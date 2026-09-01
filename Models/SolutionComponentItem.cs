@@ -37,6 +37,13 @@ public sealed class SolutionComponentItem
     public string? ComponentLogicalName { get; init; }
     public Guid ObjectId { get; init; }
     public string? SchemaName { get; init; }
+
+    /// <summary>
+    /// A process's solution-independent id (workflow.workflowidunique), where the summary
+    /// supplies one. Exposed as {workflowIdUnique} for flow link templates, since the portals
+    /// are inconsistent about which of the two flow ids they address.
+    /// </summary>
+    public Guid? WorkflowIdUnique { get; init; }
     public string? PrimaryEntityName { get; init; }
     public bool IsManaged { get; init; }
     public bool IsCustomizable { get; init; }

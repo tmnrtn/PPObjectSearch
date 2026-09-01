@@ -101,10 +101,14 @@ then set `ClientId` in settings (below).
   },
 
   // Override the maker portal URL per component type (by type number or component logical name).
-  // Placeholders: {envId} {envUrl} {solutionId} {objectId} {name} {logicalName}
-  //               {primaryEntity} {primaryEntityId} {componentType}
+  // Placeholders: {envId} {envUrl} {solutionId} {objectId} {entitySet} {name} {logicalName}
+  //               {primaryEntity} {primaryEntityId} {workflowIdUnique} {componentType}
   "MakerLinkTemplates": {
-    "1": "https://make.powerapps.com/environments/{envId}/entities/{objectId}"
+    "1": "https://make.powerapps.com/environments/{envId}/entities/{objectId}",
+
+    // Cloud flows are addressed by workflowid under a "cloudflows" segment. If a tenant wants
+    // the solution-independent id instead, swap {objectId} for {workflowIdUnique}:
+    "29": "https://make.powerapps.com/environments/{envId}/solutions/{solutionId}/objects/cloudflows/{objectId}/view"
   }
 }
 ```
@@ -114,12 +118,21 @@ user. **Sign out all** deletes it and forgets every account.
 
 ## Maker portal links
 
-Maker portal routes are not a documented, versioned contract. The app ships known-good routes for
-tables, cloud flows, canvas apps, model-driven apps, choices, connection references and
-environment variables, and falls back to the solution-explorer object route for everything else —
-and to the solution page itself when it has nothing better, so it never renders a link it knows to
-be dead. Anything that turns out wrong for your tenant can be corrected via `MakerLinkTemplates`
-without a rebuild.
+The solution explorer addresses an object as
+`/solutions/{solutionId}/objects/{entitySetName}/{objectId}/view`, where the segment is the
+component type's OData entity set name — `roleeditorlayout` becomes `/objects/roleeditorlayouts`.
+That segment is read from table metadata rather than guessed, so it is correct for component
+types this app has never heard of. Tables and columns use the table designer instead, and cloud
+flows are the known exception to the rule: they are `workflow` rows but the portal files them
+under `cloudflows`.
+
+Links degrade in steps rather than collapsing to nothing. A component whose object route cannot
+be built still links to **that type's object list inside the solution**; only a component whose
+type cannot be resolved at all falls back to the solution page. Nothing renders a link that is
+known to be dead.
+
+Maker portal routes are not a documented, versioned contract, so anything wrong for your tenant
+can be corrected via `MakerLinkTemplates` without a rebuild.
 
 Links need the Power Platform environment id, which is resolved from the organization metadata
 and, failing that, from the Global Discovery Service. If neither is reachable the status bar says

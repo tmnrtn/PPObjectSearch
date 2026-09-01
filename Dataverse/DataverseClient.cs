@@ -23,6 +23,9 @@ public sealed class DataverseException : Exception
 /// <summary>Identity of the connected environment, from RetrieveCurrentOrganization.</summary>
 public sealed record OrganizationDetails(string? FriendlyName, string? UniqueName, string? EnvironmentId);
 
+/// <summary>The bits of a table's metadata that maker portal links need.</summary>
+public sealed record TableMetadata(Guid MetadataId, string? EntitySetName);
+
 /// <summary>
 /// Thin Dataverse Web API client covering the three calls this app needs:
 /// who am I, list solutions, and list a solution's components.
@@ -277,17 +280,18 @@ public sealed class DataverseClient : IDisposable
     }
 
     /// <summary>
-    /// Maps table logical names to their metadata ids. Needed for maker portal links to columns:
-    /// the component summary names a column's parent table but never gives its id, and the maker
-    /// portal addresses tables by id.
+    /// Maps table logical names to their metadata id and entity set name. Both feed maker portal
+    /// links: columns are addressed via their parent table's metadata id, and the solution
+    /// explorer's URL segment for a component type is that type's entity set name
+    /// (roleeditorlayout -> /objects/roleeditorlayouts).
     /// </summary>
-    public async Task<IReadOnlyDictionary<string, Guid>> GetTableMetadataIdsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, TableMetadata>> GetTableMetadataAsync(CancellationToken ct = default)
     {
-        var map = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, TableMetadata>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            var url = EnvironmentUrl + ApiPath + "EntityDefinitions?$select=LogicalName,MetadataId";
+            var url = EnvironmentUrl + ApiPath + "EntityDefinitions?$select=LogicalName,MetadataId,EntitySetName";
 
             while (url.Length > 0)
             {
@@ -299,7 +303,9 @@ public sealed class DataverseClient : IDisposable
                     {
                         var logicalName = JsonHelper.GetString(row, "LogicalName");
                         if (string.IsNullOrWhiteSpace(logicalName)) continue;
-                        if (Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id)) map[logicalName!] = id;
+
+                        Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
+                        map[logicalName!] = new TableMetadata(id, JsonHelper.GetString(row, "EntitySetName"));
                     }
                 }
 
@@ -309,7 +315,7 @@ public sealed class DataverseClient : IDisposable
         catch (OperationCanceledException) { throw; }
         catch
         {
-            // Best effort - without it, column links fall back to the solution page.
+            // Best effort - links degrade to the solution page without it.
         }
 
         return map;
@@ -598,6 +604,9 @@ public sealed class DataverseClient : IDisposable
             ComponentLogicalName = JsonHelper.GetString(row, "msdyn_componentlogicalname"),
             ObjectId = Guid.TryParse(JsonHelper.GetString(row, "msdyn_objectid"), out var objectId) ? objectId : Guid.Empty,
             SchemaName = JsonHelper.GetString(row, "msdyn_schemaname"),
+            WorkflowIdUnique = Guid.TryParse(JsonHelper.GetString(row, "msdyn_workflowidunique"), out var uniqueId)
+                ? uniqueId
+                : null,
             PrimaryEntityName = JsonHelper.GetString(row, "msdyn_primaryentityname"),
             IsManaged = JsonHelper.GetBool(row, "msdyn_ismanaged") ?? false,
             IsCustomizable = JsonHelper.GetBool(row, "msdyn_iscustomizable") ?? true,
