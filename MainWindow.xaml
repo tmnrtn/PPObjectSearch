@@ -14,6 +14,8 @@
         <KeyBinding Key="T" Modifiers="Ctrl" Command="{Binding AddTabCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl" Command="{Binding CloseTabCommand}"
                     CommandParameter="{Binding SelectedSession}" />
+        <KeyBinding Key="F" Modifiers="Ctrl+Shift" Command="{Binding GlobalSearchCommand}" />
+        <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CompareCommand}" />
     </Window.InputBindings>
 
     <TabControl ItemsSource="{Binding Sessions}"
@@ -88,10 +90,18 @@
                                 <TabPanel IsItemsHost="True" />
                             </ScrollViewer>
 
-                            <Button Grid.Column="1" Content="+ Environment" MinWidth="0" Padding="10,5"
-                                    Margin="8,0,0,6" VerticalAlignment="Bottom"
-                                    ToolTip="Open another environment in a new tab (Ctrl+T)"
-                                    Command="{Binding AddTabCommand}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom"
+                                        Margin="8,0,0,6">
+                                <Button Content="+ Environment" MinWidth="0" Padding="10,5"
+                                        ToolTip="Open another environment in a new tab (Ctrl+T)"
+                                        Command="{Binding AddTabCommand}" />
+                                <Button Content="Search all" MinWidth="0" Padding="10,5" Margin="6,0,0,0"
+                                        ToolTip="One keyword across every connected environment (Ctrl+Shift+F)"
+                                        Command="{Binding GlobalSearchCommand}" />
+                                <Button Content="Compare" MinWidth="0" Padding="10,5" Margin="6,0,0,0"
+                                        ToolTip="Diff the objects loaded in two environments (Ctrl+D)"
+                                        Command="{Binding CompareCommand}" />
+                            </StackPanel>
 
                             <Button Grid.Column="2" Content="Sign out all" MinWidth="0" Padding="10,5"
                                     Margin="6,0,0,6" VerticalAlignment="Bottom"

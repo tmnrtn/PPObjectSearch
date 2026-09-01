@@ -130,9 +130,12 @@
                               IsEnabled="{Binding IsConnected}" />
                 </StackPanel>
 
-                <Button Grid.Column="4" Margin="0,16,0,0" VerticalAlignment="Bottom"
-                        Content="Clear filters" MinWidth="100"
-                        Command="{Binding ClearFiltersCommand}" />
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="0,16,0,0" VerticalAlignment="Bottom">
+                    <Button Content="Clear filters" MinWidth="100" Command="{Binding ClearFiltersCommand}" />
+                    <Button Content="Export CSV" MinWidth="100" Margin="8,0,0,0"
+                            Command="{Binding ExportCsvCommand}"
+                            ToolTip="Exports the rows currently on screen, filters and all." />
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -181,6 +184,9 @@
                 <ContextMenu>
                     <MenuItem Header="Open in maker portal"
                               Command="{Binding OpenLinkCommand}"
+                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Details - solutions and dependencies..."
+                              Command="{Binding ShowDetailsCommand}"
                               CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <Separator />
                     <MenuItem Header="Copy name"

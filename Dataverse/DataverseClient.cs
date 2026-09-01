@@ -321,6 +321,107 @@ public sealed class DataverseClient : IDisposable
         return map;
     }
 
+    /// <summary>
+    /// Dependencies in one direction, via RetrieveDependentComponents (what would break if this
+    /// were deleted) or RetrieveRequiredComponents (what this needs).
+    /// </summary>
+    public async Task<IReadOnlyList<DependencyRef>> GetDependenciesAsync(
+        Guid objectId,
+        int componentType,
+        DependencyDirection direction,
+        CancellationToken ct = default)
+    {
+        var function = direction == DependencyDirection.Dependent
+            ? "RetrieveDependentComponents"
+            : "RetrieveRequiredComponents";
+
+        // The returned dependency records describe both ends; which end is "the other one"
+        // depends on the direction asked for.
+        var prefix = direction == DependencyDirection.Dependent ? "dependentcomponent" : "requiredcomponent";
+
+        var url = $"{EnvironmentUrl}{ApiPath}{function}(ObjectId=@p1,ComponentType=@p2)" +
+                  $"?@p1={objectId}&@p2={componentType}";
+
+        var results = new List<DependencyRef>();
+        using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+
+        if (!doc.RootElement.TryGetProperty("value", out var value)) return results;
+
+        foreach (var row in value.EnumerateArray())
+        {
+            if (!Guid.TryParse(JsonHelper.GetString(row, prefix + "objectid"), out var id)) continue;
+
+            var type = JsonHelper.GetInt(row, prefix + "type") ?? 0;
+            var typeName = JsonHelper.GetString(row, $"{prefix}type@OData.Community.Display.V1.FormattedValue")
+                           ?? ComponentTypes.GetName(type);
+
+            results.Add(new DependencyRef
+            {
+                ObjectId = id,
+                ComponentType = type,
+                ComponentTypeName = typeName,
+                Direction = direction
+            });
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Every solution that carries a given object. Answers the layering question - whether
+    /// something is only in the default solution, or owned by an unmanaged solution that should
+    /// be edited instead.
+    /// </summary>
+    public async Task<IReadOnlyList<ContainingSolution>> GetContainingSolutionsAsync(
+        Guid objectId,
+        CancellationToken ct = default)
+    {
+        var url = EnvironmentUrl + ApiPath +
+                  $"solutioncomponents?$select=componenttype&$filter=objectid eq {objectId}" +
+                  "&$expand=solutionid($select=solutionid,uniquename,friendlyname,ismanaged,version)";
+
+        var solutions = new List<ContainingSolution>();
+        var seen = new HashSet<Guid>();
+
+        while (url.Length > 0)
+        {
+            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+
+            if (doc.RootElement.TryGetProperty("value", out var value))
+            {
+                foreach (var row in value.EnumerateArray())
+                {
+                    if (!row.TryGetProperty("solutionid", out var solution) ||
+                        solution.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    if (!Guid.TryParse(JsonHelper.GetString(solution, "solutionid"), out var id)) continue;
+                    if (!seen.Add(id)) continue;
+
+                    var uniqueName = JsonHelper.GetString(solution, "uniquename") ?? id.ToString();
+
+                    solutions.Add(new ContainingSolution
+                    {
+                        SolutionId = id,
+                        UniqueName = uniqueName,
+                        FriendlyName = JsonHelper.GetString(solution, "friendlyname") ?? uniqueName,
+                        IsManaged = JsonHelper.GetBool(solution, "ismanaged") ?? false,
+                        Version = JsonHelper.GetString(solution, "version")
+                    });
+                }
+            }
+
+            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+        }
+
+        return solutions
+            .OrderBy(s => s.IsManaged ? 1 : 0)
+            .ThenBy(s => s.FriendlyName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<SolutionInfo>> GetSolutionsAsync(CancellationToken ct = default)
     {
         var url = EnvironmentUrl + ApiPath +

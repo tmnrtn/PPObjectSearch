@@ -22,6 +22,8 @@ public sealed class ShellViewModel : ObservableObject
         _auth = new AuthenticationService(_settings.ClientId);
 
         AddTabCommand = new RelayCommand(_ => AddTab());
+        GlobalSearchCommand = new RelayCommand(_ => OpenGlobalSearch());
+        CompareCommand = new RelayCommand(_ => OpenCompare());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         SignOutAllCommand = new AsyncRelayCommand(_ => SignOutAllAsync());
 
@@ -33,6 +35,38 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand AddTabCommand { get; }
     public RelayCommand CloseTabCommand { get; }
     public AsyncRelayCommand SignOutAllCommand { get; }
+    public RelayCommand GlobalSearchCommand { get; }
+    public RelayCommand CompareCommand { get; }
+
+    private void OpenGlobalSearch()
+    {
+        if (!RequireConnectedTabs(1, "Connect at least one environment first.")) return;
+
+        new Views.GlobalSearchWindow
+        {
+            DataContext = new GlobalSearchViewModel(Sessions),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
+    private void OpenCompare()
+    {
+        if (!RequireConnectedTabs(2, "Connect at least two environments to compare them.")) return;
+
+        new Views.CompareWindow
+        {
+            DataContext = new CompareViewModel(Sessions),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
+    private bool RequireConnectedTabs(int minimum, string message)
+    {
+        if (Sessions.Count(s => s.IsConnected) >= minimum) return true;
+
+        MessageBox.Show(message, "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Information);
+        return false;
+    }
 
     private EnvironmentSessionViewModel? _selectedSession;
     public EnvironmentSessionViewModel? SelectedSession
