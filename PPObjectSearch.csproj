@@ -9,6 +9,10 @@
     <RootNamespace>PPObjectSearch</RootNamespace>
     <AssemblyName>PPObjectSearch</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>appicon.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>Power Platform Object Search</Product>
+    <Description>Keyword search over the objects in a Power Platform solution.</Description>
   </PropertyGroup>
 
   <ItemGroup>

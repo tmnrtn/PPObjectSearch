@@ -14,6 +14,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -63,7 +64,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="300" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="260" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
@@ -87,7 +87,25 @@
                     </TextBox>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Margin="0,0,12,0">
+                <Button Grid.Column="2" Margin="0,16,0,0" VerticalAlignment="Bottom"
+                        Content="Refresh" Command="{Binding RefreshCommand}"
+                        ToolTip="F5 - re-reads the environment, bypassing the cache." />
+            </Grid>
+        </Border>
+
+        <!-- Filters -->
+        <Border Grid.Row="2" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
+                BorderThickness="0,0,0,1" Padding="14,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="230" />
+                    <ColumnDefinition Width="230" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="OBJECT TYPE" Style="{StaticResource Label}" />
                     <ComboBox ItemsSource="{Binding TypeFilters}"
                               SelectedItem="{Binding SelectedTypeFilter}"
@@ -95,16 +113,34 @@
                               IsEnabled="{Binding IsConnected}" />
                 </StackPanel>
 
-                <Button Grid.Column="3" Margin="0,16,0,0" VerticalAlignment="Bottom"
-                        Content="Refresh" Command="{Binding RefreshCommand}" ToolTip="F5" />
+                <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                    <TextBlock Text="SUB TYPE" Style="{StaticResource Label}" />
+                    <ComboBox ItemsSource="{Binding SubTypeFilters}"
+                              SelectedItem="{Binding SelectedSubTypeFilter}"
+                              DisplayMemberPath="Label"
+                              IsEnabled="{Binding HasSubTypes}"
+                              ToolTip="Categorisation within the selected object type, e.g. cloud flow or business rule for a process." />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Margin="0,0,12,0">
+                    <TextBlock Text="STATE" Style="{StaticResource Label}" />
+                    <ComboBox ItemsSource="{Binding StateFilters}"
+                              SelectedItem="{Binding SelectedStateFilter}"
+                              DisplayMemberPath="Label"
+                              IsEnabled="{Binding IsConnected}" />
+                </StackPanel>
+
+                <Button Grid.Column="4" Margin="0,16,0,0" VerticalAlignment="Bottom"
+                        Content="Clear filters" MinWidth="100"
+                        Command="{Binding ClearFiltersCommand}" />
             </Grid>
         </Border>
 
-        <ProgressBar Grid.Row="2" Height="3" IsIndeterminate="True" BorderThickness="0"
+        <ProgressBar Grid.Row="3" Height="3" IsIndeterminate="True" BorderThickness="0"
                      Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
 
         <!-- Results -->
-        <DataGrid Grid.Row="3"
+        <DataGrid Grid.Row="4"
                   ItemsSource="{Binding ItemsView}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
@@ -204,10 +240,15 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="Object type" Binding="{Binding ComponentTypeName}" Width="200"
+                <DataGridTextColumn Header="Object type" Binding="{Binding ComponentTypeName}" Width="180"
                                     ElementStyle="{StaticResource CellText}" />
 
-                <DataGridTextColumn Header="Related table" Binding="{Binding PrimaryEntityName}" Width="160"
+                <DataGridTextColumn x:Name="SubTypeColumn"
+                                    Header="Sub type" Binding="{Binding SubType}" Width="160"
+                                    ElementStyle="{StaticResource CellText}" />
+
+                <DataGridTextColumn x:Name="RelatedTableColumn"
+                                    Header="Related table" Binding="{Binding PrimaryEntityName}" Width="160"
                                     ElementStyle="{StaticResource MutedCellText}" />
 
                 <DataGridTextColumn Header="State" Binding="{Binding ManagedLabel}" Width="110"
@@ -224,7 +265,7 @@
         </DataGrid>
 
         <!-- Status -->
-        <Border Grid.Row="4" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
+        <Border Grid.Row="5" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
                 BorderThickness="0,1,0,0" Padding="14,7">
             <Grid>
                 <Grid.ColumnDefinitions>

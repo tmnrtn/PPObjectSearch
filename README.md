@@ -28,11 +28,25 @@ dotnet build
 dotnet run
 ```
 
-Produces `bin\Debug\net10.0-windows\PPObjectSearch.exe`. To publish a self-contained exe:
+Produces `bin\Debug\net10.0-windows\PPObjectSearch.exe`. To publish a single self-contained exe
+that runs without .NET installed:
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained false
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
 ```
+
+## Releases
+
+`.github/workflows/release.yml` builds that same single-file exe on `windows-latest`. Push a tag
+to cut a release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The exe is attached to the GitHub release, with notes generated from the commits. Running the
+workflow manually from the Actions tab instead just uploads the exe as a build artifact.
 
 ## Usage
 
@@ -88,9 +102,9 @@ then set `ClientId` in settings (below).
 
   // Override the maker portal URL per component type (by type number or component logical name).
   // Placeholders: {envId} {envUrl} {solutionId} {objectId} {name} {logicalName}
-  //               {primaryEntity} {componentType}
+  //               {primaryEntity} {primaryEntityId} {componentType}
   "MakerLinkTemplates": {
-    "1": "https://make.powerapps.com/environments/{envId}/entities/{name}"
+    "1": "https://make.powerapps.com/environments/{envId}/entities/{objectId}"
   }
 }
 ```

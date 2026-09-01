@@ -50,8 +50,8 @@ public sealed class AppSettings
 
     /// <summary>
     /// Optional maker portal URL templates, keyed by component type number (as a string) or by
-    /// component logical name. Placeholders:
-    /// {envId} {envUrl} {solutionId} {objectId} {name} {logicalName} {primaryEntity} {componentType}.
+    /// component logical name. Placeholders: {envId} {envUrl} {solutionId} {objectId} {name}
+    /// {logicalName} {primaryEntity} {primaryEntityId} {componentType}.
     /// </summary>
     public Dictionary<string, string>? MakerLinkTemplates { get; set; }
 

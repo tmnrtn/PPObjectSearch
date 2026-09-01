@@ -1,6 +1,9 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PPObjectSearch.Auth;
 using PPObjectSearch.Models;
 
@@ -8,8 +11,17 @@ namespace PPObjectSearch.Dataverse;
 
 public sealed class DataverseException : Exception
 {
-    public DataverseException(string message, Exception? inner = null) : base(message, inner) { }
+    public DataverseException(string message, HttpStatusCode? statusCode = null, Exception? inner = null)
+        : base(message, inner)
+    {
+        StatusCode = statusCode;
+    }
+
+    public HttpStatusCode? StatusCode { get; }
 }
+
+/// <summary>Identity of the connected environment, from RetrieveCurrentOrganization.</summary>
+public sealed record OrganizationDetails(string? FriendlyName, string? UniqueName, string? EnvironmentId);
 
 /// <summary>
 /// Thin Dataverse Web API client covering the three calls this app needs:
@@ -20,6 +32,13 @@ public sealed class DataverseClient : IDisposable
     private const string ApiPath = "/api/data/v9.2/";
     private const int PageSize = 5000;
     private const int MaxRows = 200_000;
+
+    /// <summary>
+    /// IIS rejects long request lines with 414. Dataverse paging cookies for
+    /// msdyn_solutioncomponentsummary routinely exceed that, so anything near the limit is sent
+    /// through $batch instead, which carries the URL in the request body.
+    /// </summary>
+    private const int MaxGetUrlLength = 1800;
 
     private readonly HttpClient _http;
     private readonly EnvironmentAuthContext _auth;
@@ -52,34 +71,107 @@ public sealed class DataverseClient : IDisposable
         return uri.GetLeftPart(UriPartial.Authority);
     }
 
-    private async Task<HttpResponseMessage> SendAsync(string url, CancellationToken ct, bool includeFormattedValues = false)
+    private static string BuildPreferHeader(bool includeFormattedValues)
     {
-        var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
         var prefer = new List<string> { $"odata.maxpagesize={PageSize}" };
         if (includeFormattedValues) prefer.Add("odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"");
-        request.Headers.Add("Prefer", string.Join(",", prefer));
-
-        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            response.Dispose();
-            throw new DataverseException($"{(int)response.StatusCode} {response.ReasonPhrase}: {ExtractError(body)}");
-        }
-
-        return response;
+        return string.Join(",", prefer);
     }
 
     private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, bool includeFormattedValues = false)
     {
-        using var response = await SendAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
-        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        // Skip the doomed GET entirely when the URL is already over the limit.
+        if (url.Length > MaxGetUrlLength)
+        {
+            return await GetJsonViaBatchAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add("Prefer", BuildPreferHeader(includeFormattedValues));
+
+            using var response = await _http
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                throw new DataverseException(
+                    $"{(int)response.StatusCode} {response.ReasonPhrase}: {ExtractError(body)}",
+                    response.StatusCode);
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.RequestUriTooLong)
+        {
+            return await GetJsonViaBatchAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Issues a GET inside a $batch POST. The URL travels in the request body, so paging cookies
+    /// of any length are fine.
+    /// </summary>
+    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, bool includeFormattedValues)
+    {
+        var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
+        var boundary = "batch_" + Guid.NewGuid().ToString("N");
+
+        var body = new StringBuilder()
+            .Append("--").Append(boundary).Append("\r\n")
+            .Append("Content-Type: application/http\r\n")
+            .Append("Content-Transfer-Encoding: binary\r\n\r\n")
+            .Append("GET ").Append(url).Append(" HTTP/1.1\r\n")
+            .Append("Accept: application/json\r\n")
+            .Append("OData-MaxVersion: 4.0\r\n")
+            .Append("OData-Version: 4.0\r\n")
+            .Append("Prefer: ").Append(BuildPreferHeader(includeFormattedValues)).Append("\r\n\r\n")
+            .Append("--").Append(boundary).Append("--\r\n")
+            .ToString();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, EnvironmentUrl + ApiPath + "$batch")
+        {
+            Content = new StringContent(body, Encoding.UTF8)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse($"multipart/mixed;boundary={boundary}");
+
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        var payload = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new DataverseException(
+                $"{(int)response.StatusCode} {response.ReasonPhrase}: {ExtractError(payload)}", response.StatusCode);
+        }
+
+        // The batch part carries its own HTTP status line ahead of the JSON payload.
+        var innerStatus = Regex.Match(payload, @"HTTP/1\.\d\s+(?<code>\d{3})");
+        var json = ExtractJsonObject(payload);
+
+        if (innerStatus.Success && !innerStatus.Groups["code"].Value.StartsWith('2'))
+        {
+            throw new DataverseException(
+                $"{innerStatus.Groups["code"].Value}: {ExtractError(json ?? payload)}");
+        }
+
+        if (json is null) throw new DataverseException("The $batch response contained no JSON payload.");
+
+        return JsonDocument.Parse(json);
+    }
+
+    private static string? ExtractJsonObject(string payload)
+    {
+        var start = payload.IndexOf('{');
+        var end = payload.LastIndexOf('}');
+        return start >= 0 && end > start ? payload[start..(end + 1)] : null;
     }
 
     private static string ExtractError(string body)
@@ -98,7 +190,11 @@ public sealed class DataverseClient : IDisposable
             // not JSON - fall through
         }
 
-        return body.Length > 500 ? body[..500] + "..." : body;
+        // IIS-level failures return an HTML error page; a wall of markup helps nobody.
+        var trimmed = body.TrimStart();
+        if (trimmed.StartsWith('<')) return "the server returned an HTML error page.";
+
+        return body.Length > 300 ? body[..300] + "..." : body;
     }
 
     public async Task<string> WhoAmIAsync(CancellationToken ct = default)
@@ -107,37 +203,14 @@ public sealed class DataverseClient : IDisposable
         return JsonHelper.GetString(doc.RootElement, "UserId") ?? string.Empty;
     }
 
-    /// <summary>Friendly organisation name, used as the tab title.</summary>
-    public async Task<string?> GetOrganizationNameAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            var url = EnvironmentUrl + ApiPath + "organizations?$select=name&$top=1";
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var name = JsonHelper.GetString(row, "name");
-                    if (!string.IsNullOrWhiteSpace(name)) return name;
-                }
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch
-        {
-            // Falls back to the host name in the tab title.
-        }
-
-        return null;
-    }
-
     /// <summary>
-    /// Resolves the Power Platform environment id (needed for maker portal links). Tries the
-    /// organization's own metadata first, then the Global Discovery Service.
+    /// Reads the environment's own identity: the friendly name shown in the admin centre (used as
+    /// the tab title) and, where the version exposes it, the Power Platform environment id.
+    ///
+    /// The organization table's own <c>name</c> column is deliberately not used - on many
+    /// environments it holds the internal unique name (unq0f8c...), not anything readable.
     /// </summary>
-    public async Task<string?> GetEnvironmentIdAsync(CancellationToken ct = default)
+    public async Task<OrganizationDetails?> RetrieveCurrentOrganizationAsync(CancellationToken ct = default)
     {
         try
         {
@@ -145,19 +218,24 @@ public sealed class DataverseClient : IDisposable
                       "RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')";
             using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
 
-            var id = JsonHelper.FindStringDeep(doc.RootElement, "EnvironmentId");
-            if (!string.IsNullOrWhiteSpace(id)) return id;
+            return new OrganizationDetails(
+                JsonHelper.FindStringDeep(doc.RootElement, "FriendlyName"),
+                JsonHelper.FindStringDeep(doc.RootElement, "UniqueName"),
+                JsonHelper.FindStringDeep(doc.RootElement, "EnvironmentId"));
         }
         catch (OperationCanceledException) { throw; }
         catch
         {
-            // Not exposed on every version - fall through to discovery.
+            // Not available on every version - the caller falls back to the host name.
+            return null;
         }
-
-        return await GetEnvironmentIdFromDiscoveryAsync(ct).ConfigureAwait(false);
     }
 
-    private async Task<string?> GetEnvironmentIdFromDiscoveryAsync(CancellationToken ct)
+    /// <summary>
+    /// Resolves the Power Platform environment id from the Global Discovery Service, for when
+    /// <see cref="RetrieveCurrentOrganizationAsync"/> does not carry one.
+    /// </summary>
+    public async Task<string?> GetEnvironmentIdFromDiscoveryAsync(CancellationToken ct = default)
     {
         const string discoveryResource = "https://globaldisco.crm.dynamics.com";
 
@@ -196,6 +274,45 @@ public sealed class DataverseClient : IDisposable
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Maps table logical names to their metadata ids. Needed for maker portal links to columns:
+    /// the component summary names a column's parent table but never gives its id, and the maker
+    /// portal addresses tables by id.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, Guid>> GetTableMetadataIdsAsync(CancellationToken ct = default)
+    {
+        var map = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var url = EnvironmentUrl + ApiPath + "EntityDefinitions?$select=LogicalName,MetadataId";
+
+            while (url.Length > 0)
+            {
+                using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+
+                if (doc.RootElement.TryGetProperty("value", out var value))
+                {
+                    foreach (var row in value.EnumerateArray())
+                    {
+                        var logicalName = JsonHelper.GetString(row, "LogicalName");
+                        if (string.IsNullOrWhiteSpace(logicalName)) continue;
+                        if (Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id)) map[logicalName!] = id;
+                    }
+                }
+
+                url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch
+        {
+            // Best effort - without it, column links fall back to the solution page.
+        }
+
+        return map;
     }
 
     public async Task<IReadOnlyList<SolutionInfo>> GetSolutionsAsync(CancellationToken ct = default)
@@ -250,30 +367,204 @@ public sealed class DataverseClient : IDisposable
         IProgress<int>? progress = null,
         CancellationToken ct = default)
     {
-        var url = EnvironmentUrl + ApiPath +
-                  $"msdyn_solutioncomponentsummaries?$filter=(msdyn_solutionid eq {solutionId})";
+        // Paging is inherently serial - each page needs the previous page's cookie - so the only
+        // way to overlap requests is to split the solution into independent slices. Component
+        // type ranges partition the rows exactly, with no overlap and no gaps.
+        if (await SupportsTypeRangeFilterAsync(solutionId, ct).ConfigureAwait(false))
+        {
+            try
+            {
+                var parallel = await GetComponentsInParallelAsync(solutionId, progress, ct).ConfigureAwait(false);
+                await ApplyProcessCategoriesAsync(parallel, ct).ConfigureAwait(false);
+                return parallel;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (DataverseException)
+            {
+                // Partitioned read failed mid-flight - fall back to the single serial query.
+            }
+        }
 
         var items = new List<SolutionComponentItem>();
+        var total = 0;
 
-        while (url.Length > 0 && items.Count < MaxRows)
+        await ReadAllPagesAsync(
+            BuildComponentsUrl(solutionId, null),
+            items,
+            added => progress?.Report(total += added),
+            ct).ConfigureAwait(false);
+
+        await ApplyProcessCategoriesAsync(items, ct).ConfigureAwait(false);
+        return items;
+    }
+
+    /// <summary>
+    /// Fills in the sub type for processes from the workflow table's own category option set -
+    /// the authoritative source for telling a cloud flow from a business rule, BPF or action.
+    /// The component summary does not carry it.
+    /// </summary>
+    private async Task ApplyProcessCategoriesAsync(IReadOnlyList<SolutionComponentItem> items, CancellationToken ct)
+    {
+        var processes = items.Where(i => i.ComponentType == 29 && i.ObjectId != Guid.Empty).ToList();
+        if (processes.Count == 0) return;
+
+        try
+        {
+            var categories = new Dictionary<Guid, string>();
+            var url = EnvironmentUrl + ApiPath + "workflows?$select=workflowid,category";
+
+            while (url.Length > 0)
+            {
+                using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+
+                if (doc.RootElement.TryGetProperty("value", out var value))
+                {
+                    foreach (var row in value.EnumerateArray())
+                    {
+                        if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
+
+                        var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
+
+                        if (string.IsNullOrWhiteSpace(label))
+                        {
+                            var category = JsonHelper.GetInt(row, "category");
+                            label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(label)) categories[id] = label!;
+                    }
+                }
+
+                url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+            }
+
+            foreach (var process in processes)
+            {
+                if (!categories.TryGetValue(process.ObjectId, out var label)) continue;
+
+                process.SubType = label;
+                // The search index was built before the category was known.
+                process.BuildSearchIndex();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Best effort - processes simply keep whatever sub type the summary supplied.
+        }
+    }
+
+    private string BuildComponentsUrl(Guid solutionId, (int Low, int High)? typeRange)
+    {
+        var filter = $"(msdyn_solutionid eq {solutionId})";
+
+        if (typeRange is { } range)
+        {
+            filter += range.Low == range.High
+                ? $" and (msdyn_componenttype eq {range.Low})"
+                : $" and (msdyn_componenttype ge {range.Low} and msdyn_componenttype le {range.High})";
+        }
+
+        return EnvironmentUrl + ApiPath + "msdyn_solutioncomponentsummaries?$filter=" + filter;
+    }
+
+    /// <summary>
+    /// Contiguous, gap-free component type ranges. Split finely where the heavy types live
+    /// (tables, columns, choices, processes, forms) so the slices finish in comparable times.
+    /// </summary>
+    private static readonly (int Low, int High)[] TypeRanges =
+    {
+        (0, 1), (2, 2), (3, 8), (9, 9), (10, 25), (26, 28), (29, 29), (30, 58), (59, 60),
+        (61, 61), (62, 89), (90, 99), (100, 149), (150, 299), (300, 300), (301, 370),
+        (371, 379), (380, 399), (400, 9999), (10000, int.MaxValue)
+    };
+
+    /// <summary>
+    /// Not every Dataverse version accepts range operators on the summary virtual table, so this
+    /// is probed once with a single-row request before committing to the partitioned read.
+    /// </summary>
+    private async Task<bool> SupportsTypeRangeFilterAsync(Guid solutionId, CancellationToken ct)
+    {
+        try
+        {
+            var url = BuildComponentsUrl(solutionId, (0, 1)) + "&$top=1";
+            using var _ = await GetJsonAsync(url, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (DataverseException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<IReadOnlyList<SolutionComponentItem>> GetComponentsInParallelAsync(
+        Guid solutionId,
+        IProgress<int>? progress,
+        CancellationToken ct)
+    {
+        // Dataverse's service protection limits penalise aggressive fan-out; a handful of
+        // concurrent readers captures most of the win without tripping them.
+        using var gate = new SemaphoreSlim(4);
+        var total = 0;
+
+        var tasks = TypeRanges.Select(async range =>
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                var slice = new List<SolutionComponentItem>();
+                await ReadAllPagesAsync(
+                    BuildComponentsUrl(solutionId, range),
+                    slice,
+                    added => progress?.Report(Interlocked.Add(ref total, added)),
+                    ct).ConfigureAwait(false);
+                return slice;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }).ToList();
+
+        var slices = await Task.WhenAll(tasks).ConfigureAwait(false);
+        return slices.SelectMany(s => s).ToList();
+    }
+
+    private async Task ReadAllPagesAsync(
+        string url,
+        List<SolutionComponentItem> into,
+        Action<int> onRowsAdded,
+        CancellationToken ct)
+    {
+        while (url.Length > 0 && into.Count < MaxRows)
         {
             ct.ThrowIfCancellationRequested();
 
             using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
 
+            var added = 0;
             if (doc.RootElement.TryGetProperty("value", out var value))
             {
                 foreach (var row in value.EnumerateArray())
                 {
-                    items.Add(ReadComponent(row));
+                    into.Add(ReadComponent(row));
+                    added++;
                 }
             }
 
-            progress?.Report(items.Count);
+            onRowsAdded(added);
             url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
         }
-
-        return items;
     }
 
     private static SolutionComponentItem ReadComponent(JsonElement row)
@@ -285,10 +576,14 @@ public sealed class DataverseClient : IDisposable
                        ?? JsonHelper.GetString(row, "msdyn_componenttype@OData.Community.Display.V1.FormattedValue")
                        ?? ComponentTypes.GetName(componentType);
 
-        // Processes all report as "Process" - the subtype tells flows from business rules.
+        // Kept as its own column rather than folded into the type: processes all report as
+        // "Process", and only the subtype separates a cloud flow from a business rule.
+        //
+        // Only the server's own label is trusted here. The raw msdyn_subtype number is NOT the
+        // workflow category - reading it as one labelled every process "Dialog". Processes get
+        // their real category from the workflow table in a follow-up pass.
         var subType = JsonHelper.GetString(row, "msdyn_subtypename")
                       ?? JsonHelper.GetString(row, "msdyn_subtype@OData.Community.Display.V1.FormattedValue");
-        if (componentType == 29 && !string.IsNullOrWhiteSpace(subType)) typeName = subType!;
 
         var name = JsonHelper.GetString(row, "msdyn_name");
         var displayName = JsonHelper.GetString(row, "msdyn_displayname");
@@ -299,6 +594,7 @@ public sealed class DataverseClient : IDisposable
             DisplayName = displayName,
             ComponentType = componentType,
             ComponentTypeName = typeName,
+            SubType = string.IsNullOrWhiteSpace(subType) ? null : subType,
             ComponentLogicalName = JsonHelper.GetString(row, "msdyn_componentlogicalname"),
             ObjectId = Guid.TryParse(JsonHelper.GetString(row, "msdyn_objectid"), out var objectId) ? objectId : Guid.Empty,
             SchemaName = JsonHelper.GetString(row, "msdyn_schemaname"),

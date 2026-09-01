@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PPObjectSearch.Models;
 
 public sealed class SolutionInfo
@@ -23,6 +25,14 @@ public sealed class SolutionComponentItem
     public required string Name { get; init; }
     public string? DisplayName { get; init; }
     public required string ComponentTypeName { get; init; }
+
+    /// <summary>
+    /// The component's own categorisation within its type - "Cloud Flow" or "Business Rule" for a
+    /// process, the form type for a form, the web resource kind, and so on. Null where the type
+    /// has no sub-classification.
+    /// </summary>
+    public string? SubType { get; set; }
+
     public int ComponentType { get; init; }
     public string? ComponentLogicalName { get; init; }
     public Guid ObjectId { get; init; }
@@ -38,10 +48,12 @@ public sealed class SolutionComponentItem
     public string? MakerUrl { get; set; }
 
     /// <summary>Best label for the Name column - display name where there is one.</summary>
+    [JsonIgnore]
     public string PrimaryLabel =>
         !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName! : Name;
 
     /// <summary>Secondary identifier shown alongside the label (logical / schema name).</summary>
+    [JsonIgnore]
     public string SecondaryLabel
     {
         get
@@ -51,9 +63,11 @@ public sealed class SolutionComponentItem
         }
     }
 
+    [JsonIgnore]
     public string ManagedLabel => IsManaged ? "Managed" : "Unmanaged";
 
     /// <summary>Pre-computed lower-case haystack so keyword filtering stays allocation free.</summary>
+    [JsonIgnore]
     public string SearchIndex { get; private set; } = string.Empty;
 
     public void BuildSearchIndex()
@@ -64,6 +78,7 @@ public sealed class SolutionComponentItem
             DisplayName,
             SchemaName,
             ComponentTypeName,
+            SubType,
             ComponentLogicalName,
             PrimaryEntityName,
             Owner,

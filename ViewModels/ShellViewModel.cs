@@ -100,6 +100,9 @@ public sealed class ShellViewModel : ObservableObject
 
         await _auth.SignOutAllAsync();
 
+        // Cached component lists are environment data - they go with the accounts.
+        ComponentCache.Clear();
+
         foreach (var session in Sessions) session.Reset("Signed out.");
         SaveTabs();
     }

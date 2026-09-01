@@ -18,16 +18,18 @@ public sealed class MakerPortalLinkBuilder
     private readonly string? _environmentId;
     private readonly string _environmentUrl;
     private readonly Dictionary<string, string> _overrides;
+    private readonly IReadOnlyDictionary<string, Guid> _tableIds;
 
     /// <summary>
     /// Routes keyed by component type number. Placeholders are substituted case-sensitively.
     /// </summary>
     private static readonly Dictionary<int, string> DefaultTemplates = new()
     {
-        // Tables are addressed by logical name, not by id.
-        [1] = MakerRoot + "/environments/{envId}/entities/{name}",
-        // Columns hang off their parent table.
-        [2] = MakerRoot + "/environments/{envId}/entities/{primaryEntity}",
+        // The maker portal addresses tables by metadata id, which for an entity component is
+        // exactly the solution component's own object id.
+        [1] = MakerRoot + "/environments/{envId}/entities/{objectId}",
+        // Columns hang off their parent table, addressed by that table's metadata id.
+        [2] = MakerRoot + "/environments/{envId}/entities/{primaryEntityId}",
         [9] = MakerRoot + "/environments/{envId}/customchoices/{objectId}",
         [300] = MakerRoot + "/e/{envId}/canvas?action=edit&app-id=%2Fproviders%2FMicrosoft.PowerApps%2Fapps%2F{objectId}",
         [80] = MakerRoot + "/environments/{envId}/solutions/{solutionId}/objects/appmodule/{objectId}/view",
@@ -46,10 +48,15 @@ public sealed class MakerPortalLinkBuilder
     private const string SolutionTemplate =
         MakerRoot + "/environments/{envId}/solutions/{solutionId}";
 
-    public MakerPortalLinkBuilder(string? environmentId, string environmentUrl, IDictionary<string, string>? overrides)
+    public MakerPortalLinkBuilder(
+        string? environmentId,
+        string environmentUrl,
+        IDictionary<string, string>? overrides,
+        IReadOnlyDictionary<string, Guid>? tableIds = null)
     {
         _environmentId = string.IsNullOrWhiteSpace(environmentId) ? null : environmentId.Trim();
         _environmentUrl = environmentUrl.TrimEnd('/');
+        _tableIds = tableIds ?? new Dictionary<string, Guid>();
         _overrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (overrides is not null)
@@ -67,9 +74,15 @@ public sealed class MakerPortalLinkBuilder
 
         var template = ResolveTemplate(item);
 
+        var primaryEntityId = !string.IsNullOrWhiteSpace(item.PrimaryEntityName) &&
+                              _tableIds.TryGetValue(item.PrimaryEntityName!, out var tableId)
+            ? tableId.ToString()
+            : null;
+
         // A template that needs a value we do not have would produce a dead link.
         if (template.Contains("{name}") && string.IsNullOrWhiteSpace(item.Name)) template = SolutionTemplate;
         if (template.Contains("{primaryEntity}") && string.IsNullOrWhiteSpace(item.PrimaryEntityName)) template = SolutionTemplate;
+        if (template.Contains("{primaryEntityId}") && primaryEntityId is null) template = SolutionTemplate;
         if (template.Contains("{logicalName}") && string.IsNullOrWhiteSpace(item.ComponentLogicalName)) template = SolutionTemplate;
         if (template.Contains("{objectId}") && item.ObjectId == Guid.Empty) template = SolutionTemplate;
 
@@ -79,6 +92,7 @@ public sealed class MakerPortalLinkBuilder
             .Replace("{solutionId}", solutionId.ToString())
             .Replace("{objectId}", item.ObjectId.ToString())
             .Replace("{componentType}", item.ComponentType.ToString())
+            .Replace("{primaryEntityId}", primaryEntityId ?? string.Empty)
             .Replace("{primaryEntity}", Uri.EscapeDataString(item.PrimaryEntityName ?? string.Empty))
             .Replace("{logicalName}", Uri.EscapeDataString(item.ComponentLogicalName ?? string.Empty))
             .Replace("{name}", Uri.EscapeDataString(item.Name ?? string.Empty));
