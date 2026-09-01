@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+*.user
+*.suo
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.sln.docstates
+
+# NuGet
+*.nupkg
+packages/
+
+# OS
+Thumbs.db
+desktop.ini

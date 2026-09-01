@@ -1,0 +1,112 @@
+# Power Platform Object Search
+
+A Windows desktop app (WPF, .NET 10) for keyword-searching the objects in a Power Platform /
+Dataverse solution. Connects with interactive OAuth, defaults to the environment's **default
+solution**, lists every object with a filterable **Object type** column, and links each name
+straight into the maker portal.
+
+## Features
+
+- **OAuth sign-in** (authorization code + PKCE) through the system browser, so existing SSO and
+  MFA sessions are reused. Tokens are cached encrypted with DPAPI, so restarts reconnect silently.
+- **Environment tabs** — open as many environments as you like side by side. Tabs are restored on
+  the next launch (`Ctrl+T` new tab, `Ctrl+W` close).
+- **Cross-tenant** — each tab discovers its environment's tenant from the Dataverse 401 challenge
+  and holds its own account, so tabs in different tenants work simultaneously. *Switch account*
+  re-signs a single tab without touching the others.
+- **Solution picker** — defaults to the default solution; any visible solution can be selected.
+- **Instant keyword search** — space-separated terms, all of which must match; matched against
+  name, display name, schema name, object type, related table, owner and object id.
+- **Filterable object type column** — the dropdown lists every type present with a count.
+- **Name as a maker portal link** — click to open the object in <https://make.powerapps.com>.
+  Right-click a row to copy the name, the link, or the object id.
+
+## Build and run
+
+```powershell
+dotnet build
+dotnet run
+```
+
+Produces `bin\Debug\net10.0-windows\PPObjectSearch.exe`. To publish a self-contained exe:
+
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained false
+```
+
+## Usage
+
+1. Paste the environment URL (e.g. `https://contoso.crm11.dynamics.com`) and press **Connect**.
+2. Sign in in the browser window that opens.
+3. The default solution loads automatically. Type keywords in **Search** and/or pick an
+   **Object type** to narrow the list.
+4. Click an object's name to open it in the maker portal.
+
+## How objects are read
+
+The object list comes from the `msdyn_solutioncomponentsummary` virtual table — the same source
+the maker portal's own solution object list uses — so display names, schema names and component
+type labels all arrive in a single paged query. The whole solution is loaded once, then searching
+and filtering happen in memory, which keeps typing instant even on the default solution of a large
+environment.
+
+## Authentication
+
+By default the app uses Microsoft's pre-consented public client for Dataverse tooling
+(`51f81489-12ee-4a9e-aaae-a2591f45987d`, the one PAC CLI and XrmToolBox use), so **no app
+registration is needed**. If your tenant blocks it, register your own public client with the
+`http://localhost` redirect URI and the Dynamics CRM `user_impersonation` delegated permission,
+then set `ClientId` in settings (below).
+
+## Settings
+
+`%LOCALAPPDATA%\PPObjectSearch\settings.json` — written automatically, all fields optional.
+
+```jsonc
+{
+  // Restored tabs, maintained by the app.
+  "Tabs": [
+    {
+      "EnvironmentUrl": "https://contoso.crm11.dynamics.com",
+      "TenantId": "00000000-0000-0000-0000-000000000000",
+      "AccountId": "<msal home account id>",
+      "SolutionUniqueName": "Default"
+    }
+  ],
+
+  // Use your own app registration instead of the built-in public client.
+  "ClientId": null,
+
+  // Solution to select on connect when a tab has no remembered one.
+  "DefaultSolutionUniqueName": "Default",
+
+  // Power Platform environment ids for maker portal links, keyed by host. Only needed if
+  // automatic discovery is blocked in your tenant.
+  "EnvironmentIds": {
+    "contoso.crm11.dynamics.com": "00000000-0000-0000-0000-000000000000"
+  },
+
+  // Override the maker portal URL per component type (by type number or component logical name).
+  // Placeholders: {envId} {envUrl} {solutionId} {objectId} {name} {logicalName}
+  //               {primaryEntity} {componentType}
+  "MakerLinkTemplates": {
+    "1": "https://make.powerapps.com/environments/{envId}/entities/{name}"
+  }
+}
+```
+
+The token cache lives next to it in `msal.cache`, encrypted with DPAPI for the current Windows
+user. **Sign out all** deletes it and forgets every account.
+
+## Maker portal links
+
+Maker portal routes are not a documented, versioned contract. The app ships known-good routes for
+tables, cloud flows, canvas apps, model-driven apps, choices, connection references and
+environment variables, and falls back to the solution-explorer object route for everything else —
+and to the solution page itself when it has nothing better, so it never renders a link it knows to
+be dead. Anything that turns out wrong for your tenant can be corrected via `MakerLinkTemplates`
+without a rebuild.
+
+Links need the Power Platform environment id, which is resolved from the organization metadata
+and, failing that, from the Global Discovery Service. If neither is reachable the status bar says
+so and the names render as plain text; set the id under `EnvironmentIds` to restore linking.
