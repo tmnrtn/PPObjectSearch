@@ -280,6 +280,13 @@ public sealed class CompareViewModel : ObservableObject
     private bool FilterTypeOption(object obj)
     {
         if (string.IsNullOrWhiteSpace(_typeFilterSearchText)) return true;
+
+        if (SelectedTypeFilter != null && 
+            string.Equals(_typeFilterSearchText, SelectedTypeFilter.Label, StringComparison.CurrentCultureIgnoreCase))
+        {
+            return true;
+        }
+
         if (obj is not TypeFilterOption option) return false;
         
         if (option.IsAll) return true;
