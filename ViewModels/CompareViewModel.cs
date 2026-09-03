@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Threading;
 using PPObjectSearch.Core;
 using PPObjectSearch.Models;
 using PPObjectSearch.Services;
@@ -11,7 +13,6 @@ public enum CompareStatus
 {
     OnlyInLeft,
     OnlyInRight,
-    Different,
     Same
 }
 
@@ -31,14 +32,12 @@ public sealed class CompareRow
     {
         CompareStatus.OnlyInLeft => "Only in left",
         CompareStatus.OnlyInRight => "Only in right",
-        CompareStatus.Different => "Differs",
         _ => "Same"
     };
 }
 
 /// <summary>
-/// Diffs the objects loaded in two tabs - what is missing from one side, and what exists in both
-/// but was changed more recently on one. Works from the loaded lists, so it costs no requests.
+/// Diffs the objects loaded in two tabs - what is missing from one side. Works from the loaded lists, so it costs no requests.
 ///
 /// Objects are matched on object id first, since solution deployment preserves ids, and fall back
 /// to type plus name for anything created independently in each environment.
@@ -54,6 +53,16 @@ public sealed class CompareViewModel : ObservableObject
         Rows = new ObservableCollection<CompareRow>();
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
         RowsView.Filter = Filter;
+
+        TypeFiltersView = CollectionViewSource.GetDefaultView(TypeFilters);
+        TypeFiltersView.Filter = FilterTypeOption;
+
+        _searchDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _searchDebounce.Tick += (_, _) =>
+        {
+            _searchDebounce.Stop();
+            RefreshView();
+        };
 
         CompareCommand = new RelayCommand(_ => Compare(), _ => Left is not null && Right is not null && Left != Right);
         ExportCommand = new RelayCommand(_ => Export(), _ => Rows.Count > 0);
@@ -108,6 +117,46 @@ public sealed class CompareViewModel : ObservableObject
         private set => SetProperty(ref _summary, value);
     }
 
+    public ObservableCollection<TypeFilterOption> TypeFilters { get; } = new();
+
+    private TypeFilterOption? _selectedTypeFilter;
+    public TypeFilterOption? SelectedTypeFilter
+    {
+        get => _selectedTypeFilter;
+        set
+        {
+            if (SetProperty(ref _selectedTypeFilter, value)) RefreshView();
+        }
+    }
+
+    private string _typeFilterSearchText = string.Empty;
+    public string TypeFilterSearchText
+    {
+        get => _typeFilterSearchText;
+        set
+        {
+            if (SetProperty(ref _typeFilterSearchText, value)) TypeFiltersView?.Refresh();
+        }
+    }
+
+    public ICollectionView TypeFiltersView { get; private set; }
+
+    private string _searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetProperty(ref _searchText, value))
+            {
+                _searchDebounce.Stop();
+                _searchDebounce.Start();
+            }
+        }
+    }
+
+    private readonly System.Windows.Threading.DispatcherTimer _searchDebounce;
+
     public string LeftHeader => Left is null ? "Left" : Left.Title;
     public string RightHeader => Right is null ? "Right" : Right.Title;
 
@@ -143,10 +192,7 @@ public sealed class CompareViewModel : ObservableObject
 
             matchedRight.Add(match);
 
-            var differs = item.ModifiedOn != match.ModifiedOn ||
-                          !string.Equals(item.PrimaryLabel, match.PrimaryLabel, StringComparison.Ordinal);
-
-            _all.Add(Row(item, match, differs ? CompareStatus.Different : CompareStatus.Same));
+            _all.Add(Row(item, match, CompareStatus.Same));
         }
 
         foreach (var item in right.Where(i => !matchedRight.Contains(i)))
@@ -162,6 +208,17 @@ public sealed class CompareViewModel : ObservableObject
             var byType = string.Compare(a.ComponentTypeName, b.ComponentTypeName, StringComparison.CurrentCultureIgnoreCase);
             return byType != 0 ? byType : string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
         });
+
+        TypeFilters.Clear();
+        TypeFilters.Add(new TypeFilterOption { Name = " all", Count = _all.Count, IsAll = true, AllLabel = "All types" });
+
+        foreach (var group in _all.GroupBy(r => r.ComponentTypeName)
+                                  .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
+        {
+            TypeFilters.Add(new TypeFilterOption { Name = group.Key, Count = group.Count() });
+        }
+
+        SelectedTypeFilter = TypeFilters[0];
 
         OnPropertyChanged(nameof(LeftHeader));
         OnPropertyChanged(nameof(RightHeader));
@@ -206,15 +263,42 @@ public sealed class CompareViewModel : ObservableObject
 
         var onlyLeft = _all.Count(r => r.Status == CompareStatus.OnlyInLeft);
         var onlyRight = _all.Count(r => r.Status == CompareStatus.OnlyInRight);
-        var differs = _all.Count(r => r.Status == CompareStatus.Different);
         var same = _all.Count(r => r.Status == CompareStatus.Same);
 
         Summary = $"{onlyLeft:N0} only in {LeftHeader}  |  {onlyRight:N0} only in {RightHeader}  |  " +
-                  $"{differs:N0} differ  |  {same:N0} identical";
+                  $"{same:N0} identical";
     }
 
-    private bool Filter(object obj) =>
-        obj is CompareRow row && (ShowIdentical || row.Status != CompareStatus.Same);
+    private bool FilterTypeOption(object obj)
+    {
+        if (string.IsNullOrWhiteSpace(_typeFilterSearchText)) return true;
+        if (obj is not TypeFilterOption option) return false;
+        
+        if (option.IsAll) return true;
+
+        return option.Name.Contains(_typeFilterSearchText, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private bool Filter(object obj)
+    {
+        if (obj is not CompareRow row) return false;
+
+        if (!ShowIdentical && row.Status == CompareStatus.Same) return false;
+
+        if (SelectedTypeFilter is { IsAll: false } type &&
+            !string.Equals(row.ComponentTypeName, type.Name, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchText) &&
+            !row.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     private void Export()
     {

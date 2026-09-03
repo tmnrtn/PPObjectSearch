@@ -19,34 +19,64 @@
         <Border Grid.Row="0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
                 BorderThickness="0,0,0,1" Padding="16,12">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                    <TextBlock Text="LEFT" Style="{StaticResource Label}" />
-                    <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Left}"
-                              DisplayMemberPath="Title" />
-                </StackPanel>
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Text="LEFT" Style="{StaticResource Label}" />
+                        <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Left}"
+                                  DisplayMemberPath="Title" />
+                    </StackPanel>
 
-                <StackPanel Grid.Column="1" Margin="0,0,12,0">
-                    <TextBlock Text="RIGHT" Style="{StaticResource Label}" />
-                    <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Right}"
-                              DisplayMemberPath="Title" />
-                </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                        <TextBlock Text="RIGHT" Style="{StaticResource Label}" />
+                        <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Right}"
+                                  DisplayMemberPath="Title" />
+                    </StackPanel>
 
-                <Button Grid.Column="2" Content="Compare" Margin="0,16,0,0" VerticalAlignment="Bottom"
-                        Command="{Binding CompareCommand}" />
+                    <Button Grid.Column="2" Content="Compare" Margin="0,16,0,0" VerticalAlignment="Bottom"
+                            Command="{Binding CompareCommand}" />
 
-                <CheckBox Grid.Column="3" Content="Show identical" Margin="14,0,0,8"
-                          VerticalAlignment="Bottom" IsChecked="{Binding ShowIdentical}" />
+                    <CheckBox Grid.Column="3" Content="Show identical" Margin="14,0,0,8"
+                              VerticalAlignment="Bottom" IsChecked="{Binding ShowIdentical}" />
 
-                <Button Grid.Column="4" Content="Export CSV" Margin="14,16,0,0" VerticalAlignment="Bottom"
-                        MinWidth="100" Command="{Binding ExportCommand}" />
+                    <Button Grid.Column="4" Content="Export CSV" Margin="14,16,0,0" VerticalAlignment="Bottom"
+                            MinWidth="100" Command="{Binding ExportCommand}" />
+                </Grid>
+
+                <Grid Grid.Row="1" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0" MinWidth="250">
+                        <TextBlock Text="OBJECT TYPE" Style="{StaticResource Label}" />
+                        <ComboBox ItemsSource="{Binding TypeFiltersView}"
+                                  SelectedItem="{Binding SelectedTypeFilter}"
+                                  Text="{Binding TypeFilterSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="False"
+                                  StaysOpenOnEdit="True"
+                                  DisplayMemberPath="Label" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="SEARCH" Style="{StaticResource Label}" />
+                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
@@ -94,9 +124,6 @@
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="{x:Static vm:CompareStatus.OnlyInRight}">
                                     <Setter Property="Foreground" Value="#1F52C4" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Status}" Value="{x:Static vm:CompareStatus.Different}">
-                                    <Setter Property="Foreground" Value="#A66300" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Status}" Value="{x:Static vm:CompareStatus.Same}">
                                     <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
