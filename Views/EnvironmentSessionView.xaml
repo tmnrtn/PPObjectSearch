@@ -101,6 +101,7 @@
                     <ColumnDefinition Width="260" />
                     <ColumnDefinition Width="230" />
                     <ColumnDefinition Width="230" />
+                    <ColumnDefinition Width="200" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -130,8 +131,20 @@
                               IsEnabled="{Binding IsConnected}" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="0,16,0,0" VerticalAlignment="Bottom">
-                    <Button Content="Clear filters" MinWidth="100" Command="{Binding ClearFiltersCommand}" />
+                <StackPanel Grid.Column="3" Margin="0,0,12,0">
+                    <TextBlock Text="LAYER" Style="{StaticResource Label}" />
+                    <ComboBox ItemsSource="{Binding LayerFilters}"
+                              SelectedItem="{Binding SelectedLayerFilter}"
+                              DisplayMemberPath="Label"
+                              IsEnabled="{Binding IsConnected}"
+                              ToolTip="Whether the object has an unmanaged customization on top of its managed layer. Unknown until 'Check unmanaged layers' has been run." />
+                </StackPanel>
+
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="0,16,0,0" VerticalAlignment="Bottom">
+                    <Button Content="Check unmanaged layers" MinWidth="160"
+                            Command="{Binding CheckUnmanagedLayersCommand}"
+                            ToolTip="Queries Dataverse's solution layers for every object currently on screen that hasn't been checked yet - one request per object, so narrowing the filters first is faster." />
+                    <Button Content="Clear filters" MinWidth="100" Margin="8,0,0,0" Command="{Binding ClearFiltersCommand}" />
                     <Button Content="Export CSV" MinWidth="100" Margin="8,0,0,0"
                             Command="{Binding ExportCsvCommand}"
                             ToolTip="Exports the rows currently on screen, filters and all." />
@@ -259,6 +272,9 @@
 
                 <DataGridTextColumn Header="State" Binding="{Binding ManagedLabel}" Width="110"
                                     ElementStyle="{StaticResource CellText}" />
+
+                <DataGridTextColumn Header="Layer" Binding="{Binding UnmanagedLayerLabel}" Width="130"
+                                    ElementStyle="{StaticResource MutedCellText}" />
 
                 <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" Width="170"
                                     ElementStyle="{StaticResource CellText}" />

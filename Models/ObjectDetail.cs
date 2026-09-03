@@ -36,3 +36,19 @@ public sealed class ContainingSolution
 
     public string StateLabel => IsManaged ? "Managed" : "Unmanaged";
 }
+
+/// <summary>
+/// One row of a component's solution layer stack, top (most recently applied) first. The
+/// unmanaged layer is a single, environment-wide layer shared by every unmanaged customization -
+/// Dataverse's own maker portal labels it "Active" rather than naming a solution.
+/// </summary>
+public sealed class ComponentLayer
+{
+    public required string SolutionName { get; init; }
+    public string? PublisherName { get; init; }
+    public int Order { get; init; }
+
+    public bool IsUnmanagedLayer => string.Equals(SolutionName, "Active", StringComparison.OrdinalIgnoreCase);
+
+    public string StateLabel => IsUnmanagedLayer ? "Unmanaged (Active)" : "Managed";
+}

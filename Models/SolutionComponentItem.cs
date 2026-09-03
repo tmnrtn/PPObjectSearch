@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PPObjectSearch.Core;
 
 namespace PPObjectSearch.Models;
 
@@ -20,7 +21,7 @@ public sealed class SolutionInfo
 }
 
 /// <summary>One row of the solution's object list.</summary>
-public sealed class SolutionComponentItem
+public sealed class SolutionComponentItem : ObservableObject
 {
     public required string Name { get; init; }
     public string? DisplayName { get; init; }
@@ -53,6 +54,31 @@ public sealed class SolutionComponentItem
 
     /// <summary>Absolute maker portal URL for this object, or null when no link can be built.</summary>
     public string? MakerUrl { get; set; }
+
+    private bool? _hasUnmanagedLayer;
+    /// <summary>
+    /// Whether this object has an unmanaged customization on top of its managed layer. Null until
+    /// explicitly checked - unlike <see cref="IsManaged"/> this isn't in the bulk component read,
+    /// it costs one Dataverse call per object, so it is opt-in rather than loaded up front.
+    /// Not persisted to the on-disk cache: it goes stale the moment anyone customizes something.
+    /// </summary>
+    [JsonIgnore]
+    public bool? HasUnmanagedLayer
+    {
+        get => _hasUnmanagedLayer;
+        set
+        {
+            if (SetProperty(ref _hasUnmanagedLayer, value)) OnPropertyChanged(nameof(UnmanagedLayerLabel));
+        }
+    }
+
+    [JsonIgnore]
+    public string UnmanagedLayerLabel => HasUnmanagedLayer switch
+    {
+        true => "Unmanaged layer",
+        false => "No unmanaged layer",
+        null => "Not checked"
+    };
 
     /// <summary>Best label for the Name column - display name where there is one.</summary>
     [JsonIgnore]

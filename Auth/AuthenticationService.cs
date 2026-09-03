@@ -77,9 +77,7 @@ public sealed class AuthenticationService
                       // No remembered account: reuse one already signed into this tenant.
                       ?? accounts.FirstOrDefault(a =>
                           tenantId is not null &&
-                          string.Equals(a.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase))
-                      // Single account overall - unambiguous, so no need to interrupt the user.
-                      ?? (accounts.Count() == 1 ? accounts.First() : null);
+                          string.Equals(a.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
         }
 
         AuthenticationResult result;

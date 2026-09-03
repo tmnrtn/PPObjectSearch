@@ -56,6 +56,23 @@
                         <TextBlock Text="{Binding Item.ComponentTypeName}" Foreground="{StaticResource TextMuted}" />
                         <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}" />
                         <TextBlock Text="{Binding Item.ManagedLabel}" Foreground="{StaticResource TextMuted}" />
+                        <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}"
+                                   Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Foreground="{StaticResource TextMuted}"
+                                   Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="No unmanaged layer" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="True">
+                                            <Setter Property="Text" Value="Has unmanaged layer" />
+                                            <Setter Property="Foreground" Value="#B45309" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}" />
                         <TextBlock Text="{Binding Item.ObjectId}" Foreground="{StaticResource TextMuted}"
                                    FontFamily="Consolas" FontSize="11" VerticalAlignment="Center" />
@@ -78,23 +95,47 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Containing solutions -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                <TextBlock Style="{StaticResource SectionHeading}"
-                           Text="Solutions containing this object" />
-                <DataGrid ItemsSource="{Binding Solutions}" MaxHeight="170">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Solution" Binding="{Binding FriendlyName}" Width="*"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Unique name" Binding="{Binding UniqueName}" Width="220"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="110"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="110"
-                                            ElementStyle="{StaticResource Cell}" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </StackPanel>
+            <!-- Containing solutions + component layers -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Style="{StaticResource SectionHeading}"
+                               Text="Solutions containing this object" />
+                    <DataGrid ItemsSource="{Binding Solutions}" MaxHeight="170">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Solution" Binding="{Binding FriendlyName}" Width="*"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="Unique name" Binding="{Binding UniqueName}" Width="150"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="90"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="90"
+                                                ElementStyle="{StaticResource Cell}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource SectionHeading}"
+                               Text="Component layers (top = active)"
+                               ToolTip="Every solution layering this component, most recently applied first. 'Unmanaged (Active)' is the single environment-wide layer shared by all unmanaged customizations." />
+                    <DataGrid ItemsSource="{Binding Layers}" MaxHeight="170">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Solution" Binding="{Binding SolutionName}" Width="*"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="Publisher" Binding="{Binding PublisherName}" Width="130"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="130"
+                                                ElementStyle="{StaticResource Cell}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Grid>
 
             <!-- Dependencies, both directions -->
             <Grid Grid.Row="1">

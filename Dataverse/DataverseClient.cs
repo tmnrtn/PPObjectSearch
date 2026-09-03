@@ -422,6 +422,86 @@ public sealed class DataverseClient : IDisposable
             .ToList();
     }
 
+    /// <summary>
+    /// Reads a component's solution layer stack from msdyn_componentlayers - the same
+    /// undocumented virtual table the maker portal's "View solution layers" panel uses. There is
+    /// no public Web API for this, so it is only attempted for the component types in
+    /// <see cref="ComponentTypes.GetSdkName"/>; null means "not supported for this type", not
+    /// "no layers".
+    /// </summary>
+    public async Task<IReadOnlyList<ComponentLayer>?> GetComponentLayersAsync(
+        Guid objectId,
+        int componentType,
+        CancellationToken ct = default)
+    {
+        var sdkName = ComponentTypes.GetSdkName(componentType);
+        if (sdkName is null) return null;
+
+        var url = EnvironmentUrl + ApiPath +
+                  $"msdyn_componentlayers?$filter=msdyn_componentid eq '{objectId}' " +
+                  $"and msdyn_solutioncomponentname eq '{sdkName}'";
+
+        using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+
+        var layers = new List<ComponentLayer>();
+        if (doc.RootElement.TryGetProperty("value", out var value))
+        {
+            foreach (var row in value.EnumerateArray())
+            {
+                layers.Add(new ComponentLayer
+                {
+                    SolutionName = JsonHelper.GetString(row, "msdyn_solutionname") ?? "(unknown)",
+                    PublisherName = JsonHelper.GetString(row, "msdyn_publishername"),
+                    Order = JsonHelper.GetInt(row, "msdyn_order") ?? 0
+                });
+            }
+        }
+
+        return layers.OrderBy(l => l.Order).ToList();
+    }
+
+    /// <summary>
+    /// Layer lookups are one Dataverse call per component - there is no bulk equivalent - so this
+    /// runs a bounded number concurrently, the same tradeoff <see cref="GetComponentsInParallelAsync"/>
+    /// makes, and never lets one component's failure abort the rest.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ComponentLayer>?>> GetComponentLayersBulkAsync(
+        IReadOnlyList<(Guid ObjectId, int ComponentType)> targets,
+        IProgress<int>? progress = null,
+        CancellationToken ct = default)
+    {
+        using var gate = new SemaphoreSlim(4);
+        var results = new System.Collections.Concurrent.ConcurrentDictionary<Guid, IReadOnlyList<ComponentLayer>?>();
+        var done = 0;
+
+        var tasks = targets.Select(async target =>
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                results[target.ObjectId] = await GetComponentLayersAsync(target.ObjectId, target.ComponentType, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Best effort - one component's failure should not lose the results for the rest.
+                results[target.ObjectId] = null;
+            }
+            finally
+            {
+                progress?.Report(Interlocked.Increment(ref done));
+                gate.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+        return results;
+    }
+
     public async Task<IReadOnlyList<SolutionInfo>> GetSolutionsAsync(CancellationToken ct = default)
     {
         var url = EnvironmentUrl + ApiPath +

@@ -38,6 +38,23 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public ObservableCollection<ContainingSolution> Solutions { get; } = new();
     public ObservableCollection<DependencyRef> Dependents { get; } = new();
     public ObservableCollection<DependencyRef> Required { get; } = new();
+    public ObservableCollection<ComponentLayer> Layers { get; } = new();
+
+    private bool _layersSupported = true;
+    /// <summary>False when this object's type has no known mapping into the layers API - the
+    /// section is hidden rather than shown empty, which would read as "no unmanaged layer".</summary>
+    public bool LayersSupported
+    {
+        get => _layersSupported;
+        private set => SetProperty(ref _layersSupported, value);
+    }
+
+    private bool _hasUnmanagedLayer;
+    public bool HasUnmanagedLayer
+    {
+        get => _hasUnmanagedLayer;
+        private set => SetProperty(ref _hasUnmanagedLayer, value);
+    }
 
     public string Title => $"{Item.PrimaryLabel} - {Item.ComponentTypeName}";
 
@@ -67,8 +84,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             Solutions.Clear();
             Dependents.Clear();
             Required.Clear();
+            Layers.Clear();
 
-            // Each of the three is useful on its own, so one failing must not hide the others.
+            // Each is useful on its own, so one failing must not hide the others.
             try
             {
                 foreach (var solution in await _client.GetContainingSolutionsAsync(Item.ObjectId))
@@ -83,6 +101,23 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             await LoadDependenciesAsync(DependencyDirection.Dependent, Dependents, problems);
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
+
+            try
+            {
+                var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType);
+                LayersSupported = layers is not null;
+
+                if (layers is not null)
+                {
+                    foreach (var layer in layers) Layers.Add(layer);
+                }
+
+                HasUnmanagedLayer = Layers.Any(l => l.IsUnmanagedLayer);
+            }
+            catch (Exception ex)
+            {
+                problems.Add("layers: " + ex.Message);
+            }
 
             Status = problems.Count == 0
                 ? $"{Solutions.Count} solution(s), {Dependents.Count} dependent, {Required.Count} required."

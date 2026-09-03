@@ -118,4 +118,41 @@ public static class ComponentTypes
 
     public static string? GetProcessCategoryName(int category) =>
         ProcessCategories.TryGetValue(category, out var name) ? name : null;
+
+    /// <summary>
+    /// The componenttype option set's own PascalCase member name (e.g. "Entity", "WebResource"),
+    /// as opposed to <see cref="Names"/>'s human-friendly label. This is what the undocumented
+    /// msdyn_componentlayers virtual table expects in its msdyn_solutioncomponentname filter -
+    /// there is no public Web API for component layers, so this list only covers the types worth
+    /// the risk of getting right; everything else is left unmapped and the layers check is simply
+    /// skipped for it.
+    /// </summary>
+    private static readonly Dictionary<int, string> SdkNames = new()
+    {
+        [1] = "Entity",
+        [2] = "Attribute",
+        [9] = "OptionSet",
+        [20] = "Role",
+        [26] = "SavedQuery",
+        [29] = "Workflow",
+        [31] = "Report",
+        [36] = "EmailTemplate",
+        [60] = "SystemForm",
+        [61] = "WebResource",
+        [62] = "SiteMap",
+        [63] = "ConnectionRole",
+        [66] = "CustomControl",
+        [70] = "FieldSecurityProfile",
+        [90] = "PluginType",
+        [91] = "PluginAssembly",
+        [92] = "SDKMessageProcessingStep",
+        [95] = "ServiceEndpoint",
+        [300] = "CanvasApp",
+        [380] = "EnvironmentVariableDefinition",
+        [10018] = "CustomAPI",
+        [10029] = "ConnectionReference"
+    };
+
+    public static string? GetSdkName(int componentType) =>
+        SdkNames.TryGetValue(componentType, out var name) ? name : null;
 }

@@ -14,7 +14,7 @@ namespace PPObjectSearch.Auth;
 /// </summary>
 public static partial class TenantDiscovery
 {
-    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false })
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
@@ -27,6 +27,7 @@ public static partial class TenantDiscovery
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, environmentUrl.TrimEnd('/') + "/api/data/v9.2/WhoAmI");
+            request.Headers.ConnectionClose = true;
             using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
 
             if (response.StatusCode != HttpStatusCode.Unauthorized) return null;
