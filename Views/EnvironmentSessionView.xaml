@@ -108,8 +108,12 @@
 
                 <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="OBJECT TYPE" Style="{StaticResource Label}" />
-                    <ComboBox ItemsSource="{Binding TypeFilters}"
+                    <ComboBox ItemsSource="{Binding TypeFiltersView}"
                               SelectedItem="{Binding SelectedTypeFilter}"
+                              Text="{Binding TypeFilterSearchText, UpdateSourceTrigger=PropertyChanged}"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"
                               DisplayMemberPath="Label"
                               IsEnabled="{Binding IsConnected}" />
                 </StackPanel>

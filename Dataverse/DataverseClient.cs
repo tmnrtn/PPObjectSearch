@@ -758,9 +758,17 @@ public sealed class DataverseClient : IDisposable
     {
         var componentType = JsonHelper.GetInt(row, "msdyn_componenttype") ?? 0;
 
-        // Prefer the server's own label, then the formatted value annotation, then our map.
-        var typeName = JsonHelper.GetString(row, "msdyn_componenttypename")
-                       ?? JsonHelper.GetString(row, "msdyn_componenttype@OData.Community.Display.V1.FormattedValue")
+        var serverLabel = JsonHelper.GetString(row, "msdyn_componenttypename") 
+                          ?? JsonHelper.GetString(row, "msdyn_componenttype@OData.Community.Display.V1.FormattedValue");
+
+        if (serverLabel != null && serverLabel.StartsWith("Customization.Type_", StringComparison.OrdinalIgnoreCase))
+        {
+            serverLabel = serverLabel.Substring("Customization.Type_".Length);
+        }
+
+        // Prefer our friendly map first to avoid unfriendly localization keys like Customization.Type_WebResource
+        var typeName = ComponentTypes.TryGetName(componentType)
+                       ?? serverLabel
                        ?? ComponentTypes.GetName(componentType);
 
         // Kept as its own column rather than folded into the type: processes all report as

@@ -116,6 +116,9 @@ public static class ComponentTypes
     public static string GetName(int componentType) =>
         Names.TryGetValue(componentType, out var name) ? name : $"Component type {componentType}";
 
+    public static string? TryGetName(int componentType) =>
+        Names.TryGetValue(componentType, out var name) ? name : null;
+
     public static string? GetProcessCategoryName(int category) =>
         ProcessCategories.TryGetValue(category, out var name) ? name : null;
 
