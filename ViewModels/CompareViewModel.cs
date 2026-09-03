@@ -135,7 +135,15 @@ public sealed class CompareViewModel : ObservableObject
         get => _typeFilterSearchText;
         set
         {
-            if (SetProperty(ref _typeFilterSearchText, value)) TypeFiltersView?.Refresh();
+            if (SetProperty(ref _typeFilterSearchText, value))
+            {
+                TypeFiltersView?.Refresh();
+                
+                if (SelectedTypeFilter != null && value != SelectedTypeFilter.Label)
+                {
+                    SelectedTypeFilter = TypeFilters.FirstOrDefault(t => t.IsAll);
+                }
+            }
         }
     }
 
@@ -276,7 +284,7 @@ public sealed class CompareViewModel : ObservableObject
         
         if (option.IsAll) return true;
 
-        return option.Name.Contains(_typeFilterSearchText, StringComparison.CurrentCultureIgnoreCase);
+        return option.Label.Contains(_typeFilterSearchText, StringComparison.CurrentCultureIgnoreCase);
     }
 
     private bool Filter(object obj)
