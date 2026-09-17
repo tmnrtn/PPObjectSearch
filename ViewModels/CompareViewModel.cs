@@ -28,11 +28,22 @@ public sealed class CompareRow
     /// <summary>Whichever side's row can supply a maker portal link.</summary>
     public SolutionComponentItem? Link { get; init; }
 
+    /// <summary>
+    /// Both sides are kept, not just the one that supplies the link, because comparing the
+    /// definition needs to ask each environment about its own object - matched-by-name rows
+    /// carry a different id on each side.
+    /// </summary>
+    public SolutionComponentItem? Left { get; init; }
+    public SolutionComponentItem? Right { get; init; }
+
+    /// <summary>Only a component present on both sides has two definitions to compare.</summary>
+    public bool ExistsOnBothSides => Left is not null && Right is not null;
+
     public string StatusLabel => Status switch
     {
         CompareStatus.OnlyInLeft => "Only in left",
         CompareStatus.OnlyInRight => "Only in right",
-        _ => "Same"
+        _ => "In both"
     };
 }
 
@@ -66,6 +77,9 @@ public sealed class CompareViewModel : ObservableObject
 
         CompareCommand = new RelayCommand(_ => Compare(), _ => Left is not null && Right is not null && Left != Right);
         ExportCommand = new RelayCommand(_ => Export(), _ => Rows.Count > 0);
+        CompareDefinitionCommand = new RelayCommand(
+            p => CompareDefinition(p as CompareRow ?? SelectedRow),
+            p => (p as CompareRow ?? SelectedRow) is { ExistsOnBothSides: true });
 
         _left = Sessions.FirstOrDefault();
         _right = Sessions.Skip(1).FirstOrDefault();
@@ -79,6 +93,49 @@ public sealed class CompareViewModel : ObservableObject
 
     public RelayCommand CompareCommand { get; }
     public RelayCommand ExportCommand { get; }
+    public RelayCommand CompareDefinitionCommand { get; }
+
+    private CompareRow? _selectedRow;
+    public CompareRow? SelectedRow
+    {
+        get => _selectedRow;
+        set
+        {
+            if (SetProperty(ref _selectedRow, value)) CompareDefinitionCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// Opens the same component's definition in both environments side by side. Unlike
+    /// <see cref="Compare"/>, which works entirely from the loaded lists, this does cost two
+    /// requests - one layer lookup per environment - so it is per-row and on demand.
+    /// </summary>
+    private void CompareDefinition(CompareRow? row)
+    {
+        if (row is not { Left: { } leftItem, Right: { } rightItem }) return;
+        if (Left?.Client is not { } leftClient || Right?.Client is not { } rightClient) return;
+
+        var viewModel = new EnvironmentDiffViewModel(
+            row.Name,
+            row.ComponentTypeName,
+            LeftHeader,
+            RightHeader,
+            leftClient,
+            rightClient,
+            leftItem,
+            rightItem);
+
+        var window = new Views.EnvironmentDiffWindow
+        {
+            DataContext = viewModel,
+            Owner = Application.Current.Windows
+                .OfType<Window>()
+                .FirstOrDefault(w => ReferenceEquals(w.DataContext, this)) ?? Application.Current.MainWindow
+        };
+
+        window.Show();
+        _ = viewModel.LoadAsync();
+    }
 
     private EnvironmentSessionViewModel? _left;
     public EnvironmentSessionViewModel? Left
@@ -258,7 +315,9 @@ public sealed class CompareViewModel : ObservableObject
             Status = status,
             LeftModified = left?.ModifiedOn,
             RightModified = right?.ModifiedOn,
-            Link = source
+            Link = source,
+            Left = left,
+            Right = right
         };
     }
 
@@ -274,7 +333,7 @@ public sealed class CompareViewModel : ObservableObject
         var same = _all.Count(r => r.Status == CompareStatus.Same);
 
         Summary = $"{onlyLeft:N0} only in {LeftHeader}  |  {onlyRight:N0} only in {RightHeader}  |  " +
-                  $"{same:N0} identical";
+                  $"{same:N0} in both";
     }
 
     private bool FilterTypeOption(object obj)

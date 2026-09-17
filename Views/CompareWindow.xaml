@@ -48,8 +48,9 @@
                     <Button Grid.Column="2" Content="Compare" Margin="0,16,0,0" VerticalAlignment="Bottom"
                             Command="{Binding CompareCommand}" />
 
-                    <CheckBox Grid.Column="3" Content="Show identical" Margin="14,0,0,8"
-                              VerticalAlignment="Bottom" IsChecked="{Binding ShowIdentical}" />
+                    <CheckBox Grid.Column="3" Content="Show items in both" Margin="14,0,0,8"
+                              VerticalAlignment="Bottom" IsChecked="{Binding ShowIdentical}"
+                              ToolTip="Components present in both environments. Their definitions may still differ - use the Compare button on a row to see." />
 
                     <Button Grid.Column="4" Content="Export CSV" Margin="14,16,0,0" VerticalAlignment="Bottom"
                             MinWidth="100" Command="{Binding ExportCommand}" />
@@ -82,6 +83,7 @@
 
         <DataGrid Grid.Row="1"
                   ItemsSource="{Binding RowsView}"
+                  SelectedItem="{Binding SelectedRow}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
                   CanUserAddRows="False"
@@ -146,6 +148,20 @@
                 <DataGridTextColumn Header="Right modified"
                                     Binding="{Binding RightModified, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
                                     Width="140" ElementStyle="{StaticResource MutedCell}" />
+
+                <!-- Only meaningful where both sides have the component to compare. -->
+                <DataGridTemplateColumn Header="Definition" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="Compare" Padding="8,2" MinWidth="0" Margin="4,2"
+                                    ToolTip="Show this component's definition in both environments side by side."
+                                    Visibility="{Binding ExistsOnBothSides, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.CompareDefinitionCommand,
+                                                      RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 

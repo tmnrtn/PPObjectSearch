@@ -452,12 +452,16 @@ public sealed class DataverseClient : IDisposable
                 {
                     SolutionName = JsonHelper.GetString(row, "msdyn_solutionname") ?? "(unknown)",
                     PublisherName = JsonHelper.GetString(row, "msdyn_publishername"),
-                    Order = JsonHelper.GetInt(row, "msdyn_order") ?? 0
+                    Order = JsonHelper.GetInt(row, "msdyn_order") ?? 0,
+                    ComponentJson = JsonHelper.GetString(row, "msdyn_componentjson"),
+                    ChangesRaw = JsonHelper.GetString(row, "msdyn_changes")
                 });
             }
         }
 
-        return layers.OrderBy(l => l.Order).ToList();
+        // Dataverse numbers the stack from the bottom up, so the highest order is the layer
+        // actually in effect - list it first, matching the maker portal's own layers panel.
+        return layers.OrderByDescending(l => l.Order).ToList();
     }
 
     /// <summary>

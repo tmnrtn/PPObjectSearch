@@ -28,17 +28,31 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         OpenLinkCommand = new RelayCommand(_ => OpenUrl(item.MakerUrl), _ => item.MakerUrl is not null);
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
+        ViewLayerChangesCommand = new RelayCommand(
+            p => ShowLayerChanges(p as ComponentLayer ?? SelectedLayer),
+            p => (p as ComponentLayer ?? SelectedLayer) is not null);
     }
 
     public SolutionComponentItem Item { get; }
 
     public RelayCommand OpenLinkCommand { get; }
     public AsyncRelayCommand RefreshCommand { get; }
+    public RelayCommand ViewLayerChangesCommand { get; }
 
     public ObservableCollection<ContainingSolution> Solutions { get; } = new();
     public ObservableCollection<DependencyRef> Dependents { get; } = new();
     public ObservableCollection<DependencyRef> Required { get; } = new();
     public ObservableCollection<ComponentLayer> Layers { get; } = new();
+
+    private ComponentLayer? _selectedLayer;
+    public ComponentLayer? SelectedLayer
+    {
+        get => _selectedLayer;
+        set
+        {
+            if (SetProperty(ref _selectedLayer, value)) ViewLayerChangesCommand.RaiseCanExecuteChanged();
+        }
+    }
 
     private bool _layersSupported = true;
     /// <summary>False when this object's type has no known mapping into the layers API - the
@@ -151,6 +165,28 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             problems.Add($"{direction.ToString().ToLowerInvariant()} components: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Opens the diff for one layer. <see cref="Layers"/> runs top of the stack first, so the
+    /// layer a given one sits on top of - the "before" side of the diff - is the next row down.
+    /// </summary>
+    private void ShowLayerChanges(ComponentLayer? layer)
+    {
+        if (layer is null) return;
+
+        var index = Layers.IndexOf(layer);
+        var below = index >= 0 && index + 1 < Layers.Count ? Layers[index + 1] : null;
+
+        var window = new Views.LayerChangesWindow
+        {
+            DataContext = new LayerChangesViewModel(Item.PrimaryLabel, layer, below),
+            Owner = Application.Current.Windows
+                .OfType<Window>()
+                .FirstOrDefault(w => ReferenceEquals(w.DataContext, this)) ?? Application.Current.MainWindow
+        };
+
+        window.Show();
     }
 
     private static void OpenUrl(string? url)

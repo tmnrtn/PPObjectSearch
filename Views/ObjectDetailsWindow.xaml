@@ -122,16 +122,30 @@
 
                 <StackPanel Grid.Column="2" Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
                     <TextBlock Style="{StaticResource SectionHeading}"
-                               Text="Component layers (top = active)"
-                               ToolTip="Every solution layering this component, most recently applied first. 'Unmanaged (Active)' is the single environment-wide layer shared by all unmanaged customizations." />
-                    <DataGrid ItemsSource="{Binding Layers}" MaxHeight="170">
+                               Text="Component layers (top of stack first)"
+                               ToolTip="Every solution layering this component, the one actually in effect first. 'Unmanaged (Active)' is the single environment-wide layer shared by all unmanaged customizations." />
+                    <DataGrid ItemsSource="{Binding Layers}" MaxHeight="170"
+                              SelectedItem="{Binding SelectedLayer}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Solution" Binding="{Binding SolutionName}" Width="*"
                                                 ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Publisher" Binding="{Binding PublisherName}" Width="130"
+                            <DataGridTextColumn Header="Publisher" Binding="{Binding PublisherName}" Width="110"
                                                 ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="130"
+                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="120"
                                                 ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="Changes" Binding="{Binding ChangeSummary}" Width="90"
+                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTemplateColumn Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="View" Padding="8,2" MinWidth="0" Margin="4,2"
+                                                ToolTip="Show the properties this layer changed, against the layer beneath it."
+                                                Command="{Binding DataContext.ViewLayerChangesCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </StackPanel>
