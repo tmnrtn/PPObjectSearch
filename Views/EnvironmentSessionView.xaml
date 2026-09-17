@@ -162,6 +162,8 @@
         <!-- Results -->
         <DataGrid Grid.Row="4"
                   ItemsSource="{Binding ItemsView}"
+                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                  PreviewMouseRightButtonDown="OnGridRightButtonDown"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
                   CanUserAddRows="False"
@@ -198,23 +200,18 @@
             </DataGrid.Resources>
 
             <DataGrid.ContextMenu>
+                <!--
+                    No CommandParameter: the menu closes before the command runs, which detaches
+                    a RelativeSource binding and hands the command a null. The commands read
+                    SelectedItem instead, and right-clicking a row selects it first.
+                -->
                 <ContextMenu>
-                    <MenuItem Header="Open in maker portal"
-                              Command="{Binding OpenLinkCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <MenuItem Header="Details - solutions and dependencies..."
-                              Command="{Binding ShowDetailsCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
+                    <MenuItem Header="Details - solutions and dependencies..." Command="{Binding ShowDetailsCommand}" />
                     <Separator />
-                    <MenuItem Header="Copy name"
-                              Command="{Binding CopyNameCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <MenuItem Header="Copy maker portal link"
-                              Command="{Binding CopyLinkCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                    <MenuItem Header="Copy object id"
-                              Command="{Binding CopyIdCommand}"
-                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}" />
+                    <MenuItem Header="Copy maker portal link" Command="{Binding CopyLinkCommand}" />
+                    <MenuItem Header="Copy object id" Command="{Binding CopyIdCommand}" />
                 </ContextMenu>
             </DataGrid.ContextMenu>
 
