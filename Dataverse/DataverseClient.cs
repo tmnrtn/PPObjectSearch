@@ -30,7 +30,7 @@ public sealed record TableMetadata(Guid MetadataId, string? EntitySetName);
 /// Thin Dataverse Web API client covering the three calls this app needs:
 /// who am I, list solutions, and list a solution's components.
 /// </summary>
-public sealed class DataverseClient : IDisposable
+public sealed partial class DataverseClient : IDisposable
 {
     private const string ApiPath = "/api/data/v9.2/";
     private const int PageSize = 5000;

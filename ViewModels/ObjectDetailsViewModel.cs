@@ -9,13 +9,23 @@ namespace PPObjectSearch.ViewModels;
 
 /// <summary>
 /// Everything worth knowing about one object beyond its row: which solutions carry it (the
-/// layering question that bites during deployments) and what depends on it in both directions
-/// (the question worth asking before deleting anything).
+/// layering question that bites during deployments), what depends on it in both directions
+/// (the question worth asking before deleting anything), and - for a table - what it owns,
+/// down to the properties of each column, relationship, key, form, view, chart and dashboard.
 /// </summary>
 public sealed class ObjectDetailsViewModel : ObservableObject
 {
+    /// <summary>solutioncomponent type code for a table.</summary>
+    private const int TableComponentType = 1;
+
     private readonly DataverseClient _client;
     private readonly IReadOnlyDictionary<Guid, SolutionComponentItem> _known;
+
+    /// <summary>
+    /// Bumped on every child selection. Arrowing down a long column list starts a fetch per row,
+    /// and only the last one asked for may write its results.
+    /// </summary>
+    private int _propertyRequest;
 
     public ObjectDetailsViewModel(
         DataverseClient client,
@@ -44,6 +54,18 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public ObservableCollection<DependencyRef> Required { get; } = new();
     public ObservableCollection<ComponentLayer> Layers { get; } = new();
 
+    /// <summary>What the table owns, one group per kind. Empty for anything that is not a table.</summary>
+    public ObservableCollection<TableChildGroup> ChildGroups { get; } = new();
+
+    /// <summary>The selected group's children, after the filter box.</summary>
+    public ObservableCollection<TableChild> Children { get; } = new();
+
+    /// <summary>Every property of the selected child, fetched the first time it is selected.</summary>
+    public ObservableCollection<ComponentProperty> ChildProperties { get; } = new();
+
+    /// <summary>Only a table has child components; every other type hides the whole section.</summary>
+    public bool IsTable => Item.ComponentType == TableComponentType;
+
     private ComponentLayer? _selectedLayer;
     public ComponentLayer? SelectedLayer
     {
@@ -52,6 +74,52 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedLayer, value)) ViewLayerChangesCommand.RaiseCanExecuteChanged();
         }
+    }
+
+    private TableChildGroup? _selectedChildGroup;
+    public TableChildGroup? SelectedChildGroup
+    {
+        get => _selectedChildGroup;
+        set
+        {
+            if (SetProperty(ref _selectedChildGroup, value)) ApplyChildFilter();
+        }
+    }
+
+    private string _childFilter = string.Empty;
+    /// <summary>Narrows the selected group - a table with 400 columns needs it.</summary>
+    public string ChildFilter
+    {
+        get => _childFilter;
+        set
+        {
+            if (SetProperty(ref _childFilter, value)) ApplyChildFilter();
+        }
+    }
+
+    private TableChild? _selectedChild;
+    public TableChild? SelectedChild
+    {
+        get => _selectedChild;
+        set
+        {
+            if (SetProperty(ref _selectedChild, value)) _ = ShowChildPropertiesAsync(value);
+        }
+    }
+
+    private bool _isLoadingProperties;
+    public bool IsLoadingProperties
+    {
+        get => _isLoadingProperties;
+        private set => SetProperty(ref _isLoadingProperties, value);
+    }
+
+    private string _childStatus = "Select a component to see its properties.";
+    /// <summary>Stands in for the property grid whenever there is nothing in it.</summary>
+    public string ChildStatus
+    {
+        get => _childStatus;
+        private set => SetProperty(ref _childStatus, value);
     }
 
     private bool _layersSupported = true;
@@ -99,6 +167,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             Dependents.Clear();
             Required.Clear();
             Layers.Clear();
+            ClearChildComponents();
 
             // Each is useful on its own, so one failing must not hide the others.
             try
@@ -115,6 +184,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             await LoadDependenciesAsync(DependencyDirection.Dependent, Dependents, problems);
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
+
+            if (IsTable) await LoadChildComponentsAsync(problems);
 
             try
             {
@@ -133,8 +204,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 problems.Add("layers: " + ex.Message);
             }
 
+            var summary = $"{Solutions.Count} solution(s), {Dependents.Count} dependent, {Required.Count} required";
+            if (IsTable) summary += $", {ChildGroups.Sum(g => g.Count)} child component(s)";
+
             Status = problems.Count == 0
-                ? $"{Solutions.Count} solution(s), {Dependents.Count} dependent, {Required.Count} required."
+                ? summary + "."
                 : "Some details could not be read - " + string.Join("; ", problems);
         }
         finally
@@ -165,6 +239,182 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             problems.Add($"{direction.ToString().ToLowerInvariant()} components: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Reads everything the table owns. The six reads are independent, so they run together and
+    /// each is allowed to fail on its own - a tenant that blocks charts should not cost the user
+    /// their columns.
+    /// </summary>
+    private async Task LoadChildComponentsAsync(List<string> problems)
+    {
+        TableIdentity? table;
+
+        try
+        {
+            table = await _client.GetTableIdentityAsync(Item.ObjectId, Item.Name);
+        }
+        catch (Exception ex)
+        {
+            problems.Add("table metadata: " + ex.Message);
+            return;
+        }
+
+        if (table is null)
+        {
+            problems.Add("table metadata: this component could not be matched to a table.");
+            return;
+        }
+
+        var columns = _client.GetTableColumnsAsync(table);
+        var relationships = _client.GetTableRelationshipsAsync(table);
+        var keys = _client.GetTableKeysAsync(table);
+        var forms = _client.GetTableFormsAsync(table);
+        var views = _client.GetTableViewsAsync(table);
+        var charts = _client.GetTableChartsAsync(table);
+
+        var all = new List<TableChild>();
+        all.AddRange(await GatherAsync(columns, "columns", problems));
+        all.AddRange(await GatherAsync(relationships, "relationships", problems));
+        all.AddRange(await GatherAsync(keys, "keys", problems));
+        all.AddRange(await GatherAsync(forms, "forms", problems));
+        all.AddRange(await GatherAsync(views, "views", problems));
+        all.AddRange(await GatherAsync(charts, "charts", problems));
+
+        // Every kind is listed even when it came back empty: "Views 0" is an answer, whereas a
+        // missing section only raises the question of whether it was looked for.
+        foreach (var kind in Enum.GetValues<TableChildKind>())
+        {
+            ChildGroups.Add(new TableChildGroup
+            {
+                Kind = kind,
+                Label = GroupLabel(kind),
+                Children = all
+                    .Where(c => c.Kind == kind)
+                    .OrderBy(c => c.PrimaryLabel, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList()
+            });
+        }
+
+        SelectedChildGroup = ChildGroups.FirstOrDefault(g => !g.IsEmpty) ?? ChildGroups.FirstOrDefault();
+    }
+
+    private static async Task<IReadOnlyList<TableChild>> GatherAsync(
+        Task<IReadOnlyList<TableChild>> read,
+        string what,
+        List<string> problems)
+    {
+        try
+        {
+            return await read;
+        }
+        catch (Exception ex)
+        {
+            problems.Add($"{what}: {ex.Message}");
+            return Array.Empty<TableChild>();
+        }
+    }
+
+    private static string GroupLabel(TableChildKind kind) => kind switch
+    {
+        TableChildKind.Column => "Columns",
+        TableChildKind.Relationship => "Relationships",
+        TableChildKind.Key => "Keys",
+        TableChildKind.Form => "Forms",
+        TableChildKind.View => "Views",
+        TableChildKind.Chart => "Charts",
+        _ => "Dashboards"
+    };
+
+    private void ClearChildComponents()
+    {
+        // Nothing may still be in flight against the old list once it is gone.
+        _propertyRequest++;
+
+        ChildGroups.Clear();
+        Children.Clear();
+        ChildProperties.Clear();
+
+        _selectedChildGroup = null;
+        OnPropertyChanged(nameof(SelectedChildGroup));
+
+        _selectedChild = null;
+        OnPropertyChanged(nameof(SelectedChild));
+
+        IsLoadingProperties = false;
+        ChildStatus = "Select a component to see its properties.";
+    }
+
+    private void ApplyChildFilter()
+    {
+        // Clearing the list makes the grid report a null selection, so the one to restore has to
+        // be remembered before that happens.
+        var previous = SelectedChild;
+
+        Children.Clear();
+
+        var children = SelectedChildGroup?.Children ?? Array.Empty<TableChild>();
+        var terms = ChildFilter.ToLowerInvariant()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var child in children)
+        {
+            if (terms.All(t => child.FilterIndex.Contains(t, StringComparison.Ordinal))) Children.Add(child);
+        }
+
+        // Typing in the filter box should not throw away what is already on screen, but a
+        // selection the filter has just excluded - or one from another group - has to go.
+        SelectedChild = previous is not null && Children.Contains(previous)
+            ? previous
+            : Children.Count == 1 ? Children[0] : null;
+    }
+
+    /// <summary>
+    /// Fills the property grid for one child, from its cache where it has one. A form or view
+    /// record carries its whole XML definition, which is why this is not read up front.
+    /// </summary>
+    private async Task ShowChildPropertiesAsync(TableChild? child)
+    {
+        var request = ++_propertyRequest;
+
+        ChildProperties.Clear();
+
+        if (child is null)
+        {
+            IsLoadingProperties = false;
+            ChildStatus = "Select a component to see its properties.";
+            return;
+        }
+
+        if (child.Properties is null)
+        {
+            IsLoadingProperties = true;
+            ChildStatus = "Loading properties...";
+
+            try
+            {
+                child.Properties = await _client.GetChildPropertiesAsync(child);
+            }
+            catch (Exception ex)
+            {
+                if (request != _propertyRequest) return;
+
+                IsLoadingProperties = false;
+                ChildStatus = "Properties could not be read - " + ex.Message;
+                return;
+            }
+
+            // The user moved on while this was in flight; their current selection owns the grid.
+            if (request != _propertyRequest) return;
+
+            IsLoadingProperties = false;
+        }
+
+        foreach (var property in child.Properties) ChildProperties.Add(property);
+
+        ChildStatus = ChildProperties.Count == 0
+            ? "Dataverse returned no properties for this component."
+            : string.Empty;
     }
 
     /// <summary>
