@@ -20,6 +20,8 @@ straight into the maker portal.
 - **Filterable object type column** — the dropdown lists every type present with a count.
 - **Name as a maker portal link** — click to open the object in <https://make.powerapps.com>.
   Right-click a row to copy the name, the link, or the object id.
+- **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
+  on the primary key, an alternate key or columns you pick. Saved as named configurations.
 
 ## Build and run
 
@@ -63,6 +65,48 @@ the maker portal's own solution object list uses — so display names, schema na
 type labels all arrive in a single paged query. The whole solution is loaded once, then searching
 and filtering happen in memory, which keeps typing instant even on the default solution of a large
 environment.
+
+## Comparing reference data
+
+**Compare data** (`Ctrl+Shift+D`) diffs the rows of chosen tables between two connected
+environments — currencies, categories, configuration tables, anything whose *contents* are part of
+the solution rather than just its shape. It is read-only: nothing is ever written to either
+environment.
+
+1. Pick a **source** and a **target** from the connected tabs.
+2. **Add tables…** lists every table in the source environment. Tick the ones to check.
+3. **Settings…** on a table (or double-click it) decides how it is compared:
+   - **What identifies a row** — the primary key, one of the table's alternate keys, or columns you
+     pick. Primary keys only agree between environments where the rows were *deployed*; rows built
+     separately in each environment carry different ids, so an alternate key or a natural key
+     column is usually the right choice.
+   - **Row filter** — an optional OData `$filter` (e.g. `statecode eq 0`), applied to both sides.
+   - **Columns to compare** — every readable column, minus the primary id and the
+     created/modified/owner housekeeping columns, which differ for every deployed row and would
+     bury the real differences. **Defaults** puts that back.
+4. **Compare**. Each row lands as *only in source*, *only in target*, *values differ* or *match*,
+   and selecting one shows every compared column side by side with the differences highlighted.
+
+**Export CSV** writes one line per differing column — table, key, name, status, column, and each
+environment's value — so the output can be sorted and filtered outside the app.
+
+Some details worth knowing:
+
+- **Lookups are matched on their label, not their id**, because the id behind a lookup only agrees
+  where the target row was deployed. Untick **Match lookups by name** to compare the raw ids
+  instead; the result is re-judged from rows already read, without asking either environment again.
+- **Columns are intersected across both environments.** A column that exists only in the source
+  would make the target's query fail outright, so it is left out and reported in the warnings.
+- **Values are normalised per column type** before comparing, so `1.0000` against `1.0`, or the
+  same instant written with a different UTC offset, is not reported as a difference. Text is
+  compared exactly apart from surrounding whitespace, so a change of case *is* a difference.
+- **Anything that makes the result partial is said out loud** in the warnings strip: a table
+  missing from one side, a non-unique key, a column that exists on one side only, or a table that
+  hit the row cap. A truncated table reports every unread row as missing, so the cap matters —
+  raise it or add a filter.
+
+Configurations are saved by name into `settings.json` (below) and picked from the dropdown, so a
+data set worth checking regularly is set up once.
 
 ## Authentication
 
@@ -109,7 +153,40 @@ then set `ClientId` in settings (below).
     // Cloud flows are addressed by workflowid under a "cloudflows" segment. If a tenant wants
     // the solution-independent id instead, swap {objectId} for {workflowIdUnique}:
     "29": "https://make.powerapps.com/environments/{envId}/solutions/{solutionId}/objects/cloudflows/{objectId}/view"
-  }
+  },
+
+  // Saved reference data comparisons, maintained by the Compare data window. Editable by hand -
+  // this is the shape a configuration takes.
+  "ReferenceDataConfigurations": [
+    {
+      "Name": "Core reference data",
+      "MatchLookupsByName": true,
+      "MaxRowsPerEntity": 5000,
+      "Entities": [
+        {
+          "LogicalName": "contoso_category",
+          "DisplayName": "Category",
+
+          // "PrimaryId", "AlternateKey" or "Columns".
+          "KeySource": "AlternateKey",
+          "AlternateKeyName": "contoso_categorycodekey",
+
+          // The key's columns, kept so the comparison still works if the key is later dropped.
+          // Also the key itself when KeySource is "Columns".
+          "KeyColumns": ["contoso_code"],
+
+          // OData $filter applied to both environments. Omit for every row.
+          "Filter": "statecode eq 0",
+
+          // Columns left out of the value comparison. Omit the property entirely (not an empty
+          // list) to take the defaults: the primary id and the created/modified/owner columns.
+          "ExcludedColumns": ["contoso_categoryid", "createdon", "modifiedon"],
+
+          "IsEnabled": true
+        }
+      ]
+    }
+  ]
 }
 ```
 

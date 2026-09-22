@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows;
 using PPObjectSearch.Auth;
 using PPObjectSearch.Core;
@@ -24,6 +24,7 @@ public sealed class ShellViewModel : ObservableObject
         AddTabCommand = new RelayCommand(_ => AddTab());
         GlobalSearchCommand = new RelayCommand(_ => OpenGlobalSearch());
         CompareCommand = new RelayCommand(_ => OpenCompare());
+        CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         SignOutAllCommand = new AsyncRelayCommand(_ => SignOutAllAsync());
 
@@ -37,6 +38,7 @@ public sealed class ShellViewModel : ObservableObject
     public AsyncRelayCommand SignOutAllCommand { get; }
     public RelayCommand GlobalSearchCommand { get; }
     public RelayCommand CompareCommand { get; }
+    public RelayCommand CompareDataCommand { get; }
 
     private void OpenGlobalSearch()
     {
@@ -56,6 +58,22 @@ public sealed class ShellViewModel : ObservableObject
         new Views.CompareWindow
         {
             DataContext = new CompareViewModel(Sessions),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
+    /// <summary>
+    /// Reference data is rows rather than components, so it has its own window: nothing it needs
+    /// is in memory already, and which tables to read is a saved configuration rather than a
+    /// property of the tabs.
+    /// </summary>
+    private void OpenDataCompare()
+    {
+        if (!RequireConnectedTabs(2, "Connect at least two environments to compare their data.")) return;
+
+        new Views.ReferenceDataCompareWindow
+        {
+            DataContext = new ReferenceDataCompareViewModel(Sessions, _settings),
             Owner = Application.Current.MainWindow
         }.Show();
     }

@@ -55,6 +55,12 @@ public sealed class AppSettings
     /// </summary>
     public Dictionary<string, string>? MakerLinkTemplates { get; set; }
 
+    /// <summary>
+    /// Saved reference-data comparisons - which tables to check, keyed on what, with which columns
+    /// left out. Named so a team can keep one per data set rather than rebuilding the list.
+    /// </summary>
+    public List<ReferenceDataConfig>? ReferenceDataConfigurations { get; set; }
+
     public string? GetEnvironmentId(string environmentUrl)
     {
         if (EnvironmentIds is null) return null;

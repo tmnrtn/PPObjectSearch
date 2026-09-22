@@ -1,9 +1,12 @@
 <Application x:Class="PPObjectSearch.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:PPObjectSearch.Core"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <core:NotBoolConverter x:Key="NotBool" />
+        <core:CountToVisibilityConverter x:Key="CountToVis" />
 
         <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
         <SolidColorBrush x:Key="SurfaceAlt" Color="#F6F7F9" />
