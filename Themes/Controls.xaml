@@ -9,8 +9,10 @@
         Light/Dark dictionary (ThemeManager) repaints open windows.
     -->
 
-    <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
-    <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
+    <!-- Static fonts, not the design's Segoe UI Variable / Cascadia Mono: WPF draws only a variable
+         font's default outline and fakes the other weights, so SemiBold and hinting come out wrong. -->
+    <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
+    <FontFamily x:Key="MonoFont">Consolas</FontFamily>
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -693,7 +695,7 @@
     <!-- A read-only, multi-line monospace box (definitions, raw JSON). -->
     <Style TargetType="TextBox" x:Key="CodeBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="IsReadOnly" Value="True" />
         <Setter Property="AcceptsReturn" Value="True" />
         <Setter Property="TextWrapping" Value="NoWrap" />

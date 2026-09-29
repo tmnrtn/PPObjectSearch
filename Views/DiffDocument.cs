@@ -52,7 +52,7 @@ public static class DiffDocument
         var side = GetSide(box);
         var document = new FlowDocument
         {
-            FontSize = 11.5,
+            FontSize = 12,
             PagePadding = new Thickness(0, 4, 8, 4),
             LineHeight = LineHeight,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
