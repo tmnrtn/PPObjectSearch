@@ -247,6 +247,38 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     /// <summary>The page-number paging the count relies on is documented as capped here.</summary>
     private const long SimplePagingLimit = 50_000;
 
+    private RowCountSnapshot? _snapshot;
+
+    /// <summary>
+    /// Dataverse's stored count, shown as soon as the window opens: instant, but refreshed about
+    /// daily, so it stands until an exact count replaces it.
+    /// </summary>
+    private async Task LoadRowCountSnapshotAsync()
+    {
+        try
+        {
+            _snapshot = await _client.GetRowCountSnapshotAsync(Item.ObjectId);
+        }
+        catch
+        {
+            _snapshot = null;
+        }
+
+        // An exact count made meanwhile is the better answer; leave it alone.
+        if (IsCounting || RowCountDetail?.StartsWith("Exact", StringComparison.Ordinal) == true) return;
+
+        if (_snapshot is { } s)
+        {
+            RowCountText = $"~{s.Rows:N0} rows";
+            RowCountDetail = StoredCountDescription(s) + " Count rows gives an exact, current number.";
+        }
+    }
+
+    private static string StoredCountDescription(RowCountSnapshot snapshot) =>
+        snapshot.LastUpdated is { } at
+            ? $"Dataverse's stored count, last refreshed {at.ToLocalTime():yyyy-MM-dd HH:mm}."
+            : "Dataverse's stored count, refreshed about daily.";
+
     private async Task CountRowsAsync()
     {
         if (IsCounting)
@@ -258,50 +290,34 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         var cts = _countCts = new CancellationTokenSource();
         IsCounting = true;
         RowCountWarning = null;
-        RowCountDetail = null;
         RowCountText = "Counting...";
-
-        // The snapshot is cheap and independent; it runs alongside and is only a cross-check.
-        var snapshotTask = Task.Run(async () =>
-        {
-            try
-            {
-                var name = await _client.GetTableLogicalNameAsync(Item.ObjectId, cts.Token);
-                return name is null ? null : await _client.GetRowCountSnapshotAsync(name, cts.Token);
-            }
-            catch
-            {
-                return (long?)null;
-            }
-        });
 
         try
         {
             var progress = new Progress<string>(text => RowCountText = text);
-            var result = await _client.CountRowsAsync(Item.ObjectId, progress, cts.Token);
-            var snapshot = await snapshotTask;
+            var result = await _client.CountRowsAsync(Item.ObjectId, _snapshot?.Rows, progress, cts.Token);
 
             RowCountText = result.Rows == 1 ? "1 row" : $"{result.Rows:N0} rows";
             RowCountDetail =
-                $"Exact count from {result.Requests} request(s) in {result.Elapsed.TotalSeconds:0.0} s." +
-                (snapshot is { } s ? $" Dataverse's daily snapshot: {s:N0}." : string.Empty);
+                $"Exact count by {result.Method}, {result.Requests} request(s) in {result.Elapsed.TotalSeconds:0.0} s." +
+                (_snapshot is { } s ? $" {StoredCountDescription(s)} It said {s.Rows:N0}." : string.Empty);
 
-            if (result.Rows == SimplePagingLimit && snapshot > SimplePagingLimit)
+            if (result.Rows == SimplePagingLimit && _snapshot?.Rows > SimplePagingLimit)
             {
                 RowCountWarning =
-                    $"Counted exactly {SimplePagingLimit:N0}, but Dataverse's snapshot says {snapshot:N0}. " +
+                    $"Counted exactly {SimplePagingLimit:N0}, but Dataverse's stored count says {_snapshot.Rows:N0}. " +
                     "Dataverse can cap page-number paging at 50,000 rows, so the table is probably larger than counted.";
             }
         }
         catch (OperationCanceledException)
         {
-            RowCountText = "Count stopped";
+            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count stopped";
+            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) + " The exact count was stopped." : null;
         }
         catch (Exception ex)
         {
-            var snapshot = await snapshotTask;
-            RowCountText = snapshot is { } s ? $"~{s:N0} rows" : "Count failed";
-            RowCountDetail = snapshot is null ? null : "From Dataverse's daily snapshot; the exact count failed.";
+            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count failed";
+            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) : null;
             RowCountWarning = "The exact count failed: " + ex.Message;
         }
         finally
@@ -653,6 +669,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             await LoadDependenciesAsync(DependencyDirection.Dependent, Dependents, problems);
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
 
+            // The stored count is one quick request, so it shows before the child components load.
+            if (IsTable) await LoadRowCountSnapshotAsync();
             if (IsTable) await LoadChildComponentsAsync(problems);
             if (HasRunHistory) await LoadRunsAsync(problems);
             if (HasTraceLog) await LoadTraceLogAsync(problems);

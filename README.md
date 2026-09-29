@@ -37,8 +37,9 @@ straight into the maker portal.
     (and a warning when tracing is switched off).
   - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files.
   - **Environment variables**: the current value in this environment, the default, and which applies.
-  - **Tables**: their columns, relationships, keys, forms and views, and an exact **Count rows**
-    that finds the last page of 5,000 instead of reading every row.
+  - **Tables**: their columns, relationships, keys, forms and views; Dataverse's stored row count
+    (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
+    one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
 - **Solution history** — every import, upgrade, uninstall and export in an environment, with the
   error for any that failed.
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed

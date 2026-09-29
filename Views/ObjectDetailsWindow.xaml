@@ -130,7 +130,7 @@
                                     Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}">
                             <Button Style="{StaticResource RowButton}" Content="{Binding CountButtonLabel}"
                                     Command="{Binding CountRowsCommand}"
-                                    ToolTip="Counts the table's rows exactly by finding its last page of 5,000 - a couple of dozen requests even for millions of rows." />
+                                    ToolTip="An exact, current count: one aggregate request up to 50,000 rows, and beyond that a search for the last page of 5,000 - a couple of dozen requests even for millions of rows. The number shown before counting is Dataverse's stored count, refreshed about daily." />
                             <TextBlock Text="{Binding RowCountText}" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"
                                        ToolTip="{Binding RowCountDetail}" />
                             <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" Foreground="{DynamicResource Amber}"
