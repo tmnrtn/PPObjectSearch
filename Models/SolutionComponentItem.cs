@@ -34,6 +34,12 @@ public sealed class SolutionComponentItem : ObservableObject
     /// </summary>
     public string? SubType { get; set; }
 
+    /// <summary>
+    /// For a process, workflow.category - 0 classic workflow, 5 cloud flow, and so on. The sub type
+    /// is Dataverse's display label for it ("Modern Flow"), which is not something to match on.
+    /// </summary>
+    public int? ProcessCategory { get; set; }
+
     public int ComponentType { get; init; }
     public string? ComponentLogicalName { get; init; }
     public Guid ObjectId { get; init; }

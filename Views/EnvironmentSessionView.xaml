@@ -43,7 +43,7 @@
                     <ContentControl Style="{StaticResource EnvTypeBadge}" Margin="8,1,0,0"
                                     Tag="{Binding EnvironmentSku}"
                                     Content="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}}"
-                                    ToolTip="{Binding EnvironmentType.SkuLabel}"
+                                    ToolTip="{Binding EnvironmentTypeDescription}"
                                     Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
                 <TextBlock Text="{Binding EnvironmentUrl}" FontSize="11" Foreground="{DynamicResource Muted}"
@@ -189,6 +189,9 @@
             </WrapPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
+                <Button Content="Solution history" Margin="0,0,6,0"
+                        Command="{Binding SolutionHistoryCommand}"
+                        ToolTip="Imports, upgrades, uninstalls and exports in this environment, with the error for any that failed." />
                 <Button Content="Check layers"
                         Command="{Binding CheckUnmanagedLayersCommand}"
                         ToolTip="Queries Dataverse's solution layers for every object currently on screen that hasn't been checked yet - one request per object, so narrowing the filters first is faster." />

@@ -74,6 +74,24 @@ public sealed class MakerPortalLinkBuilder
     /// <summary>Links can only be built once the Power Platform environment id is known.</summary>
     public bool CanBuildLinks => _environmentId is not null;
 
+    public string? EnvironmentId => _environmentId;
+
+    /// <summary>
+    /// One cloud flow run in Power Automate's run detail page. The flow id is the one Power
+    /// Automate knows the flow by, which the run itself records.
+    /// </summary>
+    public static string? BuildFlowRunUrl(string? environmentId, string? flowId, string? runName)
+    {
+        if (string.IsNullOrWhiteSpace(environmentId) || string.IsNullOrWhiteSpace(flowId) || string.IsNullOrWhiteSpace(runName))
+        {
+            return null;
+        }
+
+        return "https://make.powerautomate.com/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
+               "/flows/" + Uri.EscapeDataString(flowId.Trim()) +
+               "/runs/" + Uri.EscapeDataString(runName.Trim());
+    }
+
     public string? Build(SolutionComponentItem item, Guid solutionId)
     {
         if (_environmentId is null) return null;

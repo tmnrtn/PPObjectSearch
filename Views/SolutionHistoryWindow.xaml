@@ -1,0 +1,276 @@
+<Window x:Class="PPObjectSearch.Views.SolutionHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:models="clr-namespace:PPObjectSearch.Models"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Height="740" Width="1240"
+        MinHeight="480" MinWidth="900"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style TargetType="ContentControl" x:Key="OutcomePill" BasedOn="{StaticResource StatusPill}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Succeeded}">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Failed}">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Running}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="DetailKey">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Margin" Value="0,0,10,6" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="DetailValue">
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style TargetType="Border" x:Key="PaneHeading">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="BorderThickness" Value="0,1,0,1" />
+        </Style>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="18,14,18,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource EnvBar}" Height="20" Margin="0,0,10,0" Tag="{Binding Session.EnvironmentSku}" />
+                    <TextBlock Text="Solution history" Style="{StaticResource WindowHeading}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Session.Title}" Foreground="{DynamicResource Muted}" FontSize="13"
+                               Margin="10,3,0,0" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource EnvTypeBadge}" Margin="8,3,0,0" Tag="{Binding Session.EnvironmentSku}"
+                                    Content="{Binding Session.EnvironmentSku, Converter={StaticResource SkuBadge}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Export CSV" Height="30" Command="{Binding ExportCommand}"
+                            ToolTip="Exports the operations currently shown, filters and all." />
+                    <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Read the history again" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Filters -->
+            <Grid Grid.Row="1" Margin="16,0,16,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Style="{StaticResource Segmented}">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="HistoryFilter"
+                                     core:Ui.DotBrush="{DynamicResource Muted}" core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Imports" GroupName="HistoryFilter"
+                                     core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountImports, StringFormat=N0}"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Imports}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Uninstalls" GroupName="HistoryFilter"
+                                     core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountUninstalls, StringFormat=N0}"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Uninstalls}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Exports" GroupName="HistoryFilter"
+                                     core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountExports, StringFormat=N0}"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Exports}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Failed" GroupName="HistoryFilter"
+                                     core:Ui.DotBrush="{DynamicResource Red}" core:Ui.Count="{Binding CountFailed, StringFormat=N0}"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Failed}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBox x:Name="SearchBox" Grid.Column="1" Height="30" Margin="8,0,0,0"
+                         core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Solution, publisher, package or error code"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+            </Grid>
+
+            <Rectangle Grid.Row="2" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+            <ProgressBar Grid.Row="2" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <!-- History | detail -->
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="520" />
+                    <ColumnDefinition Width="360" MinWidth="260" />
+                </Grid.ColumnDefinitions>
+
+                <DataGrid ItemsSource="{Binding EntriesView}" SelectedItem="{Binding SelectedEntry}"
+                          SelectionMode="Single" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Result" Width="104" SortMemberPath="ResultLabel"
+                                                HeaderStyle="{StaticResource FirstHeader}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl Style="{StaticResource OutcomePill}" Margin="16,0,8,0" Content="{Binding ResultLabel}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Solution" Width="*" MinWidth="180" SortMemberPath="SolutionName">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource Cell}" ToolTip="{Binding SolutionName}">
+                                        <Run Text="{Binding SolutionName, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <Run Text="{Binding Version, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                             Foreground="{DynamicResource Muted}" />
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Operation" Width="150" Binding="{Binding OperationLabel}"
+                                            ElementStyle="{StaticResource Cell}" />
+                        <DataGridTextColumn Header="State" Width="84" Binding="{Binding ManagedLabel}"
+                                            ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Publisher" Width="130" Binding="{Binding PublisherName}"
+                                            ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Started" Width="132" SortMemberPath="StartTime"
+                                            Binding="{Binding StartTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                                            ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Duration" Width="76" SortMemberPath="TotalSeconds"
+                                            Binding="{Binding DurationLabel}" ElementStyle="{StaticResource CellMuted}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- The selected operation -->
+                <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                    <Grid>
+                        <TextBlock Text="Select an operation to see its details." Foreground="{DynamicResource Faint}" Margin="16,14">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedEntry}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <DockPanel DataContext="{Binding SelectedEntry}"
+                                   Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                            <StackPanel DockPanel.Dock="Top" Margin="16,14,16,10">
+                                <TextBlock Text="{Binding SolutionName}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <ContentControl Style="{StaticResource OutcomePill}" Content="{Binding ResultLabel}" />
+                                    <TextBlock Text="{Binding OperationLabel}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="112" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="Version" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               FontFamily="{StaticResource MonoFont}" Text="{Binding Version, TargetNullValue=—}" />
+                                    <TextBlock Grid.Row="1" Text="Publisher" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               Text="{Binding PublisherName, TargetNullValue=—}" />
+                                    <TextBlock Grid.Row="2" Text="State" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}">
+                                        <Run Text="{Binding ManagedLabel, Mode=OneWay}" />
+                                        <Run Text="{Binding IsPatch, Mode=OneWay, Converter={StaticResource PatchLabel}}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="3" Text="Started" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               Text="{Binding StartTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}, TargetNullValue=—}" />
+                                    <TextBlock Grid.Row="4" Text="Ended" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               Text="{Binding EndTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}, TargetNullValue=—}" />
+                                    <TextBlock Grid.Row="5" Text="Duration" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource DetailValue}" Text="{Binding DurationLabel}" />
+                                    <TextBlock Grid.Row="6" Text="Overwrite" Style="{StaticResource DetailKey}"
+                                               ToolTip="Whether unmanaged customizations were overwritten by the import." />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               Text="{Binding OverwriteCustomizations, Converter={StaticResource YesNo}}" />
+                                    <TextBlock Grid.Row="7" Text="Package" Style="{StaticResource DetailKey}"
+                                               Visibility="{Binding PackageName, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBlock Grid.Row="7" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               Visibility="{Binding PackageName, Converter={StaticResource EmptyToCollapsed}}">
+                                        <Run Text="{Binding PackageName, Mode=OneWay}" />
+                                        <Run Text="{Binding PackageVersion, Mode=OneWay}" FontFamily="{StaticResource MonoFont}"
+                                             Foreground="{DynamicResource Muted}" />
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="8" Text="Retries" Style="{StaticResource DetailKey}"
+                                               Visibility="{Binding RetryCount, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBlock Grid.Row="8" Grid.Column="1" Style="{StaticResource DetailValue}" Text="{Binding RetryCount}"
+                                               Visibility="{Binding RetryCount, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBlock Grid.Row="9" Text="Activity id" Style="{StaticResource DetailKey}"
+                                               Visibility="{Binding ActivityId, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBox Grid.Row="9" Grid.Column="1" Style="{StaticResource CodeBox}" Padding="0" FontSize="11"
+                                             Background="Transparent" TextWrapping="Wrap" Margin="0,0,0,6"
+                                             Text="{Binding ActivityId, Mode=OneWay}"
+                                             ToolTip="Quote this to Microsoft support about a failed import."
+                                             Visibility="{Binding ActivityId, Converter={StaticResource EmptyToCollapsed}}" />
+                                </Grid>
+                            </StackPanel>
+
+                            <DockPanel Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="Error" FontWeight="SemiBold" Foreground="{DynamicResource Red}" />
+                                        <Run Text="{Binding ErrorCode, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                             Foreground="{DynamicResource Muted}" />
+                                    </TextBlock>
+                                </Border>
+                                <TextBox Style="{StaticResource CodeBox}" TextWrapping="Wrap" Background="{DynamicResource Surface}"
+                                         Text="{Binding ExceptionMessage, Mode=OneWay}" />
+                            </DockPanel>
+                        </DockPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="4" Style="{StaticResource StatusBar}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Summary}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

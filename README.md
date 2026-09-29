@@ -29,6 +29,18 @@ straight into the maker portal.
 - **Detail pane** — the selected object's related table, owner, id and layer state, with buttons to
   open it, see its solutions and dependencies, or copy its name, link or id. Right-click a row for
   the same copy actions; the pane can be hidden from the toolbar.
+- **Object details** (*Details…*) — solutions, layers and dependencies for any object, plus, by type:
+  - **Cloud flows**: recent run history from Dataverse, with each run's error and a link to the run
+    in Power Automate, and the flow's JSON definition to copy or save.
+  - **Classic workflows**: recent system jobs and their errors.
+  - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
+    (and a warning when tracing is switched off).
+  - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files.
+  - **Environment variables**: the current value in this environment, the default, and which applies.
+  - **Tables**: their columns, relationships, keys, forms and views, and an exact **Count rows**
+    that finds the last page of 5,000 instead of reading every row.
+- **Solution history** — every import, upgrade, uninstall and export in an environment, with the
+  error for any that failed.
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production

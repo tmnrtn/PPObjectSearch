@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:models="clr-namespace:PPObjectSearch.Models"
         Title="{Binding Title}"
         Style="{StaticResource AppWindow}"
         Height="760" Width="1180"
@@ -33,6 +34,37 @@
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
             <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+
+        <!-- Content comes from the caller; the colour from the Outcome of the row it sits in. -->
+        <Style TargetType="ContentControl" x:Key="OutcomePill" BasedOn="{StaticResource StatusPill}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Succeeded}">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Failed}">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Running}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:RunOutcome.Other}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="DetailKey">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Margin" Value="0,0,10,6" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="DetailValue">
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
         <Style TargetType="DataGridRow" x:Key="CopyRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
@@ -92,6 +124,19 @@
                                    Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
                         <Button Style="{StaticResource LinkButton}" Content="Copy" Height="20" Padding="4,0" Margin="2,0,0,0"
                                 FontSize="11" Command="{Binding CopyIdCommand}" ToolTip="Copy the object id" />
+
+                        <!-- Tables only: an exact row count, found by probing pages rather than reading every row. -->
+                        <StackPanel Orientation="Horizontal" Margin="14,0,0,0"
+                                    Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}">
+                            <Button Style="{StaticResource RowButton}" Content="{Binding CountButtonLabel}"
+                                    Command="{Binding CountRowsCommand}"
+                                    ToolTip="Counts the table's rows exactly by finding its last page of 5,000 - a couple of dozen requests even for millions of rows." />
+                            <TextBlock Text="{Binding RowCountText}" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       ToolTip="{Binding RowCountDetail}" />
+                            <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" Foreground="{DynamicResource Amber}"
+                                       Margin="6,0,0,0" ToolTip="{Binding RowCountWarning}"
+                                       Visibility="{Binding RowCountWarning, Converter={StaticResource EmptyToCollapsed}}" />
+                        </StackPanel>
                     </WrapPanel>
                 </StackPanel>
 
@@ -233,6 +278,398 @@
                                     </DataGrid>
                                 </Border>
                             </DockPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- An environment variable as this environment resolves it. -->
+                    <TabItem Header="Value"
+                             Visibility="{Binding IsEnvironmentVariable, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding IsEnvironmentVariable, Mode=OneTime}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="18,14,18,18" MaxWidth="900">
+                                <TextBlock Text="{Binding EnvironmentVariableStatus}" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource Muted}" Margin="0,0,0,12" />
+
+                                <Grid DataContext="{Binding EnvironmentVariable}"
+                                      Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="Schema name" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               FontFamily="{StaticResource MonoFont}" Text="{Binding SchemaName}" />
+
+                                    <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource DetailKey}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Text="{Binding TypeLabel}" />
+
+                                    <TextBlock Grid.Row="2" Text="Description" Style="{StaticResource DetailKey}"
+                                               Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Text="{Binding Description}"
+                                               Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}" />
+
+                                    <TextBlock Grid.Row="3" Text="Current value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                    <Border Grid.Row="3" Grid.Column="1" Margin="0,6,0,8" BorderBrush="{DynamicResource Border2}"
+                                            BorderThickness="1" CornerRadius="4">
+                                        <Grid>
+                                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding CurrentValue, Mode=OneWay}"
+                                                     TextWrapping="Wrap" MaxHeight="220" Background="Transparent"
+                                                     Visibility="{Binding HasCurrentValue, Converter={StaticResource BoolToVis}}" />
+                                            <TextBlock Text="Not set in this environment" Foreground="{DynamicResource Faint}" Margin="10,8"
+                                                       Visibility="{Binding HasCurrentValue, Converter={StaticResource NotBoolToVis}}" />
+                                        </Grid>
+                                    </Border>
+
+                                    <TextBlock Grid.Row="4" Text="Default value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                    <Border Grid.Row="4" Grid.Column="1" Margin="0,6,0,8" BorderBrush="{DynamicResource Border2}"
+                                            BorderThickness="1" CornerRadius="4">
+                                        <Grid>
+                                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding DefaultValue, Mode=OneWay}"
+                                                     TextWrapping="Wrap" MaxHeight="220" Background="Transparent"
+                                                     Visibility="{Binding DefaultValue, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <TextBlock Text="No default" Foreground="{DynamicResource Faint}" Margin="10,8">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DefaultValue}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Border>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                                               Text="A secret holds an Azure Key Vault reference, not the secret itself. The value is resolved by Key Vault at run time."
+                                               Visibility="{Binding IsSecret, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- A web resource's source, or a cloud flow's JSON definition. -->
+                    <TabItem Header="{Binding SourceTabHeader}"
+                             Visibility="{Binding HasSource, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding IsWebResource, Mode=OneTime}">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource SmallButton}" Content="Copy" Command="{Binding CopySourceCommand}" />
+                                        <Button Style="{StaticResource SmallButton}" Content="Save as..." Margin="6,0,0,0"
+                                                Command="{Binding SaveSourceCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding SourceStatus}" Foreground="{DynamicResource Muted}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding SourceStatus}" />
+                                </DockPanel>
+                            </Border>
+                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding SourceText, Mode=OneWay}"
+                                     Background="{DynamicResource Surface}" />
+                        </DockPanel>
+                    </TabItem>
+
+                    <!-- A process's runs: cloud flow runs from flowrun, classic workflow system jobs.
+                         What a flow is usually opened for, so it starts selected. -->
+                    <TabItem Header="Run history" core:Ui.Count="{Binding RunsTabCount}"
+                             Visibility="{Binding HasRunHistory, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding HasRunHistory, Mode=OneTime}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.4*" MinWidth="360" />
+                                <ColumnDefinition Width="*" MinWidth="280" />
+                            </Grid.ColumnDefinitions>
+
+                            <DockPanel Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding RunsStatus}" />
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Runs}"
+                                          SelectedItem="{Binding SelectedRun}" SelectionMode="Single" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Status" Width="100" SortMemberPath="Status"
+                                                                HeaderStyle="{StaticResource PaneFirstHeader}">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Style="{StaticResource OutcomePill}" Margin="12,0,8,0"
+                                                                    Content="{Binding Status}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Started" Width="140" SortMemberPath="StartTime"
+                                                            Binding="{Binding StartTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                        <DataGridTextColumn Header="Duration" Width="76" SortMemberPath="DurationMs"
+                                                            Binding="{Binding DurationLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                        <DataGridTextColumn Header="Trigger" Width="110" Binding="{Binding TriggerType}"
+                                                            ElementStyle="{StaticResource CellFull}" />
+                                        <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorMessage}">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellFull}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTemplateColumn Width="72" CanUserSort="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
+                                                            ToolTip="Open this run in Power Automate"
+                                                            Visibility="{Binding HasPortalUrl, Converter={StaticResource BoolToVis}}"
+                                                            Command="{Binding DataContext.OpenRunCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                            CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="Open" />
+                                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="9" Margin="5,1,0,0" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <!-- The selected run -->
+                            <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select a run to see its details." Foreground="{DynamicResource Faint}"
+                                               Margin="16,14">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedRun}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <DockPanel DataContext="{Binding SelectedRun}"
+                                               Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                        <StackPanel DockPanel.Dock="Top" Margin="16,12,16,8">
+                                            <StackPanel Orientation="Horizontal">
+                                                <ContentControl Style="{StaticResource OutcomePill}" Content="{Binding Status}" />
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource Mono}" Margin="8,0,0,0"
+                                                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                            </StackPanel>
+
+                                            <Button Style="{StaticResource PrimaryButton}" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                                    Content="Open run in Power Automate"
+                                                    Visibility="{Binding HasPortalUrl, Converter={StaticResource BoolToVis}}"
+                                                    Command="{Binding DataContext.OpenRunCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="{Binding PortalUrl}" />
+
+                                            <Grid Margin="0,12,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Text="Started" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding StartTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" />
+                                                <TextBlock Grid.Row="1" Text="Ended" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding EndTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="2" Text="Duration" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding DurationLabel}" />
+                                                <TextBlock Grid.Row="3" Text="Trigger" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding TriggerType, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="4" Text="Regarding" Style="{StaticResource DetailKey}"
+                                                           Visibility="{Binding Regarding, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding Regarding}"
+                                                           Visibility="{Binding Regarding, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock Grid.Row="5" Text="Error code" Style="{StaticResource DetailKey}"
+                                                           Visibility="{Binding ErrorCode, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           FontFamily="{StaticResource MonoFont}" Text="{Binding ErrorCode}"
+                                                           Visibility="{Binding ErrorCode, Converter={StaticResource EmptyToCollapsed}}" />
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <DockPanel Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
+                                            <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}"
+                                                    BorderThickness="0,1,0,1" Background="{DynamicResource Surface2}">
+                                                <TextBlock Text="Error" Style="{StaticResource SectionHeading}"
+                                                           Foreground="{DynamicResource Red}" VerticalAlignment="Center" />
+                                            </Border>
+                                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding ErrorMessage, Mode=OneWay}"
+                                                     TextWrapping="Wrap" Background="{DynamicResource Surface}" />
+                                        </DockPanel>
+                                    </DockPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- A plug-in's trace log: its trace text and any exception, per execution. -->
+                    <TabItem Header="Trace log" core:Ui.Count="{Binding TraceTabCount}"
+                             Visibility="{Binding HasTraceLog, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding HasTraceLog, Mode=OneTime}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.3*" MinWidth="380" />
+                                <ColumnDefinition Width="*" MinWidth="300" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Tracing off: nothing new will appear until it is turned on. -->
+                            <Border Grid.Row="0" Grid.ColumnSpan="2" Style="{StaticResource Banner}" Margin="12,10,12,2"
+                                    Visibility="{Binding IsTraceOff, Converter={StaticResource BoolToVis}}">
+                                <TextBlock TextWrapping="Wrap">
+                                    <Run Text="Plug-in tracing is off in this environment." FontWeight="SemiBold"
+                                         Foreground="{DynamicResource Amber}" />
+                                    <Run Text="Only entries written before it was turned off are shown. Turn it on under Settings &gt; Administration &gt; System settings &gt; Customization." />
+                                </TextBlock>
+                            </Border>
+
+                            <DockPanel Grid.Row="1" Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock Text="{Binding TraceStatus}" Foreground="{DynamicResource Muted}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding TraceStatus}" />
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding TraceEntries}"
+                                          SelectedItem="{Binding SelectedTrace}" SelectionMode="Single" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Result" Width="96" SortMemberPath="HasException"
+                                                                HeaderStyle="{StaticResource PaneFirstHeader}">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Style="{StaticResource OutcomePill}" Margin="12,0,8,0"
+                                                                    Content="{Binding OutcomeLabel}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="When" Width="140" SortMemberPath="CreatedOn"
+                                                            Binding="{Binding CreatedOn, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                        <DataGridTextColumn Header="Plug-in" Width="*" Binding="{Binding ShortTypeName}">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellMono}">
+                                                    <Setter Property="ToolTip" Value="{Binding TypeName}" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn Header="Message" Width="90" Binding="{Binding MessageName}"
+                                                            ElementStyle="{StaticResource Cell}" />
+                                        <DataGridTextColumn Header="Table" Width="110" Binding="{Binding PrimaryEntity}"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                        <DataGridTextColumn Header="Duration" Width="70" SortMemberPath="DurationMs"
+                                                            Binding="{Binding DurationLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <!-- The selected execution -->
+                            <Border Grid.Row="1" Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select an entry to see its trace." Foreground="{DynamicResource Faint}"
+                                               Margin="16,14">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedTrace}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Grid DataContext="{Binding SelectedTrace}"
+                                          Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Margin="16,12,16,10">
+                                            <TextBlock Text="{Binding TypeName}" FontFamily="{StaticResource MonoFont}"
+                                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Foreground="{DynamicResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap">
+                                                <Run Text="{Binding MessageName, Mode=OneWay}" />
+                                                <Run Text="{Binding PrimaryEntity, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter='of '}" />
+                                                <Run Text="·" Foreground="{DynamicResource Faint}" />
+                                                <Run Text="{Binding Mode, Mode=OneWay}" />
+                                                <Run Text="·" Foreground="{DynamicResource Faint}" />
+                                                <Run Text="{Binding Depth, Mode=OneWay, StringFormat=depth {0}}" />
+                                                <Run Text="·" Foreground="{DynamicResource Faint}" />
+                                                <Run Text="{Binding DurationLabel, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Faint}"
+                                                       Text="{Binding CorrelationId, StringFormat=Correlation id {0}}"
+                                                       Visibility="{Binding CorrelationId, Converter={StaticResource EmptyToCollapsed}}" />
+                                        </StackPanel>
+
+                                        <Border Grid.Row="1" Style="{StaticResource PaneHeading}" BorderThickness="0,1,0,1"
+                                                Background="{DynamicResource Surface2}">
+                                            <TextBlock Text="Trace" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
+                                        </Border>
+                                        <!-- Takes the exception's rows too when there is no exception. -->
+                                        <TextBox Grid.Row="2" Text="{Binding MessageBlock, Mode=OneWay}"
+                                                 Background="{DynamicResource Surface}">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource CodeBox}">
+                                                    <Setter Property="Grid.RowSpan" Value="3" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasException}" Value="True">
+                                                            <Setter Property="Grid.RowSpan" Value="1" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+
+                                        <Border Grid.Row="3" Style="{StaticResource PaneHeading}" BorderThickness="0,1,0,1"
+                                                Background="{DynamicResource Surface2}"
+                                                Visibility="{Binding HasException, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="Exception" Style="{StaticResource SectionHeading}"
+                                                       Foreground="{DynamicResource Red}" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBox Grid.Row="4" Style="{StaticResource CodeBox}" Text="{Binding ExceptionDetails, Mode=OneWay}"
+                                                 Background="{DynamicResource Surface}"
+                                                 Visibility="{Binding HasException, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </TabItem>
 

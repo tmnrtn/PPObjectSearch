@@ -85,19 +85,24 @@ public sealed partial class DataverseClient : IDisposable
         public const string All = "*";
     }
 
-    private static string BuildPreferHeader(string? annotations)
+    private static string BuildPreferHeader(string? annotations, bool maxPageSize = true)
     {
-        var prefer = new List<string> { $"odata.maxpagesize={PageSize}" };
+        var prefer = new List<string>();
+        if (maxPageSize) prefer.Add($"odata.maxpagesize={PageSize}");
         if (annotations is not null) prefer.Add($"odata.include-annotations=\"{annotations}\"");
         return string.Join(",", prefer);
     }
 
-    private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, string? annotations = null)
+    /// <param name="maxPageSize">
+    /// False for FetchXML that pages itself with page/count: odata.maxpagesize puts the Web API's
+    /// own paging in charge, and the fetch's page number is then ignored.
+    /// </param>
+    private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, string? annotations = null, bool maxPageSize = true)
     {
         // Skip the doomed GET entirely when the URL is already over the limit.
         if (url.Length > MaxGetUrlLength)
         {
-            return await GetJsonViaBatchAsync(url, ct, annotations).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
         }
 
         try
@@ -106,7 +111,8 @@ public sealed partial class DataverseClient : IDisposable
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("Prefer", BuildPreferHeader(annotations));
+            var prefer = BuildPreferHeader(annotations, maxPageSize);
+            if (prefer.Length > 0) request.Headers.Add("Prefer", prefer);
 
             using var response = await _http
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
@@ -125,7 +131,7 @@ public sealed partial class DataverseClient : IDisposable
         }
         catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.RequestUriTooLong)
         {
-            return await GetJsonViaBatchAsync(url, ct, annotations).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
         }
     }
 
@@ -133,7 +139,7 @@ public sealed partial class DataverseClient : IDisposable
     /// Issues a GET inside a $batch POST. The URL travels in the request body, so paging cookies
     /// of any length are fine.
     /// </summary>
-    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, string? annotations)
+    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize = true)
     {
         var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
         var boundary = "batch_" + Guid.NewGuid().ToString("N");
@@ -146,7 +152,7 @@ public sealed partial class DataverseClient : IDisposable
             .Append("Accept: application/json\r\n")
             .Append("OData-MaxVersion: 4.0\r\n")
             .Append("OData-Version: 4.0\r\n")
-            .Append("Prefer: ").Append(BuildPreferHeader(annotations)).Append("\r\n\r\n")
+            .Append("Prefer: ").Append(BuildPreferHeader(annotations, maxPageSize)).Append("\r\n\r\n")
             .Append("--").Append(boundary).Append("--\r\n")
             .ToString();
 
@@ -616,6 +622,7 @@ public sealed partial class DataverseClient : IDisposable
         try
         {
             var categories = new Dictionary<Guid, string>();
+            var codes = new Dictionary<Guid, int>();
             var url = EnvironmentUrl + ApiPath + "workflows?$select=workflowid,category";
 
             while (url.Length > 0)
@@ -629,10 +636,11 @@ public sealed partial class DataverseClient : IDisposable
                         if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
 
                         var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
+                        var category = JsonHelper.GetInt(row, "category");
+                        if (category is not null) codes[id] = category.Value;
 
                         if (string.IsNullOrWhiteSpace(label))
                         {
-                            var category = JsonHelper.GetInt(row, "category");
                             label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
                         }
 
@@ -645,6 +653,7 @@ public sealed partial class DataverseClient : IDisposable
 
             foreach (var process in processes)
             {
+                if (codes.TryGetValue(process.ObjectId, out var code)) process.ProcessCategory = code;
                 if (!categories.TryGetValue(process.ObjectId, out var label)) continue;
 
                 process.SubType = label;

@@ -12,6 +12,13 @@ public sealed class TabState
     public string? TenantId { get; set; }
     public string? AccountId { get; set; }
     public string? SolutionUniqueName { get; set; }
+
+    /// <summary>
+    /// The environment type last read for this tab, so its colour and badge show before it
+    /// connects. Display only: the write guard always asks the Power Platform API afresh.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Dataverse.EnvironmentSku? EnvironmentType { get; set; }
 }
 
 /// <summary>

@@ -74,7 +74,6 @@
                                 <Setter Property="Height" Value="44" />
                                 <Setter Property="Padding" Value="8,0" />
                                 <Setter Property="AllowDrop" Value="True" />
-                                <Setter Property="ToolTip" Value="{Binding EnvironmentUrl}" />
                                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="Tab_PreviewMouseLeftButtonDown" />
                                 <EventSetter Event="PreviewMouseMove" Handler="Tab_PreviewMouseMove" />
                                 <EventSetter Event="DragOver" Handler="Tab_DragOver" />
@@ -85,6 +84,13 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Background="Transparent">
+                                    <Grid.ToolTip>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding EnvironmentUrl}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding EnvironmentTypeDescription}" Margin="0,3,0,0"
+                                                       TextWrapping="Wrap" MaxWidth="400" />
+                                        </StackPanel>
+                                    </Grid.ToolTip>
                                     <Grid.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Close tab" InputGestureText="Ctrl+W"

@@ -24,6 +24,8 @@
     <core:EnvironmentSkuToBadgeConverter x:Key="SkuBadge" />
     <core:PrefixConverter x:Key="Prefix" />
     <core:EnumEqualsConverter x:Key="EnumEquals" />
+    <core:PatchLabelConverter x:Key="PatchLabel" />
+    <core:YesNoConverter x:Key="YesNo" />
 
     <!-- ============================================================ text -->
 

@@ -30,10 +30,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public ObjectDetailsViewModel(
         DataverseClient client,
         SolutionComponentItem item,
-        IReadOnlyDictionary<Guid, SolutionComponentItem> known)
+        IReadOnlyDictionary<Guid, SolutionComponentItem> known,
+        string? environmentId = null)
     {
         _client = client;
         _known = known;
+        _environmentId = environmentId;
         Item = item;
 
         OpenLinkCommand = new RelayCommand(_ => OpenUrl(item.MakerUrl), _ => item.MakerUrl is not null);
@@ -53,6 +55,439 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     }
 
     public RelayCommand CopyIdCommand { get; }
+
+    // ---------------------------------------------------------------- web resource content / flow definition
+
+    private const int WebResourceComponentType = 61;
+
+    public bool IsWebResource => Item.ComponentType == WebResourceComponentType;
+
+    /// <summary>Web resources have content, cloud flows a JSON definition; both show as text.</summary>
+    public bool HasSource => IsWebResource || IsCloudFlow;
+
+    public string SourceTabHeader => IsCloudFlow ? "Definition" : "Content";
+
+    private string? _sourceText;
+    public string? SourceText
+    {
+        get => _sourceText;
+        private set
+        {
+            if (!SetProperty(ref _sourceText, value)) return;
+            CopySourceCommand.RaiseCanExecuteChanged();
+            SaveSourceCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _sourceStatus = string.Empty;
+    public string SourceStatus
+    {
+        get => _sourceStatus;
+        private set => SetProperty(ref _sourceStatus, value);
+    }
+
+    private string _sourceFileName = "content.txt";
+
+    public RelayCommand CopySourceCommand => _copySourceCommand ??= new RelayCommand(
+        _ => Status = ClipboardText.TryCopy(SourceText ?? string.Empty, out var failure)
+            ? $"Copied the {SourceTabHeader.ToLowerInvariant()} ({SourceText!.Length:N0} characters)."
+            : $"Could not copy - the clipboard is held by another application ({failure}).",
+        _ => !string.IsNullOrEmpty(SourceText));
+    private RelayCommand? _copySourceCommand;
+
+    public RelayCommand SaveSourceCommand => _saveSourceCommand ??= new RelayCommand(_ => SaveSource(), _ => !string.IsNullOrEmpty(SourceText));
+    private RelayCommand? _saveSourceCommand;
+
+    private void SaveSource()
+    {
+        var extension = System.IO.Path.GetExtension(_sourceFileName);
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = _sourceFileName,
+            Filter = string.IsNullOrEmpty(extension)
+                ? "All files (*.*)|*.*"
+                : $"{extension.TrimStart('.').ToUpperInvariant()} file (*{extension})|*{extension}|All files (*.*)|*.*"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            System.IO.File.WriteAllText(dialog.FileName, SourceText, new System.Text.UTF8Encoding(false));
+            Status = $"Saved to {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async Task LoadSourceAsync(List<string> problems)
+    {
+        SourceText = null;
+
+        try
+        {
+            if (IsCloudFlow)
+            {
+                var definition = await _client.GetCloudFlowDefinitionAsync(Item.ObjectId);
+                SourceText = string.IsNullOrWhiteSpace(definition) ? null : TextDiff.Prettify(definition);
+                _sourceFileName = SafeFileName(Item.PrimaryLabel) + ".json";
+                SourceStatus = SourceText is null
+                    ? "This flow has no definition stored in Dataverse."
+                    : $"The flow's definition (workflow.clientdata), {SourceText.Length:N0} characters.";
+                return;
+            }
+
+            var content = await _client.GetWebResourceContentAsync(Item.ObjectId);
+            SourceText = content.Text;
+
+            // "new_/scripts/account.js" saves as "account.js".
+            var leaf = content.Name.Split('/', '\\').LastOrDefault(s => s.Length > 0) ?? content.Name;
+            _sourceFileName = SafeFileName(System.IO.Path.HasExtension(leaf) ? leaf : leaf + content.FileExtension);
+
+            SourceStatus = content.Text is null
+                ? $"{content.TypeLabel} - binary content ({content.ByteCount:N0} bytes), not shown as text."
+                : $"{content.Name} · {content.TypeLabel} · {content.ByteCount:N0} bytes";
+        }
+        catch (Exception ex)
+        {
+            SourceStatus = $"Could not read the {SourceTabHeader.ToLowerInvariant()} - {ex.Message}";
+            problems.Add(SourceTabHeader.ToLowerInvariant() + ": " + ex.Message);
+        }
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var safe = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
+        return safe.Length == 0 ? "content" : safe;
+    }
+
+    // ---------------------------------------------------------------- environment variables
+
+    /// <summary>A definition (380) or one of its value records (381).</summary>
+    public bool IsEnvironmentVariable => Item.ComponentType is 380 or 381;
+
+    private EnvironmentVariableInfo? _environmentVariable;
+    public EnvironmentVariableInfo? EnvironmentVariable
+    {
+        get => _environmentVariable;
+        private set => SetProperty(ref _environmentVariable, value);
+    }
+
+    private string _environmentVariableStatus = string.Empty;
+    public string EnvironmentVariableStatus
+    {
+        get => _environmentVariableStatus;
+        private set => SetProperty(ref _environmentVariableStatus, value);
+    }
+
+    private async Task LoadEnvironmentVariableAsync(List<string> problems)
+    {
+        try
+        {
+            EnvironmentVariable = await _client.GetEnvironmentVariableAsync(Item.ObjectId, Item.ComponentType == 381);
+            EnvironmentVariableStatus = EnvironmentVariable.ValueRecordCount > 1
+                ? $"This definition has {EnvironmentVariable.ValueRecordCount} value records - there should be at most one. The first is shown."
+                : EnvironmentVariable.EffectiveSource;
+        }
+        catch (Exception ex)
+        {
+            EnvironmentVariable = null;
+            EnvironmentVariableStatus = "Could not read the environment variable - " + ex.Message;
+            problems.Add("environment variable: " + ex.Message);
+        }
+    }
+
+    // ---------------------------------------------------------------- row count
+
+    private CancellationTokenSource? _countCts;
+
+    /// <summary>Counts, or - while a count is running - stops it.</summary>
+    public AsyncRelayCommand CountRowsCommand => _countRowsCommand ??= new AsyncRelayCommand(_ => CountRowsAsync());
+    private AsyncRelayCommand? _countRowsCommand;
+
+    private bool _isCounting;
+    public bool IsCounting
+    {
+        get => _isCounting;
+        private set
+        {
+            if (SetProperty(ref _isCounting, value)) OnPropertyChanged(nameof(CountButtonLabel));
+        }
+    }
+
+    public string CountButtonLabel => IsCounting ? "Stop counting" : "Count rows";
+
+    private string _rowCountText = string.Empty;
+    /// <summary>"36,250,112 rows", or progress while counting.</summary>
+    public string RowCountText
+    {
+        get => _rowCountText;
+        private set => SetProperty(ref _rowCountText, value);
+    }
+
+    private string? _rowCountDetail;
+    /// <summary>How the count was reached, and the daily snapshot beside it.</summary>
+    public string? RowCountDetail
+    {
+        get => _rowCountDetail;
+        private set => SetProperty(ref _rowCountDetail, value);
+    }
+
+    private string? _rowCountWarning;
+    /// <summary>Set when the exact count and the snapshot disagree in the way a paging cap would explain.</summary>
+    public string? RowCountWarning
+    {
+        get => _rowCountWarning;
+        private set => SetProperty(ref _rowCountWarning, value);
+    }
+
+    /// <summary>The page-number paging the count relies on is documented as capped here.</summary>
+    private const long SimplePagingLimit = 50_000;
+
+    private async Task CountRowsAsync()
+    {
+        if (IsCounting)
+        {
+            _countCts?.Cancel();
+            return;
+        }
+
+        var cts = _countCts = new CancellationTokenSource();
+        IsCounting = true;
+        RowCountWarning = null;
+        RowCountDetail = null;
+        RowCountText = "Counting...";
+
+        // The snapshot is cheap and independent; it runs alongside and is only a cross-check.
+        var snapshotTask = Task.Run(async () =>
+        {
+            try
+            {
+                var name = await _client.GetTableLogicalNameAsync(Item.ObjectId, cts.Token);
+                return name is null ? null : await _client.GetRowCountSnapshotAsync(name, cts.Token);
+            }
+            catch
+            {
+                return (long?)null;
+            }
+        });
+
+        try
+        {
+            var progress = new Progress<string>(text => RowCountText = text);
+            var result = await _client.CountRowsAsync(Item.ObjectId, progress, cts.Token);
+            var snapshot = await snapshotTask;
+
+            RowCountText = result.Rows == 1 ? "1 row" : $"{result.Rows:N0} rows";
+            RowCountDetail =
+                $"Exact count from {result.Requests} request(s) in {result.Elapsed.TotalSeconds:0.0} s." +
+                (snapshot is { } s ? $" Dataverse's daily snapshot: {s:N0}." : string.Empty);
+
+            if (result.Rows == SimplePagingLimit && snapshot > SimplePagingLimit)
+            {
+                RowCountWarning =
+                    $"Counted exactly {SimplePagingLimit:N0}, but Dataverse's snapshot says {snapshot:N0}. " +
+                    "Dataverse can cap page-number paging at 50,000 rows, so the table is probably larger than counted.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            RowCountText = "Count stopped";
+        }
+        catch (Exception ex)
+        {
+            var snapshot = await snapshotTask;
+            RowCountText = snapshot is { } s ? $"~{s:N0} rows" : "Count failed";
+            RowCountDetail = snapshot is null ? null : "From Dataverse's daily snapshot; the exact count failed.";
+            RowCountWarning = "The exact count failed: " + ex.Message;
+        }
+        finally
+        {
+            IsCounting = false;
+            cts.Dispose();
+            if (ReferenceEquals(_countCts, cts)) _countCts = null;
+        }
+    }
+
+    // ---------------------------------------------------------------- run history and trace log
+
+    private const int ProcessComponentType = 29;
+
+    // The category code is what to go by; the labels cover items loaded from a cache written
+    // before the code was kept. Dataverse labels category 5 "Modern Flow" and 0 "Workflow".
+    public bool IsCloudFlow => Item.ComponentType == ProcessComponentType &&
+                               (Item.ProcessCategory is { } c ? c == 5 : Item.SubType is "Modern Flow" or "Cloud Flow");
+
+    public bool IsClassicWorkflow => Item.ComponentType == ProcessComponentType &&
+                                     (Item.ProcessCategory is { } c ? c == 0 : Item.SubType is "Workflow" or "Workflow (classic)");
+
+    /// <summary>Cloud flows have runs, classic workflows have system jobs; both land in one tab.</summary>
+    public bool HasRunHistory => IsCloudFlow || IsClassicWorkflow;
+
+    /// <summary>A plug-in assembly, plug-in type or registration step - anything the trace log can name.</summary>
+    public bool HasTraceLog => Item.ComponentType is 90 or 91 or 92;
+
+    /// <summary>The Power Platform environment id, for Power Automate run links. Null where unknown.</summary>
+    private readonly string? _environmentId;
+
+    public ObservableCollection<ProcessRun> Runs { get; } = new();
+
+    /// <summary>Opens a run - the one passed, else the selected one - in Power Automate.</summary>
+    public RelayCommand OpenRunCommand => _openRunCommand ??= new RelayCommand(
+        p => OpenUrl((p as ProcessRun ?? SelectedRun)?.PortalUrl),
+        p => (p as ProcessRun ?? SelectedRun)?.PortalUrl is not null);
+    private RelayCommand? _openRunCommand;
+
+    public ObservableCollection<PluginTraceEntry> TraceEntries { get; } = new();
+
+    private ProcessRun? _selectedRun;
+    public ProcessRun? SelectedRun
+    {
+        get => _selectedRun;
+        set
+        {
+            if (SetProperty(ref _selectedRun, value)) OpenRunCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private PluginTraceEntry? _selectedTrace;
+    public PluginTraceEntry? SelectedTrace
+    {
+        get => _selectedTrace;
+        set => SetProperty(ref _selectedTrace, value);
+    }
+
+    private string _runsStatus = string.Empty;
+    /// <summary>Why the run list is empty, or what it covers.</summary>
+    public string RunsStatus
+    {
+        get => _runsStatus;
+        private set => SetProperty(ref _runsStatus, value);
+    }
+
+    private string _traceStatus = string.Empty;
+    /// <summary>The organization's trace setting, and why the list may be short or empty.</summary>
+    public string TraceStatus
+    {
+        get => _traceStatus;
+        private set => SetProperty(ref _traceStatus, value);
+    }
+
+    private bool _isTraceOff;
+    /// <summary>Tracing is switched off for the organization, so nothing new is being written.</summary>
+    public bool IsTraceOff
+    {
+        get => _isTraceOff;
+        private set => SetProperty(ref _isTraceOff, value);
+    }
+
+    public string RunsTabCount => Runs.Count >= DataverseClient.MaxRunHistory ? $"{Runs.Count}+" : $"{Runs.Count}";
+
+    public string TraceTabCount =>
+        TraceEntries.Count >= DataverseClient.MaxRunHistory ? $"{TraceEntries.Count}+" : $"{TraceEntries.Count}";
+
+    private async Task LoadRunsAsync(List<string> problems)
+    {
+        Runs.Clear();
+        SelectedRun = null;
+
+        try
+        {
+            var runs = IsCloudFlow
+                ? await _client.GetCloudFlowRunsAsync(Item.ObjectId)
+                : await _client.GetClassicWorkflowRunsAsync(Item.ObjectId);
+
+            foreach (var run in runs)
+            {
+                // The run's own record of the flow id is what Power Automate addresses it by; the
+                // solution-independent id and then the workflow id stand in where it is missing.
+                if (IsCloudFlow)
+                {
+                    run.PortalUrl = MakerPortalLinkBuilder.BuildFlowRunUrl(
+                        _environmentId,
+                        run.FlowId ?? Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString(),
+                        run.Name);
+                }
+
+                Runs.Add(run);
+            }
+            SelectedRun = Runs.FirstOrDefault(r => r.Outcome == RunOutcome.Failed) ?? Runs.FirstOrDefault();
+
+            var failed = Runs.Count(r => r.Outcome == RunOutcome.Failed);
+            RunsStatus = Runs.Count == 0
+                ? IsCloudFlow
+                    ? "No runs recorded in Dataverse. Cloud flow run history is kept for 28 days by default, " +
+                      "and only while flow run history in Dataverse is turned on for the environment."
+                    : "No system jobs found for this workflow. Completed jobs may have been cleaned up."
+                : $"Latest {Runs.Count} run(s), {failed} failed.";
+        }
+        catch (Exception ex)
+        {
+            RunsStatus = "Could not read the run history - " + ex.Message;
+            problems.Add("runs: " + ex.Message);
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(RunsTabCount));
+        }
+    }
+
+    private async Task LoadTraceLogAsync(List<string> problems)
+    {
+        TraceEntries.Clear();
+        SelectedTrace = null;
+
+        PluginTraceSetting? setting = null;
+        try
+        {
+            setting = await _client.GetPluginTraceSettingAsync();
+        }
+        catch
+        {
+            // Reading the setting is a courtesy; the log itself is what matters.
+        }
+
+        IsTraceOff = setting == PluginTraceSetting.Off;
+
+        try
+        {
+            foreach (var entry in await _client.GetPluginTraceLogAsync(Item.ObjectId, Item.ComponentType)
+                                  ?? Array.Empty<PluginTraceEntry>())
+            {
+                TraceEntries.Add(entry);
+            }
+
+            SelectedTrace = TraceEntries.FirstOrDefault(t => t.HasException) ?? TraceEntries.FirstOrDefault();
+
+            var settingNote = setting switch
+            {
+                PluginTraceSetting.Off => "Plug-in tracing is off in this environment, so no new entries are being written. " +
+                                          "Turn it on under Settings > Administration > System settings > Customization.",
+                PluginTraceSetting.Exception => "Tracing is set to exceptions only, so successful runs are not logged.",
+                PluginTraceSetting.All => "Tracing is on for all executions.",
+                _ => null
+            };
+
+            var exceptions = TraceEntries.Count(t => t.HasException);
+            var found = TraceEntries.Count == 0
+                ? "No trace log entries for this plug-in."
+                : $"Latest {TraceEntries.Count} entr{(TraceEntries.Count == 1 ? "y" : "ies")}, {exceptions} with an exception.";
+
+            TraceStatus = settingNote is null ? found : $"{found} {settingNote}";
+        }
+        catch (Exception ex)
+        {
+            TraceStatus = "Could not read the plug-in trace log - " + ex.Message;
+            problems.Add("trace log: " + ex.Message);
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(TraceTabCount));
+        }
+    }
 
     /// <summary>"3 · 3" - solutions, then layers.</summary>
     public string SolutionsTabCount => LayersSupported
@@ -219,6 +654,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
 
             if (IsTable) await LoadChildComponentsAsync(problems);
+            if (HasRunHistory) await LoadRunsAsync(problems);
+            if (HasTraceLog) await LoadTraceLogAsync(problems);
+            if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
+            if (HasSource) await LoadSourceAsync(problems);
 
             try
             {

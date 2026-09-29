@@ -124,3 +124,27 @@ public sealed class EmptyToDashConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         System.Windows.Data.Binding.DoNothing;
 }
+
+/// <summary>" · patch" after the managed state when the operation was on a patch; nothing otherwise.</summary>
+public sealed class PatchLabelConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true ? "· patch" : string.Empty;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        System.Windows.Data.Binding.DoNothing;
+}
+
+/// <summary>"Yes" / "No" for a flag, "—" when it is not known.</summary>
+public sealed class YesNoConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
+    {
+        true => "Yes",
+        false => "No",
+        _ => "—"
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        System.Windows.Data.Binding.DoNothing;
+}
