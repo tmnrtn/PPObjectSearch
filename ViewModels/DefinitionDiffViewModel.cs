@@ -27,6 +27,16 @@ public abstract class DefinitionDiffViewModel : ObservableObject
 
     public ObservableCollection<DefinitionChange> Changes { get; } = new();
 
+    /// <summary>
+    /// What colours each pane's heading bar: an <see cref="Dataverse.EnvironmentSku"/> for an
+    /// environment, or "Beneath" / "Layer" for the two sides of a layer diff.
+    /// </summary>
+    public virtual object? BeforeMarker => null;
+    public virtual object? AfterMarker => null;
+
+    /// <summary>"3 changes", for the tab header.</summary>
+    public string ChangeCountLabel => Changes.Count == 1 ? "1 change" : $"{Changes.Count:N0} changes";
+
     public RelayCommand CopyBeforeCommand { get; }
     public RelayCommand CopyAfterCommand { get; }
 
@@ -65,6 +75,7 @@ public abstract class DefinitionDiffViewModel : ObservableObject
         foreach (var change in changes ?? Enumerable.Empty<DefinitionChange>()) Changes.Add(change);
 
         SelectedChange = Changes.FirstOrDefault();
+        OnPropertyChanged(nameof(ChangeCountLabel));
     }
 
     /// <summary>Copying a value whole is what most people want from this window; selecting it in

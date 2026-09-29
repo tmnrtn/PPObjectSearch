@@ -1,0 +1,68 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Surfaces and text -->
+    <SolidColorBrush x:Key="Bg" Color="#111113" />
+    <SolidColorBrush x:Key="Surface" Color="#18181B" />
+    <SolidColorBrush x:Key="Surface2" Color="#1C1C20" />
+    <SolidColorBrush x:Key="Hover" Color="#232327" />
+    <SolidColorBrush x:Key="Selected" Color="#1F2A44" />
+    <SolidColorBrush x:Key="Border" Color="#29292E" />
+    <SolidColorBrush x:Key="Border2" Color="#3A3A41" />
+    <SolidColorBrush x:Key="Text" Color="#EDEDEF" />
+    <SolidColorBrush x:Key="Muted" Color="#A1A1AA" />
+    <SolidColorBrush x:Key="Faint" Color="#71717A" />
+    <SolidColorBrush x:Key="Accent" Color="#3D78E6" />
+    <SolidColorBrush x:Key="AccentSoft" Color="#1E2B4A" />
+    <SolidColorBrush x:Key="AccentText" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Link" Color="#8AB4FF" />
+    <SolidColorBrush x:Key="Shadow" Color="#66000000" />
+
+    <!-- Status: fg / soft background -->
+    <SolidColorBrush x:Key="Red" Color="#F08A80" />
+    <SolidColorBrush x:Key="RedSoft" Color="#3A2320" />
+    <SolidColorBrush x:Key="Blue" Color="#8FB0F5" />
+    <SolidColorBrush x:Key="BlueSoft" Color="#1F2740" />
+    <SolidColorBrush x:Key="Amber" Color="#E8B865" />
+    <SolidColorBrush x:Key="AmberSoft" Color="#33291A" />
+    <SolidColorBrush x:Key="Green" Color="#6FCB8A" />
+    <SolidColorBrush x:Key="GreenSoft" Color="#1D3024" />
+    <SolidColorBrush x:Key="DiffAddedBg" Color="#1F3A27" />
+    <SolidColorBrush x:Key="DiffRemovedBg" Color="#3F2220" />
+    <SolidColorBrush x:Key="DiffAddedWord" Color="#2D6140" />
+    <SolidColorBrush x:Key="DiffRemovedWord" Color="#6E302A" />
+
+    <!-- A diff gap row: 1px diagonal lines every 5px, so the panes stay aligned. -->
+    <DrawingBrush x:Key="HatchBrush" TileMode="Tile" Viewport="0,0,5,5" ViewportUnits="Absolute"
+                  Viewbox="0,0,5,5" ViewboxUnits="Absolute">
+        <DrawingBrush.Drawing>
+            <GeometryDrawing Geometry="M0,0 L5,5">
+                <GeometryDrawing.Pen>
+                    <Pen Brush="#29292E" Thickness="1" />
+                </GeometryDrawing.Pen>
+            </GeometryDrawing>
+        </DrawingBrush.Drawing>
+    </DrawingBrush>
+
+    <!-- Environment types -->
+    <SolidColorBrush x:Key="EnvProduction" Color="#F0776B" />
+    <SolidColorBrush x:Key="EnvDefault" Color="#E9A553" />
+    <SolidColorBrush x:Key="EnvSandbox" Color="#4DB3DF" />
+    <SolidColorBrush x:Key="EnvDeveloper" Color="#63C07E" />
+    <SolidColorBrush x:Key="EnvTrial" Color="#B38CE6" />
+    <SolidColorBrush x:Key="EnvUnknown" Color="#8E8E96" />
+
+    <Color x:Key="AccentColor">#3D78E6</Color>
+
+    <!-- System colours used inside stock templates (scroll viewer corner, text selection, disabled text). -->
+    <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#18181B" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#18181B" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#EDEDEF" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#EDEDEF" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.GrayTextBrushKey}" Color="#71717A" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1F2A44" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#EDEDEF" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#1F2A44" />
+    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#EDEDEF" />
+
+</ResourceDictionary>

@@ -61,6 +61,21 @@ public sealed class AppSettings
     /// </summary>
     public List<ReferenceDataConfig>? ReferenceDataConfigurations { get; set; }
 
+    /// <summary>
+    /// Environment URLs this app may write reference data to despite being production - or despite
+    /// their type being unreadable, which is guarded the same way. Sandbox, developer and trial
+    /// environments do not need an entry. Nothing here is a wildcard: each entry clears exactly
+    /// the one environment it names, and the list is never written by the app.
+    /// </summary>
+    public List<string>? AllowProductionWrites { get; set; }
+
+    /// <summary>Light, Dark, or System to follow the Windows app theme.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AppTheme Theme { get; set; } = AppTheme.System;
+
+    /// <summary>Whether the main window's object detail pane is showing.</summary>
+    public bool IsDetailPaneOpen { get; set; } = true;
+
     public string? GetEnvironmentId(string environmentUrl)
     {
         if (EnvironmentIds is null) return null;

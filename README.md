@@ -9,19 +9,30 @@ straight into the maker portal.
 
 - **OAuth sign-in** (authorization code + PKCE) through the system browser, so existing SSO and
   MFA sessions are reused. Tokens are cached encrypted with DPAPI, so restarts reconnect silently.
-- **Environment tabs** — open as many environments as you like side by side. Tabs are restored on
-  the next launch (`Ctrl+T` new tab, `Ctrl+W` close).
+- **Environment sidebar** — open as many environments as you like; each is an entry in the sidebar,
+  restored on the next launch in the order you left them (`Ctrl+T` new, `Ctrl+W` or the entry's ✕
+  to close; drag an entry or use `Ctrl+Shift+PgUp` / `PgDn` to reorder).
+- **Environment type at a glance** — every environment carries a colour and a badge for its type
+  (production, default, sandbox, developer, trial), read from the Power Platform API. An
+  environment whose type cannot be read shows as *Unknown*.
+- **Light and dark themes** — follows the Windows app theme by default; the sun icon at the bottom
+  of the sidebar picks Light or Dark instead.
 - **Cross-tenant** — each tab discovers its environment's tenant from the Dataverse 401 challenge
-  and holds its own account, so tabs in different tenants work simultaneously. *Switch account*
-  re-signs a single tab without touching the others.
+  and holds its own account, so tabs in different tenants work simultaneously. *Switch account*,
+  in the account menu at the top right, re-signs a single tab without touching the others.
 - **Solution picker** — defaults to the default solution; any visible solution can be selected.
 - **Instant keyword search** — space-separated terms, all of which must match; matched against
   name, display name, schema name, object type, related table, owner and object id.
-- **Filterable object type column** — the dropdown lists every type present with a count.
+- **Filters** — type, sub type, managed state and layer, each listing what is present with a count.
+  A filter in use is highlighted, and **Clear** resets them all.
 - **Name as a maker portal link** — click to open the object in <https://make.powerapps.com>.
-  Right-click a row to copy the name, the link, or the object id.
+- **Detail pane** — the selected object's related table, owner, id and layer state, with buttons to
+  open it, see its solutions and dependencies, or copy its name, link or id. Right-click a row for
+  the same copy actions; the pane can be hidden from the toolbar.
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
+- **Reconcile differences** — write selected rows from the source into the target. Production
+  environments are refused unless explicitly allowlisted, and deleting needs its own confirmation.
 
 ## Build and run
 
@@ -74,7 +85,7 @@ the solution rather than just its shape. It is read-only: nothing is ever writte
 environment.
 
 1. Pick a **source** and a **target** from the connected tabs.
-2. **Add tables…** lists every table in the source environment. Tick the ones to check.
+2. **+ Add** lists every table in the source environment. Tick the ones to check.
 3. **Settings…** on a table (or double-click it) decides how it is compared:
    - **What identifies a row** — the primary key, one of the table's alternate keys, or columns you
      pick. Primary keys only agree between environments where the rows were *deployed*; rows built
@@ -85,7 +96,9 @@ environment.
      created/modified/owner housekeeping columns, which differ for every deployed row and would
      bury the real differences. **Defaults** puts that back.
 4. **Compare**. Each row lands as *only in source*, *only in target*, *values differ* or *match*,
-   and selecting one shows every compared column side by side with the differences highlighted.
+   and selecting one shows its differing columns side by side (untick **Differences only** to see
+   every compared column). The filter above the grid switches between the statuses, and each
+   table in the list shows how many of its rows differ.
 
 **Export CSV** writes one line per differing column — table, key, name, status, column, and each
 environment's value — so the output can be sorted and filtered outside the app.
@@ -106,7 +119,76 @@ Some details worth knowing:
   raise it or add a filter.
 
 Configurations are saved by name into `settings.json` (below) and picked from the dropdown, so a
-data set worth checking regularly is set up once.
+data set worth checking regularly is set up once. An amber dot on **Save** means there are unsaved
+changes; **⋯** beside it holds New, Rename and Delete.
+
+## Reconciling differences
+
+Tick rows in the results grid — or select them, one or a range with `Shift`/`Ctrl` — and
+**Reconcile N rows…** writes them from the source into the target. This is the only part of the
+app that changes anything.
+
+Three actions, each a card you switch on or off (rows for an action that is off stay listed,
+faded, and are never written):
+
+| Row status | Action | On by default |
+|---|---|---|
+| Only in source | **Create** it in the target, reusing the source's id | Yes |
+| Values differ | **Update** the target row | Yes |
+| Only in target | **Delete** it from the target | **No** |
+
+Nothing is written until **Apply**. Deleting is off to begin with, and turning it on adds a
+separate acknowledgement naming how many rows will go — Dataverse deletes cannot be undone.
+
+- **Only the columns you compared are written.** A column excluded from the comparison cannot be
+  changed by reconciling, and an update writes only the columns that actually differ.
+- **Created rows keep the source's id**, so the two environments converge on one id and later
+  comparisons match on the primary key. A create is a POST, never an upsert, so an id already in
+  use fails that row rather than overwriting whatever holds it.
+- **Lookups are resolved by name** against the target: the label the source showed is looked up in
+  the table the lookup actually points at. If nothing matches, or several rows do, that record is
+  abandoned with the reason — a reference row written with a missing or guessed reference is worse
+  than one not written.
+- **Read-only columns are left out**, not failed on. Calculated and rollup columns read like any
+  other but Dataverse refuses them on write, so they are skipped and named in the result.
+- Rows are written one at a time and each reports its own result, so a failure part-way through
+  leaves the successful rows written and says exactly which ones did not go. Stopping a run does
+  not roll anything back.
+
+After a run the comparison is re-read automatically, so the grid shows what is now true rather
+than what was true before the writes.
+
+### The production guard
+
+**Writing to a production environment is refused unless that environment is named in
+`AllowProductionWrites`.** The environment type comes from the Power Platform API — Dataverse
+itself does not carry its own SKU — and the guard fails closed:
+
+- **Sandbox, developer and trial** environments are writable with no configuration.
+- **Production** is refused unless allowlisted.
+- **The tenant's default environment** is refused on the same terms. It is not labelled
+  production, but everyone in the tenant is in it.
+- **An environment whose type could not be read** is refused on the same terms too. Not knowing is
+  not the same as knowing it is safe, so an unreachable API, a missing consent or an unrecognised
+  SKU all land on "blocked".
+
+Each entry clears exactly the one environment it names — matched on host, so the scheme and a
+trailing slash do not matter, but there are no wildcards and no suffix matching. The app never
+writes to this list; you add to it by hand.
+
+```jsonc
+"AllowProductionWrites": [
+  "https://contoso.crm11.dynamics.com"
+]
+```
+
+The reconcile window always states which environment it is writing to, what type it is, and
+whether the guard cleared it — in green when it did, in red when it did not, with **Apply**
+unavailable.
+
+The type check needs a Power Platform API token for the signed-in account. It is only ever
+requested silently, so this never opens a sign-in window on its own; where no token is to be had,
+the environment simply reads as unknown and is guarded.
 
 ## Authentication
 
@@ -138,6 +220,12 @@ then set `ClientId` in settings (below).
   // Solution to select on connect when a tab has no remembered one.
   "DefaultSolutionUniqueName": "Default",
 
+  // "System" follows the Windows app theme; "Light" or "Dark" fixes it. Set from the sidebar.
+  "Theme": "System",
+
+  // Whether the main window's object detail pane is showing.
+  "IsDetailPaneOpen": true,
+
   // Power Platform environment ids for maker portal links, keyed by host. Only needed if
   // automatic discovery is blocked in your tenant.
   "EnvironmentIds": {
@@ -154,6 +242,13 @@ then set `ClientId` in settings (below).
     // the solution-independent id instead, swap {objectId} for {workflowIdUnique}:
     "29": "https://make.powerapps.com/environments/{envId}/solutions/{solutionId}/objects/cloudflows/{objectId}/view"
   },
+
+  // Environments this app may write reference data to despite being production - or despite their
+  // type being unreadable, which is guarded the same way. Sandbox, developer and trial
+  // environments need no entry. Matched on host; no wildcards. Never written by the app.
+  "AllowProductionWrites": [
+    "https://contoso.crm11.dynamics.com"
+  ],
 
   // Saved reference data comparisons, maintained by the Compare data window. Editable by hand -
   // this is the shape a configuration takes.

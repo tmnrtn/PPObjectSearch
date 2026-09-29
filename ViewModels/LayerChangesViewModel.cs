@@ -28,6 +28,9 @@ public sealed class LayerChangesViewModel : DefinitionDiffViewModel
     public string ComponentLabel { get; }
     public ComponentLayer Layer { get; }
 
+    public override object? BeforeMarker => "Beneath";
+    public override object? AfterMarker => "Layer";
+
     /// <summary>The layer this one sits on top of, or null when this is the bottom of the stack.</summary>
     public ComponentLayer? Below { get; }
 

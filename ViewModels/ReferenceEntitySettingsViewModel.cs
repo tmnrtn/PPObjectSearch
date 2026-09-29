@@ -41,6 +41,11 @@ public sealed class KeyOption
     public string? AlternateKeyName { get; init; }
     public IReadOnlyList<string> Columns { get; init; } = Array.Empty<string>();
 
+    // What the option's card shows: a title, the key itself in mono, and a line of explanation.
+    public string Title { get; init; } = string.Empty;
+    public string? Value { get; init; }
+    public string Hint { get; init; } = string.Empty;
+
     public override string ToString() => Label;
 }
 
@@ -111,6 +116,11 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
 
     public bool IsCustomKey => SelectedKey?.Source == RecordKeySource.Columns;
 
+    /// <summary>"38 of 42 columns compared".</summary>
+    public string CompareSummary => Columns.Count == 0
+        ? string.Empty
+        : $"{Columns.Count(c => c.IsCompared):N0} of {Columns.Count:N0} columns compared";
+
     private string _filter;
     /// <summary>OData <c>$filter</c>, applied to both environments' row queries.</summary>
     public string Filter
@@ -142,7 +152,15 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
             var keys = await keysTask;
 
             Columns.Clear();
-            foreach (var column in columns) Columns.Add(new ColumnChoice { Column = column });
+            foreach (var column in columns)
+            {
+                var choice = new ColumnChoice { Column = column };
+                choice.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(ColumnChoice.IsCompared)) OnPropertyChanged(nameof(CompareSummary));
+                };
+                Columns.Add(choice);
+            }
 
             BuildKeyOptions(keys);
             ApplyExclusions(_config.ExcludedColumns);
@@ -221,7 +239,10 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         {
             Label = $"Primary key - {_entity.PrimaryIdAttribute}",
             Source = RecordKeySource.PrimaryId,
-            Columns = new[] { _entity.PrimaryIdAttribute }
+            Columns = new[] { _entity.PrimaryIdAttribute },
+            Title = "Primary id",
+            Value = _entity.PrimaryIdAttribute,
+            Hint = "Only agrees where rows were deployed, not created separately."
         });
 
         foreach (var key in keys)
@@ -231,11 +252,20 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
                 Label = "Alternate key - " + key.Label,
                 Source = RecordKeySource.AlternateKey,
                 AlternateKeyName = key.LogicalName,
-                Columns = key.KeyAttributes
+                Columns = key.KeyAttributes,
+                Title = string.IsNullOrWhiteSpace(key.DisplayName) ? "Alternate key" : key.DisplayName!,
+                Value = key.LogicalName,
+                Hint = "Columns: " + string.Join(", ", key.KeyAttributes)
             });
         }
 
-        KeyOptions.Add(new KeyOption { Label = "Columns I pick", Source = RecordKeySource.Columns });
+        KeyOptions.Add(new KeyOption
+        {
+            Label = "Columns I pick",
+            Source = RecordKeySource.Columns,
+            Title = "Columns I pick",
+            Hint = "Natural key made of one or more columns."
+        });
     }
 
     private void SelectSavedKey(IReadOnlyList<AlternateKeyInfo> keys)

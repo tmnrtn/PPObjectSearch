@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Data;
@@ -40,8 +40,38 @@ public sealed class ReferenceEntityViewModel : ObservableObject
 
             Config.IsEnabled = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ResultLabel));
+            OnPropertyChanged(nameof(Result));
         }
     }
+
+    private int? _differenceCount;
+    /// <summary>Rows needing a change in the last comparison; null until this table has been compared.</summary>
+    public int? DifferenceCount
+    {
+        get => _differenceCount;
+        set
+        {
+            if (!SetProperty(ref _differenceCount, value)) return;
+            OnPropertyChanged(nameof(ResultLabel));
+            OnPropertyChanged(nameof(Result));
+        }
+    }
+
+    /// <summary>Drives the colour of <see cref="ResultLabel"/>: "Differences", "Match", "Off" or "None".</summary>
+    public string Result => !IsEnabled ? "Off"
+        : DifferenceCount is null ? "None"
+        : DifferenceCount == 0 ? "Match"
+        : "Differences";
+
+    /// <summary>"8 diff", "Match" or "Off", at the right of the table list.</summary>
+    public string ResultLabel => Result switch
+    {
+        "Off" => "Off",
+        "Match" => "Match",
+        "Differences" => $"{DifferenceCount:N0} diff",
+        _ => string.Empty
+    };
 
     public string KeyDescription => Config.KeySource switch
     {
@@ -67,7 +97,7 @@ public sealed class ReferenceEntityViewModel : ObservableObject
                 parts.Add("default columns");
             }
 
-            return string.Join("  |  ", parts);
+            return string.Join(" · ", parts);
         }
     }
 
@@ -77,6 +107,16 @@ public sealed class ReferenceEntityViewModel : ObservableObject
         OnPropertyChanged(nameof(KeyDescription));
         OnPropertyChanged(nameof(Detail));
     }
+}
+
+/// <summary>The segmented filter above the results. Matches replaces the old "Show matching rows".</summary>
+public enum RecordStatusFilter
+{
+    Differences,
+    OnlySource,
+    OnlyTarget,
+    Different,
+    Matches
 }
 
 /// <summary>
@@ -101,6 +141,15 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     private DataverseClient? _sourceEntitiesFrom;
     private CancellationTokenSource? _cts;
 
+    /// <summary>The target's tables, needed to write to it - to name its entity sets, and to
+    /// resolve a lookup label to a row that actually exists there.</summary>
+    private IReadOnlyDictionary<string, EntitySummary>? _targetEntities;
+    private DataverseClient? _targetEntitiesFrom;
+
+    /// <summary>Whether the target may be written to, re-asked whenever the target changes.</summary>
+    private WritePermission? _permission;
+    private DataverseClient? _permissionFrom;
+
     public ReferenceDataCompareViewModel(IEnumerable<EnvironmentSessionViewModel> sessions, AppSettings settings)
     {
         _settings = settings;
@@ -124,10 +173,20 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             p => (p as ReferenceEntityViewModel ?? SelectedEntity) is not null);
 
         NewConfigurationCommand = new RelayCommand(_ => NewConfiguration());
-        SaveConfigurationCommand = new RelayCommand(_ => SaveConfiguration(), _ => !string.IsNullOrWhiteSpace(ConfigurationName));
+        SaveConfigurationCommand = new RelayCommand(_ => SaveConfiguration());
+        RenameConfigurationCommand = new RelayCommand(_ => RenameConfiguration(), _ => SelectedConfiguration is not null);
         DeleteConfigurationCommand = new RelayCommand(_ => DeleteConfiguration(), _ => SelectedConfiguration is not null);
+        ToggleWarningsCommand = new RelayCommand(_ => ShowAllWarnings = !ShowAllWarnings);
+
+        Warnings.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(WarningsTitle));
+            OnPropertyChanged(nameof(WarningsPreview));
+        };
+        Entities.CollectionChanged += (_, _) => OnPropertyChanged(nameof(TablesHeading));
 
         ExportCommand = new RelayCommand(_ => Export(), _ => _all.Count > 0);
+        ReconcileCommand = new AsyncRelayCommand(_ => ReconcileAsync(), _ => SelectedRows.Count > 0);
 
         _source = Sessions.FirstOrDefault();
         _target = Sessions.Skip(1).FirstOrDefault();
@@ -151,8 +210,38 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     public RelayCommand RemoveEntityCommand { get; }
     public RelayCommand NewConfigurationCommand { get; }
     public RelayCommand SaveConfigurationCommand { get; }
+    public RelayCommand RenameConfigurationCommand { get; }
     public RelayCommand DeleteConfigurationCommand { get; }
+    public RelayCommand ToggleWarningsCommand { get; }
     public RelayCommand ExportCommand { get; }
+    public AsyncRelayCommand ReconcileCommand { get; }
+
+    /// <summary>"Tables · 4 of 5 checked".</summary>
+    public string TablesHeading => Entities.Count == 0
+        ? "Tables"
+        : $"Tables · {Entities.Count(e => e.IsEnabled)} of {Entities.Count} checked";
+
+    private bool _isDirty;
+    /// <summary>The configuration on screen has changes that Save would keep.</summary>
+    public bool IsDirty
+    {
+        get => _isDirty;
+        private set => SetProperty(ref _isDirty, value);
+    }
+
+    private bool _showAllWarnings;
+    public bool ShowAllWarnings
+    {
+        get => _showAllWarnings;
+        set => SetProperty(ref _showAllWarnings, value);
+    }
+
+    public string WarningsTitle => Warnings.Count == 1
+        ? "1 warning — the result may be partial"
+        : $"{Warnings.Count} warnings — the result may be partial";
+
+    /// <summary>The first couple of warnings, inline in the banner.</summary>
+    public string WarningsPreview => string.Join(" · ", Warnings.Take(2));
 
     private bool CanCompare =>
         Source is not null && Target is not null && Source != Target &&
@@ -183,7 +272,14 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             if (!SetProperty(ref _target, value)) return;
 
+            // Permission and table list belong to an environment, not to the window.
+            _targetEntities = null;
+            _targetEntitiesFrom = null;
+            _permission = null;
+            _permissionFrom = null;
+
             OnPropertyChanged(nameof(TargetHeader));
+            OnPropertyChanged(nameof(WriteStatus));
             RaiseCommandStates();
         }
     }
@@ -209,16 +305,110 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             if (!SetProperty(ref _selectedRow, value)) return;
 
-            DetailColumns.Clear();
-
-            foreach (var column in value?.AllColumns() ?? Array.Empty<ColumnComparison>())
-            {
-                DetailColumns.Add(column);
-            }
+            _detailAll = value?.AllColumns() ?? Array.Empty<ColumnComparison>();
+            RebuildDetail();
 
             OnPropertyChanged(nameof(DetailHeading));
+            OnPropertyChanged(nameof(DetailKey));
         }
     }
+
+    private IReadOnlyList<ColumnComparison> _detailAll = Array.Empty<ColumnComparison>();
+
+    private bool _differencesOnly = true;
+    /// <summary>Hides the matching columns of the selected row, which are most of them.</summary>
+    public bool DifferencesOnly
+    {
+        get => _differencesOnly;
+        set
+        {
+            if (SetProperty(ref _differencesOnly, value)) RebuildDetail();
+        }
+    }
+
+    private void RebuildDetail()
+    {
+        DetailColumns.Clear();
+
+        foreach (var column in _detailAll.Where(c => !DifferencesOnly || c.IsDifferent))
+        {
+            DetailColumns.Add(column);
+        }
+
+        OnPropertyChanged(nameof(DetailCounts));
+    }
+
+    /// <summary>"3 of 14 columns differ".</summary>
+    public string DetailCounts => SelectedRow is null
+        ? string.Empty
+        : $"{_detailAll.Count(c => c.IsDifferent):N0} of {_detailAll.Count:N0} columns differ";
+
+    /// <summary>"contoso_category · CAT-017" beside the row name.</summary>
+    public string DetailKey => SelectedRow is null
+        ? string.Empty
+        : $"{SelectedRow.EntityLogicalName} · {SelectedRow.Key}";
+
+    /// <summary>
+    /// Every row highlighted in the grid. WPF will not bind SelectedItems, so the view pushes it
+    /// here; reconciling acts on all of them, not just the one the detail pane is showing.
+    /// </summary>
+    public IReadOnlyList<RecordComparison> SelectedRows { get; private set; } = Array.Empty<RecordComparison>();
+
+    public void SetSelectedRows(IEnumerable<RecordComparison> rows)
+    {
+        SelectedRows = rows.ToList();
+
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(SelectionBreakdown));
+        OnPropertyChanged(nameof(ReconcileLabel));
+        ReconcileCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>"1 create, 2 update" - what reconciling the selection would do.</summary>
+    public string SelectionBreakdown
+    {
+        get
+        {
+            var parts = new List<string>();
+            var create = SelectedRows.Count(r => r.Status == RecordCompareStatus.OnlyInSource);
+            var update = SelectedRows.Count(r => r.Status == RecordCompareStatus.Different);
+            var delete = SelectedRows.Count(r => r.Status == RecordCompareStatus.OnlyInTarget);
+
+            if (create > 0) parts.Add($"{create:N0} create");
+            if (update > 0) parts.Add($"{update:N0} update");
+            if (delete > 0) parts.Add($"{delete:N0} delete");
+
+            return parts.Count == 0 ? string.Empty : " · " + string.Join(", ", parts);
+        }
+    }
+
+    public string ReconcileLabel => SelectedRows.Count switch
+    {
+        0 => "Reconcile...",
+        1 => "Reconcile 1 row...",
+        var n => $"Reconcile {n:N0} rows..."
+    };
+
+    public string SelectionSummary
+    {
+        get
+        {
+            var actionable = SelectedRows.Count(r => r.Status != RecordCompareStatus.Same);
+
+            if (SelectedRows.Count == 0) return "No rows selected";
+
+            var rows = SelectedRows.Count == 1 ? "1 row selected" : $"{SelectedRows.Count:N0} rows selected";
+
+            return actionable == SelectedRows.Count
+                ? rows
+                : $"{rows}, {actionable:N0} need a change";
+        }
+    }
+
+    /// <summary>What the status bar says about writing to the target, once it is known.</summary>
+    public string WriteStatus => _permission is null
+        ? string.Empty
+        : _permission.Reason;
 
     public string DetailHeading => SelectedRow is null
         ? "Select a row to see its columns."
@@ -255,7 +445,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         get => _matchLookupsByName;
         set
         {
-            if (SetProperty(ref _matchLookupsByName, value) && _fetched.Count > 0) Recompare();
+            if (!SetProperty(ref _matchLookupsByName, value)) return;
+
+            IsDirty = true;
+            if (_fetched.Count > 0) Recompare();
         }
     }
 
@@ -263,18 +456,29 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     public int MaxRowsPerEntity
     {
         get => _maxRowsPerEntity;
-        set => SetProperty(ref _maxRowsPerEntity, Math.Clamp(value, 1, 100_000));
-    }
-
-    private bool _showMatches;
-    public bool ShowMatches
-    {
-        get => _showMatches;
         set
         {
-            if (SetProperty(ref _showMatches, value)) RefreshView();
+            if (SetProperty(ref _maxRowsPerEntity, Math.Clamp(value, 1, 100_000))) IsDirty = true;
         }
     }
+
+    private RecordStatusFilter _statusFilter = RecordStatusFilter.Differences;
+    public RecordStatusFilter StatusFilter
+    {
+        get => _statusFilter;
+        set
+        {
+            if (SetProperty(ref _statusFilter, value)) RefreshView();
+        }
+    }
+
+    // Counts for the segmented filter, after the table and search filters.
+    private int _countDifferences, _countOnlySource, _countOnlyTarget, _countDifferent, _countMatches;
+    public int CountDifferences { get => _countDifferences; private set => SetProperty(ref _countDifferences, value); }
+    public int CountOnlySource { get => _countOnlySource; private set => SetProperty(ref _countOnlySource, value); }
+    public int CountOnlyTarget { get => _countOnlyTarget; private set => SetProperty(ref _countOnlyTarget, value); }
+    public int CountDifferent { get => _countDifferent; private set => SetProperty(ref _countDifferent, value); }
+    public int CountMatches { get => _countMatches; private set => SetProperty(ref _countMatches, value); }
 
     private string _searchText = string.Empty;
     public string SearchText
@@ -355,6 +559,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         var planner = new ReferenceDataPlanner(sourceClient, targetClient);
         var configured = Entities.Where(e => e.IsEnabled).ToList();
         var done = 0;
+        var timer = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
@@ -408,7 +613,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             }
 
             Recompare();
-            Status = BuildStatus(_fetched.Count);
+            Status = BuildStatus(_fetched.Count, timer.Elapsed);
         }
         catch (OperationCanceledException)
         {
@@ -447,22 +652,41 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             _all.AddRange(result.Rows);
         }
 
+        foreach (var entity in Entities)
+        {
+            var compared = _fetched.Any(f => string.Equals(
+                f.Plan.Entity.LogicalName, entity.LogicalName, StringComparison.OrdinalIgnoreCase));
+
+            entity.DifferenceCount = compared
+                ? _all.Count(r => r.Status != RecordCompareStatus.Same &&
+                                  string.Equals(r.EntityLogicalName, entity.LogicalName, StringComparison.OrdinalIgnoreCase))
+                : null;
+        }
+
         SelectedRow = null;
         BuildEntityFilters();
         RefreshView();
         ExportCommand.RaiseCanExecuteChanged();
     }
 
-    private string BuildStatus(int tableCount)
+    private string BuildStatus(int tableCount, TimeSpan elapsed)
     {
-        if (_all.Count == 0) return $"{tableCount} table(s) compared - no rows read.";
-
         var noun = tableCount == 1 ? "table" : "tables";
+        var took = $"Compared {tableCount} {noun} in {elapsed.TotalSeconds:0.0} s";
+
+        if (_all.Count == 0) return $"{took} - no rows read.";
+
+        var sourceRows = _fetched.Sum(f => f.Source.Count);
+        var targetRows = _fetched.Sum(f => f.Target.Count);
+        var read = sourceRows == targetRows
+            ? $"{sourceRows:N0} rows read from each side"
+            : $"{sourceRows:N0} source and {targetRows:N0} target rows read";
+
         var differing = _all.Count(r => r.Status != RecordCompareStatus.Same);
 
         return differing == 0
-            ? $"{tableCount} {noun} compared - every row matches."
-            : $"{tableCount} {noun} compared - {differing:N0} row(s) need attention.";
+            ? $"{took} · {read} · every row matches."
+            : $"{took} · {read}";
     }
 
     private void BuildEntityFilters()
@@ -496,14 +720,33 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
         Summary = $"{onlySource:N0} only in {SourceHeader}  |  {onlyTarget:N0} only in {TargetHeader}  |  " +
                   $"{different:N0} with different values  |  {same:N0} matching";
+
+        var narrowed = _all.Where(MatchesTableAndSearch).ToList();
+        CountOnlySource = narrowed.Count(r => r.Status == RecordCompareStatus.OnlyInSource);
+        CountOnlyTarget = narrowed.Count(r => r.Status == RecordCompareStatus.OnlyInTarget);
+        CountDifferent = narrowed.Count(r => r.Status == RecordCompareStatus.Different);
+        CountMatches = narrowed.Count(r => r.Status == RecordCompareStatus.Same);
+        CountDifferences = CountOnlySource + CountOnlyTarget + CountDifferent;
     }
 
     private bool FilterRow(object obj)
     {
         if (obj is not RecordComparison row) return false;
 
-        if (!ShowMatches && row.Status == RecordCompareStatus.Same) return false;
+        var statusMatches = StatusFilter switch
+        {
+            RecordStatusFilter.OnlySource => row.Status == RecordCompareStatus.OnlyInSource,
+            RecordStatusFilter.OnlyTarget => row.Status == RecordCompareStatus.OnlyInTarget,
+            RecordStatusFilter.Different => row.Status == RecordCompareStatus.Different,
+            RecordStatusFilter.Matches => row.Status == RecordCompareStatus.Same,
+            _ => row.Status != RecordCompareStatus.Same
+        };
 
+        return statusMatches && MatchesTableAndSearch(row);
+    }
+
+    private bool MatchesTableAndSearch(RecordComparison row)
+    {
         if (!string.Equals(SelectedEntityFilter, AllEntities, StringComparison.Ordinal) &&
             !string.Equals(row.EntityLogicalName, SelectedEntityFilter, StringComparison.OrdinalIgnoreCase))
         {
@@ -515,6 +758,94 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         return row.Key.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                (row.Name?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
                row.DifferenceSummary.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- reconciling -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Opens the reconcile window for the selected rows. The write guard is consulted here, before
+    /// the window is shown, so a blocked environment is visible in the confirmation rather than
+    /// only at the moment a write fails.
+    /// </summary>
+    private async Task ReconcileAsync()
+    {
+        if (Target?.Client is not { } targetClient) return;
+        if (SelectedRows.Count == 0) return;
+
+        var actionable = SelectedRows.Where(r => r.Status != RecordCompareStatus.Same).ToList();
+
+        if (actionable.Count == 0)
+        {
+            Status = "Every selected row already matches, so there is nothing to reconcile.";
+            return;
+        }
+
+        WritePermission permission;
+        IReadOnlyDictionary<string, EntitySummary> targetEntities;
+
+        try
+        {
+            IsBusy = true;
+            Status = $"Checking what kind of environment {TargetHeader} is...";
+
+            permission = await EnsurePermissionAsync(targetClient);
+            targetEntities = await EnsureTargetEntitiesAsync(targetClient);
+        }
+        catch (Exception ex)
+        {
+            Status = "Could not prepare the write - " + ex.Message;
+            return;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        OnPropertyChanged(nameof(WriteStatus));
+
+        var viewModel = new ReconcileViewModel(
+            actionable, SourceHeader, TargetHeader, targetClient, targetEntities, permission,
+            Source?.EnvironmentSku ?? EnvironmentSku.Unknown);
+
+        var window = new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() };
+        var wrote = window.ShowDialog() == true;
+
+        Status = permission.Allowed
+            ? viewModel.Status
+            : permission.Reason;
+
+        // Anything written makes the rows on screen a description of how things used to be, so the
+        // comparison is run again rather than left showing differences that have just been fixed.
+        if (wrote) await CompareAsync();
+    }
+
+    private async Task<WritePermission> EnsurePermissionAsync(DataverseClient targetClient)
+    {
+        if (_permission is not null && ReferenceEquals(_permissionFrom, targetClient)) return _permission;
+
+        var environmentId = _settings.GetEnvironmentId(targetClient.EnvironmentUrl);
+        var type = await targetClient.GetEnvironmentTypeAsync(environmentId);
+
+        _permission = WriteGuard.Evaluate(_settings, targetClient.EnvironmentUrl, type);
+        _permissionFrom = targetClient;
+
+        return _permission;
+    }
+
+    private async Task<IReadOnlyDictionary<string, EntitySummary>> EnsureTargetEntitiesAsync(
+        DataverseClient targetClient)
+    {
+        if (_targetEntities is not null && ReferenceEquals(_targetEntitiesFrom, targetClient))
+        {
+            return _targetEntities;
+        }
+
+        var entities = await targetClient.GetEntitiesAsync();
+
+        _targetEntities = entities.ToDictionary(e => e.LogicalName, StringComparer.OrdinalIgnoreCase);
+        _targetEntitiesFrom = targetClient;
+
+        return _targetEntities;
     }
 
     // --- configuration ---------------------------------------------------------------------
@@ -532,6 +863,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             Add(new ReferenceEntityViewModel(entity.Clone()));
         }
 
+        IsDirty = false;
         RaiseCommandStates();
     }
 
@@ -540,11 +872,22 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         SelectedConfiguration = null;
         ConfigurationName = string.Empty;
         Entities.Clear();
+        IsDirty = false;
         RaiseCommandStates();
     }
 
+    /// <summary>A configuration that has never been saved is asked for its name first.</summary>
     private void SaveConfiguration()
     {
+        if (string.IsNullOrWhiteSpace(ConfigurationName))
+        {
+            var asked = Views.NamePromptWindow.Ask(OwnerWindow(), "Save configuration",
+                "Name this set of tables so it can be picked again.", string.Empty);
+            if (asked is null) return;
+
+            ConfigurationName = asked;
+        }
+
         var name = ConfigurationName.Trim();
         if (name.Length == 0) return;
 
@@ -575,7 +918,37 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         DeleteConfigurationCommand.RaiseCanExecuteChanged();
 
         Persist();
+        IsDirty = false;
         Status = $"Saved configuration '{name}'.";
+    }
+
+    private void RenameConfiguration()
+    {
+        if (SelectedConfiguration is not { } config) return;
+
+        var name = Views.NamePromptWindow.Ask(OwnerWindow(), "Rename configuration",
+            "The tables and settings stay as they are.", config.Name ?? string.Empty);
+
+        if (name is null || string.Equals(name, config.Name, StringComparison.Ordinal)) return;
+
+        if (Configurations.Any(c => !ReferenceEquals(c, config) &&
+                                    string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            Status = $"There is already a configuration called '{name}'.";
+            return;
+        }
+
+        var renamed = config.Clone();
+        renamed.Name = name;
+
+        // Replacing the item, rather than editing it, is what makes the dropdown show the new name.
+        _selectedConfiguration = renamed;
+        Configurations[Configurations.IndexOf(config)] = renamed;
+        OnPropertyChanged(nameof(SelectedConfiguration));
+        ConfigurationName = name;
+
+        Persist();
+        Status = $"Renamed the configuration to '{name}'.";
     }
 
     private void DeleteConfiguration()
@@ -646,6 +1019,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         }
 
         Status = $"{Entities.Count} table(s) configured.";
+        if (picker.SelectedEntities.Any()) IsDirty = true;
         RaiseCommandStates();
     }
 
@@ -668,7 +1042,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
         _ = settings.LoadAsync();
 
-        if (window.ShowDialog() == true) entity.Refresh();
+        if (window.ShowDialog() != true) return;
+
+        entity.Refresh();
+        IsDirty = true;
     }
 
     private async Task<EntitySummary?> ResolveEntityAsync(DataverseClient client, string logicalName)
@@ -704,7 +1081,11 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         entity.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ReferenceEntityViewModel.IsEnabled)) CompareCommand.RaiseCanExecuteChanged();
+            if (e.PropertyName != nameof(ReferenceEntityViewModel.IsEnabled)) return;
+
+            CompareCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(TablesHeading));
+            IsDirty = true;
         };
 
         Entities.Add(entity);
@@ -715,11 +1096,13 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         if (entity is null) return;
 
         Entities.Remove(entity);
+        IsDirty = true;
         RaiseCommandStates();
     }
 
     private void RaiseCommandStates()
     {
+        ReconcileCommand.RaiseCanExecuteChanged();
         CompareCommand.RaiseCanExecuteChanged();
         AddEntitiesCommand.RaiseCanExecuteChanged();
         EditEntityCommand.RaiseCanExecuteChanged();

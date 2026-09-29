@@ -107,6 +107,50 @@ public sealed class AuthenticationService
             result.Account?.HomeAccountId?.TenantId ?? tenantId);
     }
 
+    /// <summary>
+    /// A token for another resource on an account already signed in, or null if getting one would
+    /// mean prompting. Used for side questions - what type of environment is this - where opening
+    /// a browser window the user did not ask for would be worse than not knowing the answer.
+    /// </summary>
+    public async Task<AccountToken?> TryAcquireTokenSilentAsync(
+        string resource,
+        string? tenantId,
+        string? preferredAccountId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var app = GetApp(tenantId);
+            var accounts = await app.GetAccountsAsync().ConfigureAwait(false);
+
+            var account = accounts.FirstOrDefault(a =>
+                              preferredAccountId is not null &&
+                              string.Equals(a.HomeAccountId?.Identifier, preferredAccountId, StringComparison.OrdinalIgnoreCase))
+                          ?? accounts.FirstOrDefault(a =>
+                              tenantId is not null &&
+                              string.Equals(a.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+
+            if (account is null) return null;
+
+            var result = await app
+                .AcquireTokenSilent(new[] { $"{resource.TrimEnd('/')}/.default" }, account)
+                .ExecuteAsync(ct)
+                .ConfigureAwait(false);
+
+            return new AccountToken(
+                result.AccessToken,
+                result.Account?.HomeAccountId?.Identifier ?? string.Empty,
+                result.Account?.Username ?? "(unknown account)",
+                result.Account?.HomeAccountId?.TenantId ?? tenantId);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch
+        {
+            // No consent for this resource, or nothing cached - the caller treats that as unknown.
+            return null;
+        }
+    }
+
     public async Task<IReadOnlyList<KnownAccount>> GetKnownAccountsAsync()
     {
         var known = new Dictionary<string, KnownAccount>(StringComparer.OrdinalIgnoreCase);
@@ -166,6 +210,13 @@ public sealed class EnvironmentAuthContext
     {
         if (!string.IsNullOrWhiteSpace(TenantId)) return;
         TenantId = await TenantDiscovery.GetTenantIdAsync(environmentUrl, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A token for another resource without ever prompting - null when none is to be had.</summary>
+    public async Task<string?> TryGetTokenSilentAsync(string resource, CancellationToken ct = default)
+    {
+        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct).ConfigureAwait(false);
+        return token?.AccessToken;
     }
 
     public async Task<string> GetTokenAsync(string resource, CancellationToken ct = default)

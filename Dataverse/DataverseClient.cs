@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -74,19 +74,30 @@ public sealed partial class DataverseClient : IDisposable
         return uri.GetLeftPart(UriPartial.Authority);
     }
 
-    private static string BuildPreferHeader(bool includeFormattedValues)
+    /// <summary>
+    /// Which OData annotations a read asks for. Labels are what most reads want; a row that is
+    /// going to be written somewhere else needs all of them, because a lookup only says which
+    /// table it points at, and which navigation property binds it, in annotations beyond the label.
+    /// </summary>
+    internal static class Annotations
+    {
+        public const string Formatted = "OData.Community.Display.V1.FormattedValue";
+        public const string All = "*";
+    }
+
+    private static string BuildPreferHeader(string? annotations)
     {
         var prefer = new List<string> { $"odata.maxpagesize={PageSize}" };
-        if (includeFormattedValues) prefer.Add("odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"");
+        if (annotations is not null) prefer.Add($"odata.include-annotations=\"{annotations}\"");
         return string.Join(",", prefer);
     }
 
-    private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, bool includeFormattedValues = false)
+    private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, string? annotations = null)
     {
         // Skip the doomed GET entirely when the URL is already over the limit.
         if (url.Length > MaxGetUrlLength)
         {
-            return await GetJsonViaBatchAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, ct, annotations).ConfigureAwait(false);
         }
 
         try
@@ -95,7 +106,7 @@ public sealed partial class DataverseClient : IDisposable
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Add("Prefer", BuildPreferHeader(includeFormattedValues));
+            request.Headers.Add("Prefer", BuildPreferHeader(annotations));
 
             using var response = await _http
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
@@ -114,7 +125,7 @@ public sealed partial class DataverseClient : IDisposable
         }
         catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.RequestUriTooLong)
         {
-            return await GetJsonViaBatchAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, ct, annotations).ConfigureAwait(false);
         }
     }
 
@@ -122,7 +133,7 @@ public sealed partial class DataverseClient : IDisposable
     /// Issues a GET inside a $batch POST. The URL travels in the request body, so paging cookies
     /// of any length are fine.
     /// </summary>
-    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, bool includeFormattedValues)
+    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, string? annotations)
     {
         var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
         var boundary = "batch_" + Guid.NewGuid().ToString("N");
@@ -135,7 +146,7 @@ public sealed partial class DataverseClient : IDisposable
             .Append("Accept: application/json\r\n")
             .Append("OData-MaxVersion: 4.0\r\n")
             .Append("OData-Version: 4.0\r\n")
-            .Append("Prefer: ").Append(BuildPreferHeader(includeFormattedValues)).Append("\r\n\r\n")
+            .Append("Prefer: ").Append(BuildPreferHeader(annotations)).Append("\r\n\r\n")
             .Append("--").Append(boundary).Append("--\r\n")
             .ToString();
 
@@ -343,7 +354,7 @@ public sealed partial class DataverseClient : IDisposable
                   $"?@p1={objectId}&@p2={componentType}";
 
         var results = new List<DependencyRef>();
-        using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+        using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
         if (!doc.RootElement.TryGetProperty("value", out var value)) return results;
 
@@ -609,7 +620,7 @@ public sealed partial class DataverseClient : IDisposable
 
             while (url.Length > 0)
             {
-                using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+                using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
                 if (doc.RootElement.TryGetProperty("value", out var value))
                 {
@@ -741,7 +752,7 @@ public sealed partial class DataverseClient : IDisposable
         {
             ct.ThrowIfCancellationRequested();
 
-            using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+            using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
             var added = 0;
             if (doc.RootElement.TryGetProperty("value", out var value))

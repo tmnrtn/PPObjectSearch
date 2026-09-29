@@ -63,7 +63,7 @@ public sealed class DefinitionChange
     {
         DefinitionChangeKind.Added => "Added",
         DefinitionChangeKind.Removed => "Removed",
-        _ => "Changed"
+        _ => "Modified"
     };
 
     private string? _previousText;

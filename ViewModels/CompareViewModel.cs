@@ -16,6 +16,15 @@ public enum CompareStatus
     Same
 }
 
+/// <summary>The segmented filter above the grid.</summary>
+public enum CompareStatusFilter
+{
+    All,
+    OnlyLeft,
+    OnlyRight,
+    Both
+}
+
 public sealed class CompareRow
 {
     public required string Name { get; init; }
@@ -76,6 +85,12 @@ public sealed class CompareViewModel : ObservableObject
         };
 
         CompareCommand = new RelayCommand(_ => Compare(), _ => Left is not null && Right is not null && Left != Right);
+        SwapCommand = new RelayCommand(_ => Swap(), _ => Left is not null || Right is not null);
+
+        // Keeps "Compared 2 min ago" honest while the window sits open.
+        _agoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _agoTimer.Tick += (_, _) => OnPropertyChanged(nameof(ComparedAgo));
+        _agoTimer.Start();
         ExportCommand = new RelayCommand(_ => Export(), _ => Rows.Count > 0);
         CompareDefinitionCommand = new RelayCommand(
             p => CompareDefinition(p as CompareRow ?? SelectedRow),
@@ -92,8 +107,80 @@ public sealed class CompareViewModel : ObservableObject
     public ListCollectionView RowsView { get; }
 
     public RelayCommand CompareCommand { get; }
+    public RelayCommand SwapCommand { get; }
     public RelayCommand ExportCommand { get; }
     public RelayCommand CompareDefinitionCommand { get; }
+
+    private readonly DispatcherTimer _agoTimer;
+    private DateTime? _comparedAt;
+
+    /// <summary>"Compared 2 min ago" - empty until the first comparison.</summary>
+    public string ComparedAgo
+    {
+        get
+        {
+            if (_comparedAt is not { } at) return string.Empty;
+
+            var elapsed = DateTime.Now - at;
+            return elapsed.TotalMinutes < 1 ? "Compared just now"
+                : elapsed.TotalHours < 1 ? $"Compared {(int)elapsed.TotalMinutes} min ago"
+                : $"Compared at {at:HH:mm}";
+        }
+    }
+
+    /// <summary>How rows were paired, and from which solutions - the status bar's left side.</summary>
+    public string MatchDescription
+    {
+        get
+        {
+            var rule = "Matched on object id, falling back to type and name";
+            var left = Left?.SelectedSolution?.FriendlyName;
+            var right = Right?.SelectedSolution?.FriendlyName;
+
+            if (left is null || right is null) return rule;
+
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+                ? $"{rule} · {left} on both sides"
+                : $"{rule} · {left} vs {right}";
+        }
+    }
+
+    private CompareStatusFilter _statusFilter;
+    /// <summary>Replaces the old "Show items in both" check box.</summary>
+    public CompareStatusFilter StatusFilter
+    {
+        get => _statusFilter;
+        set
+        {
+            if (SetProperty(ref _statusFilter, value)) RefreshView();
+        }
+    }
+
+    // Counts for the segmented filter, after the type and search filters but before the status one.
+    private int _countAll, _countOnlyLeft, _countOnlyRight, _countBoth;
+    public int CountAll { get => _countAll; private set => SetProperty(ref _countAll, value); }
+    public int CountOnlyLeft { get => _countOnlyLeft; private set => SetProperty(ref _countOnlyLeft, value); }
+    public int CountOnlyRight { get => _countOnlyRight; private set => SetProperty(ref _countOnlyRight, value); }
+    public int CountBoth { get => _countBoth; private set => SetProperty(ref _countBoth, value); }
+
+    private string _resultSummary = string.Empty;
+    /// <summary>"47 differences · 2,904 in both".</summary>
+    public string ResultSummary
+    {
+        get => _resultSummary;
+        private set => SetProperty(ref _resultSummary, value);
+    }
+
+    /// <summary>Left becomes right and the comparison runs again, so the status labels follow.</summary>
+    private void Swap()
+    {
+        (_left, _right) = (_right, _left);
+        OnPropertyChanged(nameof(Left));
+        OnPropertyChanged(nameof(Right));
+        CompareCommand.RaiseCanExecuteChanged();
+
+        if (CompareCommand.CanExecute(null)) Compare();
+    }
 
     private CompareRow? _selectedRow;
     public CompareRow? SelectedRow
@@ -123,7 +210,9 @@ public sealed class CompareViewModel : ObservableObject
             leftClient,
             rightClient,
             leftItem,
-            rightItem);
+            rightItem,
+            Left.EnvironmentSku,
+            Right.EnvironmentSku);
 
         var window = new Views.EnvironmentDiffWindow
         {
@@ -143,7 +232,9 @@ public sealed class CompareViewModel : ObservableObject
         get => _left;
         set
         {
-            if (SetProperty(ref _left, value)) CompareCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _left, value)) return;
+            CompareCommand.RaiseCanExecuteChanged();
+            SwapCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -153,17 +244,9 @@ public sealed class CompareViewModel : ObservableObject
         get => _right;
         set
         {
-            if (SetProperty(ref _right, value)) CompareCommand.RaiseCanExecuteChanged();
-        }
-    }
-
-    private bool _showIdentical;
-    public bool ShowIdentical
-    {
-        get => _showIdentical;
-        set
-        {
-            if (SetProperty(ref _showIdentical, value)) RefreshView();
+            if (!SetProperty(ref _right, value)) return;
+            CompareCommand.RaiseCanExecuteChanged();
+            SwapCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -225,11 +308,18 @@ public sealed class CompareViewModel : ObservableObject
     public string LeftHeader => Left is null ? "Left" : Left.Title;
     public string RightHeader => Right is null ? "Right" : Right.Title;
 
+    /// <summary>The sides as they were when the rows were built - the column headers follow
+    /// these rather than the pickers, which may have moved on since.</summary>
+    public EnvironmentSessionViewModel? ComparedLeft { get; private set; }
+    public EnvironmentSessionViewModel? ComparedRight { get; private set; }
+
     private void Compare()
     {
         if (Left is null || Right is null) return;
 
         _all.Clear();
+        ComparedLeft = Left;
+        ComparedRight = Right;
 
         var left = Left.AllItems;
         var right = Right.AllItems;
@@ -285,8 +375,13 @@ public sealed class CompareViewModel : ObservableObject
 
         SelectedTypeFilter = TypeFilters[0];
 
+        _comparedAt = DateTime.Now;
+        OnPropertyChanged(nameof(ComparedAgo));
+        OnPropertyChanged(nameof(MatchDescription));
         OnPropertyChanged(nameof(LeftHeader));
         OnPropertyChanged(nameof(RightHeader));
+        OnPropertyChanged(nameof(ComparedLeft));
+        OnPropertyChanged(nameof(ComparedRight));
         RefreshView();
         ExportCommand.RaiseCanExecuteChanged();
     }
@@ -334,6 +429,13 @@ public sealed class CompareViewModel : ObservableObject
 
         Summary = $"{onlyLeft:N0} only in {LeftHeader}  |  {onlyRight:N0} only in {RightHeader}  |  " +
                   $"{same:N0} in both";
+        ResultSummary = $"{onlyLeft + onlyRight:N0} differences · {same:N0} in both";
+
+        var narrowed = _all.Where(MatchesTypeAndSearch).ToList();
+        CountAll = narrowed.Count;
+        CountOnlyLeft = narrowed.Count(r => r.Status == CompareStatus.OnlyInLeft);
+        CountOnlyRight = narrowed.Count(r => r.Status == CompareStatus.OnlyInRight);
+        CountBoth = narrowed.Count(r => r.Status == CompareStatus.Same);
     }
 
     private bool FilterTypeOption(object obj)
@@ -357,8 +459,19 @@ public sealed class CompareViewModel : ObservableObject
     {
         if (obj is not CompareRow row) return false;
 
-        if (!ShowIdentical && row.Status == CompareStatus.Same) return false;
+        var statusMatches = StatusFilter switch
+        {
+            CompareStatusFilter.OnlyLeft => row.Status == CompareStatus.OnlyInLeft,
+            CompareStatusFilter.OnlyRight => row.Status == CompareStatus.OnlyInRight,
+            CompareStatusFilter.Both => row.Status == CompareStatus.Same,
+            _ => true
+        };
 
+        return statusMatches && MatchesTypeAndSearch(row);
+    }
+
+    private bool MatchesTypeAndSearch(CompareRow row)
+    {
         if (SelectedTypeFilter is { IsAll: false } type &&
             !string.Equals(row.ComponentTypeName, type.Name, StringComparison.Ordinal))
         {

@@ -26,7 +26,13 @@ public sealed class ShellViewModel : ObservableObject
         CompareCommand = new RelayCommand(_ => OpenCompare());
         CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
+        MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
+        MoveTabRightCommand = new RelayCommand(_ => MoveSelectedTab(+1));
         SignOutAllCommand = new AsyncRelayCommand(_ => SignOutAllAsync());
+        SetThemeCommand = new RelayCommand(p =>
+        {
+            if (Enum.TryParse<AppTheme>(p as string, out var theme)) Theme = theme;
+        });
 
         RestoreTabs();
     }
@@ -35,10 +41,36 @@ public sealed class ShellViewModel : ObservableObject
 
     public RelayCommand AddTabCommand { get; }
     public RelayCommand CloseTabCommand { get; }
+    public RelayCommand MoveTabLeftCommand { get; }
+    public RelayCommand MoveTabRightCommand { get; }
     public AsyncRelayCommand SignOutAllCommand { get; }
     public RelayCommand GlobalSearchCommand { get; }
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
+    public RelayCommand SetThemeCommand { get; }
+
+    /// <summary>Light, Dark or System; applied at once and remembered in settings.</summary>
+    public AppTheme Theme
+    {
+        get => _settings.Theme;
+        set
+        {
+            if (_settings.Theme == value) return;
+
+            _settings.Theme = value;
+            _settings.Save();
+            ThemeManager.Apply(value);
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsSystemTheme));
+            OnPropertyChanged(nameof(IsLightTheme));
+            OnPropertyChanged(nameof(IsDarkTheme));
+        }
+    }
+
+    public bool IsSystemTheme => Theme == AppTheme.System;
+    public bool IsLightTheme => Theme == AppTheme.Light;
+    public bool IsDarkTheme => Theme == AppTheme.Dark;
 
     private void OpenGlobalSearch()
     {
@@ -140,6 +172,33 @@ public sealed class ShellViewModel : ObservableObject
         SelectedSession = Sessions[Math.Clamp(index, 0, Sessions.Count - 1)];
         SaveTabs();
         CloseTabCommand.RaiseCanExecuteChanged();
+    }
+
+    private void MoveSelectedTab(int offset)
+    {
+        if (SelectedSession is null) return;
+        MoveTab(SelectedSession, Sessions.IndexOf(SelectedSession) + offset);
+    }
+
+    /// <summary>
+    /// Tab order is the order saved to settings, so a moved tab stays where it was put.
+    /// </summary>
+    public void MoveTab(EnvironmentSessionViewModel session, int newIndex)
+    {
+        var oldIndex = Sessions.IndexOf(session);
+        if (oldIndex < 0) return;
+
+        newIndex = Math.Clamp(newIndex, 0, Sessions.Count - 1);
+        if (newIndex == oldIndex) return;
+
+        var selected = SelectedSession;
+        Sessions.Move(oldIndex, newIndex);
+
+        // The TabControl can drop its selection while the item moves - put it back.
+        SelectedSession = selected;
+        OnPropertyChanged(nameof(SelectedSession));
+
+        SaveTabs();
     }
 
     private async Task SignOutAllAsync()

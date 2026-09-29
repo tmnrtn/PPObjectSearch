@@ -17,16 +17,13 @@ public enum DiffSide
 /// Renders <see cref="DiffRow"/>s into a RichTextBox, which keeps the text selectable and
 /// copyable while still allowing per-line and per-word highlighting - neither a DataGrid cell
 /// nor a plain TextBox can do both.
+///
+/// Colours are resource references rather than brushes, so a theme change repaints an open diff.
 /// </summary>
 public static class DiffDocument
 {
-    private static readonly Brush RemovedLine = Frozen("#FDECEA");
-    private static readonly Brush RemovedWord = Frozen("#F5A9A0");
-    private static readonly Brush AddedLine = Frozen("#E7F6E9");
-    private static readonly Brush AddedWord = Frozen("#9EDBA6");
-
-    /// <summary>Marks the rows where this side has no line at all, so the two panes stay aligned.</summary>
-    private static readonly Brush Absent = Frozen("#F1F2F4");
+    private const double LineHeight = 19;
+    private const double GutterWidth = 36;
 
     public static readonly DependencyProperty RowsProperty = DependencyProperty.RegisterAttached(
         "Rows",
@@ -55,77 +52,99 @@ public static class DiffDocument
         var side = GetSide(box);
         var document = new FlowDocument
         {
-            FontFamily = new FontFamily("Consolas"),
-            FontSize = 12,
-            PagePadding = new Thickness(6, 4, 6, 4),
+            FontSize = 11.5,
+            PagePadding = new Thickness(0, 4, 8, 4),
+            LineHeight = LineHeight,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
 
             // Wrapping would let the two panes drift out of step, so lines are kept whole and
             // the panes scroll sideways together instead.
             PageWidth = 4000
         };
+        document.SetResourceReference(TextElement.FontFamilyProperty, "MonoFont");
+        document.SetResourceReference(TextElement.ForegroundProperty, "Text");
 
+        var number = 0;
         foreach (var row in (GetRows(box) ?? Array.Empty<object>()).OfType<DiffRow>())
         {
-            document.Blocks.Add(BuildLine(row, side));
+            var present = (side == DiffSide.Left ? row.Left : row.Right) is not null;
+            if (present) number++;
+
+            document.Blocks.Add(BuildLine(row, side, present ? number : null));
         }
 
         if (document.Blocks.Count == 0)
         {
-            document.Blocks.Add(new Paragraph(new Run("(no value)")) { Foreground = Brushes.Gray, Margin = default });
+            var empty = new Paragraph(new Run("(no value)")) { Margin = new Thickness(GutterWidth, 0, 0, 0) };
+            empty.SetResourceReference(TextElement.ForegroundProperty, "Faint");
+            document.Blocks.Add(empty);
         }
 
         box.Document = document;
     }
 
-    private static Paragraph BuildLine(DiffRow row, DiffSide side)
+    private static Paragraph BuildLine(DiffRow row, DiffSide side, int? lineNumber)
     {
         var runs = side == DiffSide.Left ? row.Left : row.Right;
+        var paragraph = new Paragraph { Margin = default };
 
-        var paragraph = new Paragraph
-        {
-            Margin = default,
-            LineHeight = 16,
-            Background = BackgroundFor(row, side, runs is null)
-        };
+        paragraph.Inlines.Add(Gutter(lineNumber));
 
         if (runs is null)
         {
-            // An empty paragraph still occupies its line, which is the point - it holds the
-            // other pane's added or removed line in place opposite this one.
+            // A gap: this side has no line where the other has one. The hatched, numberless row
+            // holds the other pane's added or removed line in place opposite it.
+            paragraph.SetResourceReference(TextElement.BackgroundProperty, "HatchBrush");
             paragraph.Inlines.Add(new Run(string.Empty));
             return paragraph;
         }
 
-        var wordBrush = side == DiffSide.Left ? RemovedWord : AddedWord;
-
-        foreach (var run in runs)
+        var lineBrush = row.Kind switch
         {
-            paragraph.Inlines.Add(new Run(run.Text)
-            {
-                Background = run.Changed && row.Kind != DiffKind.Unchanged ? wordBrush : null
-            });
+            DiffKind.Unchanged => null,
+            DiffKind.Removed => "DiffRemovedBg",
+            DiffKind.Added => "DiffAddedBg",
+            _ => side == DiffSide.Left ? "DiffRemovedBg" : "DiffAddedBg"
+        };
+
+        if (lineBrush is null)
+        {
+            paragraph.SetResourceReference(TextElement.ForegroundProperty, "Muted");
+        }
+        else
+        {
+            paragraph.SetResourceReference(TextElement.BackgroundProperty, lineBrush);
+        }
+
+        var wordBrush = side == DiffSide.Left ? "DiffRemovedWord" : "DiffAddedWord";
+
+        foreach (var part in runs)
+        {
+            var run = new Run(part.Text);
+            if (part.Changed && row.Kind != DiffKind.Unchanged) run.SetResourceReference(TextElement.BackgroundProperty, wordBrush);
+            paragraph.Inlines.Add(run);
         }
 
         return paragraph;
     }
 
-    private static Brush? BackgroundFor(DiffRow row, DiffSide side, bool missing)
+    /// <summary>
+    /// The line number, as a UI element rather than text so that selecting and copying lines
+    /// takes only the value, never the numbers beside it.
+    /// </summary>
+    private static InlineUIContainer Gutter(int? lineNumber)
     {
-        if (missing) return Absent;
-
-        return row.Kind switch
+        var text = new TextBlock
         {
-            DiffKind.Unchanged => null,
-            DiffKind.Removed => RemovedLine,
-            DiffKind.Added => AddedLine,
-            _ => side == DiffSide.Left ? RemovedLine : AddedLine
+            Text = lineNumber?.ToString() ?? string.Empty,
+            Width = GutterWidth,
+            Padding = new Thickness(0, 0, 10, 0),
+            TextAlignment = TextAlignment.Right,
+            FontSize = 11,
+            IsHitTestVisible = false
         };
-    }
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
 
-    private static Brush Frozen(string hex)
-    {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-        brush.Freeze();
-        return brush;
+        return new InlineUIContainer(text) { BaselineAlignment = BaselineAlignment.TextBottom };
     }
 }

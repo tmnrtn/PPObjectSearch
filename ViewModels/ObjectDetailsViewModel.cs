@@ -41,6 +41,35 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         ViewLayerChangesCommand = new RelayCommand(
             p => ShowLayerChanges(p as ComponentLayer ?? SelectedLayer),
             p => (p as ComponentLayer ?? SelectedLayer) is not null);
+        CopyPropertyCommand = new RelayCommand(p => CopyProperty(p as ComponentProperty));
+        CopyIdCommand = new RelayCommand(_ => CopyId(), _ => item.ObjectId != Guid.Empty);
+
+        // The tab headers carry counts, which follow the collections as they load.
+        Solutions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
+        Layers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
+        Dependents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
+        Required.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
+        ChildGroups.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ComponentCount));
+    }
+
+    public RelayCommand CopyIdCommand { get; }
+
+    /// <summary>"3 · 3" - solutions, then layers.</summary>
+    public string SolutionsTabCount => LayersSupported
+        ? $"{Solutions.Count:N0} · {Layers.Count:N0}"
+        : $"{Solutions.Count:N0}";
+
+    public int DependencyCount => Dependents.Count + Required.Count;
+
+    public int ComponentCount => ChildGroups.Sum(g => g.Count);
+
+    private void CopyId()
+    {
+        var id = Item.ObjectId.ToString();
+
+        Status = ClipboardText.TryCopy(id, out var failure)
+            ? $"Copied object id: {id}"
+            : $"Could not copy the object id - the clipboard is held by another application ({failure}).";
     }
 
     public SolutionComponentItem Item { get; }
@@ -48,6 +77,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public RelayCommand OpenLinkCommand { get; }
     public AsyncRelayCommand RefreshCommand { get; }
     public RelayCommand ViewLayerChangesCommand { get; }
+    public RelayCommand CopyPropertyCommand { get; }
 
     public ObservableCollection<ContainingSolution> Solutions { get; } = new();
     public ObservableCollection<DependencyRef> Dependents { get; } = new();
@@ -128,7 +158,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public bool LayersSupported
     {
         get => _layersSupported;
-        private set => SetProperty(ref _layersSupported, value);
+        private set
+        {
+            if (SetProperty(ref _layersSupported, value)) OnPropertyChanged(nameof(SolutionsTabCount));
+        }
     }
 
     private bool _hasUnmanagedLayer;
@@ -138,7 +171,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         private set => SetProperty(ref _hasUnmanagedLayer, value);
     }
 
-    public string Title => $"{Item.PrimaryLabel} - {Item.ComponentTypeName}";
+    public string Title => $"{Item.PrimaryLabel} — {Item.ComponentTypeName}";
 
     private bool _isBusy;
     public bool IsBusy
@@ -415,6 +448,27 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         ChildStatus = ChildProperties.Count == 0
             ? "Dataverse returned no properties for this component."
             : string.Empty;
+    }
+
+    /// <summary>
+    /// Puts one property's value on the clipboard. A property is read in order to use it
+    /// somewhere else - a query, a ticket, a config file - and the grid is read-only, so a click
+    /// is a shorter route than selecting text that cannot be selected.
+    /// </summary>
+    private void CopyProperty(ComponentProperty? property)
+    {
+        if (property is null) return;
+
+        Status = ClipboardText.TryCopy(property.Value, out var failure)
+            ? $"Copied {property.Name}: {Shorten(property.Value)}"
+            : $"Could not copy {property.Name} - the clipboard is held by another application ({failure}).";
+    }
+
+    /// <summary>A form's XML went to the clipboard whole; the status bar only needs to say so.</summary>
+    private static string Shorten(string value)
+    {
+        var line = value.ReplaceLineEndings(" ");
+        return line.Length <= 120 ? line : line[..117] + "...";
     }
 
     /// <summary>

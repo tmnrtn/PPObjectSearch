@@ -1,122 +1,217 @@
 <Window x:Class="PPObjectSearch.Views.GlobalSearchWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
         Title="Search all environments"
+        Style="{StaticResource AppWindow}"
         Height="720" Width="1180"
-        WindowStartupLocation="CenterOwner"
-        Background="{StaticResource SurfaceAlt}"
-        FontFamily="Segoe UI" FontSize="13"
-        Foreground="{StaticResource TextPrimary}">
+        WindowStartupLocation="CenterOwner">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <!-- An "In" pill. The active one is inverted: Text background, Surface text. -->
+        <Style TargetType="Button" x:Key="ScopePill">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Background" Value="{DynamicResource Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="12" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Hover}" />
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Text}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Text}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Surface}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                    <Setter Property="Opacity" Value="0.5" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                    <Setter Property="ToolTip" Value="Not connected" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
 
-        <Border Grid.Row="0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,0,0,1" Padding="16,12">
-            <Grid>
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Search -->
+            <Grid Grid.Row="0" Margin="16,14,16,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                    <TextBlock Text="SEARCH EVERY CONNECTED ENVIRONMENT" Style="{StaticResource Label}" />
-                    <TextBox x:Name="SearchBox"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Space separated keywords. Environment names match too, so you can narrow to one." />
-                </StackPanel>
+                <TextBox x:Name="SearchBox" Height="34" FontSize="13" Padding="9,0"
+                         core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search every connected environment"
+                         core:Ui.TrailingText="Environment names match too"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Space separated keywords. Environment names match too, so you can narrow to one." />
 
-                <Button Grid.Column="1" Content="Export CSV" Margin="0,16,0,0" VerticalAlignment="Bottom"
-                        MinWidth="100" Command="{Binding ExportCommand}" />
+                <Button Grid.Column="1" Content="Export CSV" Height="34" Margin="8,0,0,0"
+                        Command="{Binding ExportCommand}" />
             </Grid>
-        </Border>
 
-        <DataGrid Grid.Row="1"
-                  ItemsSource="{Binding RowsView}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  HeadersVisibility="Column"
-                  RowHeaderWidth="0"
-                  GridLinesVisibility="Horizontal"
-                  HorizontalGridLinesBrush="#EEF0F3"
-                  Background="{StaticResource Surface}"
-                  BorderThickness="0"
-                  EnableRowVirtualization="True"
-                  VirtualizingPanel.IsVirtualizing="True"
-                  VirtualizingPanel.VirtualizationMode="Recycling">
-
-            <DataGrid.Resources>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Padding" Value="10,8" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                    <Setter Property="Background" Value="{StaticResource SurfaceAlt}" />
-                    <Setter Property="BorderBrush" Value="{StaticResource Border}" />
-                    <Setter Property="BorderThickness" Value="0,0,1,1" />
-                    <Setter Property="HorizontalContentAlignment" Value="Left" />
-                </Style>
-                <Style TargetType="TextBlock" x:Key="Cell">
-                    <Setter Property="Margin" Value="8,6" />
-                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                </Style>
-                <Style TargetType="TextBlock" x:Key="MutedCell" BasedOn="{StaticResource Cell}">
-                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
-                </Style>
-            </DataGrid.Resources>
-
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Environment" Binding="{Binding Environment}" Width="190"
-                                    ElementStyle="{StaticResource Cell}" />
-
-                <DataGridTemplateColumn Header="Name" Width="360" SortMemberPath="Item.PrimaryLabel">
-                    <DataGridTemplateColumn.CellTemplate>
+            <!-- Scope -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="16,0,16,10">
+                <TextBlock Text="In" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ItemsControl ItemsSource="{Binding Scopes}" Focusable="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Margin="8,6" TextTrimming="CharacterEllipsis">
-                                <Hyperlink Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                           CommandParameter="{Binding}"
-                                           ToolTip="{Binding Item.MakerUrl}">
-                                    <Hyperlink.Style>
-                                        <Style TargetType="Hyperlink">
-                                            <Setter Property="Foreground" Value="{StaticResource Accent}" />
-                                            <Setter Property="TextDecorations" Value="{x:Null}" />
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="TextDecorations" Value="Underline" />
-                                                </Trigger>
-                                                <DataTrigger Binding="{Binding Item.MakerUrl}" Value="{x:Null}">
-                                                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Hyperlink.Style>
-                                    <Run Text="{Binding Item.PrimaryLabel, Mode=OneWay}" />
-                                </Hyperlink>
-                            </TextBlock>
+                            <Button Style="{StaticResource ScopePill}"
+                                    Command="{Binding DataContext.SelectScopeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border x:Name="Swatch" Style="{StaticResource EnvBar}" Width="7" Height="7"
+                                            CornerRadius="2" Margin="0,0,6,0" Tag="{Binding EnvironmentSku}" />
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="Count" Text="{Binding CountLabel}" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Muted}" FontWeight="Normal"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsAll}" Value="True">
+                                    <Setter TargetName="Swatch" Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                                    <Setter TargetName="Swatch" Property="Background" Value="{DynamicResource Border2}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Surface}" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
 
-                <DataGridTextColumn Header="Object type" Binding="{Binding Item.ComponentTypeName}" Width="170"
-                                    ElementStyle="{StaticResource Cell}" />
-                <DataGridTextColumn Header="Sub type" Binding="{Binding Item.SubType}" Width="150"
-                                    ElementStyle="{StaticResource Cell}" />
-                <DataGridTextColumn Header="State" Binding="{Binding Item.ManagedLabel}" Width="110"
-                                    ElementStyle="{StaticResource Cell}" />
-                <DataGridTextColumn Header="Solution" Binding="{Binding Solution}" Width="160"
-                                    ElementStyle="{StaticResource MutedCell}" />
-                <DataGridTextColumn Header="Modified"
-                                    Binding="{Binding Item.ModifiedOn, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
-                                    Width="140" ElementStyle="{StaticResource MutedCell}" />
-            </DataGrid.Columns>
-        </DataGrid>
+            <DataGrid Grid.Row="2"
+                      ItemsSource="{Binding RowsView}"
+                      IsReadOnly="True"
+                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
 
-        <Border Grid.Row="2" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,1,0,0" Padding="16,7">
-            <TextBlock Text="{Binding Summary}" Foreground="{StaticResource TextMuted}" />
-        </Border>
-    </Grid>
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsGroupEnd}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+                                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="Environment" Width="180" SortMemberPath="Environment"
+                                            HeaderStyle="{StaticResource FirstHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="16,0,8,0" VerticalAlignment="Center">
+                                    <Border Style="{StaticResource EnvBar}" Height="16" Margin="0,0,7,0"
+                                            Tag="{Binding EnvironmentSku}" />
+                                    <TextBlock Text="{Binding Environment}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Name" Width="*" MinWidth="200" SortMemberPath="Item.PrimaryLabel"
+                                            SortDirection="Ascending">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource Cell}">
+                                    <Hyperlink Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                               CommandParameter="{Binding}"
+                                               ToolTip="{Binding Item.MakerUrl}">
+                                        <Hyperlink.Style>
+                                            <Style TargetType="Hyperlink" BasedOn="{StaticResource {x:Type Hyperlink}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Item.MakerUrl}" Value="{x:Null}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Hyperlink.Style>
+                                        <Run Text="{Binding Item.PrimaryLabel, Mode=OneWay}" />
+                                    </Hyperlink>
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Type" Width="190" SortMemberPath="Item.ComponentTypeName">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource Cell}">
+                                    <Run Text="{Binding Item.ComponentTypeName, Mode=OneWay}" /><Run
+                                         Text="{Binding Item.SubType, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter=' · '}"
+                                         Foreground="{DynamicResource Muted}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="State" Binding="{Binding Item.ManagedLabel}" Width="96">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Item.IsManaged}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTextColumn Header="Solution" Binding="{Binding Solution}" Width="160"
+                                        ElementStyle="{StaticResource CellMuted}" />
+                    <DataGridTextColumn Header="Modified"
+                                        Binding="{Binding Item.ModifiedOn, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                                        SortMemberPath="Item.ModifiedOn"
+                                        Width="116" ElementStyle="{StaticResource CellMuted}" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding SkippedMessage}" Foreground="{DynamicResource Muted}"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Summary}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
 </Window>

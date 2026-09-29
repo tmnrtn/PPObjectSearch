@@ -1,315 +1,393 @@
 <Window x:Class="PPObjectSearch.Views.ObjectDetailsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
         Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
         Height="760" Width="1180"
         MinHeight="560" MinWidth="820"
-        WindowStartupLocation="CenterOwner"
-        Background="{StaticResource SurfaceAlt}"
-        FontFamily="Segoe UI" FontSize="13"
-        Foreground="{StaticResource TextPrimary}">
+        WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
-        <Style TargetType="TextBlock" x:Key="Cell">
-            <Setter Property="Margin" Value="8,6" />
-            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        </Style>
         <!-- For cells whose text is routinely wider than any sensible column: a form's XML, a
              flattened property path. The tooltip is the cell's own text, so nothing is lost. -->
         <Style TargetType="TextBlock" x:Key="CellFull" BasedOn="{StaticResource Cell}">
             <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
         </Style>
-        <Style TargetType="TextBlock" x:Key="SectionHeading">
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,0,6" />
+        <Style TargetType="TextBlock" x:Key="CellFullFirst" BasedOn="{StaticResource CellFull}">
+            <Setter Property="Margin" Value="12,0,8,0" />
         </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns" Value="False" />
-            <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="CanUserAddRows" Value="False" />
-            <Setter Property="HeadersVisibility" Value="Column" />
-            <Setter Property="RowHeaderWidth" Value="0" />
-            <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#EEF0F3" />
-            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Background" Value="{StaticResource Surface}" />
+        <Style TargetType="TextBlock" x:Key="CellMonoFull" BasedOn="{StaticResource CellMono}">
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="CellMonoFullFirst" BasedOn="{StaticResource CellMonoFull}">
+            <Setter Property="Margin" Value="12,0,8,0" />
+        </Style>
+        <Style TargetType="DataGridColumnHeader" x:Key="PaneFirstHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="Padding" Value="12,0,8,0" />
+        </Style>
+
+        <!-- A pane's heading row: 36 tall, heading at left, extras at right. -->
+        <Style TargetType="Border" x:Key="PaneHeading">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+
+        <Style TargetType="DataGridRow" x:Key="CopyRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+            <Setter Property="Cursor" Value="Hand" />
         </Style>
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <Border Grid.Row="0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,0,0,1" Padding="16,14">
-            <Grid>
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,14,18,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding Item.PrimaryLabel}" FontSize="17" FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis" />
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <TextBlock Text="{Binding Item.ComponentTypeName}" Foreground="{StaticResource TextMuted}" />
-                        <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}" />
-                        <TextBlock Text="{Binding Item.ManagedLabel}" Foreground="{StaticResource TextMuted}" />
-                        <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}"
-                                   Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}" />
-                        <TextBlock Foreground="{StaticResource TextMuted}"
-                                   Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="No unmanaged layer" />
+                    <TextBlock TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding Item.PrimaryLabel, Mode=OneWay}" FontSize="17" FontWeight="SemiBold" />
+                        <Run Text="{Binding Item.SecondaryLabel, Mode=OneWay}" FontFamily="{StaticResource MonoFont}"
+                             FontSize="12" Foreground="{DynamicResource Muted}" />
+                    </TextBlock>
+
+                    <WrapPanel Margin="0,6,0,0">
+                        <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0">
+                            <TextBlock>
+                                <Run Text="{Binding Item.ComponentTypeName, Mode=OneWay}" /><Run
+                                     Text="{Binding Item.SubType, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter=' · '}" />
+                            </TextBlock>
+                        </ContentControl>
+                        <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0" Content="{Binding Item.ManagedLabel}" />
+                        <ContentControl Margin="0,0,4,0"
+                                        Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl" BasedOn="{StaticResource Chip}">
+                                    <Setter Property="Content" Value="No unmanaged layer" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="True">
-                                            <Setter Property="Text" Value="Has unmanaged layer" />
-                                            <Setter Property="Foreground" Value="#B45309" />
+                                            <Setter Property="Content" Value="Has unmanaged layer" />
+                                            <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AmberSoft}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Amber}" />
                                             <Setter Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock Text="  ·  " Foreground="{StaticResource TextMuted}" />
-                        <TextBlock Text="{Binding Item.ObjectId}" Foreground="{StaticResource TextMuted}"
-                                   FontFamily="Consolas" FontSize="11" VerticalAlignment="Center" />
-                    </StackPanel>
+                            </ContentControl.Style>
+                        </ContentControl>
+
+                        <TextBlock Text="{Binding Item.ObjectId}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        <Button Style="{StaticResource LinkButton}" Content="Copy" Height="20" Padding="4,0" Margin="2,0,0,0"
+                                FontSize="11" Command="{Binding CopyIdCommand}" ToolTip="Copy the object id" />
+                    </WrapPanel>
                 </StackPanel>
 
-                <Button Grid.Column="1" Content="Open in maker" Padding="12,6" MinWidth="0"
-                        VerticalAlignment="Center" Command="{Binding OpenLinkCommand}" />
-                <Button Grid.Column="2" Content="Refresh" Padding="12,6" MinWidth="0" Margin="8,0,0,0"
-                        VerticalAlignment="Center" Command="{Binding RefreshCommand}" />
-            </Grid>
-        </Border>
-
-        <ProgressBar Grid.Row="1" Height="3" IsIndeterminate="True" BorderThickness="0"
-                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-
-        <Grid Grid.Row="2" Margin="16">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <!-- Containing solutions + component layers -->
-            <Grid Grid.Row="0" Margin="0,0,0,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource SectionHeading}"
-                               Text="Solutions containing this object" />
-                    <DataGrid ItemsSource="{Binding Solutions}" MaxHeight="170">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Solution" Binding="{Binding FriendlyName}" Width="*"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Unique name" Binding="{Binding UniqueName}" Width="150"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="90"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="90"
-                                                ElementStyle="{StaticResource Cell}" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </StackPanel>
-
-                <StackPanel Grid.Column="2" Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Style="{StaticResource SectionHeading}"
-                               Text="Component layers (top of stack first)"
-                               ToolTip="Every solution layering this component, the one actually in effect first. 'Unmanaged (Active)' is the single environment-wide layer shared by all unmanaged customizations." />
-                    <DataGrid ItemsSource="{Binding Layers}" MaxHeight="170"
-                              SelectedItem="{Binding SelectedLayer}">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Solution" Binding="{Binding SolutionName}" Width="*"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Publisher" Binding="{Binding PublisherName}" Width="110"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="120"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Changes" Binding="{Binding ChangeSummary}" Width="90"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTemplateColumn Width="70">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Content="View" Padding="8,2" MinWidth="0" Margin="4,2"
-                                                ToolTip="Show the properties this layer changed, against the layer beneath it."
-                                                Command="{Binding DataContext.ViewLayerChangesCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                CommandParameter="{Binding}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Style="{StaticResource PrimaryButton}" Content="Open in maker portal" Height="30"
+                            Command="{Binding OpenLinkCommand}" />
+                    <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30" Margin="8,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Read everything again" />
                 </StackPanel>
             </Grid>
 
-            <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0" Padding="0,10,0,0">
-                <TabControl.Resources>
-                    <Style TargetType="TabItem">
-                        <Setter Property="Padding" Value="12,6" />
-                        <Setter Property="Margin" Value="0,0,2,0" />
-                    </Style>
-                </TabControl.Resources>
+            <!-- ============================================================ tabs -->
+            <Grid Grid.Row="1">
+                <TabControl>
+                    <!-- Containing solutions + component layers -->
+                    <TabItem Header="Solutions &amp; layers" core:Ui.Count="{Binding SolutionsTabCount}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                <!-- Dependencies, both directions -->
-                <TabItem Header="Dependencies">
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <DockPanel Grid.Column="0">
-                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeading}"
-                                       Text="Depends on this (blocks deletion)"
-                                       ToolTip="Components that would break if this object were deleted." />
-                            <DataGrid ItemsSource="{Binding Dependents}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
-                                                        ElementStyle="{StaticResource Cell}" />
-                                    <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
-                                                        ElementStyle="{StaticResource Cell}" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </DockPanel>
-
-                        <DockPanel Grid.Column="2">
-                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeading}"
-                                       Text="Required by this"
-                                       ToolTip="Components this object needs in order to work." />
-                            <DataGrid ItemsSource="{Binding Required}">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
-                                                        ElementStyle="{StaticResource Cell}" />
-                                    <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
-                                                        ElementStyle="{StaticResource Cell}" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </DockPanel>
-                    </Grid>
-                </TabItem>
-
-                <!-- What the table owns - only a table has any of this, and when it does, it is
-                     what the window was most likely opened for, so it starts selected. -->
-                <TabItem Header="Table components"
-                         Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}"
-                         IsSelected="{Binding IsTable, Mode=OneTime}">
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="190" MinWidth="130" />
-                            <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="1.3*" MinWidth="200" />
-                            <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="*" MinWidth="200" />
-                        </Grid.ColumnDefinitions>
-
-                        <DockPanel Grid.Column="0">
-                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeading}" Text="Owned by this table" />
-                            <ListBox ItemsSource="{Binding ChildGroups}" SelectedItem="{Binding SelectedChildGroup}"
-                                     Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                                     HorizontalContentAlignment="Stretch">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <DockPanel Margin="2,4">
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Count}"
-                                                       Foreground="{StaticResource TextMuted}" Margin="8,0,0,0" />
-                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </DockPanel>
-
-                        <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Stretch"
-                                      Background="Transparent" />
-
-                        <DockPanel Grid.Column="2">
-                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                <TextBlock Text="{Binding SelectedChildGroup.Label}" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" Margin="0,0,10,0" />
-                                <TextBlock Text="Filter" Style="{StaticResource Label}" Margin="0,0,6,0"
-                                           VerticalAlignment="Center" />
-                                <TextBox Text="{Binding ChildFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                                         ToolTip="Narrows this list by name, display name or detail." />
-                            </DockPanel>
-                            <DataGrid ItemsSource="{Binding Children}" SelectedItem="{Binding SelectedChild}"
-                                      SelectionMode="Single">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"
-                                                        ElementStyle="{StaticResource CellFull}" />
-                                    <DataGridTextColumn Header="Display name" Binding="{Binding DisplayName}" Width="*"
-                                                        ElementStyle="{StaticResource CellFull}" />
-                                    <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="160"
-                                                        ElementStyle="{StaticResource CellFull}" />
-                                    <DataGridTextColumn Header="State" Binding="{Binding ManagedLabel}" Width="90"
-                                                        ElementStyle="{StaticResource Cell}" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </DockPanel>
-
-                        <GridSplitter Grid.Column="3" Width="12" HorizontalAlignment="Stretch"
-                                      Background="Transparent" />
-
-                        <DockPanel Grid.Column="4">
-                            <TextBlock DockPanel.Dock="Top" TextTrimming="CharacterEllipsis">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource SectionHeading}">
-                                        <Setter Property="Text"
-                                                Value="{Binding SelectedChild.PrimaryLabel, StringFormat='Properties of {0}'}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding SelectedChild}" Value="{x:Null}">
-                                                <Setter Property="Text" Value="Properties" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-
-                            <ProgressBar DockPanel.Dock="Top" Height="3" IsIndeterminate="True" BorderThickness="0"
-                                         Margin="0,0,0,4"
-                                         Visibility="{Binding IsLoadingProperties, Converter={StaticResource BoolToVis}}" />
-
-                            <Grid>
-                                <DataGrid ItemsSource="{Binding ChildProperties}">
+                            <DockPanel Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
+                                               Text="Solutions containing this object" />
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Solutions}" IsReadOnly="True">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="200"
-                                                            ElementStyle="{StaticResource CellFull}" />
-                                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"
-                                                            ElementStyle="{StaticResource CellFull}" />
+                                        <DataGridTextColumn Header="Solution" Binding="{Binding FriendlyName}" Width="*"
+                                                            HeaderStyle="{StaticResource PaneFirstHeader}"
+                                                            ElementStyle="{StaticResource CellFullFirst}" />
+                                        <DataGridTextColumn Header="Unique name" Binding="{Binding UniqueName}" Width="150"
+                                                            ElementStyle="{StaticResource CellMonoFull}" />
+                                        <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="84"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                        <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="76"
+                                                            ElementStyle="{StaticResource CellMuted}" />
                                     </DataGrid.Columns>
                                 </DataGrid>
+                            </DockPanel>
 
-                                <!-- Sits over the empty grid rather than below it, so the reason
-                                     there is nothing to show is where the rows would have been. -->
-                                <TextBlock Text="{Binding ChildStatus}" Foreground="{StaticResource TextMuted}"
-                                           Margin="12,34,12,0" TextWrapping="Wrap" VerticalAlignment="Top"
-                                           IsHitTestVisible="False" />
-                            </Grid>
-                        </DockPanel>
-                    </Grid>
-                </TabItem>
-            </TabControl>
+                            <DockPanel Grid.Column="1"
+                                       Visibility="{Binding LayersSupported, Converter={StaticResource BoolToVis}}">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}" BorderThickness="1,0,0,1">
+                                    <TextBlock VerticalAlignment="Center"
+                                               ToolTip="Every solution layering this component, the one actually in effect first. 'Unmanaged (Active)' is the single environment-wide layer shared by all unmanaged customizations.">
+                                        <Run Text="Component layers" FontWeight="SemiBold" />
+                                        <Run Text=" top of stack first" FontSize="11" Foreground="{DynamicResource Faint}" />
+                                    </TextBlock>
+                                </Border>
+                                <Border BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                    <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Layers}"
+                                              SelectedItem="{Binding SelectedLayer}" IsReadOnly="True">
+                                        <DataGrid.Columns>
+                                            <DataGridTemplateColumn Header="Solution" Width="*" SortMemberPath="SolutionName"
+                                                                    HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="12,0,8,0" VerticalAlignment="Center">
+                                                            <Ellipse x:Name="LayerDot" Style="{StaticResource Dot}" Margin="0,1,7,0" />
+                                                            <TextBlock x:Name="LayerName" Text="{Binding SolutionName}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <DataTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding IsUnmanagedLayer}" Value="True">
+                                                                <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Amber}" />
+                                                                <Setter TargetName="LayerName" Property="FontWeight" Value="SemiBold" />
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Publisher" Binding="{Binding PublisherName}" Width="100"
+                                                                ElementStyle="{StaticResource CellMuted}" />
+                                            <DataGridTextColumn Header="State" Binding="{Binding StateLabel}" Width="120"
+                                                                ElementStyle="{StaticResource Cell}" />
+                                            <DataGridTextColumn Header="Changes" Binding="{Binding ChangeSummary}" Width="70"
+                                                                ElementStyle="{StaticResource CellMuted}" />
+                                            <DataGridTemplateColumn Width="70">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Style="{StaticResource RowButton}" Content="View" Margin="8,0"
+                                                                HorizontalAlignment="Left"
+                                                                ToolTip="Show the properties this layer changed, against the layer beneath it."
+                                                                Command="{Binding DataContext.ViewLayerChangesCommand,
+                                                                                  RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                CommandParameter="{Binding}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Border>
+                            </DockPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Dependencies, both directions -->
+                    <TabItem Header="Dependencies" core:Ui.Count="{Binding DependencyCount, StringFormat=N0}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <DockPanel Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
+                                               Text="Depends on this (blocks deletion)"
+                                               ToolTip="Components that would break if this object were deleted." />
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Dependents}" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
+                                                            HeaderStyle="{StaticResource PaneFirstHeader}"
+                                                            ElementStyle="{StaticResource CellFullFirst}" />
+                                        <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <DockPanel Grid.Column="1">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}" BorderThickness="1,0,0,1">
+                                    <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
+                                               Text="Required by this"
+                                               ToolTip="Components this object needs in order to work." />
+                                </Border>
+                                <Border BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                    <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Required}" IsReadOnly="True">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
+                                                                HeaderStyle="{StaticResource PaneFirstHeader}"
+                                                                ElementStyle="{StaticResource CellFullFirst}" />
+                                            <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
+                                                                ElementStyle="{StaticResource CellMuted}" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Border>
+                            </DockPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- What the table owns - only a table has any of this, and when it does, it is
+                         what the window was most likely opened for, so it starts selected. -->
+                    <TabItem Header="Table components" core:Ui.Count="{Binding ComponentCount, StringFormat=N0}"
+                             Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding IsTable, Mode=OneTime}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190" MinWidth="130" />
+                                <ColumnDefinition Width="1.3*" MinWidth="200" />
+                                <ColumnDefinition Width="*" MinWidth="200" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Groups -->
+                            <Border Grid.Column="0" Background="{DynamicResource Surface2}"
+                                    BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
+                                <ListBox Margin="6,8" ItemsSource="{Binding ChildGroups}" SelectedItem="{Binding SelectedChildGroup}">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                            <Setter Property="Height" Value="28" />
+                                            <Setter Property="Padding" Value="10,0" />
+                                            <Setter Property="Margin" Value="0,0,0,1" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" FontWeight="Normal"
+                                                           Foreground="{DynamicResource Muted}" Margin="8,0,0,0" />
+                                                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+
+                            <!-- Children -->
+                            <DockPanel Grid.Column="1">
+                                <Border DockPanel.Dock="Top" Height="44" Padding="12,0" BorderBrush="{DynamicResource Border}"
+                                        BorderThickness="0,0,0,1">
+                                    <DockPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedChildGroup.Label}" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <TextBox Text="{Binding ChildFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                                 core:Ui.Icon="&#xE721;"
+                                                 core:Ui.Placeholder="{Binding SelectedChildGroup.Label, StringFormat=Filter {0}}"
+                                                 ToolTip="Narrows this list by name, display name or detail." />
+                                    </DockPanel>
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Children}"
+                                          SelectedItem="{Binding SelectedChild}" SelectionMode="Single" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"
+                                                            HeaderStyle="{StaticResource PaneFirstHeader}"
+                                                            ElementStyle="{StaticResource CellMonoFullFirst}" />
+                                        <DataGridTextColumn Header="Display name" Binding="{Binding DisplayName}" Width="*"
+                                                            ElementStyle="{StaticResource CellFull}" />
+                                        <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="110">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellFull}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn Header="State" Binding="{Binding ManagedLabel}" Width="78"
+                                                            ElementStyle="{StaticResource CellMuted}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <!-- Properties -->
+                            <Border Grid.Column="2" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Top" Height="44" Padding="12,0" BorderBrush="{DynamicResource Border}"
+                                            BorderThickness="0,0,0,1">
+                                        <DockPanel VerticalAlignment="Center">
+                                            <TextBlock DockPanel.Dock="Right" Text="Click a row to copy its value" FontSize="11"
+                                                       Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SelectedChild}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource SectionHeading}">
+                                                        <Setter Property="Text"
+                                                                Value="{Binding SelectedChild.PrimaryLabel, StringFormat='Properties of {0}'}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SelectedChild}" Value="{x:Null}">
+                                                                <Setter Property="Text" Value="Properties" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <ProgressBar DockPanel.Dock="Top" Style="{StaticResource BusyBar}"
+                                                 Visibility="{Binding IsLoadingProperties, Converter={StaticResource BoolToVis}}" />
+
+                                    <Grid>
+                                        <!-- A property is looked at in order to use it somewhere else, so
+                                             a click on the row copies its value - see the code-behind. -->
+                                        <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding ChildProperties}"
+                                                  RowStyle="{StaticResource CopyRow}" IsReadOnly="True"
+                                                  PreviewMouseLeftButtonUp="OnPropertyClicked">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="170"
+                                                                    HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellFullFirst}">
+                                                            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"
+                                                                    ElementStyle="{StaticResource CellMonoFull}" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+
+                                        <!-- Sits over the empty grid rather than below it, so the reason
+                                             there is nothing to show is where the rows would have been. -->
+                                        <TextBlock Text="{Binding ChildStatus}" Foreground="{DynamicResource Muted}"
+                                                   Margin="12,38,12,0" TextWrapping="Wrap" VerticalAlignment="Top"
+                                                   IsHitTestVisible="False" />
+                                    </Grid>
+                                </DockPanel>
+                            </Border>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+
+                <!-- Under the tab strip, where the grid starts. -->
+                <ProgressBar Style="{StaticResource BusyBar}" VerticalAlignment="Top" Margin="0,31,0,0"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+
+            <Border Grid.Row="2" Style="{StaticResource StatusBar}">
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </Border>
         </Grid>
-
-        <Border Grid.Row="3" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,1,0,0" Padding="16,7">
-            <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextMuted}"
-                       TextTrimming="CharacterEllipsis" />
-        </Border>
-    </Grid>
+    </Border>
 </Window>

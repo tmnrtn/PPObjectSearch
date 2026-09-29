@@ -27,13 +27,17 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
         DataverseClient leftClient,
         DataverseClient rightClient,
         SolutionComponentItem leftItem,
-        SolutionComponentItem rightItem)
+        SolutionComponentItem rightItem,
+        EnvironmentSku leftSku = EnvironmentSku.Unknown,
+        EnvironmentSku rightSku = EnvironmentSku.Unknown)
         : base(leftEnvironment, rightEnvironment)
     {
         ComponentLabel = componentLabel;
         ComponentTypeName = componentTypeName;
         LeftEnvironment = leftEnvironment;
         RightEnvironment = rightEnvironment;
+        LeftSku = leftSku;
+        RightSku = rightSku;
 
         _leftClient = leftClient;
         _rightClient = rightClient;
@@ -47,6 +51,11 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
     public string ComponentTypeName { get; }
     public string LeftEnvironment { get; }
     public string RightEnvironment { get; }
+    public EnvironmentSku LeftSku { get; }
+    public EnvironmentSku RightSku { get; }
+
+    public override object? BeforeMarker => LeftSku;
+    public override object? AfterMarker => RightSku;
 
     public AsyncRelayCommand RefreshCommand { get; }
 

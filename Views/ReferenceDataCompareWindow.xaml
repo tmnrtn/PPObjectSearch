@@ -4,381 +4,566 @@
         xmlns:svc="clr-namespace:PPObjectSearch.Services"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
         Title="Compare reference data"
+        Style="{StaticResource AppWindow}"
         Height="800" Width="1320"
         MinHeight="560" MinWidth="1000"
-        WindowStartupLocation="CenterOwner"
-        Background="{StaticResource SurfaceAlt}"
-        FontFamily="Segoe UI" FontSize="13"
-        Foreground="{StaticResource TextPrimary}">
+        WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
         <!-- A DataGrid column lives outside the visual tree, so it reaches the view model through this. -->
         <core:BindingProxy x:Key="Proxy" Data="{Binding}" />
 
-        <Style TargetType="DataGridColumnHeader" x:Key="Head">
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Background" Value="{StaticResource SurfaceAlt}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
-            <Setter Property="BorderThickness" Value="0,0,1,1" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <!-- Status pill for a compared row. -->
+        <Style TargetType="ContentControl" x:Key="RowStatusPill" BasedOn="{StaticResource StatusPill}">
+            <Setter Property="Content" Value="{Binding StatusLabel}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:RecordCompareStatus.OnlyInSource}">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:RecordCompareStatus.OnlyInTarget}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:RecordCompareStatus.Different}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
-        <Style TargetType="TextBlock" x:Key="Cell">
-            <Setter Property="Margin" Value="8,6" />
-            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        </Style>
-        <Style TargetType="TextBlock" x:Key="MutedCell" BasedOn="{StaticResource Cell}">
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+
+        <!-- A detail value, on an added- or removed-line chip where the column differs. -->
+        <Style TargetType="Border" x:Key="ValueChip">
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Padding" Value="4,1" />
+            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <!-- Environments, saved configuration and the run controls -->
-        <Border Grid.Row="0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,0,0,1" Padding="16,12">
-            <StackPanel>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+            <!-- ============================================================ command bar -->
+            <Grid Grid.Row="0" Margin="16,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                        <TextBlock Text="SOURCE" Style="{StaticResource Label}" />
-                        <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Source}"
-                                  DisplayMemberPath="Title" />
+                <ComboBox Grid.Column="0" MinWidth="220" MaxWidth="300" Height="32" Padding="10,0"
+                          FontWeight="SemiBold"
+                          core:Ui.InlineLabel="Configuration"
+                          ItemsSource="{Binding Configurations}" SelectedItem="{Binding SelectedConfiguration}"
+                          DisplayMemberPath="Name">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedConfiguration}" Value="{x:Null}">
+                                    <Setter Property="core:Ui.SelectionText" Value="Unsaved" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                            <Setter Property="FontWeight" Value="Normal" />
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
+
+                <Button Grid.Column="1" Height="32" Margin="8,0,0,0" Command="{Binding SaveConfigurationCommand}"
+                        ToolTip="Save these tables and settings under the configuration's name.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Save" />
+                        <Ellipse Style="{StaticResource Dot}" Fill="{DynamicResource Amber}" Margin="7,1,0,0"
+                                 ToolTip="Unsaved changes"
+                                 Visibility="{Binding IsDirty, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
+                </Button>
 
-                    <StackPanel Grid.Column="1" Margin="0,0,12,0">
-                        <TextBlock Text="TARGET" Style="{StaticResource Label}" />
-                        <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding Target}"
-                                  DisplayMemberPath="Title" />
-                    </StackPanel>
+                <Button Grid.Column="2" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
+                        FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE712;"
+                        ToolTip="More" core:Ui.OpensMenu="True">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="New configuration" Command="{Binding NewConfigurationCommand}" />
+                            <MenuItem Header="Rename..." Command="{Binding RenameConfigurationCommand}" />
+                            <Separator />
+                            <MenuItem Header="Delete" Command="{Binding DeleteConfigurationCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
-                    <Button Grid.Column="2" Content="Compare" Margin="0,16,0,0" VerticalAlignment="Bottom"
+                <Rectangle Grid.Column="3" Style="{StaticResource VDivider}" Margin="12,0" />
+
+                <ComboBox Grid.Column="4" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
+                          core:Ui.InlineLabel="Source"
+                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Source}" />
+
+                <TextBlock Grid.Column="5" Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="11"
+                           Foreground="{DynamicResource Muted}" Margin="8,0" />
+
+                <ComboBox Grid.Column="6" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
+                          core:Ui.InlineLabel="Target"
+                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Target}" />
+
+                <CheckBox Grid.Column="8" Content="Match lookups by name" Margin="16,0,0,0"
+                          VerticalAlignment="Center" IsChecked="{Binding MatchLookupsByName}"
+                          ToolTip="Compare a lookup on the label it renders rather than the id behind it. Ids only agree where the target row was deployed." />
+
+                <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <TextBlock Text="Row cap" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                    <TextBox Text="{Binding MaxRowsPerEntity, UpdateSourceTrigger=LostFocus}"
+                             Width="58" Height="32" Margin="8,0,0,0"
+                             ToolTip="Most rows read per table per environment. A table that hits the cap is reported as partial." />
+                </StackPanel>
+
+                <Grid Grid.Column="10" Margin="16,0,0,0">
+                    <Button Style="{StaticResource PrimaryButton}" Content="Compare" Height="32" Padding="16,0"
                             Command="{Binding CompareCommand}"
                             Visibility="{Binding IsIdle, Converter={StaticResource BoolToVis}}" />
-
-                    <Button Grid.Column="2" Content="Cancel" Margin="0,16,0,0" VerticalAlignment="Bottom"
+                    <Button Content="Cancel" Height="32" Padding="16,0"
                             Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-
-                    <Button Grid.Column="3" Content="Export CSV" Margin="8,16,0,0" VerticalAlignment="Bottom"
-                            MinWidth="100" Command="{Binding ExportCommand}" />
                 </Grid>
-
-                <Grid Margin="0,12,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="220" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Margin="0,0,8,0" MinWidth="200">
-                        <TextBlock Text="SAVED CONFIGURATION" Style="{StaticResource Label}" />
-                        <ComboBox ItemsSource="{Binding Configurations}" SelectedItem="{Binding SelectedConfiguration}"
-                                  DisplayMemberPath="Name" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                        <TextBlock Text="NAME" Style="{StaticResource Label}" />
-                        <TextBox Text="{Binding ConfigurationName, UpdateSourceTrigger=PropertyChanged}" />
-                    </StackPanel>
-
-                    <Button Grid.Column="2" Content="Save" MinWidth="0" Padding="12,5" Margin="0,16,0,0"
-                            VerticalAlignment="Bottom" Command="{Binding SaveConfigurationCommand}"
-                            ToolTip="Save these tables and settings under the name above." />
-                    <Button Grid.Column="3" Content="New" MinWidth="0" Padding="12,5" Margin="6,16,0,0"
-                            VerticalAlignment="Bottom" Command="{Binding NewConfigurationCommand}" />
-                    <Button Grid.Column="4" Content="Delete" MinWidth="0" Padding="12,5" Margin="6,16,0,0"
-                            VerticalAlignment="Bottom" Command="{Binding DeleteConfigurationCommand}" />
-
-                    <CheckBox Grid.Column="6" Content="Match lookups by name" Margin="14,0,0,7"
-                              VerticalAlignment="Bottom" IsChecked="{Binding MatchLookupsByName}"
-                              ToolTip="Compare a lookup on the label it renders rather than the id behind it. Ids only agree where the target row was deployed." />
-
-                    <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Bottom"
-                                Margin="14,0,0,3">
-                        <TextBlock Text="Row cap" VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextMuted}" FontSize="11" />
-                        <TextBox Text="{Binding MaxRowsPerEntity, UpdateSourceTrigger=LostFocus}"
-                                 Width="70" Margin="6,0,0,0"
-                                 ToolTip="Most rows read per table per environment. A table that hits the cap is reported as partial." />
-                    </StackPanel>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <!-- Configured tables | results | detail -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" MinWidth="220" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" MinWidth="420" />
-            </Grid.ColumnDefinitions>
-
-            <Grid Grid.Column="0" Background="{StaticResource Surface}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <TextBlock Grid.Row="0" Text="TABLES TO CHECK" Style="{StaticResource Label}"
-                           Margin="12,12,12,6" />
-
-                <ListBox Grid.Row="1" ItemsSource="{Binding Entities}"
-                         SelectedItem="{Binding SelectedEntity}"
-                         BorderThickness="0" Background="Transparent"
-                         HorizontalContentAlignment="Stretch"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="2,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}"
-                                          VerticalAlignment="Center" Margin="0,0,8,0"
-                                          ToolTip="Include this table in the next comparison." />
-
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Detail}" FontSize="11"
-                                               Foreground="{StaticResource TextMuted}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="8,2" />
-                            <EventSetter Event="MouseDoubleClick" Handler="Entity_DoubleClick" />
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-
-                </ListBox>
-
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="12,8,12,12">
-                    <Button Content="Add tables..." MinWidth="0" Padding="10,5"
-                            Command="{Binding AddEntitiesCommand}" />
-                    <Button Content="Settings..." MinWidth="0" Padding="10,5" Margin="6,0,0,0"
-                            Command="{Binding EditEntityCommand}"
-                            ToolTip="Key, row filter and which columns take part, for the selected table." />
-                    <Button Content="Remove" MinWidth="0" Padding="10,5" Margin="6,0,0,0"
-                            Command="{Binding RemoveEntityCommand}" />
-                </StackPanel>
             </Grid>
 
-            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch"
-                          Background="{StaticResource Border}" />
+            <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Top" Fill="{DynamicResource Border}" />
+            <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
 
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="140" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="240" MinHeight="90" />
-                </Grid.RowDefinitions>
+            <!-- ============================================================ tables | results -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="272" MinWidth="200" />
+                    <ColumnDefinition Width="*" MinWidth="420" />
+                </Grid.ColumnDefinitions>
 
-                <Grid Grid.Row="0" Margin="16,12,16,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="190" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <!-- Tables -->
+                <Border Grid.Column="0" Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="0,0,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                        <TextBlock Text="TABLE" Style="{StaticResource Label}" />
-                        <ComboBox ItemsSource="{Binding EntityFilters}"
-                                  SelectedItem="{Binding SelectedEntityFilter}" />
-                    </StackPanel>
+                        <Grid Grid.Row="0" Margin="14,10,10,6">
+                            <TextBlock Text="{Binding TablesHeading}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                            <Button HorizontalAlignment="Right" Style="{StaticResource LinkButton}" Height="24"
+                                    Command="{Binding AddEntitiesCommand}" ToolTip="Add tables to check">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="9" Margin="0,1,5,0" />
+                                    <TextBlock Text="Add" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
 
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="SEARCH" Style="{StaticResource Label}" />
-                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="Matches the key, the name and the list of differing columns." />
-                    </StackPanel>
-
-                    <CheckBox Grid.Column="2" Content="Show matching rows" Margin="14,0,0,7"
-                              VerticalAlignment="Bottom" IsChecked="{Binding ShowMatches}" />
-                </Grid>
-
-                <DataGrid Grid.Row="1"
-                          ItemsSource="{Binding RowsView}"
-                          SelectedItem="{Binding SelectedRow}"
-                          AutoGenerateColumns="False"
-                          IsReadOnly="True"
-                          CanUserAddRows="False"
-                          HeadersVisibility="Column"
-                          RowHeaderWidth="0"
-                          GridLinesVisibility="Horizontal"
-                          HorizontalGridLinesBrush="#EEF0F3"
-                          Background="{StaticResource Surface}"
-                          BorderThickness="0,1,0,0"
-                          BorderBrush="{StaticResource Border}"
-                          EnableRowVirtualization="True"
-                          VirtualizingPanel.IsVirtualizing="True"
-                          VirtualizingPanel.VirtualizationMode="Recycling"
-                          ColumnHeaderStyle="{StaticResource Head}">
-
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Status" Binding="{Binding StatusLabel}" Width="120">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-                                    <Setter Property="FontWeight" Value="SemiBold" />
+                        <ListBox Grid.Row="1" Margin="6,0" ItemsSource="{Binding Entities}"
+                                 SelectedItem="{Binding SelectedEntity}">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                    <Setter Property="Padding" Value="8,7" />
+                                    <EventSetter Event="MouseDoubleClick" Handler="Entity_DoubleClick" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Status}"
-                                                     Value="{x:Static svc:RecordCompareStatus.OnlyInSource}">
-                                            <Setter Property="Foreground" Value="#B3261E" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}"
-                                                     Value="{x:Static svc:RecordCompareStatus.OnlyInTarget}">
-                                            <Setter Property="Foreground" Value="#1F52C4" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}"
-                                                     Value="{x:Static svc:RecordCompareStatus.Different}">
-                                            <Setter Property="Foreground" Value="#9A6400" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Status}"
-                                                     Value="{x:Static svc:RecordCompareStatus.Same}">
-                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
-                                            <Setter Property="FontWeight" Value="Normal" />
+                                        <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                            <Setter Property="Opacity" Value="0.55" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
+                            </ListBox.ItemContainerStyle>
 
-                        <DataGridTextColumn Header="Table" Binding="{Binding EntityLogicalName}" Width="150"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="230"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"
-                                            ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Differences" Binding="{Binding DifferenceCount}" Width="90"
-                                            ElementStyle="{StaticResource MutedCell}" />
-                        <DataGridTextColumn Header="Differing columns" Binding="{Binding DifferenceSummary}"
-                                            Width="260" ElementStyle="{StaticResource MutedCell}" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch"
-                              Background="{StaticResource Border}" />
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" Margin="0,0,9,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Include this table in the next comparison." />
+                                        <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="Result" Grid.Column="2" Text="{Binding ResultLabel}"
+                                                   FontSize="11" FontWeight="SemiBold" Margin="8,0,0,0"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource Faint}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Detail}"
+                                                   FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Result}" Value="Differences">
+                                            <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Amber}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Result}" Value="Match">
+                                            <Setter TargetName="Result" Property="Foreground" Value="{DynamicResource Green}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
 
-                <Grid Grid.Row="3" Background="{StaticResource Surface}">
+                        <Grid Grid.Row="2" Margin="12,10,12,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button Content="Settings..." Command="{Binding EditEntityCommand}"
+                                    ToolTip="Key, row filter and which columns take part, for the selected table." />
+                            <Button Grid.Column="1" Content="Remove" Margin="6,0,0,0"
+                                    Command="{Binding RemoveEntityCommand}" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Results -->
+                <Grid Grid.Column="1">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="140" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="250" MinHeight="90" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="{Binding DetailHeading}" Margin="16,10,16,8"
-                               Foreground="{StaticResource TextMuted}" FontSize="11"
-                               TextTrimming="CharacterEllipsis" />
+                    <Grid Grid.Row="0" Margin="16,12,16,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding DetailColumns}"
-                              AutoGenerateColumns="False"
+                        <Border Style="{StaticResource Segmented}">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="All differences" GroupName="RecordStatus"
+                                             core:Ui.DotBrush="{DynamicResource Muted}" core:Ui.Count="{Binding CountDifferences, StringFormat=N0}"
+                                             IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Differences}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Only in source" GroupName="RecordStatus"
+                                             core:Ui.DotBrush="{DynamicResource Red}" core:Ui.Count="{Binding CountOnlySource, StringFormat=N0}"
+                                             IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=OnlySource}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Only in target" GroupName="RecordStatus"
+                                             core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountOnlyTarget, StringFormat=N0}"
+                                             IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=OnlyTarget}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Values differ" GroupName="RecordStatus"
+                                             core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountDifferent, StringFormat=N0}"
+                                             IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Different}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Matches" GroupName="RecordStatus"
+                                             core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountMatches, StringFormat=N0}"
+                                             IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Matches}" />
+                            </StackPanel>
+                        </Border>
+
+                        <ComboBox Grid.Column="1" MinWidth="130" MaxWidth="240" Height="30" Margin="8,0,0,0" Padding="7,0"
+                                  core:Ui.InlineLabel="Table"
+                                  ItemsSource="{Binding EntityFilters}"
+                                  SelectedItem="{Binding SelectedEntityFilter}" />
+
+                        <TextBox Grid.Column="2" Height="30" Margin="8,0,0,0"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Key, name or column"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Matches the key, the name and the list of differing columns." />
+                    </Grid>
+
+                    <!-- Warnings -->
+                    <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="16,0,16,10"
+                            Visibility="{Binding Warnings.Count, Converter={StaticResource CountToVis}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Width="16" Height="16" CornerRadius="8" Background="{DynamicResource Amber}"
+                                    VerticalAlignment="Top" Margin="0,1,8,0">
+                                <TextBlock Text="!" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Surface}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding WarningsTitle}" FontWeight="SemiBold" Foreground="{DynamicResource Amber}" />
+                                <TextBlock Text="{Binding WarningsPreview}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Visibility="{Binding ShowAllWarnings, Converter={StaticResource NotBoolToVis}}" />
+                                <ItemsControl ItemsSource="{Binding Warnings}" Margin="0,2,0,0" MaxHeight="140"
+                                              Visibility="{Binding ShowAllWarnings, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl.Template>
+                                        <ControlTemplate TargetType="ItemsControl">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <ItemsPresenter />
+                                            </ScrollViewer>
+                                        </ControlTemplate>
+                                    </ItemsControl.Template>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <Button Grid.Column="2" Style="{StaticResource LinkButton}" Height="20" VerticalAlignment="Top"
+                                    Command="{Binding ToggleWarningsCommand}">
+                                <Button.Content>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="Show all" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowAllWarnings}" Value="True">
+                                                        <Setter Property="Text" Value="Show less" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Button.Content>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <DataGrid Grid.Row="2"
+                              x:Name="ResultsGrid"
+                              ItemsSource="{Binding RowsView}"
+                              SelectedItem="{Binding SelectedRow}"
+                              SelectionMode="Extended"
+                              SelectionChanged="Results_SelectionChanged"
                               IsReadOnly="True"
-                              CanUserAddRows="False"
-                              HeadersVisibility="Column"
-                              RowHeaderWidth="0"
-                              GridLinesVisibility="Horizontal"
-                              HorizontalGridLinesBrush="#EEF0F3"
-                              Background="{StaticResource Surface}"
-                              BorderThickness="0,1,0,0"
-                              BorderBrush="{StaticResource Border}"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
-                              ColumnHeaderStyle="{StaticResource Head}">
-
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsDifferent}" Value="True">
-                                        <Setter Property="Background" Value="#FFF6E5" />
-                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
+                              BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
 
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Column" Binding="{Binding ColumnLabel}" Width="260"
+                            <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserSort="False">
+                                <DataGridTemplateColumn.Header>
+                                    <CheckBox x:Name="SelectAllBox" IsThreeState="True" Margin="8,0,0,0"
+                                              Click="SelectAll_Click" ToolTip="Select every row shown" />
+                                </DataGridTemplateColumn.Header>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Margin="16,0,0,0" Focusable="False"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=DataGridRow}}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Status" Width="116" SortMemberPath="Status">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Style="{StaticResource RowStatusPill}" Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTextColumn Header="Table" Binding="{Binding EntityLogicalName}" Width="130"
+                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="140"
+                                                ElementStyle="{StaticResource CellMono}" />
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" MinWidth="120"
                                                 ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="110"
-                                                ElementStyle="{StaticResource MutedCell}" />
-                            <DataGridTextColumn Header="{Binding Data.SourceHeader, Source={StaticResource Proxy}}"
-                                                Binding="{Binding SourceValue}" Width="*"
-                                                ElementStyle="{StaticResource Cell}" />
-                            <DataGridTextColumn Header="{Binding Data.TargetHeader, Source={StaticResource Proxy}}"
-                                                Binding="{Binding TargetValue}" Width="*"
-                                                ElementStyle="{StaticResource Cell}" />
+                            <DataGridTemplateColumn Header="Diffs" Width="52" SortMemberPath="DifferenceCount"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock x:Name="Diffs" Style="{StaticResource Cell}" HorizontalAlignment="Right"
+                                                   Text="{Binding DifferenceCount}" />
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding DifferenceCount}" Value="0">
+                                                <Setter TargetName="Diffs" Property="Text" Value="" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Differing columns" Width="200" SortMemberPath="DifferenceSummary">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Style="{StaticResource CellMuted}" ToolTip="{Binding DifferenceSummary}">
+                                            <TextBlock.Text>
+                                                <Binding Path="DifferenceSummary">
+                                                    <Binding.Converter>
+                                                        <core:EmptyToDashConverter />
+                                                    </Binding.Converter>
+                                                </Binding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                  Background="Transparent" />
+                    <Rectangle Grid.Row="3" Height="1" Fill="{DynamicResource Border2}" IsHitTestVisible="False" />
+
+                    <!-- Detail -->
+                    <Grid Grid.Row="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="16,10,16,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                <Run Text="{Binding SelectedRow.Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Run Text="{Binding DetailKey, Mode=OneWay}" FontFamily="{StaticResource MonoFont}"
+                                     FontSize="11" Foreground="{DynamicResource Muted}" />
+                            </TextBlock>
+                            <TextBlock Text="Select a row to see its columns." Foreground="{DynamicResource Faint}"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedRow}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <TextBlock Grid.Column="1" Text="{Binding DetailCounts}" FontSize="11"
+                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="12,0,10,0" />
+                            <CheckBox Grid.Column="2" Content="Differences only" IsChecked="{Binding DifferencesOnly}"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+
+                        <DataGrid Grid.Row="1" Style="{StaticResource NestedGrid}"
+                                  ItemsSource="{Binding DetailColumns}"
+                                  IsReadOnly="True"
+                                  BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Column" Binding="{Binding Column.LogicalName}" Width="200"
+                                                    HeaderStyle="{StaticResource FirstHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellMonoFirst}">
+                                            <Setter Property="ToolTip" Value="{Binding ColumnLabel}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="100"
+                                                    ElementStyle="{StaticResource CellMuted}" />
+
+                                <DataGridTemplateColumn Width="*" SortMemberPath="SourceValue">
+                                    <DataGridTemplateColumn.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Style="{StaticResource EnvBar}" Height="11" Margin="0,0,6,0"
+                                                    Tag="{Binding Data.Source.EnvironmentSku, Source={StaticResource Proxy}}" />
+                                            <TextBlock Text="{Binding Data.SourceHeader, Source={StaticResource Proxy}, StringFormat={}{0} (source)}" />
+                                        </StackPanel>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="Chip" Style="{StaticResource ValueChip}">
+                                                <TextBlock Text="{Binding SourceValue}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding SourceValue}" />
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsDifferent}" Value="True">
+                                                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource DiffAddedBg}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTemplateColumn Width="*" SortMemberPath="TargetValue">
+                                    <DataGridTemplateColumn.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Style="{StaticResource EnvBar}" Height="11" Margin="0,0,6,0"
+                                                    Tag="{Binding Data.Target.EnvironmentSku, Source={StaticResource Proxy}}" />
+                                            <TextBlock Text="{Binding Data.TargetHeader, Source={StaticResource Proxy}, StringFormat={}{0} (target)}" />
+                                        </StackPanel>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="Chip" Style="{StaticResource ValueChip}">
+                                                <TextBlock Text="{Binding TargetValue}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding TargetValue}" />
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsDifferent}" Value="True">
+                                                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource DiffRemovedBg}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
                 </Grid>
             </Grid>
-        </Grid>
 
-        <!-- Status, counts and anything that made the result partial -->
-        <Border Grid.Row="2" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}"
-                BorderThickness="0,1,0,0" Padding="16,7">
-            <StackPanel>
+            <!-- ============================================================ action footer -->
+            <Border Grid.Row="3" Style="{StaticResource Footer}" MinHeight="48" Padding="16,7">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="{Binding Status}" TextTrimming="CharacterEllipsis"
-                               Foreground="{StaticResource TextMuted}" />
-                    <TextBlock Grid.Column="1" Text="{Binding Summary}" Margin="16,0,0,0"
-                               TextTrimming="CharacterEllipsis" />
-                </Grid>
-
-                <Expander Margin="0,6,0,0" Foreground="#9A6400"
-                          Visibility="{Binding Warnings.Count, Converter={StaticResource CountToVis}}">
-                    <Expander.Header>
-                        <TextBlock>
-                            <Run Text="{Binding Warnings.Count, Mode=OneWay}" />
-                            <Run Text="warning(s) - the result may be partial" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding WriteStatus}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WriteStatus}" Value="">
+                                            <Setter Property="ToolTip" Value="{x:Null}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Run Text="{Binding SelectionSummary, Mode=OneWay}" FontWeight="SemiBold" />
+                            <Run Text="{Binding SelectionBreakdown, Mode=OneWay}" Foreground="{DynamicResource Muted}" />
                         </TextBlock>
-                    </Expander.Header>
+                        <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Summary}" />
+                    </StackPanel>
 
-                    <ItemsControl ItemsSource="{Binding Warnings}" Margin="0,6,0,4" MaxHeight="120">
-                        <ItemsControl.Template>
-                            <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <ItemsPresenter />
-                                </ScrollViewer>
-                            </ControlTemplate>
-                        </ItemsControl.Template>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1"
-                                           Foreground="{StaticResource TextPrimary}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Expander>
-            </StackPanel>
-        </Border>
-    </Grid>
+                    <Button Grid.Column="1" Content="Export CSV" Height="30" Margin="12,0,0,0"
+                            Command="{Binding ExportCommand}" />
+                    <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Height="30" Margin="8,0,0,0"
+                            Content="{Binding ReconcileLabel}"
+                            Command="{Binding ReconcileCommand}"
+                            ToolTip="Write the selected rows from the source into the target. Nothing is written until you confirm, and production environments are refused unless allowlisted in settings.json." />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
 </Window>

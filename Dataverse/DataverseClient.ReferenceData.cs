@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using PPObjectSearch.Models;
 
 namespace PPObjectSearch.Dataverse;
@@ -85,7 +85,8 @@ public sealed partial class DataverseClient
     {
         var url = EnvironmentUrl + ApiPath +
                   $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalName.ToLowerInvariant())}')/Attributes" +
-                  "?$select=LogicalName,DisplayName,AttributeTypeName,IsValidForRead,IsPrimaryId,IsPrimaryName,AttributeOf";
+                  "?$select=LogicalName,DisplayName,AttributeTypeName,IsValidForRead,IsValidForCreate," +
+                  "IsValidForUpdate,IsPrimaryId,IsPrimaryName,AttributeOf";
 
         var results = new List<EntityColumn>();
 
@@ -114,7 +115,11 @@ public sealed partial class DataverseClient
                         ReadLabel(row, "DisplayName"),
                         typeName!,
                         JsonHelper.GetBool(row, "IsPrimaryId") ?? false,
-                        JsonHelper.GetBool(row, "IsPrimaryName") ?? false));
+                        JsonHelper.GetBool(row, "IsPrimaryName") ?? false)
+                    {
+                        IsValidForCreate = JsonHelper.GetBool(row, "IsValidForCreate") ?? true,
+                        IsValidForUpdate = JsonHelper.GetBool(row, "IsValidForUpdate") ?? true
+                    });
                 }
             }
 
@@ -210,7 +215,7 @@ public sealed partial class DataverseClient
         {
             ct.ThrowIfCancellationRequested();
 
-            using var doc = await GetJsonAsync(url, ct, includeFormattedValues: true).ConfigureAwait(false);
+            using var doc = await GetJsonAsync(url, ct, Annotations.All).ConfigureAwait(false);
 
             if (doc.RootElement.TryGetProperty("value", out var value))
             {
@@ -239,11 +244,15 @@ public sealed partial class DataverseClient
         .Replace("+", "%2B", StringComparison.Ordinal);
 
     private const string FormattedValueSuffix = "@OData.Community.Display.V1.FormattedValue";
+    private const string LookupTargetSuffix = "@Microsoft.Dynamics.CRM.lookuplogicalname";
+    private const string NavigationSuffix = "@Microsoft.Dynamics.CRM.associatednavigationproperty";
 
     private static DataRecord ReadRecord(JsonElement row, EntitySummary entity)
     {
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var formatted = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var lookupTargets = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var navigationProperties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var property in row.EnumerateObject())
         {
@@ -254,9 +263,19 @@ public sealed partial class DataverseClient
 
             if (at > 0)
             {
+                var column = property.Name[..at];
+
                 if (property.Name.EndsWith(FormattedValueSuffix, StringComparison.Ordinal))
                 {
-                    formatted[property.Name[..at]] = property.Value.GetString();
+                    formatted[column] = property.Value.GetString();
+                }
+                else if (property.Name.EndsWith(LookupTargetSuffix, StringComparison.Ordinal))
+                {
+                    lookupTargets[column] = property.Value.GetString();
+                }
+                else if (property.Name.EndsWith(NavigationSuffix, StringComparison.Ordinal))
+                {
+                    navigationProperties[column] = property.Value.GetString();
                 }
 
                 continue;
@@ -272,6 +291,8 @@ public sealed partial class DataverseClient
             Id = recordId,
             Values = values,
             Formatted = formatted,
+            LookupTargets = lookupTargets,
+            NavigationProperties = navigationProperties,
             PrimaryName = entity.PrimaryNameAttribute is { Length: > 0 } name &&
                           values.TryGetValue(name, out var label)
                 ? label

@@ -18,12 +18,28 @@ public sealed class EntityPick : ObservableObject
     public bool IsSelected
     {
         get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
+        set
+        {
+            if (SetProperty(ref _isSelected, value)) OnPropertyChanged(nameof(IsTicked));
+        }
+    }
+
+    /// <summary>What the check box shows: a table already in the configuration reads as ticked.</summary>
+    public bool IsTicked
+    {
+        get => IsAlreadyAdded || IsSelected;
+        set
+        {
+            if (!IsAlreadyAdded) IsSelected = value;
+        }
     }
 
     public string Label => Entity.Label;
     public string LogicalName => Entity.LogicalName;
-    public string StateLabel => IsAlreadyAdded ? "Added" : (Entity.IsManaged ? "Managed" : "Unmanaged");
+    public string StateLabel => IsAlreadyAdded ? "Already added" : (Entity.IsManaged ? "Managed" : "Unmanaged");
+
+    /// <summary>The display name alone; the logical name sits beside it in mono.</summary>
+    public string DisplayLabel => string.IsNullOrWhiteSpace(Entity.DisplayName) ? Entity.LogicalName : Entity.DisplayName!;
 }
 
 /// <summary>
@@ -48,7 +64,7 @@ public sealed class EntityPickerViewModel : ObservableObject
         {
             item.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(EntityPick.IsSelected)) OnPropertyChanged(nameof(Summary));
+                if (e.PropertyName == nameof(EntityPick.IsSelected)) NotifySelectionChanged();
             };
         }
 
@@ -58,7 +74,7 @@ public sealed class EntityPickerViewModel : ObservableObject
         ClearSelectionCommand = new RelayCommand(_ =>
         {
             foreach (var item in Items) item.IsSelected = false;
-            OnPropertyChanged(nameof(Summary));
+            NotifySelectionChanged();
         });
     }
 
@@ -75,7 +91,7 @@ public sealed class EntityPickerViewModel : ObservableObject
             if (!SetProperty(ref _searchText, value)) return;
 
             ItemsView.Refresh();
-            OnPropertyChanged(nameof(Summary));
+            NotifySelectionChanged();
         }
     }
 
@@ -90,24 +106,50 @@ public sealed class EntityPickerViewModel : ObservableObject
             if (!SetProperty(ref _hideManaged, value)) return;
 
             ItemsView.Refresh();
-            OnPropertyChanged(nameof(Summary));
+            NotifySelectionChanged();
         }
     }
 
+    /// <summary>"3 selected · 412 managed tables hidden".</summary>
     public string Summary
     {
         get
         {
-            var shown = ItemsView.Cast<EntityPick>().Count();
-            var chosen = Items.Count(i => i.IsSelected);
+            var chosen = Items.Count(i => i is { IsSelected: true, IsAlreadyAdded: false });
+            var parts = new List<string> { $"{chosen:N0} selected" };
 
-            return chosen == 0
-                ? $"{shown:N0} of {Items.Count:N0} tables"
-                : $"{shown:N0} of {Items.Count:N0} tables  |  {chosen:N0} selected";
+            if (HideManaged)
+            {
+                var hidden = Items.Count(i => i.Entity.IsManaged && !i.IsSelected);
+                parts.Add($"{hidden:N0} managed tables hidden");
+            }
+            else
+            {
+                parts.Add($"{ItemsView.Cast<EntityPick>().Count():N0} of {Items.Count:N0} tables shown");
+            }
+
+            return string.Join(" · ", parts);
         }
     }
 
-    public void NotifySelectionChanged() => OnPropertyChanged(nameof(Summary));
+    public int SelectedCount => Items.Count(i => i is { IsSelected: true, IsAlreadyAdded: false });
+
+    public bool HasSelection => SelectedCount > 0;
+
+    public string AddLabel => SelectedCount switch
+    {
+        0 => "Add tables",
+        1 => "Add 1 table",
+        var n => $"Add {n:N0} tables"
+    };
+
+    public void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(SelectedCount));
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(AddLabel));
+    }
 
     public IReadOnlyList<EntitySummary> SelectedEntities =>
         Items.Where(i => i is { IsSelected: true, IsAlreadyAdded: false }).Select(i => i.Entity).ToList();

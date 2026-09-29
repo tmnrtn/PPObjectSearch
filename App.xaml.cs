@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
+using PPObjectSearch.Core;
+using PPObjectSearch.Services;
 
 namespace PPObjectSearch;
 
@@ -9,6 +11,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
+
+        WindowChromeSupport.Register();
+        ThemeManager.Apply(AppSettings.Load().Theme);
     }
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

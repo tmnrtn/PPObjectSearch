@@ -1,0 +1,1655 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+                    xmlns:core="clr-namespace:PPObjectSearch.Core"
+                    xmlns:dv="clr-namespace:PPObjectSearch.Dataverse">
+
+    <!--
+        Global control styles. Every themed brush is a DynamicResource so that swapping the
+        Light/Dark dictionary (ThemeManager) repaints open windows.
+    -->
+
+    <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    <core:NotBoolConverter x:Key="NotBool" />
+    <core:IsFalseConverter x:Key="IsFalse" />
+    <core:CountToVisibilityConverter x:Key="CountToVis" />
+    <core:NotBoolToVisibilityConverter x:Key="NotBoolToVis" />
+    <core:EmptyToCollapsedConverter x:Key="EmptyToCollapsed" />
+    <core:EnvironmentSkuToBadgeConverter x:Key="SkuBadge" />
+    <core:PrefixConverter x:Key="Prefix" />
+    <core:EnumEqualsConverter x:Key="EnumEquals" />
+
+    <!-- ============================================================ text -->
+
+    <!-- Section label: sentence case, 11 SemiBold Muted. -->
+    <Style TargetType="TextBlock" x:Key="Label">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="MutedText">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="FaintText">
+        <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="Mono">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="WindowHeading">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="SectionHeading">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="Icon">
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Grid cell text: 8px sides, single line. -->
+    <Style TargetType="TextBlock" x:Key="Cell">
+        <Setter Property="Margin" Value="8,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellFirst" BasedOn="{StaticResource Cell}">
+        <Setter Property="Margin" Value="16,0,8,0" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellMuted" BasedOn="{StaticResource Cell}">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellFaint" BasedOn="{StaticResource Cell}">
+        <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellMono" BasedOn="{StaticResource Cell}">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellMonoFirst" BasedOn="{StaticResource CellMono}">
+        <Setter Property="Margin" Value="16,0,8,0" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="CellMonoMuted" BasedOn="{StaticResource CellMono}">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+
+    <Style TargetType="Hyperlink">
+        <Setter Property="Foreground" Value="{DynamicResource Link}" />
+        <Setter Property="TextDecorations" Value="{x:Null}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="TextDecorations" Value="Underline" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ environment colour -->
+
+    <!-- Tag = EnvironmentSku. A 3px rounded bar beside an environment name. -->
+    <Style TargetType="Border" x:Key="EnvBar">
+        <Setter Property="Width" Value="3" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource EnvUnknown}" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Production}">
+                <Setter Property="Background" Value="{DynamicResource EnvProduction}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Default}">
+                <Setter Property="Background" Value="{DynamicResource EnvDefault}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Sandbox}">
+                <Setter Property="Background" Value="{DynamicResource EnvSandbox}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Developer}">
+                <Setter Property="Background" Value="{DynamicResource EnvDeveloper}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Trial}">
+                <Setter Property="Background" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Teams}">
+                <Setter Property="Background" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Tag = EnvironmentSku. Text in the environment colour. -->
+    <Style TargetType="TextBlock" x:Key="EnvText">
+        <Setter Property="Foreground" Value="{DynamicResource EnvUnknown}" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Production}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvProduction}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Default}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvDefault}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Sandbox}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvSandbox}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Developer}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvDeveloper}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Trial}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Teams}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Tag = EnvironmentSku, Content = badge text. Outlined badge in the environment colour. -->
+    <Style TargetType="ContentControl" x:Key="EnvTypeBadge">
+        <Setter Property="Foreground" Value="{DynamicResource EnvUnknown}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Border BorderBrush="{TemplateBinding Foreground}" BorderThickness="1" CornerRadius="3"
+                            Padding="4,0" Height="17" SnapsToDevicePixels="True">
+                        <TextBlock Text="{TemplateBinding Content}" VerticalAlignment="Center"
+                                   LineHeight="15" LineStackingStrategy="BlockLineHeight" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Production}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvProduction}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Default}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvDefault}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Sandbox}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvSandbox}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Developer}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvDeveloper}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Trial}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static dv:EnvironmentSku.Teams}">
+                <Setter Property="Foreground" Value="{DynamicResource EnvTrial}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ chips and pills -->
+
+    <!-- Neutral chip: Surface2 with a Border outline. -->
+    <Style TargetType="ContentControl" x:Key="Chip">
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="3" Padding="6,0" Height="20" SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="ContentControl" x:Key="ChipAmber" BasedOn="{StaticResource Chip}">
+        <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AmberSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+    </Style>
+    <Style TargetType="ContentControl" x:Key="ChipGreen" BasedOn="{StaticResource Chip}">
+        <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource GreenSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    </Style>
+
+    <!-- Status pill: soft background, coloured SemiBold text. Set Background/Foreground. -->
+    <Style TargetType="ContentControl" x:Key="StatusPill">
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="3" Padding="6,0" Height="18"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="ContentControl" x:Key="PillRed" BasedOn="{StaticResource StatusPill}">
+        <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Red}" />
+    </Style>
+    <Style TargetType="ContentControl" x:Key="PillBlue" BasedOn="{StaticResource StatusPill}">
+        <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+    </Style>
+    <Style TargetType="ContentControl" x:Key="PillAmber" BasedOn="{StaticResource StatusPill}">
+        <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+    </Style>
+    <Style TargetType="ContentControl" x:Key="PillGreen" BasedOn="{StaticResource StatusPill}">
+        <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Green}" />
+    </Style>
+
+    <!-- A 6px status dot. -->
+    <Style TargetType="Ellipse" x:Key="Dot">
+        <Setter Property="Width" Value="6" />
+        <Setter Property="Height" Value="6" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill" Value="{DynamicResource Border2}" />
+    </Style>
+
+    <!-- A 1px vertical divider between command-bar groups. -->
+    <Style TargetType="Rectangle" x:Key="VDivider">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Margin" Value="4,0" />
+        <Setter Property="Fill" Value="{DynamicResource Border2}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Warning / guard banner container. -->
+    <Style TargetType="Border" x:Key="Banner">
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+    </Style>
+
+    <!-- Status bar: 26 tall, Surface2, top Border, 11px. -->
+    <Style TargetType="Border" x:Key="StatusBar">
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Padding" Value="16,4" />
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="TextElement.FontSize" Value="11" />
+    </Style>
+
+    <!-- Dialog / action footer: Surface2, top Border. -->
+    <Style TargetType="Border" x:Key="Footer">
+        <Setter Property="MinHeight" Value="52" />
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+
+    <!-- ============================================================ focus -->
+
+    <Style x:Key="FocusRing">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-2" RadiusX="5" RadiusY="5" StrokeThickness="2"
+                               Stroke="{DynamicResource AccentSoft}" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================ buttons -->
+
+    <ControlTemplate x:Key="ButtonTemplate" TargetType="ButtonBase">
+        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4"
+                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                              RecognizesAccessKey="True" />
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!-- Secondary (default) button. -->
+    <Style TargetType="Button">
+        <Setter Property="Template" Value="{StaticResource ButtonTemplate}" />
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Border}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="SmallButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Padding" Value="8,0" />
+    </Style>
+
+    <Style TargetType="Button" x:Key="RowButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <Style TargetType="Button" x:Key="PrimaryButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="14,0" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Accent}" />
+                <Setter Property="Opacity" Value="0.9" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Accent}" />
+                <Setter Property="Opacity" Value="0.8" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Text}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{DynamicResource Border}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+                <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                <Setter Property="Opacity" Value="1" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="DangerButton" BasedOn="{StaticResource PrimaryButton}">
+        <Setter Property="Background" Value="{DynamicResource Red}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Red}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Red}" />
+                <Setter Property="Opacity" Value="0.9" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{DynamicResource Border}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+                <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                <Setter Property="Opacity" Value="1" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Borderless, transparent: sidebar rows, account button, "⋯". -->
+    <Style TargetType="Button" x:Key="GhostButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Padding" Value="8,0" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Text-only button in the Link colour ("Clear", "+ Add", "Show all"). -->
+    <Style TargetType="Button" x:Key="LinkButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Link}" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="4">
+                        <ContentPresenter x:Name="Cp" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Cp" Property="TextBlock.TextDecorations" Value="Underline" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="Transparent" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 28x28 square with a Fluent glyph as its content. -->
+    <Style TargetType="Button" x:Key="IconButton" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <!-- Title bar caption buttons. -->
+    <Style TargetType="Button" x:Key="CaptionButton">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style TargetType="Button" x:Key="CloseCaptionButton" BasedOn="{StaticResource CaptionButton}">
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#C42B1C" />
+                <Setter Property="Foreground" Value="#FFFFFF" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ windows -->
+
+    <Style TargetType="Window" x:Key="AppWindow">
+        <Setter Property="Background" Value="{DynamicResource Bg}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="shell:WindowChrome.WindowChrome">
+            <Setter.Value>
+                <shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="6" CornerRadius="8"
+                                    GlassFrameThickness="0,0,0,1" UseAeroCaptionButtons="False" />
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <Border x:Name="Root" Background="{TemplateBinding Background}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="32" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center">
+                                    <Border x:Name="AppMark" Width="12" Height="12" CornerRadius="3"
+                                            Background="{DynamicResource Accent}" Margin="0,0,10,0"
+                                            Visibility="Collapsed" />
+                                    <TextBlock x:Name="TitleText" Text="{TemplateBinding Title}" FontSize="12"
+                                               Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="MinButton" Style="{StaticResource CaptionButton}" Content="&#xE921;"
+                                            Command="{x:Static SystemCommands.MinimizeWindowCommand}" ToolTip="Minimise" />
+                                    <Button x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
+                                            Command="{x:Static SystemCommands.MaximizeWindowCommand}" ToolTip="Maximise" />
+                                    <Button Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;"
+                                            Command="{x:Static SystemCommands.CloseWindowCommand}" ToolTip="Close" />
+                                </StackPanel>
+                            </Grid>
+
+                            <AdornerDecorator Grid.Row="1">
+                                <ContentPresenter />
+                            </AdornerDecorator>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="WindowState" Value="Maximized">
+                            <Setter TargetName="Root" Property="Padding"
+                                    Value="{x:Static core:WindowChromeSupport.MaximizedMargin}" />
+                            <Setter TargetName="MaxButton" Property="Content" Value="&#xE923;" />
+                            <Setter TargetName="MaxButton" Property="ToolTip" Value="Restore" />
+                        </Trigger>
+                        <Trigger Property="IsActive" Value="False">
+                            <Setter TargetName="TitleText" Property="Foreground" Value="{DynamicResource Faint}" />
+                        </Trigger>
+                        <Trigger Property="core:WindowChromeSupport.IsDialog" Value="True">
+                            <Setter TargetName="MinButton" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="MaxButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="ResizeMode" Value="NoResize">
+                            <Setter TargetName="MinButton" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="MaxButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Tag" Value="Main">
+                            <Setter TargetName="AppMark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Window" x:Key="DialogWindow" BasedOn="{StaticResource AppWindow}">
+        <Setter Property="core:WindowChromeSupport.IsDialog" Value="True" />
+        <Setter Property="ShowInTaskbar" Value="False" />
+    </Style>
+
+    <!-- The Surface content panel below a secondary window's title bar. -->
+    <Style TargetType="Border" x:Key="WindowBody">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+
+    <!-- ============================================================ text box -->
+
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Text}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Grid>
+                        <Border x:Name="Ring" Margin="-2" CornerRadius="6" BorderThickness="2"
+                                BorderBrush="Transparent" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <!-- No padding here: TextBoxBase already hands Padding to PART_ContentHost. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock x:Name="IconGlyph" Grid.Column="0" Style="{StaticResource Icon}"
+                                           Text="{TemplateBinding core:Ui.Icon}" FontSize="12"
+                                           Foreground="{DynamicResource Faint}" Margin="9,0,0,0"
+                                           Visibility="{Binding (core:Ui.Icon), RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource EmptyToCollapsed}}" />
+
+                                <TextBlock x:Name="PlaceholderText" Grid.Column="1"
+                                           Text="{TemplateBinding core:Ui.Placeholder}"
+                                           Foreground="{DynamicResource Faint}" Margin="2,0,0,0"
+                                           Padding="{TemplateBinding Padding}"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           IsHitTestVisible="False" Visibility="Collapsed"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <ScrollViewer x:Name="PART_ContentHost" Grid.Column="1" Focusable="False"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden" />
+
+                                <TextBlock x:Name="Trailing" Grid.Column="2"
+                                           Text="{TemplateBinding core:Ui.TrailingText}"
+                                           Foreground="{DynamicResource Faint}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,9,0" IsHitTestVisible="False" />
+
+                                <Border x:Name="KeyHint" Grid.Column="3" BorderBrush="{DynamicResource Border2}"
+                                        BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,6,0"
+                                        VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <TextBlock Text="{TemplateBinding core:Ui.KeyHint}" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="10" Foreground="{DynamicResource Faint}" LineHeight="14"
+                                               LineStackingStrategy="BlockLineHeight" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="core:Ui.TrailingText" Value="{x:Null}">
+                            <Setter TargetName="Trailing" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="core:Ui.KeyHint" Value="{x:Null}">
+                            <Setter TargetName="KeyHint" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Faint}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource AccentSoft}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A read-only, multi-line monospace box (definitions, raw JSON). -->
+    <Style TargetType="TextBox" x:Key="CodeBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The text box inside an editable ComboBox. -->
+    <Style TargetType="TextBox" x:Key="ComboEditableTextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Text}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Grid>
+                        <TextBlock x:Name="PlaceholderText" Margin="2,0,0,0" VerticalAlignment="Center"
+                                   IsHitTestVisible="False" Visibility="Collapsed"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                   FontWeight="{Binding FontWeight, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Text="{Binding (core:Ui.Placeholder), RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="Text" Value="" />
+                                <Condition Property="IsKeyboardFocused" Value="False" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible" />
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================ combo box -->
+
+    <Style TargetType="ToggleButton" x:Key="ComboToggle">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="ClickMode" Value="Press" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Selected}" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="8,0,8,0" />
+        <Setter Property="MaxDropDownHeight" Value="420" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid x:Name="Root" SnapsToDevicePixels="True">
+                        <Border x:Name="Ring" Margin="-2" CornerRadius="6" BorderThickness="2" BorderBrush="Transparent" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" />
+
+                        <ToggleButton Style="{StaticResource ComboToggle}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                        <Grid Margin="{TemplateBinding Padding}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock x:Name="InlineLabel" Grid.Column="0" Text="{TemplateBinding core:Ui.InlineLabel}"
+                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                       Margin="0,0,5,0" IsHitTestVisible="False" />
+
+                            <ContentPresenter x:Name="ContentSite" Grid.Column="1" IsHitTestVisible="False"
+                                              Visibility="Collapsed"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+
+                            <TextBlock x:Name="SelectionText" Grid.Column="1" IsHitTestVisible="False"
+                                       Text="{TemplateBinding core:Ui.SelectionText}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+
+                            <TextBox x:Name="PART_EditableTextBox" Grid.Column="1"
+                                     Style="{StaticResource ComboEditableTextBox}"
+                                     IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}"
+                                     Visibility="Collapsed" />
+
+                            <TextBlock Grid.Column="2" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9"
+                                       Foreground="{DynamicResource Muted}" Margin="8,1,0,0" IsHitTestVisible="False" />
+                        </Grid>
+
+                        <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Bottom" Focusable="False"
+                               IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                               PopupAnimation="{DynamicResource {x:Static SystemParameters.ComboBoxPopupAnimationKey}}">
+                            <Grid Margin="0,4,10,10">
+                                <Border x:Name="DropDown" MinWidth="{Binding ActualWidth, ElementName=Root}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                        BorderThickness="1" CornerRadius="6" Padding="4">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                                    </Border.Effect>
+                                    <ScrollViewer>
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="core:Ui.InlineLabel" Value="{x:Null}">
+                            <Setter TargetName="InlineLabel" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="core:Ui.SelectionText" Value="{x:Null}">
+                            <Setter TargetName="SelectionText" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsEditable" Value="False" />
+                                <Condition Property="core:Ui.SelectionText" Value="{x:Null}" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Visible" />
+                        </MultiTrigger>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="SelectionText" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="core:Ui.IsActive" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSoft}" />
+                            <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="{DynamicResource Link}" />
+                            <Setter TargetName="ContentSite" Property="TextElement.FontWeight" Value="SemiBold" />
+                            <Setter TargetName="SelectionText" Property="Foreground" Value="{DynamicResource Link}" />
+                            <Setter TargetName="SelectionText" Property="FontWeight" Value="SemiBold" />
+                            <Setter TargetName="PART_EditableTextBox" Property="Foreground" Value="{DynamicResource Link}" />
+                            <Setter TargetName="PART_EditableTextBox" Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource AccentSoft}" />
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="DropDown" Property="MinHeight" Value="32" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- An environment session as a picker entry: colour bar, name, type in its colour. -->
+    <DataTemplate x:Key="EnvironmentItem">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Style="{StaticResource EnvBar}" Height="16" Margin="0,0,8,0" Tag="{Binding EnvironmentSku}" />
+            <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Style="{StaticResource EnvText}" Tag="{Binding EnvironmentSku}"
+                       Text="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}, ConverterParameter=short}"
+                       FontSize="10" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+        </Grid>
+    </DataTemplate>
+
+    <!-- The same without the type text, where the picker is narrow. -->
+    <DataTemplate x:Key="EnvironmentItemCompact">
+        <StackPanel Orientation="Horizontal">
+            <Border Style="{StaticResource EnvBar}" Height="16" Margin="0,0,8,0" Tag="{Binding EnvironmentSku}" />
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- 32-tall command-bar picker of environment sessions. Set core:Ui.InlineLabel ("Left", "Source"). -->
+    <Style TargetType="ComboBox" x:Key="EnvPicker" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="ItemTemplate" Value="{StaticResource EnvironmentItem}" />
+    </Style>
+
+    <!-- ============================================================ check box / radio -->
+
+    <!-- Background = the checked fill; BorderBrush = the unchecked outline. -->
+    <Style TargetType="CheckBox">
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="Box" Width="14" Height="14" CornerRadius="3" BorderThickness="1"
+                                BorderBrush="{TemplateBinding BorderBrush}" Background="{DynamicResource Surface}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" SnapsToDevicePixels="True">
+                            <TextBlock x:Name="Mark" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="10"
+                                       Foreground="#FFFFFF" Visibility="Collapsed" />
+                        </Border>
+                        <ContentPresenter x:Name="Cp" Grid.Column="1" Margin="7,0,0,0" RecognizesAccessKey="True"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasContent" Value="False">
+                            <Setter TargetName="Cp" Property="Margin" Value="0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Box" Property="Background" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Mark" Property="Text" Value="&#xE738;" />
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="CheckBox" x:Key="DangerCheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="Background" Value="{DynamicResource Red}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Red}" />
+    </Style>
+
+    <Style TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="14" Height="14" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                            <Ellipse x:Name="Ring" Stroke="{DynamicResource Border2}" StrokeThickness="1"
+                                     Fill="{DynamicResource Surface}" />
+                            <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{DynamicResource Accent}" Visibility="Collapsed" />
+                        </Grid>
+                        <ContentPresenter x:Name="Cp" Grid.Column="1" Margin="7,0,0,0" RecognizesAccessKey="True"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasContent" Value="False">
+                            <Setter TargetName="Cp" Property="Margin" Value="0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================ segmented control -->
+
+    <!-- The container: Surface2, 1px Border2, radius 5, 2px padding. Put the items in a horizontal StackPanel. -->
+    <Style TargetType="Border" x:Key="Segmented">
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <ControlTemplate x:Key="SegmentTemplate" TargetType="ButtonBase">
+        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}"
+                SnapsToDevicePixels="True">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse x:Name="SegDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center"
+                         Fill="{TemplateBinding core:Ui.DotBrush}" />
+                <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True" />
+                <TextBlock x:Name="SegCount" Text="{TemplateBinding core:Ui.Count}" Margin="6,0,0,0"
+                           Foreground="{DynamicResource Muted}" FontWeight="Normal" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="core:Ui.DotBrush" Value="{x:Null}">
+                <Setter TargetName="SegDot" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="core:Ui.Count" Value="{x:Null}">
+                <Setter TargetName="SegCount" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="ToggleButton.IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                <Setter TargetName="Bd" Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect BlurRadius="2" ShadowDepth="1" Direction="270" Opacity="0.12" />
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="RadioButton" x:Key="SegmentedToggle">
+        <Setter Property="Template" Value="{StaticResource SegmentTemplate}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="SegmentButton">
+        <Setter Property="Template" Value="{StaticResource SegmentTemplate}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Surface}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ scroll bars -->
+
+    <Style TargetType="Thumb" x:Key="ScrollThumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border x:Name="T" CornerRadius="3" Background="{DynamicResource Border2}" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="T" Property="Background" Value="{DynamicResource Faint}" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="T" Property="Background" Value="{DynamicResource Muted}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="RepeatButton" x:Key="ScrollPage">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="MinWidth" Value="10" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Border Background="{TemplateBinding Background}" Padding="2">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageUpCommand" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageDownCommand" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource ScrollThumb}" MinHeight="24" />
+                            </Track.Thumb>
+                        </Track>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Height" Value="10" />
+                <Setter Property="MinHeight" Value="10" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Border Background="{TemplateBinding Background}" Padding="2">
+                                <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageLeftCommand" />
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageRightCommand" />
+                                    </Track.IncreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource ScrollThumb}" MinWidth="24" />
+                                    </Track.Thumb>
+                                </Track>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ data grid -->
+
+    <Style TargetType="Thumb" x:Key="HeaderGripper">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Cursor" Value="SizeWE" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="DataGridColumnHeader">
+        <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="DataGridColumnHeader">
+                    <Grid>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Border}"
+                                BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                <ContentPresenter RecognizesAccessKey="True" VerticalAlignment="Center">
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                                <TextBlock x:Name="SortGlyph" Style="{StaticResource Icon}" FontSize="9" Margin="4,1,0,0"
+                                           Visibility="Collapsed" />
+                            </StackPanel>
+                        </Border>
+                        <Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Style="{StaticResource HeaderGripper}" />
+                        <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Style="{StaticResource HeaderGripper}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="SortDirection" Value="Ascending">
+                            <Setter TargetName="SortGlyph" Property="Text" Value="&#xE74A;" />
+                            <Setter TargetName="SortGlyph" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                        </Trigger>
+                        <Trigger Property="SortDirection" Value="Descending">
+                            <Setter TargetName="SortGlyph" Property="Text" Value="&#xE74B;" />
+                            <Setter TargetName="SortGlyph" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- First column header: 16px left padding to line up with CellFirst. -->
+    <Style TargetType="DataGridColumnHeader" x:Key="FirstHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+        <Setter Property="Padding" Value="16,0,8,0" />
+    </Style>
+    <Style TargetType="DataGridColumnHeader" x:Key="RightHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+        <Setter Property="HorizontalContentAlignment" Value="Right" />
+    </Style>
+
+    <Style TargetType="DataGridCell">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=DataGridRow}}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="DataGridCell">
+                    <Border Background="Transparent" SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" SnapsToDevicePixels="True" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="DataGridRow">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="DataGridRow">
+                    <Border x:Name="DGR_Border" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <SelectiveScrollingGrid>
+                                <SelectiveScrollingGrid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </SelectiveScrollingGrid.ColumnDefinitions>
+                                <SelectiveScrollingGrid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </SelectiveScrollingGrid.RowDefinitions>
+                                <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                        SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                <DataGridDetailsPresenter Grid.Column="1" Grid.Row="1"
+                                                          SelectiveScrollingGrid.SelectiveScrollingOrientation="{Binding AreRowDetailsFrozen, ConverterParameter={x:Static SelectiveScrollingOrientation.Vertical}, Converter={x:Static DataGrid.RowDetailsScrollingConverter}, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"
+                                                          Visibility="{TemplateBinding DetailsVisibility}" />
+                                <DataGridRowHeader Grid.RowSpan="2"
+                                                   SelectiveScrollingGrid.SelectiveScrollingOrientation="Vertical"
+                                                   Visibility="{Binding HeadersVisibility, ConverterParameter={x:Static DataGridHeadersVisibility.Row}, Converter={x:Static DataGrid.HeadersVisibilityConverter}, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}" />
+                            </SelectiveScrollingGrid>
+                            <Rectangle x:Name="SelectionBar" Width="2" HorizontalAlignment="Left"
+                                       Fill="{DynamicResource Accent}" Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Selected}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="DataGrid">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="RowBackground" Value="Transparent" />
+        <Setter Property="AlternatingRowBackground" Value="Transparent" />
+        <Setter Property="GridLinesVisibility" Value="Horizontal" />
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Border}" />
+        <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
+        <Setter Property="HeadersVisibility" Value="Column" />
+        <Setter Property="RowHeaderWidth" Value="0" />
+        <Setter Property="RowHeight" Value="28" />
+        <Setter Property="ColumnHeaderHeight" Value="28" />
+        <Setter Property="AutoGenerateColumns" Value="False" />
+        <Setter Property="CanUserAddRows" Value="False" />
+        <Setter Property="CanUserDeleteRows" Value="False" />
+        <Setter Property="CanUserResizeRows" Value="False" />
+        <Setter Property="SelectionUnit" Value="FullRow" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="EnableRowVirtualization" Value="True" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+    </Style>
+
+    <!-- Nested grids (detail panes): 26px header. -->
+    <Style TargetType="DataGrid" x:Key="NestedGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+        <Setter Property="ColumnHeaderHeight" Value="26" />
+    </Style>
+
+    <!-- ============================================================ list box -->
+
+    <Style TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    </Style>
+
+    <!-- Selected: Surface with a 1px Border; hover: Hover. Radius 5. -->
+    <Style TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                            CornerRadius="5" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================ tabs (underline) -->
+
+    <Style TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="10,0">
+                            <TabPanel IsItemsHost="True" />
+                        </Border>
+                        <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Grid Background="Transparent" Margin="0,0,4,-1">
+                        <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}" VerticalAlignment="Center">
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TabCount" Text="{TemplateBinding core:Ui.Count}" FontSize="11"
+                                       FontWeight="Normal" Foreground="{DynamicResource Faint}" Margin="6,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Rectangle x:Name="Underline" Height="2" VerticalAlignment="Bottom" Fill="{DynamicResource Accent}"
+                                   Visibility="Hidden" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="core:Ui.Count" Value="{x:Null}">
+                            <Setter TargetName="TabCount" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============================================================ menus and tool tips -->
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Grid Margin="0,0,10,10">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="180">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                            </Border.Effect>
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="8,0,10,0" MinHeight="28">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="18" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="Check" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="10"
+                                       HorizontalAlignment="Left" Visibility="Hidden" />
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                              VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="24,0,0,0"
+                                       Foreground="{DynamicResource Faint}" FontFamily="{StaticResource MonoFont}"
+                                       FontSize="10" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Rectangle Height="1" Margin="4,4" Fill="{DynamicResource Border}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Grid Margin="0,0,8,8">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="8,5" MaxWidth="420">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.15" />
+                            </Border.Effect>
+                            <ContentPresenter>
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================================================ progress / splitter -->
+
+    <!-- 2px indeterminate bar: Border track, Accent indicator sweeping across. -->
+    <Style TargetType="ProgressBar" x:Key="BusyBar">
+        <Setter Property="Height" Value="2" />
+        <Setter Property="IsIndeterminate" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Grid Background="{DynamicResource Border}" ClipToBounds="True">
+                        <Rectangle x:Name="Sweep">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <LinearGradientBrush.RelativeTransform>
+                                        <TranslateTransform X="-0.61" />
+                                    </LinearGradientBrush.RelativeTransform>
+                                    <GradientStop Offset="0.39" Color="Transparent" />
+                                    <GradientStop Offset="0.39" Color="{DynamicResource AccentColor}" />
+                                    <GradientStop Offset="0.61" Color="{DynamicResource AccentColor}" />
+                                    <GradientStop Offset="0.61" Color="Transparent" />
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                            <!-- On the rectangle, not the template: a collapsed bar is Loaded before its
+                                 template is applied, and a template trigger cannot find its target then. -->
+                            <Rectangle.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetProperty="(Shape.Fill).(Brush.RelativeTransform).(TranslateTransform.X)"
+                                                             From="-0.61" To="0.61" Duration="0:0:1.4" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Rectangle.Triggers>
+                        </Rectangle>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="GridSplitter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    </Style>
+
+</ResourceDictionary>

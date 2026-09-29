@@ -30,6 +30,17 @@ public sealed record EntityColumn(
     bool IsPrimaryId,
     bool IsPrimaryName)
 {
+    /// <summary>
+    /// Whether Dataverse accepts this column on a create and on an update. Calculated and rollup
+    /// columns read like any other but are refused on write, so reconciling has to leave them out -
+    /// they are still worth comparing, because a difference in one is still worth knowing about.
+    /// </summary>
+    public bool IsValidForCreate { get; init; } = true;
+
+    public bool IsValidForUpdate { get; init; } = true;
+
+    public bool IsWritable(bool isCreate) => isCreate ? IsValidForCreate : IsValidForUpdate;
+
     /// <summary>A lookup is only readable through its <c>_name_value</c> shadow column.</summary>
     public bool IsLookup => TypeName is "LookupType" or "CustomerType" or "OwnerType";
 
@@ -82,6 +93,21 @@ public sealed class DataRecord
 
     /// <summary>The primary name column's value, for labelling the row.</summary>
     public string? PrimaryName { get; init; }
+
+    /// <summary>
+    /// Per lookup column, the table it actually points at. A customer or owner lookup can point at
+    /// more than one table, and only the row itself says which - so writing one anywhere else
+    /// depends on this rather than on guessing from metadata.
+    /// </summary>
+    public IReadOnlyDictionary<string, string?> LookupTargets { get; init; } =
+        new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Per lookup column, the navigation property that binds it. A lookup is written through this
+    /// name, which is not reliably the column's own name, so Dataverse is asked rather than guessed.
+    /// </summary>
+    public IReadOnlyDictionary<string, string?> NavigationProperties { get; init; } =
+        new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
     public string? Raw(string selectName) => Values.TryGetValue(selectName, out var value) ? value : null;
 

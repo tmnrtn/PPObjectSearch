@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using PPObjectSearch.Models;
 
@@ -282,7 +282,7 @@ public sealed partial class DataverseClient
             {
                 // Metadata endpoints ignore the annotation preference; record endpoints use it to
                 // return option labels and lookup names alongside the raw values.
-                using var doc = await GetJsonAsync(EnvironmentUrl + ApiPath + queries[i], ct, true)
+                using var doc = await GetJsonAsync(EnvironmentUrl + ApiPath + queries[i], ct, Annotations.Formatted)
                     .ConfigureAwait(false);
 
                 return RecordProperties.Flatten(doc.RootElement);
@@ -367,13 +367,13 @@ public sealed partial class DataverseClient
 
         try
         {
-            return await ReadListAsync(url, ct, read, includeFormattedValues: true).ConfigureAwait(false);
+            return await ReadListAsync(url, ct, read, Annotations.Formatted).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
         catch (DataverseException) when (table.ObjectTypeCode is not null)
         {
             var byCode = EnvironmentUrl + ApiPath + selectClause + $"{typeColumn} eq {table.ObjectTypeCode}";
-            return await ReadListAsync(byCode, ct, read, includeFormattedValues: true).ConfigureAwait(false);
+            return await ReadListAsync(byCode, ct, read, Annotations.Formatted).ConfigureAwait(false);
         }
     }
 
@@ -381,13 +381,13 @@ public sealed partial class DataverseClient
         string url,
         CancellationToken ct,
         Func<JsonElement, TableChild?> read,
-        bool includeFormattedValues = false)
+        string? annotations = null)
     {
         var results = new List<TableChild>();
 
         while (url.Length > 0)
         {
-            using var doc = await GetJsonAsync(url, ct, includeFormattedValues).ConfigureAwait(false);
+            using var doc = await GetJsonAsync(url, ct, annotations).ConfigureAwait(false);
 
             if (doc.RootElement.TryGetProperty("value", out var value))
             {
@@ -410,24 +410,10 @@ public sealed partial class DataverseClient
     /// <summary>The user-facing text of a metadata Label, whichever shape it arrives in.</summary>
     private static string? ReadLabel(JsonElement row, string property)
     {
-        if (!row.TryGetProperty(property, out var label) || label.ValueKind != JsonValueKind.Object) return null;
+        if (!row.TryGetProperty(property, out var label)) return null;
 
-        if (label.TryGetProperty("UserLocalizedLabel", out var user) && user.ValueKind == JsonValueKind.Object)
-        {
-            var text = JsonHelper.GetString(user, "Label");
-            if (!string.IsNullOrWhiteSpace(text)) return text;
-        }
-
-        if (label.TryGetProperty("LocalizedLabels", out var localized) && localized.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var entry in localized.EnumerateArray())
-            {
-                var text = JsonHelper.GetString(entry, "Label");
-                if (!string.IsNullOrWhiteSpace(text)) return text;
-            }
-        }
-
-        return null;
+        var text = RecordProperties.LabelText(label);
+        return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static string? ReadNested(JsonElement row, string property, string child) =>
@@ -463,6 +449,13 @@ internal static class RecordProperties
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
+                // A wrapper carrying one fact is that fact, not a branch of the tree.
+                if (TryCollapse(element, out var collapsed))
+                {
+                    Add(rows, path, collapsed);
+                    break;
+                }
+
                 foreach (var property in element.EnumerateObject())
                 {
                     // @odata.context and friends describe the response, not the component; the
@@ -498,7 +491,7 @@ internal static class RecordProperties
 
                 for (var i = 0; i < items.Count; i++)
                 {
-                    Flatten(items[i], $"{path}[{i}]", rows, depth + 1);
+                    Flatten(items[i], ItemPath(path, i), rows, depth + 1);
                 }
 
                 break;
@@ -507,6 +500,135 @@ internal static class RecordProperties
                 Add(rows, path, Scalar(element));
                 break;
         }
+    }
+
+    /// <summary>
+    /// Dataverse metadata wraps single facts in objects: a label in its localizations, a settable
+    /// flag in its managed-property machinery, a choice option in its label, colour and state.
+    /// Left alone each of those spreads one answer over a dozen rows and buries the ones that
+    /// matter, so they collapse back to the line a reader is actually after. An empty result
+    /// still counts as collapsed - <see cref="Add"/> drops it, which is the point.
+    /// </summary>
+    private static bool TryCollapse(JsonElement element, out string? value)
+    {
+        value = OptionText(element) ?? LabelText(element) ?? ManagedPropertyText(element);
+        return value is not null;
+    }
+
+    /// <summary>
+    /// One choice option on the single line it reads as - "Active  (1)" - because its value and
+    /// its label are only useful together. A state or status option also carries the statecode it
+    /// belongs to or the status it defaults to, which is what such a column is opened to check.
+    /// </summary>
+    private static string? OptionText(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty("Value", out var raw) || raw.ValueKind != JsonValueKind.Number) return null;
+        if (!element.TryGetProperty("Label", out var label)) return null;
+
+        var text = LabelText(label);
+        if (text is null) return null;
+
+        var line = new StringBuilder(string.IsNullOrWhiteSpace(text) ? "(unlabelled)" : text)
+            .Append("  (").Append(Scalar(raw)).Append(')');
+
+        if (JsonHelper.GetInt(element, "State") is { } state) line.Append("  state ").Append(state);
+
+        if (JsonHelper.GetInt(element, "DefaultStatus") is { } status)
+        {
+            line.Append("  default status ").Append(status);
+        }
+
+        var colour = JsonHelper.GetString(element, "Color");
+        if (!string.IsNullOrWhiteSpace(colour)) line.Append("  ").Append(colour);
+
+        var description = element.TryGetProperty("Description", out var d) ? LabelText(d) : null;
+        if (!string.IsNullOrWhiteSpace(description)) line.Append("  - ").Append(description);
+
+        return line.ToString();
+    }
+
+    /// <summary>
+    /// The text of a metadata Label - the user's own language where there is one, otherwise the
+    /// first localization carrying any text. Null for anything that is not a Label, and an empty
+    /// string for a Label that has never been given text.
+    /// </summary>
+    internal static string? LabelText(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+
+        var isLabel = false;
+
+        if (element.TryGetProperty("UserLocalizedLabel", out var user))
+        {
+            isLabel = true;
+
+            var text = JsonHelper.GetString(user, "Label");
+            if (!string.IsNullOrWhiteSpace(text)) return text;
+        }
+
+        if (element.TryGetProperty("LocalizedLabels", out var localized))
+        {
+            isLabel = true;
+
+            if (localized.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in localized.EnumerateArray())
+                {
+                    var text = JsonHelper.GetString(entry, "Label");
+                    if (!string.IsNullOrWhiteSpace(text)) return text;
+                }
+            }
+        }
+
+        return isLabel ? string.Empty : null;
+    }
+
+    /// <summary>
+    /// A BooleanManagedProperty and its relatives - RequiredLevel, AttributeTypeName, every
+    /// IsValidFor flag - are a value plus the machinery saying who may change it. The value is
+    /// the property; the machinery is the same two rows on every one of them.
+    /// </summary>
+    private static string? ManagedPropertyText(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+
+        string? value = null;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            switch (property.Name)
+            {
+                case "Value" when property.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array):
+                    value = Scalar(property.Value);
+                    break;
+
+                case "CanBeChanged":
+                case "ManagedPropertyLogicalName":
+                    break;
+
+                default:
+                    return null;
+            }
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// "OptionSet.Options[3]" says less than "OptionSet.Option 4" - a choice's options read as a
+    /// numbered list, not as array subscripts. A path not named as a plural keeps its index.
+    /// </summary>
+    private static string ItemPath(string? path, int index)
+    {
+        if (string.IsNullOrEmpty(path)) return $"[{index}]";
+
+        var dot = path.LastIndexOf('.');
+        var last = dot >= 0 ? path[(dot + 1)..] : path;
+
+        return last.Length > 1 && last.EndsWith('s') && !last.EndsWith("ss", StringComparison.Ordinal)
+            ? $"{path[..^1]} {index + 1}"
+            : $"{path}[{index}]";
     }
 
     private static void Add(List<ComponentProperty> rows, string? name, string? value)
