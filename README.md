@@ -46,6 +46,9 @@ straight into the maker portal.
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
   environments are refused unless explicitly allowlisted, and deleting needs its own confirmation.
+- **Admin tools** (*Admin* on the toolbar) — sync an Entra group team with its Entra (RBAC)
+  group, and make a queue's members match a team's. Every change is previewed and confirmed first,
+  under the same production guard.
 
 ## Build and run
 
@@ -60,6 +63,19 @@ that runs without .NET installed:
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
 ```
+
+## Tests
+
+```powershell
+dotnet test tests/PPObjectSearch.Tests
+```
+
+xUnit tests for everything that can run without a live tenant: diffing, comparison and
+reconcile planning, maker portal links, the environment-type probe and the production guard,
+the membership planners and the confirmation window's gating, and the Dataverse and Graph
+clients' requests. The HTTP clients are exercised against an in-memory fake
+(`tests/PPObjectSearch.Tests/Infrastructure`), so no test touches the network. The release
+workflow runs them before publishing.
 
 ## Releases
 
@@ -186,8 +202,14 @@ itself does not carry its own SKU — and the guard fails closed:
   SKU all land on "blocked".
 
 Each entry clears exactly the one environment it names — matched on host, so the scheme and a
-trailing slash do not matter, but there are no wildcards and no suffix matching. The app never
-writes to this list; you add to it by hand.
+trailing slash do not matter, but there are no wildcards and no suffix matching.
+
+To allow writes to an environment, right-click it in the sidebar and choose **Allow writes to this
+environment…**. It is only offered where the guard applies, and it asks you to confirm, naming the
+environment and its type; the answer defaults to No. An allowlisted environment carries an amber
+unlock icon in the sidebar, and **Stop allowing writes** on the same menu takes it off the list
+again. Open windows pick the change up at their next preview. The list can also be edited by hand
+(close the app first — it rewrites `settings.json` from memory):
 
 ```jsonc
 "AllowProductionWrites": [
@@ -202,6 +224,63 @@ unavailable.
 The type check needs a Power Platform API token for the signed-in account. It is only ever
 requested silently, so this never opens a sign-in window on its own; where no token is to be had,
 the environment simply reads as unknown and is guarded.
+
+## Admin tools
+
+**Admin** on an environment's toolbar opens two membership tools. Both only read until you ask
+for a preview of changes; nothing is written until you confirm it in a separate window that lists
+every user affected, states which environment it is writing to, and applies the
+[production guard](#the-production-guard). Removing anyone needs its own acknowledgement.
+
+### Entra team sync
+
+Pick a team linked to an Entra group (AAD security or Office group team). The team's members are
+read from Dataverse and the group's from Microsoft Graph — *transitively*, because group teams
+honour nested groups — and matched on Entra object id, falling back to UPN. Each person is
+**Both**, **Team only** or **Group only**.
+
+Dataverse syncs group teams lazily, when a user signs in, so some difference is normal: *group
+only* is usually someone who has not used the environment since joining; *team only* is usually
+someone removed from the group but not yet re-synced.
+
+- **Sync from Entra…** previews Dataverse's own `SyncGroupMembersToTeam`: who it is expected to
+  remove, and which group-only users it can add — only those who already have a Dataverse user
+  record. Dataverse decides the actual changes, so after the run the team is read again and each
+  row says whether its change landed. Unavailable when the group cannot be found in Entra, since a
+  sync against a missing group could empty the team.
+- **Diagnose** explains both kinds of difference. For each team-only user it asks Entra — by
+  object id, then UPN, then whether Entra itself calls them a member — why they were left behind.
+  For each group-only user it looks up their Dataverse user, by object id and then UPN, to say why
+  the sync has not added them: disabled in Entra, excluded by the team's membership type, no
+  Dataverse user, a user linked to a different Entra id, a disabled user, or one the sync should add.
+- **Pull in group members…** provisions group-only users who have no Dataverse user, or a disabled
+  one, by making a WhoAmI request as each of them (the `CallerObjectId` header). That triggers
+  Dataverse's just-in-time user sync, the same as their own first sign-in. It needs the *Act on
+  Behalf of Another User* privilege (Delegate role, or System Administrator). Afterwards
+  `SyncGroupMembersToTeam` runs so they join the team — but only if the team has nobody the sync
+  would remove; otherwise use **Sync from Entra…**, whose preview shows its removals. Users
+  without a licence, or outside the environment's security group, still will not be added.
+- **Copy provisioning script** copies an `Add-AdminPowerAppsSyncUser` PowerShell script for every
+  group-only user who needs provisioning, for a Power Platform admin to run.
+- **Remove leftovers…** removes team-only users one at a time. Users deleted or disabled in
+  Entra, or whose Entra object id is stale — the ones the sync does not remove — are ticked. Other
+  categories are listed unticked; anyone Entra says *is* a member, or who could not be checked, is
+  never offered.
+
+Graph is called as the tab's signed-in account, in the environment's tenant. The default client
+is pre-consented; with your own `ClientId`, grant it `GroupMember.Read.All` and `User.Read.All`
+delegated permissions.
+
+### Queue membership sync
+
+Pick a team and a queue, then **Preview**. Team members missing from the queue are **added**;
+queue members not in the team are **removed**. Disabled users and application users in the team
+are not added. Application users in the queue are listed for removal but unticked, since they are
+often there for automation. Tick **Additive only** to never remove anyone: queue members who are
+not in the team are then shown as *kept*, and only additions go to the confirmation. Users are
+added and removed one at a time with a direct associate on
+the queue membership relationship, and each reports its own result; afterwards the preview is
+read again.
 
 ## Authentication
 
@@ -258,7 +337,7 @@ then set `ClientId` in settings (below).
 
   // Environments this app may write reference data to despite being production - or despite their
   // type being unreadable, which is guarded the same way. Sandbox, developer and trial
-  // environments need no entry. Matched on host; no wildcards. Never written by the app.
+  // environments need no entry. Matched on host; no wildcards. Set from the sidebar or by hand.
   "AllowProductionWrites": [
     "https://contoso.crm11.dynamics.com"
   ],

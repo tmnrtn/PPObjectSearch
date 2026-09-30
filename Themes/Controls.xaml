@@ -1021,6 +1021,74 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Red}" />
     </Style>
 
+    <!-- A toggle card: check box, verb and count, then a description. Background = checked fill. -->
+    <Style TargetType="CheckBox" x:Key="ActionCard">
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="Card" Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}"
+                            BorderThickness="1" CornerRadius="6" Padding="12,10" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Box" Width="14" Height="14" CornerRadius="3" BorderThickness="1"
+                                    BorderBrush="{DynamicResource Border2}" Background="{DynamicResource Surface}"
+                                    VerticalAlignment="Top" Margin="0,2,10,0">
+                                <TextBlock x:Name="Mark" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="10"
+                                           Foreground="#FFFFFF" Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Grid.Column="1" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Border2}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Card" Property="Background" Value="{DynamicResource Surface}" />
+                            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Border2}" />
+                            <Setter TargetName="Box" Property="Background" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                            <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True" />
+                                <Condition Property="Tag" Value="Danger" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Red}" />
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="CardText">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,3,0,0" />
+    </Style>
+
+    <!-- A 16px status circle with a glyph. -->
+    <Style TargetType="Border" x:Key="StatusCircle">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource Text}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />

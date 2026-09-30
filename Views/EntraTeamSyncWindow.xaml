@@ -1,0 +1,243 @@
+<Window x:Class="PPObjectSearch.Views.EntraTeamSyncWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:svc="clr-namespace:PPObjectSearch.Services"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Height="760" Width="1280"
+        MinHeight="500" MinWidth="960"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style TargetType="ContentControl" x:Key="MatchPill" BasedOn="{StaticResource StatusPill}">
+            <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:EntraMatchStatus.DataverseOnly}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:EntraMatchStatus.EntraOnly}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="18,14,18,12">
+                <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource EnvBar}" Height="20" Margin="0,0,10,0" Tag="{Binding Session.EnvironmentSku}" />
+                    <TextBlock Text="Entra team sync" Style="{StaticResource WindowHeading}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Session.Title}" Foreground="{DynamicResource Muted}" FontSize="13"
+                               Margin="10,3,0,0" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource EnvTypeBadge}" Margin="8,3,0,0" Tag="{Binding Session.EnvironmentSku}"
+                                    Content="{Binding Session.EnvironmentSku, Converter={StaticResource SkuBadge}}" />
+                </StackPanel>
+            </Grid>
+
+            <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+            <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300" MinWidth="220" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ============================================================ team picker -->
+                <Border Grid.Column="0" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0"
+                        Background="{DynamicResource Surface2}">
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Margin="2,0,0,8">
+                            <TextBlock Text="Entra group teams" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right"
+                                    Width="26" Height="26" Command="{Binding RefreshTeamsCommand}" ToolTip="Read the teams again" />
+                        </Grid>
+
+                        <TextBox Grid.Row="1" Height="30" Margin="0,0,0,8"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Team or business unit"
+                                 Text="{Binding TeamSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                        <ListBox Grid.Row="2" ItemsSource="{Binding TeamsView}" SelectedItem="{Binding SelectedTeam}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,5">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}" />
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding BusinessUnit, Mode=OneWay}" />
+                                            <Run Text="·" />
+                                            <Run Text="{Binding TypeDisplay, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- ============================================================ comparison -->
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.RowSpan="4" Margin="0,80,0,0" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Muted}"
+                               Text="Pick a team to compare its members with its Entra group."
+                               Visibility="{Binding HasTeam, Converter={StaticResource NotBoolToVis}}" />
+
+                    <!-- team ⇄ group -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="16,14,16,10"
+                                Visibility="{Binding HasTeam, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="Dataverse team" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,3" />
+                            <TextBlock Text="{Binding SelectedTeam.Name}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,2,0,0">
+                                <Run Text="{Binding SelectedTeam.TypeDisplay, Mode=OneWay}" />
+                                <Run Text="·" />
+                                <Run Text="{Binding SelectedTeam.MembershipTypeLabel, Mode=OneWay}" />
+                            </TextBlock>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8AB;" FontSize="13" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Muted}" Margin="18,0" />
+                        <StackPanel>
+                            <TextBlock Text="Entra group" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,3" />
+                            <TextBlock Text="{Binding GroupLabel}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding SelectedTeam.AadObjectId}" Style="{StaticResource Mono}" FontSize="11"
+                                       Foreground="{DynamicResource Muted}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="16,0,16,10"
+                            Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- filters -->
+                    <Grid Grid.Row="2" Margin="16,0,16,10" Visibility="{Binding HasTeam, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource Segmented}">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="EntraFilter"
+                                             core:Ui.DotBrush="{DynamicResource Muted}" core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Both" GroupName="EntraFilter"
+                                             core:Ui.DotBrush="{DynamicResource Green}" core:Ui.Count="{Binding CountBoth, StringFormat=N0}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=Both}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Team only" GroupName="EntraFilter"
+                                             core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountDataverseOnly, StringFormat=N0}"
+                                             ToolTip="In the Dataverse team but not in the Entra group"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=DataverseOnly}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Group only" GroupName="EntraFilter"
+                                             core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountEntraOnly, StringFormat=N0}"
+                                             ToolTip="In the Entra group but not in the Dataverse team"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=EntraOnly}" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBox Grid.Column="1" Height="30" Margin="8,0,0,0"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, UPN, email or diagnosis"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                    </Grid>
+
+                    <DataGrid Grid.Row="3" ItemsSource="{Binding RowsView}" IsReadOnly="True"
+                              BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                              Visibility="{Binding HasTeam, Converter={StaticResource BoolToVis}}">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Status" Width="110" SortMemberPath="StatusLabel"
+                                                    HeaderStyle="{StaticResource FirstHeader}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Style="{StaticResource MatchPill}" Margin="16,0,8,0" Content="{Binding StatusLabel}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="UPN" Binding="{Binding Upn}" Width="220" ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Matched on" Binding="{Binding MatchedOn}" Width="90" ElementStyle="{StaticResource CellFaint}" />
+                            <DataGridTextColumn Header="Entra enabled" Binding="{Binding EntraEnabled, Converter={StaticResource YesNo}}" Width="96"
+                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="DV disabled" Binding="{Binding DataverseDisabled, Converter={StaticResource YesNo}}" Width="90"
+                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Diagnosis" Binding="{Binding DiagnosisLabel}" Width="150">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                        <Setter Property="ToolTip" Value="{Binding DiagnosisDetail}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Why" Binding="{Binding DiagnosisDetail}" Width="*" MinWidth="160">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
+                                        <Setter Property="ToolTip" Value="{Binding DiagnosisDetail}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Entra object id" Binding="{Binding EntraObjectId}" Width="140"
+                                                ElementStyle="{StaticResource CellMonoMuted}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Grid>
+
+            <!-- ============================================================ footer -->
+            <Border Grid.Row="3" Style="{StaticResource Footer}" Padding="18,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Muted}" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <Button Content="Copy provisioning script" Height="30" Margin="0,0,6,0"
+                                Command="{Binding CopyUserSyncScriptCommand}"
+                                ToolTip="{Binding CopyScriptHint}" ToolTipService.ShowOnDisabled="True" />
+                        <Button Content="Re-read" Height="30" Command="{Binding ReloadCommand}"
+                                ToolTip="Read the team and the group again, without changing anything." />
+                        <Button Content="Diagnose" Height="30" Margin="6,0,0,0" Command="{Binding DiagnoseCommand}"
+                                ToolTip="{Binding DiagnoseHint}" ToolTipService.ShowOnDisabled="True" />
+                        <Button Content="Remove leftovers…" Height="30" Margin="6,0,0,0" Command="{Binding RemoveLeftoversCommand}"
+                                ToolTip="{Binding RemoveLeftoversHint}" ToolTipService.ShowOnDisabled="True" />
+                        <Button Content="Pull in group members…" Height="30" Margin="6,0,0,0" Command="{Binding PullInCommand}"
+                                ToolTip="{Binding PullInHint}" ToolTipService.ShowOnDisabled="True" />
+                        <Button Content="Sync from Entra…" Height="30" Margin="6,0,0,0" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding SyncCommand}"
+                                ToolTip="{Binding SyncHint}" ToolTipService.ShowOnDisabled="True" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

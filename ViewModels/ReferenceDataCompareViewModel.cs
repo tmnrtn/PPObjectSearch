@@ -819,10 +819,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         if (wrote) await CompareAsync();
     }
 
+    /// <summary>Asked afresh for every reconcile, so allowing or blocking writes from the sidebar
+    /// applies without reopening this window.</summary>
     private async Task<WritePermission> EnsurePermissionAsync(DataverseClient targetClient)
     {
-        if (_permission is not null && ReferenceEquals(_permissionFrom, targetClient)) return _permission;
-
         var environmentId = _settings.GetEnvironmentId(targetClient.EnvironmentUrl);
         var type = await targetClient.GetEnvironmentTypeAsync(environmentId);
 

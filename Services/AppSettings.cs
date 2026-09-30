@@ -72,7 +72,8 @@ public sealed class AppSettings
     /// Environment URLs this app may write reference data to despite being production - or despite
     /// their type being unreadable, which is guarded the same way. Sandbox, developer and trial
     /// environments do not need an entry. Nothing here is a wildcard: each entry clears exactly
-    /// the one environment it names, and the list is never written by the app.
+    /// the one environment it names. The app adds an entry only when someone confirms it for that
+    /// one environment from the sidebar, and removes it the same way.
     /// </summary>
     public List<string>? AllowProductionWrites { get; set; }
 

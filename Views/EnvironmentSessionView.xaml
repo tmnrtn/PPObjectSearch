@@ -189,6 +189,21 @@
             </WrapPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
+                <Button Margin="0,0,6,0" core:Ui.OpensMenu="True" IsEnabled="{Binding IsConnected}"
+                        ToolTip="Team and queue membership tools. Each previews its changes and asks you to confirm before writing.">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Admin" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="6,1,0,0" />
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Entra team sync…" Command="{Binding EntraTeamSyncCommand}"
+                                      ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind." />
+                            <MenuItem Header="Queue membership sync…" Command="{Binding QueueSyncCommand}"
+                                      ToolTip="Make a queue's members match a team's members, adding and removing." />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <Button Content="Solution history" Margin="0,0,6,0"
                         Command="{Binding SolutionHistoryCommand}"
                         ToolTip="Imports, upgrades, uninstalls and exports in this environment, with the error for any that failed." />

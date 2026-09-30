@@ -1,0 +1,242 @@
+<Window x:Class="PPObjectSearch.Views.QueueSyncWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:svc="clr-namespace:PPObjectSearch.Services"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Height="760" Width="1240"
+        MinHeight="520" MinWidth="940"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style TargetType="ContentControl" x:Key="PlanPill" BasedOn="{StaticResource StatusPill}">
+            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:QueuePlanStatus.Add}">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:QueuePlanStatus.Remove}">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:QueuePlanStatus.Keep}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static svc:QueuePlanStatus.Skip}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="18,14,18,12">
+                <StackPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource EnvBar}" Height="20" Margin="0,0,10,0" Tag="{Binding Session.EnvironmentSku}" />
+                    <TextBlock Text="Queue membership sync" Style="{StaticResource WindowHeading}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Session.Title}" Foreground="{DynamicResource Muted}" FontSize="13"
+                               Margin="10,3,0,0" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource EnvTypeBadge}" Margin="8,3,0,0" Tag="{Binding Session.EnvironmentSku}"
+                                    Content="{Binding Session.EnvironmentSku, Converter={StaticResource SkuBadge}}" />
+                </StackPanel>
+                <Button Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right"
+                        Width="30" Height="30" Command="{Binding RefreshCommand}" ToolTip="Read the teams and queues again" />
+            </Grid>
+
+            <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+            <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300" MinWidth="220" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ============================================================ pickers -->
+                <Border Grid.Column="0" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0"
+                        Background="{DynamicResource Surface2}">
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="1. Team - the members to copy" FontWeight="SemiBold" Margin="2,0,0,8" />
+                        <TextBox Grid.Row="1" Height="30" Margin="0,0,0,8"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Team or business unit"
+                                 Text="{Binding TeamSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                        <ListBox Grid.Row="2" ItemsSource="{Binding TeamsView}" SelectedItem="{Binding SelectedTeam}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,4">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}" />
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding BusinessUnit, Mode=OneWay}" />
+                                            <Run Text="·" />
+                                            <Run Text="{Binding TypeDisplay, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock Grid.Row="3" Text="2. Queue - made to match" FontWeight="SemiBold" Margin="2,14,0,8" />
+                        <TextBox Grid.Row="4" Height="30" Margin="0,0,0,8"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Queue, email or owner"
+                                 Text="{Binding QueueSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                        <ListBox Grid.Row="5" ItemsSource="{Binding QueuesView}" SelectedItem="{Binding SelectedQueue}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,4">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}" />
+                                        <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding TypeLabel, Mode=OneWay}" />
+                                            <Run Text="·" />
+                                            <Run Text="{Binding Owner, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- ============================================================ plan -->
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="16,14,16,10">
+                        <StackPanel>
+                            <TextBlock Text="Preview" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,3" />
+                            <TextBlock Text="{Binding PlanHeading}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <CheckBox Content="Additive only" IsChecked="{Binding AdditiveOnly}" VerticalAlignment="Center"
+                                      Margin="0,0,12,0"
+                                      ToolTip="Only add team members to the queue. Queue members who are not in the team are kept, never removed." />
+                            <Button Content="Preview" Height="30"
+                                    Command="{Binding PreviewCommand}"
+                                    ToolTip="Read both memberships and work out what would change. Read-only." />
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="16,0,16,10"
+                            Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <Grid Grid.Row="2" Margin="16,0,16,10" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource Segmented}">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Muted}" core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Add" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Green}" core:Ui.Count="{Binding CountAdd, StringFormat=N0}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=Add}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Remove" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Red}" core:Ui.Count="{Binding CountRemove, StringFormat=N0}"
+                                             Visibility="{Binding AdditiveOnly, Converter={StaticResource NotBoolToVis}}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=Remove}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Kept" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountKeep, StringFormat=N0}"
+                                             ToolTip="In the queue but not the team - kept, because the sync is additive only"
+                                             Visibility="{Binding AdditiveOnly, Converter={StaticResource BoolToVis}}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=Keep}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="In both" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountInBoth, StringFormat=N0}"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=InBoth}" />
+                                <RadioButton Style="{StaticResource SegmentedToggle}" Content="Skipped" GroupName="PlanFilter"
+                                             core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountSkip, StringFormat=N0}"
+                                             ToolTip="Team members who are disabled or application users, and so are not added"
+                                             IsChecked="{Binding Filter, Converter={StaticResource EnumEquals}, ConverterParameter=Skip}" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBox Grid.Column="1" Height="30" Margin="8,0,0,0"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, UPN or email"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                    </Grid>
+
+                    <DataGrid Grid.Row="3" ItemsSource="{Binding RowsView}" IsReadOnly="True"
+                              BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                              Visibility="{Binding HasPlan, Converter={StaticResource BoolToVis}}">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Action" Width="100" SortMemberPath="StatusLabel"
+                                                    HeaderStyle="{StaticResource FirstHeader}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Style="{StaticResource PlanPill}" Margin="16,0,8,0" Content="{Binding StatusLabel}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200" ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="UPN" Binding="{Binding Upn}" Width="240" ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Disabled" Binding="{Binding IsDisabled, Converter={StaticResource YesNo}}" Width="80"
+                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Access mode" Binding="{Binding AccessMode}" Width="120"
+                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Why" Binding="{Binding Detail}" Width="*" MinWidth="200">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
+                                        <Setter Property="ToolTip" Value="{Binding Detail}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Grid>
+
+            <!-- ============================================================ footer -->
+            <Border Grid.Row="3" Style="{StaticResource Footer}" Padding="18,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Muted}" />
+
+                    <Button Grid.Column="1" Margin="12,0,0,0" Height="30" Style="{StaticResource PrimaryButton}"
+                            Content="Apply changes…" Command="{Binding ApplyCommand}"
+                            ToolTip="Review every change, then confirm. Nothing is written until you do." />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

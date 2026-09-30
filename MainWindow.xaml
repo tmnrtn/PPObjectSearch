@@ -89,10 +89,22 @@
                                             <TextBlock Text="{Binding EnvironmentUrl}" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding EnvironmentTypeDescription}" Margin="0,3,0,0"
                                                        TextWrapping="Wrap" MaxWidth="400" />
+                                            <TextBlock Text="{Binding WriteAccessDescription}" Margin="0,3,0,0"
+                                                       TextWrapping="Wrap" MaxWidth="400" FontWeight="SemiBold"
+                                                       Visibility="{Binding WriteAccessDescription, Converter={StaticResource EmptyToCollapsed}}" />
                                         </StackPanel>
                                     </Grid.ToolTip>
                                     <Grid.ContextMenu>
                                         <ContextMenu>
+                                            <MenuItem Header="Allow writes to this environment…"
+                                                      Command="{Binding AllowWritesCommand}"
+                                                      Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource NotBoolToVis}}"
+                                                      ToolTip="Add this environment to AllowProductionWrites, so reconciling and the admin tools may change it. Only offered where the production guard applies." />
+                                            <MenuItem Header="Stop allowing writes"
+                                                      Command="{Binding RevokeWritesCommand}"
+                                                      Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}"
+                                                      ToolTip="Remove this environment from AllowProductionWrites. The production guard applies again." />
+                                            <Separator />
                                             <MenuItem Header="Close tab" InputGestureText="Ctrl+W"
                                                       Click="CloseTab_Click" />
                                         </ContextMenu>
@@ -110,6 +122,10 @@
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" MaxWidth="120"
                                                        TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE785;" FontSize="10" Margin="5,1,0,0"
+                                                       Foreground="{DynamicResource Amber}"
+                                                       ToolTip="Writes allowed - this environment is in AllowProductionWrites."
+                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
                                             <Ellipse Margin="6,1,0,0">
                                                 <Ellipse.Style>
                                                     <Style TargetType="Ellipse" BasedOn="{StaticResource Dot}">

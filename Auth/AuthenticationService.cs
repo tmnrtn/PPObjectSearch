@@ -191,12 +191,24 @@ public sealed class AuthenticationService
 public sealed class EnvironmentAuthContext
 {
     private readonly AuthenticationService _auth;
+    private readonly Func<string, CancellationToken, Task<string?>>? _tokenSource;
 
     public EnvironmentAuthContext(AuthenticationService auth, string? tenantId = null, string? accountId = null)
     {
         _auth = auth;
         TenantId = tenantId;
         AccountId = accountId;
+    }
+
+    /// <summary>
+    /// For tests: tokens come from <paramref name="tokenSource"/>, keyed by resource, instead of
+    /// MSAL. A null token means none is to be had - silently it reads as "no token", and an
+    /// interactive request fails.
+    /// </summary>
+    internal EnvironmentAuthContext(Func<string, CancellationToken, Task<string?>> tokenSource)
+    {
+        _auth = new AuthenticationService();
+        _tokenSource = tokenSource;
     }
 
     public string? TenantId { get; private set; }
@@ -215,12 +227,20 @@ public sealed class EnvironmentAuthContext
     /// <summary>A token for another resource without ever prompting - null when none is to be had.</summary>
     public async Task<string?> TryGetTokenSilentAsync(string resource, CancellationToken ct = default)
     {
+        if (_tokenSource is not null) return await _tokenSource(resource, ct).ConfigureAwait(false);
+
         var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct).ConfigureAwait(false);
         return token?.AccessToken;
     }
 
     public async Task<string> GetTokenAsync(string resource, CancellationToken ct = default)
     {
+        if (_tokenSource is not null)
+        {
+            return await _tokenSource(resource, ct).ConfigureAwait(false)
+                   ?? throw new InvalidOperationException($"No token for {resource}.");
+        }
+
         var force = ForceAccountPicker;
         ForceAccountPicker = false;
 

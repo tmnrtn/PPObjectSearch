@@ -151,15 +151,23 @@ public sealed class ReferenceDataWriter
                     var skipped = new List<string>();
                     var body = await BuildBodyAsync(source, columns, false, skipped, ct).ConfigureAwait(false);
 
+                    // Rows matched on another key can still carry different primary ids. An update
+                    // cannot change a row's id, so that difference is reported rather than written.
+                    var idDiffers = columns.Any(c => c.IsPrimaryId);
+
                     if (body.Count == 0)
                     {
-                        return Fail(item,
-                            "every differing column is read-only in Dataverse, so nothing could be written: " +
-                            string.Join(", ", skipped));
+                        var reasons = new List<string>();
+                        if (idDiffers) reasons.Add(PrimaryIdNote(plan.Entity.PrimaryIdAttribute));
+                        if (skipped.Count > 0) reasons.Add("read-only in Dataverse: " + string.Join(", ", skipped));
+
+                        return Fail(item, "nothing could be written - " + string.Join("; ", reasons) + ".");
                     }
 
                     await _target.UpdateRecordAsync(entitySet, target.Id, body, ct).ConfigureAwait(false);
-                    return new ReconcileOutcome(item, true, $"Updated {body.Count} column(s).{Note(skipped)}");
+                    return new ReconcileOutcome(item, true,
+                        $"Updated {body.Count} column(s).{Note(skipped)}" +
+                        (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty));
                 }
             }
         }
@@ -172,6 +180,9 @@ public sealed class ReferenceDataWriter
 
     private static ReconcileOutcome Fail(ReconcilePlanItem item, string message) =>
         new(item, false, message);
+
+    private static string PrimaryIdNote(string primaryIdAttribute) =>
+        $"the primary id ({primaryIdAttribute}) differs, and an update cannot change a row's id";
 
     /// <summary>Read-only columns are left out rather than failing the row, but never silently.</summary>
     private static string Note(IReadOnlyList<string> skipped) =>

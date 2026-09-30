@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="PPObjectSearch.csproj" />
+  <Project Path="tests/PPObjectSearch.Tests/PPObjectSearch.Tests.csproj" />
 </Solution>

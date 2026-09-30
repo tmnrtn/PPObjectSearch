@@ -145,6 +145,13 @@ public sealed class ShellViewModel : ObservableObject
     {
         var session = new EnvironmentSessionViewModel(_auth, _settings, state);
         session.StateChanged += (_, _) => SaveTabs();
+
+        // Tabs share one settings object, so another tab on the same environment is already
+        // allowed or blocked - it only needs telling to show it.
+        session.WriteAllowlistChanged += (_, _) =>
+        {
+            foreach (var other in Sessions) other.RaiseWriteAllowlist();
+        };
         return session;
     }
 

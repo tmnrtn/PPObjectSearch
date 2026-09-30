@@ -47,10 +47,17 @@ public sealed partial class DataverseClient : IDisposable
     private readonly EnvironmentAuthContext _auth;
 
     public DataverseClient(EnvironmentAuthContext auth, string environmentUrl)
+        : this(auth, environmentUrl, handler: null)
+    {
+    }
+
+    /// <summary>For tests: every request goes through <paramref name="handler"/> rather than the network.</summary>
+    internal DataverseClient(EnvironmentAuthContext auth, string environmentUrl, HttpMessageHandler? handler)
     {
         _auth = auth;
         EnvironmentUrl = NormalizeEnvironmentUrl(environmentUrl);
-        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        _http.Timeout = TimeSpan.FromMinutes(5);
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _http.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
         _http.DefaultRequestHeaders.Add("OData-Version", "4.0");

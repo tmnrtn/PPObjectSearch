@@ -19,4 +19,15 @@
     <PackageReference Include="Microsoft.Identity.Client" Version="4.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PPObjectSearch.Tests" />
+  </ItemGroup>
+
+  <!-- The test project lives under the app's folder; keep its sources out of the app. -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <Page Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+
 </Project>
