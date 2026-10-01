@@ -1606,23 +1606,51 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="8,0,10,0" MinHeight="28">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="18" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="Check" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="10"
-                                       HorizontalAlignment="Left" Visibility="Hidden" />
-                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
-                                              VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="24,0,0,0"
-                                       Foreground="{DynamicResource Faint}" FontFamily="{StaticResource MonoFont}"
-                                       FontSize="10" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
+                    <Grid>
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="8,0,10,0" MinHeight="28">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="18" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="Check" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="10"
+                                           HorizontalAlignment="Left" Visibility="Hidden" />
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center" />
+                                <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="24,0,0,0"
+                                           Foreground="{DynamicResource Faint}" FontFamily="{StaticResource MonoFont}"
+                                           FontSize="10" VerticalAlignment="Center" />
+                                <!-- A submenu's chevron, in place of a shortcut. -->
+                                <TextBlock x:Name="Chevron" Grid.Column="2" Style="{StaticResource Icon}" Text="&#xE76C;" FontSize="9"
+                                           Margin="24,0,0,0" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                           Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+
+                        <!-- A submenu's items fly out to the right, styled like the menu they came from. -->
+                        <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="2" VerticalOffset="-5"
+                               IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True" Focusable="False"
+                               PopupAnimation="None">
+                            <Grid Margin="0,0,10,10">
+                                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                        BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="180">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                                    </Border.Effect>
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="Chevron" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}" />
+                        </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover}" />
                         </Trigger>

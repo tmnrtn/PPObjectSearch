@@ -47,6 +47,23 @@ public partial class EnvironmentSessionView : UserControl
     }
 
     /// <summary>
+    /// Double-clicking a row opens its details. Only a row: a double-click on a column header (to
+    /// resize it) or on the empty space below the rows is left alone.
+    /// </summary>
+    private void OnGridDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (ItemsControl.ContainerFromElement((DataGrid)sender, (DependencyObject)e.OriginalSource) is not DataGridRow row) return;
+        if (DataContext is not EnvironmentSessionViewModel session) return;
+
+        if (session.ShowDetailsCommand.CanExecute(row.Item))
+        {
+            session.ShowDetailsCommand.Execute(row.Item);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
     /// A connected tab is there to be searched; a new tab needs its URL first.
     /// </summary>
     private void FocusMostUsefulBox()

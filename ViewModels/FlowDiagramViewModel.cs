@@ -109,8 +109,26 @@ public sealed class FlowCardViewModel : FlowStepViewModel
 
     public string Title => Node.DisplayName;
     public string Summary => Node.Summary;
-    public string? Detail => Node.Detail;
-    public bool HasDetail => !string.IsNullOrWhiteSpace(Node.Detail);
+    /// <summary>A short particular - for a child flow call, the child flow's name once it is known.</summary>
+    public string? Detail => ChildFlowName ?? Node.Detail;
+    public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
+
+    private string? _childFlowName;
+    /// <summary>"Escalate case" - the flow a "Run a child flow" step calls, read from Dataverse.</summary>
+    public string? ChildFlowName
+    {
+        get => _childFlowName;
+        internal set
+        {
+            if (!SetProperty(ref _childFlowName, value)) return;
+            OnPropertyChanged(nameof(Detail));
+            OnPropertyChanged(nameof(HasDetail));
+            OnPropertyChanged(nameof(DetailTooltip));
+        }
+    }
+
+    /// <summary>The detail in full - a long loop expression is cut short on the card - with a child flow's id.</summary>
+    public string? DetailTooltip => Node.ChildFlowId is { } id ? $"{Detail}{Environment.NewLine}Child flow {id}" : Detail;
     public string? Description => Node.Description;
     public bool HasDescription => !string.IsNullOrWhiteSpace(Node.Description);
     public FlowNodeCategory Category => Node.Category;
@@ -273,7 +291,7 @@ public sealed class FlowCardViewModel : FlowStepViewModel
     internal static string FormatDuration(TimeSpan d) => FlowRunFormat.Duration(d);
 
     internal string SearchText =>
-        $"{Node.DisplayName} {Node.Name} {Node.TypeLabel} {Node.Connector} {Node.Operation} {Node.Detail} {Node.Description} {RunAfterSummary}";
+        $"{Node.DisplayName} {Node.Name} {Node.TypeLabel} {Node.Connector} {Node.Operation} {Detail} {Node.Description} {RunAfterSummary}";
 }
 
 /// <summary>
@@ -341,7 +359,28 @@ public sealed class FlowDiagramViewModel : ObservableObject
     public RelayCommand CopyMermaidCommand { get; }
 
     /// <summary>The whole flow as a Mermaid flowchart, for documentation.</summary>
-    public string Mermaid => FlowMermaidExporter.ToMermaid(Design, _flowName);
+    public string Mermaid => FlowMermaidExporter.ToMermaid(Design, _flowName, _childFlowNames);
+
+    private IReadOnlyDictionary<Guid, string> _childFlowNames = new Dictionary<Guid, string>();
+
+    /// <summary>The ids of every child flow the flow calls, for looking up their names.</summary>
+    public IReadOnlyList<Guid> ChildFlowIds =>
+        _cards.Select(c => c.Node.ChildFlowId).OfType<Guid>().Distinct().ToList();
+
+    /// <summary>
+    /// Names the child flows on their cards. One the environment does not have - deleted, or the
+    /// flow imported without it - says so, rather than leaving a bare id.
+    /// </summary>
+    public void SetChildFlowNames(IReadOnlyDictionary<Guid, string> names)
+    {
+        _childFlowNames = names;
+
+        foreach (var card in _cards)
+        {
+            if (card.Node.ChildFlowId is not { } id) continue;
+            card.ChildFlowName = names.TryGetValue(id, out var name) ? name : "Child flow not found in this environment";
+        }
+    }
 
     private string _notice = string.Empty;
     /// <summary>A short confirmation in the toolbar - what the last copy did.</summary>

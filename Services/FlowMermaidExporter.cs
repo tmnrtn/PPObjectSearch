@@ -14,9 +14,9 @@ namespace PPObjectSearch.Services;
 /// </summary>
 public static class FlowMermaidExporter
 {
-    public static string ToMermaid(FlowDesign design, string? flowName = null)
+    public static string ToMermaid(FlowDesign design, string? flowName = null, IReadOnlyDictionary<Guid, string>? childFlowNames = null)
     {
-        var writer = new Writer(design);
+        var writer = new Writer(design, childFlowNames);
         return writer.Write(flowName);
     }
 
@@ -27,7 +27,13 @@ public static class FlowMermaidExporter
         private readonly Dictionary<string, FlowNodeCategory> _classes = new(StringComparer.Ordinal);
         private readonly StringBuilder _text = new();
 
-        public Writer(FlowDesign design) => _design = design;
+        private readonly IReadOnlyDictionary<Guid, string>? _childFlowNames;
+
+        public Writer(FlowDesign design, IReadOnlyDictionary<Guid, string>? childFlowNames)
+        {
+            _design = design;
+            _childFlowNames = childFlowNames;
+        }
 
         public string Write(string? flowName)
         {
@@ -168,10 +174,12 @@ public static class FlowMermaidExporter
         private string Target(FlowNode node) => node.IsContainer ? Box(node) : Id(node);
         private string Source(FlowNode node) => node.IsContainer ? Box(node) : Id(node);
 
-        private static string Label(FlowNode node)
+        private string Label(FlowNode node)
         {
             var title = Escape(node.DisplayName);
-            var summary = node.Summary;
+            var summary = node.ChildFlowId is { } child && _childFlowNames?.TryGetValue(child, out var childName) == true
+                ? $"{node.Summary}: {childName}"
+                : node.Summary;
 
             return string.Equals(summary, node.DisplayName, StringComparison.OrdinalIgnoreCase)
                 ? title

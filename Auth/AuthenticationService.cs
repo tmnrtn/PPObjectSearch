@@ -62,7 +62,8 @@ public sealed class AuthenticationService
         string? tenantId,
         string? preferredAccountId,
         bool forceAccountPicker = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Func<Uri, Task>? openBrowser = null)
     {
         var app = GetApp(tenantId);
         var scopes = new[] { $"{resource.TrimEnd('/')}/.default" };
@@ -96,6 +97,13 @@ public sealed class AuthenticationService
                 .WithPrompt(forceAccountPicker || account is null ? Prompt.SelectAccount : Prompt.NoPrompt);
 
             if (!forceAccountPicker && account is not null) builder = builder.WithAccount(account);
+
+            // The sign-in page opens where the environment's links do - the profile already
+            // signed in to that tenant - rather than whichever browser is the default.
+            if (openBrowser is not null)
+            {
+                builder = builder.WithSystemWebViewOptions(new SystemWebViewOptions { OpenBrowserAsync = openBrowser });
+            }
 
             result = await builder.ExecuteAsync(ct).ConfigureAwait(false);
         }
@@ -218,6 +226,9 @@ public sealed class EnvironmentAuthContext
     /// <summary>Set once by the caller before the first token request, to force the account chooser.</summary>
     public bool ForceAccountPicker { get; set; }
 
+    /// <summary>Opens the sign-in page, when a sign-in is needed. Null uses the default browser.</summary>
+    public Func<Uri, Task>? OpenBrowser { get; set; }
+
     public async Task EnsureTenantAsync(string environmentUrl, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(TenantId)) return;
@@ -244,7 +255,7 @@ public sealed class EnvironmentAuthContext
         var force = ForceAccountPicker;
         ForceAccountPicker = false;
 
-        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct).ConfigureAwait(false);
+        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct, OpenBrowser).ConfigureAwait(false);
 
         AccountId = string.IsNullOrEmpty(token.AccountId) ? AccountId : token.AccountId;
         AccountName = token.AccountName;

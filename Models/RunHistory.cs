@@ -34,6 +34,14 @@ public sealed class ProcessRun
     /// <summary>The id Power Automate knows the flow by, as the run records it (flowrun.workflowid).</summary>
     public string? FlowId { get; init; }
 
+    /// <summary>
+    /// Known only to Power Automate so far - in progress, or finished too recently for Dataverse's
+    /// copy. Dataverse records a run once it is done, and not at once.
+    /// </summary>
+    public bool IsLiveOnly { get; init; }
+
+    public string? LiveNote => IsLiveOnly ? "Not in Dataverse yet - read live from Power Automate." : null;
+
     /// <summary>This run's detail page in Power Automate; null where it cannot be built.</summary>
     public string? PortalUrl { get; set; }
 

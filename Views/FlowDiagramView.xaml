@@ -193,7 +193,7 @@
 
                                     <TextBlock Text="{Binding Detail}" FontSize="11" FontFamily="{StaticResource MonoFont}"
                                                Foreground="{DynamicResource Faint}" TextTrimming="CharacterEllipsis"
-                                               Margin="21,3,0,0" ToolTip="{Binding Detail}"
+                                               Margin="21,3,0,0" ToolTip="{Binding DetailTooltip}"
                                                Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}" />
 
                                     <TextBlock Text="{Binding Description}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"

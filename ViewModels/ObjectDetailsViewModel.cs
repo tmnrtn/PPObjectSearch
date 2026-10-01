@@ -32,8 +32,13 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         DataverseClient client,
         SolutionComponentItem item,
         IReadOnlyDictionary<Guid, SolutionComponentItem> known,
-        string? environmentId = null)
+        string? environmentId = null,
+        Action<string?>? openUrl = null,
+        EnvironmentSessionViewModel? session = null)
     {
+        _openUrl = openUrl ?? DefaultOpenUrl;
+        Session = session;
+        if (session is not null) session.PropertyChanged += OnSessionChanged;
         _client = client;
         _known = known;
         _environmentId = environmentId;
@@ -235,7 +240,20 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             var design = await Task.Run(() => FlowDesignParser.Parse(definition));
-            FlowDiagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
+            var diagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
+            FlowDiagram = diagram;
+
+            if (diagram.ChildFlowIds.Count > 0)
+            {
+                try
+                {
+                    diagram.SetChildFlowNames(await _client.GetWorkflowNamesAsync(diagram.ChildFlowIds));
+                }
+                catch
+                {
+                    // The names are a nicety; without them the cards still show the ids.
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -537,6 +555,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         Runs.Clear();
         SelectedRun = null;
+        var dataverseFailed = false;
 
         try
         {
@@ -572,11 +591,91 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             RunsStatus = "Could not read the run history - " + ex.Message;
             problems.Add("runs: " + ex.Message);
+            dataverseFailed = true;
         }
         finally
         {
             OnPropertyChanged(nameof(RunsTabCount));
         }
+
+        // Dataverse records a run once it is done, and not at once: runs in progress, and ones that
+        // have just finished or been cancelled, come from Power Automate's live list.
+        if (IsCloudFlow) await MergeLiveRunsAsync(dataverseFailed);
+    }
+
+    private async Task MergeLiveRunsAsync(bool dataverseFailed)
+    {
+        var dataverseStatus = RunsStatus;
+
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            RunsStatus = dataverseStatus + " Runs in progress cannot be shown: the environment's Power Platform id is unknown.";
+            return;
+        }
+
+        var flowId = Runs.FirstOrDefault(r => r.FlowId is not null)?.FlowId
+                     ?? Item.WorkflowIdUnique?.ToString()
+                     ?? Item.ObjectId.ToString();
+
+        try
+        {
+            _powerAutomate ??= _client.CreatePowerAutomateClient();
+            var live = await _powerAutomate.GetRunsAsync(_environmentId, flowId);
+
+            var merged = RunHistoryMerge.Merge(Runs.ToList(), live);
+            var selectedName = SelectedRun?.Name;
+
+            Runs.Clear();
+            foreach (var run in merged.Runs)
+            {
+                run.PortalUrl = MakerPortalLinkBuilder.BuildFlowRunUrl(_environmentId, run.FlowId ?? flowId, run.Name);
+                Runs.Add(run);
+            }
+
+            SelectedRun = Runs.FirstOrDefault(r => r.Name == selectedName)
+                          ?? Runs.FirstOrDefault(r => r.Outcome == RunOutcome.Failed)
+                          ?? Runs.FirstOrDefault();
+
+            RunsStatus = LiveRunsSummary(merged, dataverseFailed);
+        }
+        catch (Exception ex)
+        {
+            RunsStatus = dataverseStatus + " Runs in progress, or finished in the last few minutes, may be missing: " +
+                         "Power Automate's live list could not be read - " + ex.Message;
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(RunsTabCount));
+        }
+    }
+
+    /// <summary>"Latest 50 runs, 2 failed. 1 running and 1 cancelled run are not in Dataverse yet - shown live."</summary>
+    private string LiveRunsSummary(RunHistoryMerge.Result merged, bool dataverseFailed)
+    {
+        if (merged.Runs.Count == 0)
+        {
+            return "No runs in Dataverse or in Power Automate. Run history is kept for about 28 days.";
+        }
+
+        var failed = merged.Runs.Count(r => r.Outcome == RunOutcome.Failed);
+        var text = $"Latest {merged.Runs.Count} run(s), {failed} failed.";
+
+        if (merged.LiveOnly > 0)
+        {
+            var live = merged.Runs.Where(r => r.IsLiveOnly)
+                .GroupBy(r => r.Status.ToLowerInvariant())
+                .Select(g => $"{g.Count()} {g.Key}");
+            text += $" {string.Join(", ", live)} not in Dataverse yet - shown live from Power Automate.";
+        }
+
+        if (merged.Updated > 0)
+        {
+            text += $" {merged.Updated} run(s) have moved on since Dataverse's copy and show their live status.";
+        }
+
+        if (dataverseFailed) text += " Dataverse's run history could not be read, so these come from Power Automate alone.";
+
+        return text;
     }
 
     private async Task LoadTraceLogAsync(List<string> problems)
@@ -750,7 +849,26 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         private set => SetProperty(ref _hasUnmanagedLayer, value);
     }
 
-    public string Title => $"{Item.PrimaryLabel} — {Item.ComponentTypeName}";
+    /// <summary>The tab this window was opened from - its environment's name, type and colour.</summary>
+    public EnvironmentSessionViewModel? Session { get; }
+
+    public bool HasSession => Session is not null;
+
+    /// <summary>"Get report — Process · ECT-PreProd": the environment, so windows from different ones tell apart.</summary>
+    public string Title => Session is { } session
+        ? $"{Item.PrimaryLabel} — {Item.ComponentTypeName} · {session.Title}"
+        : $"{Item.PrimaryLabel} — {Item.ComponentTypeName}";
+
+    /// <summary>Stops following the tab, so a closed window is not kept alive by the tab it came from.</summary>
+    public void Detach()
+    {
+        if (Session is not null) Session.PropertyChanged -= OnSessionChanged;
+    }
+
+    private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(EnvironmentSessionViewModel.Title)) OnPropertyChanged(nameof(Title));
+    }
 
     private bool _isBusy;
     public bool IsBusy
@@ -1078,13 +1196,18 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         window.Show();
     }
 
-    private static void OpenUrl(string? url)
+    /// <summary>Opens links in the environment's browser profile - supplied by the tab that opened this window.</summary>
+    private readonly Action<string?> _openUrl;
+
+    private void OpenUrl(string? url) => _openUrl(url);
+
+    private static void DefaultOpenUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
 
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            LinkLauncher.Open(url, null);
         }
         catch (Exception ex)
         {

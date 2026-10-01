@@ -213,9 +213,22 @@ public static partial class FlowDesignParser
             Description = Str(element, "description"),
             RunAfter = ReadRunAfter(element),
             Branches = ReadBranches(kind, element, name, context),
-            Json = JsonWithoutChildren(element)
+            Json = JsonWithoutChildren(element),
+            ChildFlowId = ChildFlowIdOf(type, inputs)
         };
     }
+
+    /// <summary>
+    /// A child flow call names its flow by workflowid - checked against real flows, where every
+    /// reference matched a workflowid and none the solution-independent id.
+    /// </summary>
+    private static Guid? ChildFlowIdOf(string type, JsonElement inputs) =>
+        type.Equals("Workflow", StringComparison.OrdinalIgnoreCase) &&
+        inputs.ValueKind == JsonValueKind.Object &&
+        inputs.TryGetProperty("host", out var host) &&
+        Guid.TryParse(Str(host, "workflowReferenceName"), out var id)
+            ? id
+            : null;
 
     private static FlowNodeKind KindOf(string type) => type.ToLowerInvariant() switch
     {

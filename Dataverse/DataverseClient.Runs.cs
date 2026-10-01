@@ -239,7 +239,8 @@ public sealed partial class DataverseClient
         return entries;
     }
 
-    private static RunOutcome FlowOutcome(string status) => status.Trim().ToLowerInvariant() switch
+    /// <summary>A cloud flow run's status as an outcome - the same words in Dataverse and Power Automate.</summary>
+    internal static RunOutcome FlowOutcome(string status) => status.Trim().ToLowerInvariant() switch
     {
         "succeeded" => RunOutcome.Succeeded,
         "failed" or "timedout" => RunOutcome.Failed,

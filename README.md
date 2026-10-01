@@ -12,6 +12,11 @@ straight into the maker portal.
 - **Environment sidebar** — open as many environments as you like; each is an entry in the sidebar,
   restored on the next launch in the order you left them (`Ctrl+T` new, `Ctrl+W` or the entry's ✕
   to close; drag an entry or use `Ctrl+Shift+PgUp` / `PgDn` to reorder).
+- **Browser profile per environment** — right-click an environment and choose **Open links in**
+  to pick an Edge or Chrome profile (or the default browser). Maker portal and Power Automate
+  links for that environment open there, and so do its sign-in prompts - so each tenant signs in
+  in the profile already signed in to it. Saved per environment; a profile that has gone away
+  falls back to the default browser.
 - **Environment type at a glance** — every environment carries a colour and a badge for its type
   (production, default, sandbox, developer, trial), read from the Power Platform API. An
   environment whose type cannot be read shows as *Unknown*.
@@ -38,7 +43,8 @@ straight into the maker portal.
     side, and conditions, switches, loops and scopes that collapse. Where a step runs after
     something other than plain success, its connector is dashed red and shows the outcomes it
     waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
-    connector or condition, and selecting one shows its JSON. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
+    connector or condition, and selecting one shows its JSON. A "Run a child flow" step names
+    the flow it calls. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
     README or pull request. **Show on diagram** on a run in Run history
     draws that run over the design, read step by step from the Power Automate API: each step's
     outcome and duration, skipped and unreached steps faded, loops with their iteration count,

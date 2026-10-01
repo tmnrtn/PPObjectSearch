@@ -90,13 +90,29 @@
                                             <TextBlock Text="{Binding EnvironmentUrl}" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding EnvironmentTypeDescription}" Margin="0,3,0,0"
                                                        TextWrapping="Wrap" MaxWidth="400" />
+                                            <TextBlock Text="{Binding BrowserProfileDescription}" Margin="0,3,0,0"
+                                                       TextWrapping="Wrap" MaxWidth="400"
+                                                       Visibility="{Binding BrowserProfileDescription, Converter={StaticResource EmptyToCollapsed}}" />
                                             <TextBlock Text="{Binding WriteAccessDescription}" Margin="0,3,0,0"
                                                        TextWrapping="Wrap" MaxWidth="400" FontWeight="SemiBold"
                                                        Visibility="{Binding WriteAccessDescription, Converter={StaticResource EmptyToCollapsed}}" />
                                         </StackPanel>
                                     </Grid.ToolTip>
                                     <Grid.ContextMenu>
-                                        <ContextMenu>
+                                        <ContextMenu Opened="EnvironmentMenu_Opened">
+                                            <!-- Where this environment's links and sign-ins open. -->
+                                            <MenuItem Header="Open links in" ItemsSource="{Binding BrowserProfileOptions}">
+                                                <MenuItem.ItemContainerStyle>
+                                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                                        <Setter Property="Header" Value="{Binding Label}" />
+                                                        <Setter Property="IsChecked" Value="{Binding IsSelected, Mode=OneWay}" />
+                                                        <Setter Property="Command"
+                                                                Value="{Binding DataContext.SetBrowserProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                        <Setter Property="CommandParameter" Value="{Binding}" />
+                                                    </Style>
+                                                </MenuItem.ItemContainerStyle>
+                                            </MenuItem>
+                                            <Separator />
                                             <MenuItem Header="Allow writes to this environment…"
                                                       Command="{Binding AllowWritesCommand}"
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource NotBoolToVis}}"

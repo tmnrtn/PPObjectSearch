@@ -111,6 +111,69 @@ public sealed class PowerAutomateClient : IDisposable
     }
 
     /// <summary>
+    /// A flow's latest runs, live: including those still running or waiting, and those finished
+    /// too recently for Dataverse's copy. Maker's route first, then the admin route.
+    /// </summary>
+    public async Task<IReadOnlyList<ProcessRun>> GetRunsAsync(string environmentId, string flowId, int top = 50, CancellationToken ct = default)
+    {
+        var path = $"environments/{Uri.EscapeDataString(environmentId)}/flows/{Uri.EscapeDataString(flowId)}/runs";
+
+        JsonDocument doc;
+        try
+        {
+            doc = await SendAsync($"{BaseUrl}{path}?{ApiVersion}&$top={top}", ct).ConfigureAwait(false);
+        }
+        catch (PowerAutomateException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+        {
+            try
+            {
+                doc = await SendAsync($"{BaseUrl}scopes/admin/{path}?{ApiVersion}&$top={top}", ct).ConfigureAwait(false);
+            }
+            catch (PowerAutomateException adminEx) when (adminEx.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                throw new PowerAutomateException(
+                    "Power Automate would not list this flow's runs - that needs you to own or co-own the flow, " +
+                    "or to be an admin of the environment.", adminEx.StatusCode);
+            }
+        }
+
+        using (doc)
+        {
+            var runs = new List<ProcessRun>();
+            if (!doc.RootElement.TryGetProperty("value", out var value)) return runs;
+
+            foreach (var run in value.EnumerateArray())
+            {
+                if (JsonHelper.GetString(run, "name") is not { } name) continue;
+
+                var properties = run.TryGetProperty("properties", out var p) ? p : default;
+                var status = JsonHelper.GetString(properties, "status") ?? "Unknown";
+                var error = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("error", out var e) ? e : default;
+                var trigger = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("trigger", out var t) ? t : default;
+                var start = JsonHelper.GetDate(properties, "startTime");
+                var end = JsonHelper.GetDate(properties, "endTime");
+
+                runs.Add(new ProcessRun
+                {
+                    Name = name,
+                    Status = status,
+                    Outcome = DataverseClient.FlowOutcome(status),
+                    StartTime = start,
+                    EndTime = end,
+                    DurationMs = start is { } s && end is { } en && en >= s ? (long)(en - s).TotalMilliseconds : null,
+                    TriggerType = JsonHelper.GetString(trigger, "name"),
+                    ErrorCode = JsonHelper.GetString(error, "code"),
+                    ErrorMessage = JsonHelper.GetString(error, "message"),
+                    FlowId = flowId,
+                    IsLiveOnly = true
+                });
+            }
+
+            return runs;
+        }
+    }
+
+    /// <summary>
     /// Each iteration of a step inside a loop. Asked of the step itself: a loop's own entry lists
     /// none, its steps list one per pass.
     /// </summary>

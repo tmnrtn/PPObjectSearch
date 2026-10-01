@@ -61,6 +61,9 @@ public sealed class FlowNode
     /// <summary>A short particular - a variable's name, a loop's input, a recurrence.</summary>
     public string? Detail { get; init; }
 
+    /// <summary>For "Run a child flow": the child flow's workflowid in Dataverse.</summary>
+    public Guid? ChildFlowId { get; init; }
+
     /// <summary>The note added in the designer, if any.</summary>
     public string? Description { get; init; }
 

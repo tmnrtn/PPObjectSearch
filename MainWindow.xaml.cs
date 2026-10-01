@@ -61,6 +61,12 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Browser profiles can come and go between visits, so the menu reads them as it opens.</summary>
+    private void EnvironmentMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EnvironmentSessionViewModel session }) session.RaiseBrowserProfile();
+    }
+
     /// <summary>The context menu's own DataContext is the row's session, so it closes that one.</summary>
     private void CloseTab_Click(object sender, RoutedEventArgs e)
     {

@@ -241,6 +241,7 @@
                       ItemsSource="{Binding ItemsView}"
                       SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                       PreviewMouseRightButtonDown="OnGridRightButtonDown"
+                      MouseDoubleClick="OnGridDoubleClick"
                       IsReadOnly="True"
                       SelectionMode="Extended"
                       ScrollViewer.CanContentScroll="True">
@@ -252,8 +253,9 @@
                         SelectedItem instead, and right-clicking a row selects it first.
                     -->
                     <ContextMenu>
+                        <MenuItem Header="Details..." Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
+                                  InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
-                        <MenuItem Header="Details - solutions and dependencies..." Command="{Binding ShowDetailsCommand}" />
                         <Separator />
                         <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}" />
                         <MenuItem Header="Copy maker portal link" Command="{Binding CopyLinkCommand}" />
@@ -410,11 +412,13 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Button Style="{StaticResource PrimaryButton}" Content="Open in maker portal"
-                                                Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                        <Button Grid.Column="1" Content="Details..." Margin="6,0,0,0"
-                                                ToolTip="Solutions, layers and dependencies"
+                                        <!-- Details is where the app does its work, so it leads; the portal is a step away. -->
+                                        <Button Style="{StaticResource PrimaryButton}" Content="Details..."
+                                                ToolTip="Solutions, layers and dependencies - and runs, design, source or columns, by type (double-click a row)"
                                                 Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <Button Grid.Column="1" Content="Open in maker portal" Margin="6,0,0,0"
+                                                ToolTip="Open this object in make.powerapps.com"
+                                                Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </Grid>
                                 </StackPanel>
                             </Border>

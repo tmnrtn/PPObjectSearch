@@ -10,6 +10,12 @@ public partial class ObjectDetailsWindow : Window
 {
     public ObjectDetailsWindow() => InitializeComponent();
 
+    protected override void OnClosed(EventArgs e)
+    {
+        (DataContext as ObjectDetailsViewModel)?.Detach();
+        base.OnClosed(e);
+    }
+
     /// <summary>
     /// Copies the clicked property's value. Which row the mouse landed on is a view question, so
     /// the view answers it and hands the property itself to the view model.

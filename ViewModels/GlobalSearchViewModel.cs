@@ -124,7 +124,8 @@ public sealed class GlobalSearchViewModel : ObservableObject
         };
 
         OpenLinkCommand = new RelayCommand(
-            p => OpenUrl((p as GlobalSearchRow)?.Item.MakerUrl),
+            // Each row opens in its own environment's browser profile.
+            p => (p as GlobalSearchRow)?.Source.OpenUrl((p as GlobalSearchRow)?.Item.MakerUrl),
             p => (p as GlobalSearchRow)?.Item.MakerUrl is not null);
 
         ExportCommand = new RelayCommand(_ => Export(), _ => RowsView.Count > 0);
@@ -265,20 +266,6 @@ public sealed class GlobalSearchViewModel : ObservableObject
         try
         {
             CsvExporter.Write(dialog.FileName, RowsView.Cast<GlobalSearchRow>().Select(r => r.Item));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
-    private static void OpenUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url)) return;
-
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception ex)
         {

@@ -84,6 +84,32 @@ public sealed class AppSettings
     /// <summary>Whether the main window's object detail pane is showing.</summary>
     public bool IsDetailPaneOpen { get; set; } = true;
 
+    /// <summary>
+    /// The browser profile each environment's links and sign-ins open in, keyed by host. An
+    /// environment without an entry uses the system default browser.
+    /// </summary>
+    public Dictionary<string, BrowserProfileSetting>? BrowserProfiles { get; set; }
+
+    public BrowserProfileSetting? GetBrowserProfile(string environmentUrl)
+    {
+        if (BrowserProfiles is null || TryGetHost(environmentUrl) is not { } host) return null;
+        return BrowserProfiles.TryGetValue(host, out var profile) ? profile : null;
+    }
+
+    /// <summary>Sets - or, with null, clears - an environment's browser profile. The caller saves.</summary>
+    public void SetBrowserProfile(string environmentUrl, BrowserProfileSetting? profile)
+    {
+        if (TryGetHost(environmentUrl) is not { } host) return;
+
+        if (profile is null)
+        {
+            BrowserProfiles?.Remove(host);
+            return;
+        }
+
+        (BrowserProfiles ??= new Dictionary<string, BrowserProfileSetting>(StringComparer.OrdinalIgnoreCase))[host] = profile;
+    }
+
     public string? GetEnvironmentId(string environmentUrl)
     {
         if (EnvironmentIds is null) return null;
@@ -94,7 +120,10 @@ public sealed class AppSettings
 
     private static string? TryGetHost(string environmentUrl)
     {
-        return Uri.TryCreate(environmentUrl, UriKind.Absolute, out var uri) ? uri.Host : null;
+        var value = (environmentUrl ?? string.Empty).Trim();
+        if (value.Length == 0) return null;
+        if (!value.Contains("://", StringComparison.Ordinal)) value = "https://" + value;
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri.Host : null;
     }
 
     public static AppSettings Load()
@@ -108,6 +137,11 @@ public sealed class AppSettings
                 if (settings is not null)
                 {
                     settings.EnvironmentIds = Rekey(settings.EnvironmentIds);
+                    if (settings.BrowserProfiles is not null)
+                    {
+                        settings.BrowserProfiles = new Dictionary<string, BrowserProfileSetting>(
+                            settings.BrowserProfiles, StringComparer.OrdinalIgnoreCase);
+                    }
                     settings.MakerLinkTemplates = Rekey(settings.MakerLinkTemplates);
                     return settings;
                 }

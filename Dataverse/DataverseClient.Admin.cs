@@ -117,6 +117,32 @@ public sealed partial class DataverseClient
         return found.Values.ToList();
     }
 
+    /// <summary>The names of these workflows (flows, child flows), by workflowid. Missing ids are left out.</summary>
+    public async Task<IReadOnlyDictionary<Guid, string>> GetWorkflowNamesAsync(IEnumerable<Guid> workflowIds, CancellationToken ct = default)
+    {
+        var names = new Dictionary<Guid, string>();
+
+        foreach (var chunk in workflowIds.Distinct().Chunk(50))
+        {
+            var url = EnvironmentUrl + ApiPath +
+                      $"workflows?$select=workflowid,name&$filter={InFilter("workflowid", chunk.Select(id => id.ToString()))}";
+
+            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+            if (!doc.RootElement.TryGetProperty("value", out var value)) continue;
+
+            foreach (var row in value.EnumerateArray())
+            {
+                if (Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id) &&
+                    JsonHelper.GetString(row, "name") is { Length: > 0 } name)
+                {
+                    names[id] = name;
+                }
+            }
+        }
+
+        return names;
+    }
+
     /// <summary>An In() condition over literal values - quotes doubled, URL-significant characters encoded.</summary>
     private static string InFilter(string column, IEnumerable<string> values) =>
         $"Microsoft.Dynamics.CRM.In(PropertyName='{column}',PropertyValues=[" +
