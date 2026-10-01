@@ -10,7 +10,7 @@
     <AssemblyName>PPObjectSearch</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Product>Power Platform Object Search</Product>
     <Description>Keyword search over the objects in a Power Platform solution.</Description>
   </PropertyGroup>
