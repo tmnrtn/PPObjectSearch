@@ -64,9 +64,17 @@ jobs:
           path: publish/PPObjectSearch.exe
           if-no-files-found: error
 
+      # The GitHub CLI on the runner rather than a third-party action: this step can write to the
+      # repository, so nothing outside GitHub's own tooling runs with that permission.
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: publish/PPObjectSearch.exe
-          generate_release_notes: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create $env:TAG publish/PPObjectSearch.exe `
+            --repo $env:GITHUB_REPOSITORY `
+            --title $env:TAG `
+            --generate-notes `
+            --verify-tag
