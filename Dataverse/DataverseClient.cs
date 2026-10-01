@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Globalization;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -885,10 +886,18 @@ internal static class JsonHelper
         };
     }
 
+    /// <summary>
+    /// A timestamp, in this machine's local time. Dataverse sends UTC; converting here, where every
+    /// date is read, means run history, solution history, modified-on columns and exports all show
+    /// the time as it was on the user's clock. The moment is unchanged - only its offset - so
+    /// comparing and sorting are unaffected.
+    /// </summary>
     public static DateTimeOffset? GetDate(JsonElement element, string name)
     {
         var text = GetString(element, name);
-        return DateTimeOffset.TryParse(text, out var date) ? date : null;
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date)
+            ? date.ToLocalTime()
+            : null;
     }
 
     /// <summary>Depth-first search for a property name anywhere in the document.</summary>
