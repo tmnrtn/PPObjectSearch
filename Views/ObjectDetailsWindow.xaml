@@ -1,6 +1,7 @@
 <Window x:Class="PPObjectSearch.Views.ObjectDetailsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
         xmlns:models="clr-namespace:PPObjectSearch.Models"
         Title="{Binding Title}"
@@ -359,6 +360,17 @@
                         </ScrollViewer>
                     </TabItem>
 
+                    <!-- A cloud flow drawn as the designer draws it. Read-only. -->
+                    <TabItem Header="Design" Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <TextBlock Text="{Binding DesignStatus}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" Margin="24,60,24,0"
+                                       Visibility="{Binding HasFlowDiagram, Converter={StaticResource NotBoolToVis}}" />
+                            <local:FlowDiagramView DataContext="{Binding FlowDiagram}"
+                                                   Visibility="{Binding DataContext.HasFlowDiagram, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                    </TabItem>
+
                     <!-- A web resource's source, or a cloud flow's JSON definition. -->
                     <TabItem Header="{Binding SourceTabHeader}"
                              Visibility="{Binding HasSource, Converter={StaticResource BoolToVis}}"
@@ -376,8 +388,7 @@
                                                ToolTip="{Binding SourceStatus}" />
                                 </DockPanel>
                             </Border>
-                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding SourceText, Mode=OneWay}"
-                                     Background="{DynamicResource Surface}" />
+                            <local:CodeView Code="{Binding SourceText}" Syntax="{Binding SourceLanguage}" />
                         </DockPanel>
                     </TabItem>
 

@@ -4,6 +4,7 @@ using System.Windows;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
+using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
@@ -67,6 +68,51 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
     public string SourceTabHeader => IsCloudFlow ? "Definition" : "Content";
 
+    private FlowDiagramViewModel? _flowDiagram;
+    /// <summary>A cloud flow drawn as the designer draws it, once its definition has been read.</summary>
+    public FlowDiagramViewModel? FlowDiagram
+    {
+        get => _flowDiagram;
+        private set
+        {
+            if (SetProperty(ref _flowDiagram, value)) OnPropertyChanged(nameof(HasFlowDiagram));
+        }
+    }
+
+    public bool HasFlowDiagram => FlowDiagram is not null;
+
+    private string _designStatus = "Reading the flow's definition...";
+    /// <summary>Shown in place of the diagram while it loads, or when it could not be drawn.</summary>
+    public string DesignStatus
+    {
+        get => _designStatus;
+        private set => SetProperty(ref _designStatus, value);
+    }
+
+    private CodeLanguage _sourceLanguage;
+    /// <summary>How the source is highlighted: JSON for a flow, by type for a web resource.</summary>
+    public CodeLanguage SourceLanguage
+    {
+        get => _sourceLanguage;
+        private set => SetProperty(ref _sourceLanguage, value);
+    }
+
+    /// <summary>The highlighting for a web resource type; images and the like have none.</summary>
+    internal static CodeLanguage LanguageFor(int webResourceType) => webResourceType switch
+    {
+        1 => CodeLanguage.Html,
+        2 => CodeLanguage.Css,
+        3 => CodeLanguage.JavaScript,
+        4 or 9 or 11 or 12 => CodeLanguage.Xml, // XML, XSL, SVG, RESX
+        _ => CodeLanguage.None
+    };
+
+    /// <summary>Said in the status when a file has a language but is too big to colour.</summary>
+    private static string HighlightNote(string? text, CodeLanguage language) =>
+        language != CodeLanguage.None && !string.IsNullOrEmpty(text) && !CodeHighlighting.ShouldHighlight(text)
+            ? " · not highlighted (too large, or minified)"
+            : string.Empty;
+
     private string? _sourceText;
     public string? SourceText
     {
@@ -122,6 +168,28 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Parses the definition off the UI thread - a large flow is a large document.</summary>
+    private async Task LoadFlowDiagramAsync(string? definition)
+    {
+        FlowDiagram = null;
+
+        if (string.IsNullOrWhiteSpace(definition))
+        {
+            DesignStatus = "This flow has no definition stored in Dataverse, so there is nothing to draw.";
+            return;
+        }
+
+        try
+        {
+            var design = await Task.Run(() => FlowDesignParser.Parse(definition));
+            FlowDiagram = new FlowDiagramViewModel(design);
+        }
+        catch (Exception ex)
+        {
+            DesignStatus = "Could not draw the flow - " + ex.Message;
+        }
+    }
+
     private async Task LoadSourceAsync(List<string> problems)
     {
         SourceText = null;
@@ -131,15 +199,19 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (IsCloudFlow)
             {
                 var definition = await _client.GetCloudFlowDefinitionAsync(Item.ObjectId);
+                await LoadFlowDiagramAsync(definition);
+                SourceLanguage = CodeLanguage.Json;
                 SourceText = string.IsNullOrWhiteSpace(definition) ? null : TextDiff.Prettify(definition);
                 _sourceFileName = SafeFileName(Item.PrimaryLabel) + ".json";
                 SourceStatus = SourceText is null
                     ? "This flow has no definition stored in Dataverse."
-                    : $"The flow's definition (workflow.clientdata), {SourceText.Length:N0} characters.";
+                    : $"The flow's definition (workflow.clientdata), {SourceText.Length:N0} characters." +
+                      HighlightNote(SourceText, SourceLanguage);
                 return;
             }
 
             var content = await _client.GetWebResourceContentAsync(Item.ObjectId);
+            SourceLanguage = LanguageFor(content.Type);
             SourceText = content.Text;
 
             // "new_/scripts/account.js" saves as "account.js".
@@ -148,7 +220,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             SourceStatus = content.Text is null
                 ? $"{content.TypeLabel} - binary content ({content.ByteCount:N0} bytes), not shown as text."
-                : $"{content.Name} · {content.TypeLabel} · {content.ByteCount:N0} bytes";
+                : $"{content.Name} · {content.TypeLabel} · {content.ByteCount:N0} bytes" +
+                  HighlightNote(content.Text, SourceLanguage);
         }
         catch (Exception ex)
         {

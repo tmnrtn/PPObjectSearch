@@ -31,11 +31,17 @@ straight into the maker portal.
   the same copy actions; the pane can be hidden from the toolbar.
 - **Object details** (*Details…*) — solutions, layers and dependencies for any object, plus, by type:
   - **Cloud flows**: recent run history from Dataverse, with each run's error and a link to the run
-    in Power Automate, and the flow's JSON definition to copy or save.
+    in Power Automate, and the flow's JSON definition to copy or save. **Design** draws the flow
+    as the designer does, read-only: trigger, steps in run-after order, parallel branches side by
+    side, and conditions, switches, loops and scopes that collapse. Steps that run only on failure
+    or time-out are badged, search finds a step by name, type or connector, and selecting one
+    shows its JSON.
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
     (and a warning when tracing is switched off).
-  - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files.
+  - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files, with
+    syntax highlighting in both themes, line numbers and Ctrl+F search. Very large or minified
+    files are shown as plain text, since highlighting them would make the viewer crawl.
   - **Environment variables**: the current value in this environment, the default, and which applies.
   - **Tables**: their columns, relationships, keys, forms and views; Dataverse's stored row count
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -

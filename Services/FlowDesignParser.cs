@@ -1,0 +1,611 @@
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using PPObjectSearch.Models;
+
+namespace PPObjectSearch.Services;
+
+/// <summary>
+/// Reads a cloud flow's definition (workflow.clientdata) into the shape the designer draws:
+/// the trigger, then the actions in run-after order, with parallel branches side by side and
+/// conditions, switches, loops and scopes holding their own steps.
+///
+/// Read-only and forgiving: anything it cannot place by run-after is still shown, at the end of
+/// its container, and said so in the warnings - a diagram that silently drops a step is worse
+/// than one that admits it could not order it.
+/// </summary>
+public static partial class FlowDesignParser
+{
+    public static FlowDesign Parse(string clientData)
+    {
+        using var doc = JsonDocument.Parse(clientData);
+        var root = doc.RootElement;
+
+        var definition =
+            root.TryGetProperty("properties", out var properties) && properties.TryGetProperty("definition", out var d1) ? d1
+            : root.TryGetProperty("definition", out var d2) ? d2
+            : root;
+
+        if (definition.ValueKind != JsonValueKind.Object ||
+            (!definition.TryGetProperty("triggers", out _) && !definition.TryGetProperty("actions", out _)))
+        {
+            throw new FormatException("The flow's definition has no triggers or actions.");
+        }
+
+        var connections = ReadConnectionReferences(properties.ValueKind == JsonValueKind.Object ? properties : root);
+        var context = new Context(connections);
+
+        var triggers = new List<FlowNode>();
+        if (definition.TryGetProperty("triggers", out var triggerObject) && triggerObject.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var trigger in triggerObject.EnumerateObject())
+            {
+                triggers.Add(ReadNode(trigger.Name, trigger.Value, isTrigger: true, context));
+            }
+        }
+
+        var actions = definition.TryGetProperty("actions", out var actionObject)
+            ? ReadContainer(actionObject, "the flow", context)
+            : FlowSequence.Empty;
+
+        return new FlowDesign(triggers, actions, context.ActionCount, context.Warnings);
+    }
+
+    private sealed class Context(IReadOnlyDictionary<string, string> connections)
+    {
+        public IReadOnlyDictionary<string, string> Connections { get; } = connections;
+        public List<string> Warnings { get; } = new();
+        public int ActionCount { get; set; }
+    }
+
+    // ---------------------------------------------------------------- ordering
+
+    /// <summary>The actions of one container, in the order and shape the designer shows them.</summary>
+    private static FlowSequence ReadContainer(JsonElement actions, string where, Context context)
+    {
+        if (actions.ValueKind != JsonValueKind.Object) return FlowSequence.Empty;
+
+        // Definition order, which is the designer's order wherever run-after does not decide.
+        var nodes = new Dictionary<string, FlowNode>(StringComparer.Ordinal);
+        var order = new List<string>();
+
+        foreach (var action in actions.EnumerateObject())
+        {
+            if (action.Value.ValueKind != JsonValueKind.Object) continue;
+
+            nodes[action.Name] = ReadNode(action.Name, action.Value, isTrigger: false, context);
+            order.Add(action.Name);
+            context.ActionCount++;
+        }
+
+        var predecessors = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var successors = order.ToDictionary(n => n, _ => new List<string>(), StringComparer.Ordinal);
+
+        foreach (var name in order)
+        {
+            var preds = new List<string>();
+            foreach (var runAfter in nodes[name].RunAfter)
+            {
+                if (nodes.ContainsKey(runAfter.Action))
+                {
+                    preds.Add(runAfter.Action);
+                    successors[runAfter.Action].Add(name);
+                }
+                else
+                {
+                    context.Warnings.Add($"'{nodes[name].DisplayName}' runs after '{runAfter.Action.Replace('_', ' ')}', which is not in {where}.");
+                }
+            }
+
+            predecessors[name] = preds;
+        }
+
+        var placer = new Placer(nodes, order, predecessors, successors);
+        var heads = order.Where(n => predecessors[n].Count == 0).ToList();
+        var steps = placer.Chain(heads, inBranch: false, new List<string>());
+
+        // Whatever run-after could not reach - a cycle, or a join waiting on something unplaced.
+        var leftovers = order.Where(n => !placer.Placed.Contains(n)).ToList();
+        if (leftovers.Count > 0)
+        {
+            context.Warnings.Add($"{leftovers.Count} step(s) in {where} could not be ordered by run-after and are shown at the end: " +
+                                 string.Join(", ", leftovers.Select(n => nodes[n].DisplayName)) + ".");
+            steps.AddRange(leftovers.Select(n => new FlowActionStep(nodes[n])));
+        }
+
+        return new FlowSequence(steps);
+    }
+
+    private sealed class Placer(
+        IReadOnlyDictionary<string, FlowNode> nodes,
+        IReadOnlyList<string> order,
+        IReadOnlyDictionary<string, List<string>> predecessors,
+        IReadOnlyDictionary<string, List<string>> successors)
+    {
+        public HashSet<string> Placed { get; } = new(StringComparer.Ordinal);
+
+        private bool Ready(string name) => !Placed.Contains(name) && predecessors[name].All(Placed.Contains);
+
+        private IEnumerable<string> InOrder(IEnumerable<string> names)
+        {
+            var set = names.ToHashSet(StringComparer.Ordinal);
+            return order.Where(set.Contains);
+        }
+
+        /// <summary>
+        /// Steps from <paramref name="heads"/> on. In a parallel branch, a step waiting on more
+        /// than one predecessor is a join: the branch stops there and hands it to the group, which
+        /// places it after the branches - in <paramref name="joins"/>.
+        /// </summary>
+        public List<FlowStep> Chain(IReadOnlyList<string> heads, bool inBranch, List<string> joins)
+        {
+            var steps = new List<FlowStep>();
+            var current = heads.ToList();
+
+            while (current.Count > 0)
+            {
+                if (current.Count == 1)
+                {
+                    var name = current[0];
+                    Placed.Add(name);
+                    steps.Add(new FlowActionStep(nodes[name]));
+
+                    var next = successors[name].Where(s => !Placed.Contains(s)).Distinct().ToList();
+
+                    if (inBranch)
+                    {
+                        joins.AddRange(next.Where(s => predecessors[s].Count > 1));
+                        next = next.Where(s => predecessors[s].Count == 1).ToList();
+                    }
+                    else
+                    {
+                        // A step waiting on others is reached again when the last of them is placed.
+                        next = next.Where(Ready).ToList();
+                    }
+
+                    current = InOrder(next).ToList();
+                }
+                else
+                {
+                    var groupJoins = new List<string>();
+                    var branches = current
+                        .Select(head => new FlowSequence(Chain(new[] { head }, inBranch: true, groupJoins)))
+                        .ToList();
+
+                    steps.Add(new FlowParallelStep(branches));
+
+                    var distinct = groupJoins.Distinct().ToList();
+                    var ready = distinct.Where(Ready).ToList();
+
+                    // A join also waiting on a step outside this group belongs further out.
+                    if (inBranch) joins.AddRange(distinct.Except(ready));
+
+                    current = InOrder(ready).ToList();
+                }
+            }
+
+            return steps;
+        }
+    }
+
+    // ---------------------------------------------------------------- one step
+
+    private static FlowNode ReadNode(string name, JsonElement element, bool isTrigger, Context context)
+    {
+        var type = Str(element, "type") ?? "Unknown";
+        var kind = isTrigger ? FlowNodeKind.Trigger : KindOf(type);
+        var inputs = element.TryGetProperty("inputs", out var i) ? i : default;
+
+        var (connector, operation) = ReadConnector(inputs, context.Connections);
+        var category = isTrigger ? FlowNodeCategory.Trigger : CategoryOf(type, kind, connector);
+
+        return new FlowNode
+        {
+            Name = name,
+            Type = type,
+            Kind = kind,
+            Category = category,
+            TypeLabel = isTrigger ? TriggerLabel(type, element, connector, operation) : TypeLabelOf(type, inputs),
+            Connector = connector,
+            Operation = operation,
+            Detail = DetailOf(type, element, inputs),
+            Description = Str(element, "description"),
+            RunAfter = ReadRunAfter(element),
+            Branches = ReadBranches(kind, element, name, context),
+            Json = JsonWithoutChildren(element)
+        };
+    }
+
+    private static FlowNodeKind KindOf(string type) => type.ToLowerInvariant() switch
+    {
+        "if" => FlowNodeKind.Condition,
+        "switch" => FlowNodeKind.Switch,
+        "foreach" => FlowNodeKind.ForEach,
+        "until" => FlowNodeKind.Until,
+        "scope" => FlowNodeKind.Scope,
+        _ => FlowNodeKind.Action
+    };
+
+    private static FlowNodeCategory CategoryOf(string type, FlowNodeKind kind, string? connector)
+    {
+        if (kind != FlowNodeKind.Action) return FlowNodeCategory.Control;
+        if (connector is not null) return FlowNodeCategory.Connector;
+
+        return type.ToLowerInvariant() switch
+        {
+            "compose" or "parsejson" or "query" or "select" or "join" or "table" or "javascriptcode" => FlowNodeCategory.Data,
+            "initializevariable" or "setvariable" or "incrementvariable" or "decrementvariable"
+                or "appendtoarrayvariable" or "appendtostringvariable" => FlowNodeCategory.Variable,
+            "http" or "httpwebhook" or "response" => FlowNodeCategory.Http,
+            "workflow" => FlowNodeCategory.ChildFlow,
+            "terminate" or "wait" => FlowNodeCategory.Control,
+            _ when type.Contains("Connection", StringComparison.OrdinalIgnoreCase) => FlowNodeCategory.Connector,
+            _ => FlowNodeCategory.Other
+        };
+    }
+
+    private static string TypeLabelOf(string type, JsonElement inputs) => type.ToLowerInvariant() switch
+    {
+        "if" => "Condition",
+        "switch" => "Switch",
+        "foreach" => "Apply to each",
+        "until" => "Do until",
+        "scope" => "Scope",
+        "compose" => "Compose",
+        "parsejson" => "Parse JSON",
+        "query" => "Filter array",
+        "select" => "Select",
+        "join" => "Join",
+        "table" => Str(inputs, "format") is { } format ? $"Create {format.ToUpperInvariant()} table" : "Create table",
+        "javascriptcode" => "Execute JavaScript code",
+        "initializevariable" => "Initialize variable",
+        "setvariable" => "Set variable",
+        "incrementvariable" => "Increment variable",
+        "decrementvariable" => "Decrement variable",
+        "appendtoarrayvariable" => "Append to array variable",
+        "appendtostringvariable" => "Append to string variable",
+        "http" => "HTTP",
+        "httpwebhook" => "HTTP webhook",
+        "response" => "Response",
+        "workflow" => "Run a child flow",
+        "terminate" => "Terminate",
+        "wait" => inputs.ValueKind == JsonValueKind.Object && inputs.TryGetProperty("until", out _) ? "Delay until" : "Delay",
+        _ => SplitWords(type)
+    };
+
+    private static string TriggerLabel(string type, JsonElement element, string? connector, string? operation)
+    {
+        if (connector is not null) return operation ?? "Connector trigger";
+
+        var kind = Str(element, "kind");
+
+        return type.ToLowerInvariant() switch
+        {
+            "recurrence" => "Recurrence",
+            "request" => kind?.ToLowerInvariant() switch
+            {
+                "button" => "Manually trigger a flow",
+                "powerapp" or "powerappv2" => "When Power Apps calls a flow",
+                "http" => "When an HTTP request is received",
+                "skills" => "When a flow is run from Copilot",
+                _ => "When a request is received"
+            },
+            _ => SplitWords(type)
+        };
+    }
+
+    /// <summary>A short particular worth seeing on the card itself.</summary>
+    private static string? DetailOf(string type, JsonElement element, JsonElement inputs)
+    {
+        switch (type.ToLowerInvariant())
+        {
+            case "foreach":
+                return element.TryGetProperty("foreach", out var each) ? Short(each) : null;
+
+            case "until":
+                return element.TryGetProperty("expression", out var until) ? Short(until) : null;
+
+            case "initializevariable":
+                if (inputs.ValueKind == JsonValueKind.Object &&
+                    inputs.TryGetProperty("variables", out var variables) &&
+                    variables.ValueKind == JsonValueKind.Array &&
+                    variables.GetArrayLength() > 0)
+                {
+                    var v = variables[0];
+                    return Str(v, "type") is { } t ? $"{Str(v, "name")} ({t})" : Str(v, "name");
+                }
+
+                return null;
+
+            case "setvariable" or "incrementvariable" or "decrementvariable"
+                or "appendtoarrayvariable" or "appendtostringvariable":
+                return Str(inputs, "name");
+
+            case "terminate":
+                return Str(inputs, "runStatus");
+
+            case "recurrence":
+                if (element.TryGetProperty("recurrence", out var recurrence))
+                {
+                    var interval = recurrence.TryGetProperty("interval", out var n) ? n.ToString() : "1";
+                    var frequency = Str(recurrence, "frequency");
+                    return frequency is null ? null : $"Every {interval} {frequency.ToLowerInvariant()}{(interval == "1" ? "" : "s")}";
+                }
+
+                return null;
+
+            case "wait":
+                if (inputs.ValueKind == JsonValueKind.Object && inputs.TryGetProperty("interval", out var wait))
+                {
+                    return $"{(wait.TryGetProperty("count", out var c) ? c.ToString() : "?")} {Str(wait, "unit")?.ToLowerInvariant()}";
+                }
+
+                return null;
+
+            case "workflow":
+                return inputs.ValueKind == JsonValueKind.Object &&
+                       inputs.TryGetProperty("host", out var host) &&
+                       host.TryGetProperty("workflowReferenceName", out var child)
+                    ? child.GetString()
+                    : null;
+
+            default:
+                return null;
+        }
+    }
+
+    private static IReadOnlyList<FlowRunAfter> ReadRunAfter(JsonElement element)
+    {
+        if (!element.TryGetProperty("runAfter", out var runAfter) || runAfter.ValueKind != JsonValueKind.Object)
+        {
+            return Array.Empty<FlowRunAfter>();
+        }
+
+        return runAfter.EnumerateObject()
+            .Select(p => new FlowRunAfter(
+                p.Name,
+                p.Value.ValueKind == JsonValueKind.Array
+                    ? p.Value.EnumerateArray().Select(s => s.GetString() ?? string.Empty).Where(s => s.Length > 0).ToList()
+                    : new List<string> { "Succeeded" }))
+            .ToList();
+    }
+
+    private static IReadOnlyList<FlowBranch> ReadBranches(FlowNodeKind kind, JsonElement element, string name, Context context)
+    {
+        var where = $"'{name.Replace('_', ' ')}'";
+
+        FlowSequence Actions(JsonElement container) =>
+            container.ValueKind == JsonValueKind.Object && container.TryGetProperty("actions", out var a)
+                ? ReadContainer(a, where, context)
+                : FlowSequence.Empty;
+
+        switch (kind)
+        {
+            case FlowNodeKind.Condition:
+                return new[]
+                {
+                    new FlowBranch("Yes", Actions(element)),
+                    new FlowBranch("No", element.TryGetProperty("else", out var otherwise) ? Actions(otherwise) : FlowSequence.Empty)
+                };
+
+            case FlowNodeKind.Switch:
+            {
+                var branches = new List<FlowBranch>();
+
+                if (element.TryGetProperty("cases", out var cases) && cases.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var c in cases.EnumerateObject())
+                    {
+                        var value = c.Value.TryGetProperty("case", out var v) ? Short(v) : c.Name;
+                        branches.Add(new FlowBranch($"Case: {value}", Actions(c.Value)));
+                    }
+                }
+
+                branches.Add(new FlowBranch("Default",
+                    element.TryGetProperty("default", out var fallback) ? Actions(fallback) : FlowSequence.Empty));
+                return branches;
+            }
+
+            case FlowNodeKind.ForEach or FlowNodeKind.Until or FlowNodeKind.Scope:
+                return new[] { new FlowBranch(string.Empty, Actions(element)) };
+
+            default:
+                return Array.Empty<FlowBranch>();
+        }
+    }
+
+    // ---------------------------------------------------------------- connectors
+
+    /// <summary>Connection reference name to the connector's API name - "shared_commondataserviceforapps".</summary>
+    private static IReadOnlyDictionary<string, string> ReadConnectionReferences(JsonElement scope)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (scope.ValueKind != JsonValueKind.Object ||
+            !scope.TryGetProperty("connectionReferences", out var references) ||
+            references.ValueKind != JsonValueKind.Object)
+        {
+            return map;
+        }
+
+        foreach (var reference in references.EnumerateObject())
+        {
+            var api =
+                reference.Value.TryGetProperty("api", out var a) && Str(a, "name") is { } apiName ? apiName
+                : Str(reference.Value, "apiName")
+                  ?? (Str(reference.Value, "id") is { } id ? id.Split('/').Last() : null);
+
+            if (api is not null) map[reference.Name] = api;
+        }
+
+        return map;
+    }
+
+    [GeneratedRegex(@"\['(?<name>[^']+)'\]\['connectionId'\]")]
+    private static partial Regex LegacyConnectionRegex();
+
+    private static (string? Connector, string? Operation) ReadConnector(JsonElement inputs, IReadOnlyDictionary<string, string> connections)
+    {
+        if (inputs.ValueKind != JsonValueKind.Object || !inputs.TryGetProperty("host", out var host) || host.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+
+        var api =
+            Str(host, "apiId")?.Split('/').Last()
+            ?? (Str(host, "connectionName") is { } reference
+                ? connections.TryGetValue(reference, out var mapped) ? mapped : reference
+                : null);
+
+        // The older ApiConnection shape names the connection inside an expression.
+        if (api is null &&
+            host.TryGetProperty("connection", out var connection) &&
+            Str(connection, "name") is { } expression &&
+            LegacyConnectionRegex().Match(expression) is { Success: true } match)
+        {
+            var name = match.Groups["name"].Value;
+            api = connections.TryGetValue(name, out var legacy) ? legacy : name;
+        }
+
+        if (api is null) return (null, null);
+
+        var operationId = Str(host, "operationId");
+        return (ConnectorName(api), operationId is null ? null : OperationName(api, operationId));
+    }
+
+    private static readonly Dictionary<string, string> Connectors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["shared_commondataserviceforapps"] = "Microsoft Dataverse",
+        ["shared_commondataservice"] = "Common Data Service (legacy)",
+        ["shared_office365"] = "Office 365 Outlook",
+        ["shared_office365users"] = "Office 365 Users",
+        ["shared_office365groups"] = "Office 365 Groups",
+        ["shared_sharepointonline"] = "SharePoint",
+        ["shared_teams"] = "Microsoft Teams",
+        ["shared_approvals"] = "Approvals",
+        ["shared_flowpush"] = "Notifications",
+        ["shared_sendmail"] = "Mail",
+        ["shared_excelonlinebusiness"] = "Excel Online (Business)",
+        ["shared_onedriveforbusiness"] = "OneDrive for Business",
+        ["shared_planner"] = "Planner",
+        ["shared_azureblob"] = "Azure Blob Storage",
+        ["shared_keyvault"] = "Azure Key Vault",
+        ["shared_sql"] = "SQL Server",
+        ["shared_webcontents"] = "HTTP with Microsoft Entra ID",
+        ["shared_servicebus"] = "Service Bus",
+        ["shared_powerplatformforadmins"] = "Power Platform for Admins",
+        ["shared_flowmanagement"] = "Power Automate Management",
+        ["shared_outlook"] = "Outlook.com",
+        ["shared_wordonlinebusiness"] = "Word Online (Business)",
+        ["shared_powerbi"] = "Power BI",
+        ["shared_formsforbusiness"] = "Microsoft Forms",
+        ["shared_microsoftforms"] = "Microsoft Forms",
+    };
+
+    private static readonly Dictionary<string, string> DataverseOperations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ListRecords"] = "List rows",
+        ["GetItem"] = "Get a row by ID",
+        ["CreateRecord"] = "Add a new row",
+        ["UpdateRecord"] = "Update a row",
+        ["UpdateOnlyRecord"] = "Update a row",
+        ["DeleteRecord"] = "Delete a row",
+        ["PerformBoundAction"] = "Perform a bound action",
+        ["PerformUnboundAction"] = "Perform an unbound action",
+        ["AssociateEntities"] = "Relate rows",
+        ["DisassociateEntities"] = "Unrelate rows",
+        ["ExecuteChangeset"] = "Perform a changeset request",
+        ["SubscribeWebhookTrigger"] = "When a row is added, modified or deleted",
+        ["GetEntityFileImageFieldContent"] = "Download a file or an image",
+        ["UpdateEntityFileImageFieldContent"] = "Upload a file or an image",
+        ["SearchRecords"] = "Search rows",
+    };
+
+    internal static string ConnectorName(string api) =>
+        Connectors.TryGetValue(api, out var name)
+            ? name
+            : api.StartsWith("shared_", StringComparison.OrdinalIgnoreCase) ? api["shared_".Length..] : api;
+
+    internal static string OperationName(string api, string operationId) =>
+        api.Equals("shared_commondataserviceforapps", StringComparison.OrdinalIgnoreCase) &&
+        DataverseOperations.TryGetValue(operationId, out var known)
+            ? known
+            : SplitWords(operationId);
+
+    // ---------------------------------------------------------------- helpers
+
+    /// <summary>"GetItemV2" becomes "Get item V2"; "SendEmail_V2" becomes "Send email V2".</summary>
+    internal static string SplitWords(string identifier)
+    {
+        var words = Regex.Split(identifier.Replace('_', ' '), @"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|\s+")
+            .Where(w => w.Length > 0)
+            .ToList();
+
+        if (words.Count == 0) return identifier;
+
+        // Keep acronyms and version tags as they are; lower-case ordinary words after the first.
+        return string.Join(" ", words.Select((w, i) =>
+            i == 0 || w.All(char.IsUpper) || (w.Length <= 3 && w.Any(char.IsDigit)) ? w : w.ToLowerInvariant()));
+    }
+
+    private static string Short(JsonElement value)
+    {
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText();
+        return text.Length > 120 ? text[..117] + "..." : text;
+    }
+
+    private static string? Str(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
+
+    /// <summary>
+    /// The step's JSON, minus the actions inside it: a condition shows its expression, a loop its
+    /// input, without repeating every step it contains.
+    /// </summary>
+    private static string JsonWithoutChildren(JsonElement element)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        {
+            Write(element, writer, depth: 0);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+
+        static void Write(JsonElement value, Utf8JsonWriter writer, int depth)
+        {
+            if (value.ValueKind != JsonValueKind.Object)
+            {
+                value.WriteTo(writer);
+                return;
+            }
+
+            writer.WriteStartObject();
+            foreach (var property in value.EnumerateObject())
+            {
+                // "actions" at the top, and inside else/default/cases, are steps of their own.
+                if (property.NameEquals("actions") && depth <= 2)
+                {
+                    writer.WriteString("actions", $"({property.Value.EnumerateObject().Count()} step(s), shown in the diagram)");
+                    continue;
+                }
+
+                writer.WritePropertyName(property.Name);
+
+                if (depth < 2 && (property.NameEquals("else") || property.NameEquals("default") || property.NameEquals("cases") ||
+                                  (depth == 1 && property.Value.ValueKind == JsonValueKind.Object)))
+                {
+                    Write(property.Value, writer, depth + 1);
+                }
+                else
+                {
+                    property.Value.WriteTo(writer);
+                }
+            }
+
+            writer.WriteEndObject();
+        }
+    }
+}
