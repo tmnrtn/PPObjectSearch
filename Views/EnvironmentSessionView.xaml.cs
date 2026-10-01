@@ -30,6 +30,23 @@ public partial class EnvironmentSessionView : UserControl
     }
 
     /// <summary>
+    /// The solution picker's list closed without a pick: put the loaded solution's name back.
+    /// </summary>
+    private void SolutionPicker_SearchEnded(object? sender, EventArgs e)
+    {
+        if (DataContext is EnvironmentSessionViewModel session) session.EndSolutionSearch();
+    }
+
+    /// <summary>
+    /// Focus moving between the picker's own text box and its list is still the same search; only
+    /// leaving the picker altogether ends it.
+    /// </summary>
+    private void SolutionPicker_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is ComboBox { IsKeyboardFocusWithin: false, IsDropDownOpen: false }) SolutionPicker_SearchEnded(sender, e);
+    }
+
+    /// <summary>
     /// A connected tab is there to be searched; a new tab needs its URL first.
     /// </summary>
     private void FocusMostUsefulBox()

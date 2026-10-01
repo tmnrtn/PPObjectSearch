@@ -75,12 +75,18 @@
                             Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}">
                     <ComboBox MinWidth="250" MaxWidth="360"
                               core:Ui.InlineLabel="Solution"
-                              ItemsSource="{Binding Solutions}"
+                              ItemsSource="{Binding SolutionsView}"
                               SelectedItem="{Binding SelectedSolution}"
+                              Text="{Binding SolutionSearchText, UpdateSourceTrigger=PropertyChanged}"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              StaysOpenOnEdit="True"
                               DisplayMemberPath="DisplayLabel"
                               FontWeight="SemiBold"
                               IsEnabled="{Binding IsSolutionPickerEnabled}"
-                              ToolTip="Defaults to this environment's default solution.">
+                              DropDownClosed="SolutionPicker_SearchEnded"
+                              LostKeyboardFocus="SolutionPicker_LostKeyboardFocus"
+                              ToolTip="Defaults to this environment's default solution. Type to narrow the list by name, unique name or publisher.">
                         <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                                 <Setter Property="FontWeight" Value="Normal" />
