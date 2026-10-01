@@ -176,6 +176,21 @@
                                     <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Muted}"
                                                TextTrimming="CharacterEllipsis" Margin="21,2,0,0" />
 
+                                    <!-- In a run: the outcome and how long it took; a loop, how often it went round. -->
+                                    <StackPanel x:Name="RunRow" Orientation="Horizontal" Margin="21,5,0,0" Visibility="Collapsed">
+                                        <Border x:Name="RunPill" CornerRadius="9" Padding="6,1,7,1" Background="{DynamicResource Surface2}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock x:Name="RunGlyph" Style="{StaticResource Icon}" Text="{Binding RunGlyph}" FontSize="9"
+                                                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                <TextBlock x:Name="RunText" Text="{Binding RunBadge}" FontSize="10" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Text="{Binding IterationLabel}" FontSize="10" Foreground="{DynamicResource Muted}"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"
+                                                   Visibility="{Binding HasIterationLabel, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
+
                                     <TextBlock Text="{Binding Detail}" FontSize="11" FontFamily="{StaticResource MonoFont}"
                                                Foreground="{DynamicResource Faint}" TextTrimming="CharacterEllipsis"
                                                Margin="21,3,0,0" ToolTip="{Binding Detail}"
@@ -256,6 +271,42 @@
                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource EnvDefault}" />
                 </DataTrigger>
 
+                <DataTrigger Binding="{Binding InRun}" Value="True">
+                    <Setter TargetName="RunRow" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsDimmed}" Value="True">
+                    <Setter TargetName="Card" Property="Opacity" Value="0.45" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RunOutcome}" Value="{x:Static models:FlowStepOutcome.Succeeded}">
+                    <Setter TargetName="RunPill" Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter TargetName="RunGlyph" Property="Foreground" Value="{DynamicResource Green}" />
+                    <Setter TargetName="RunText" Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RunOutcome}" Value="{x:Static models:FlowStepOutcome.Failed}">
+                    <Setter TargetName="RunPill" Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter TargetName="RunGlyph" Property="Foreground" Value="{DynamicResource Red}" />
+                    <Setter TargetName="RunText" Property="Foreground" Value="{DynamicResource Red}" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Red}" />
+                    <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RunOutcome}" Value="{x:Static models:FlowStepOutcome.TimedOut}">
+                    <Setter TargetName="RunPill" Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter TargetName="RunGlyph" Property="Foreground" Value="{DynamicResource Amber}" />
+                    <Setter TargetName="RunText" Property="Foreground" Value="{DynamicResource Amber}" />
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Amber}" />
+                    <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RunOutcome}" Value="{x:Static models:FlowStepOutcome.Running}">
+                    <Setter TargetName="RunPill" Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter TargetName="RunGlyph" Property="Foreground" Value="{DynamicResource Blue}" />
+                    <Setter TargetName="RunText" Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding RunOutcome}" Value="{x:Static models:FlowStepOutcome.Waiting}">
+                    <Setter TargetName="RunPill" Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter TargetName="RunGlyph" Property="Foreground" Value="{DynamicResource Blue}" />
+                    <Setter TargetName="RunText" Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+
                 <DataTrigger Binding="{Binding IsMatch}" Value="True">
                     <Setter TargetName="Card" Property="Background" Value="{DynamicResource AmberSoft}" />
                     <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Amber}" />
@@ -277,6 +328,7 @@
 
     <Grid Background="{DynamicResource Surface}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -313,12 +365,57 @@
             </DockPanel>
         </Border>
 
-        <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="12,8,12,0"
+        <!-- ============================================================ the run on show -->
+        <Border Grid.Row="1" Padding="14,8" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                Visibility="{Binding HasRunBanner, Converter={StaticResource BoolToVis}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRunFailed}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding HasRunNotice}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsRunNoticeError}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <DockPanel>
+                <!-- Loading, or why a run could not be shown. -->
+                <TextBlock DockPanel.Dock="Top" Text="{Binding RunNotice}" TextWrapping="Wrap"
+                           Visibility="{Binding HasRunNotice, Converter={StaticResource BoolToVis}}" />
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0"
+                            Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
+                    <Button Style="{StaticResource SmallButton}" Content="Jump to first failure" Margin="0,0,6,0"
+                            Command="{Binding JumpToFailureCommand}"
+                            ToolTip="Select the first step that failed, opening whatever holds it" />
+                    <Button Style="{StaticResource SmallButton}" Content="Back to design" Command="{Binding ClearRunCommand}"
+                            ToolTip="Show the flow's design without this run" />
+                </StackPanel>
+                <StackPanel Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding RunHeading}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding RunDetail}" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,2,0,0"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding RunMismatch}" FontSize="11" Foreground="{DynamicResource Amber}" Margin="0,4,0,0"
+                               TextWrapping="Wrap" Visibility="{Binding HasRunMismatch, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding RunError}" FontSize="11" Foreground="{DynamicResource Red}" Margin="0,4,0,0"
+                               TextWrapping="Wrap" MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding RunError}"
+                               Visibility="{Binding HasRunError, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="2" Style="{StaticResource Banner}" Margin="12,8,12,0"
                 Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
         </Border>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="300" />
                 <ColumnDefinition Width="Auto" />
@@ -370,11 +467,45 @@
                     <StackPanel Grid.Row="1">
                         <TextBlock Text="Runs after" Style="{StaticResource DetailHeading}" />
                         <TextBlock Text="{Binding SelectedRunAfter}" TextWrapping="Wrap" />
-                        <TextBlock Text="Definition" Style="{StaticResource DetailHeading}" />
+
+                        <!-- The step in the run on show. -->
+                        <StackPanel Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="In this run" Style="{StaticResource DetailHeading}" />
+                            <TextBlock Text="{Binding SelectedRunStatus}" TextWrapping="Wrap" />
+                            <TextBox Text="{Binding SelectedError, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                                     BorderThickness="0" Background="{DynamicResource RedSoft}" Foreground="{DynamicResource Red}"
+                                     Padding="6,4" Margin="0,6,0,0" MaxHeight="96" VerticalScrollBarVisibility="Auto"
+                                     Visibility="{Binding HasSelectedError, Converter={StaticResource BoolToVis}}" />
+
+                            <TextBlock Text="{Binding IterationStatus}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                       TextWrapping="Wrap" Margin="0,8,0,4"
+                                       Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                            <ListBox ItemsSource="{Binding SelectedIterations}" SelectedItem="{Binding SelectedIteration}"
+                                     DisplayMemberPath="Summary" MaxHeight="130"
+                                     Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource SmallButton}" Content="Show inputs" Command="{Binding ShowInputsCommand}"
+                                        ToolTip="Read what the step was given. Fetched only when you ask, and never saved." />
+                                <Button Style="{StaticResource SmallButton}" Content="Show outputs" Margin="6,0,0,0"
+                                        Command="{Binding ShowOutputsCommand}"
+                                        ToolTip="Read what the step returned. Fetched only when you ask, and never saved." />
+                                <Button Style="{StaticResource LinkButton}" Content="Back to definition" Margin="10,0,0,0"
+                                        Command="{Binding ShowDefinitionCommand}"
+                                        Visibility="{Binding HasContent, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                            <TextBlock Text="Reading..." FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,4,0,0"
+                                       Visibility="{Binding IsContentLoading, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding ContentError}" FontSize="11" Foreground="{DynamicResource Red}"
+                                       TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding HasContentError, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding DetailCodeTitle}" Style="{StaticResource DetailHeading}" />
                     </StackPanel>
 
                     <Border Grid.Row="2" BorderBrush="{DynamicResource Border}" BorderThickness="1" Margin="0,0,0,12">
-                        <local:CodeView Code="{Binding Selected.Node.Json}" Syntax="Json" />
+                        <local:CodeView Code="{Binding DetailCode}" Syntax="Json" />
                     </Border>
                 </Grid>
             </Grid>

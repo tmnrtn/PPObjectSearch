@@ -11,6 +11,9 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
+        <!-- DataGrid columns are outside the visual tree; this carries the window's view model to them. -->
+        <core:BindingProxy x:Key="WindowProxy" Data="{Binding}" />
+
         <!-- For cells whose text is routinely wider than any sensible column: a form's XML, a
              flattened property path. The tooltip is the cell's own text, so nothing is lost. -->
         <Style TargetType="TextBlock" x:Key="CellFull" BasedOn="{StaticResource Cell}">
@@ -361,7 +364,8 @@
                     </TabItem>
 
                     <!-- A cloud flow drawn as the designer draws it. Read-only. -->
-                    <TabItem Header="Design" Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}">
+                    <TabItem Header="Design" Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}"
+                             IsSelected="{Binding IsDesignTabSelected}">
                         <Grid>
                             <TextBlock Text="{Binding DesignStatus}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                                        HorizontalAlignment="Center" Margin="24,60,24,0"
@@ -435,6 +439,22 @@
                                                 </Style>
                                             </DataGridTextColumn.ElementStyle>
                                         </DataGridTextColumn>
+                                        <DataGridTemplateColumn Width="86" CanUserSort="False"
+                                                                Visibility="{Binding Data.IsCloudFlow, Source={StaticResource WindowProxy}, Converter={StaticResource BoolToVis}}">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
+                                                            ToolTip="Show this run on the flow's diagram, step by step"
+                                                            Command="{Binding DataContext.ShowRunOnDiagramCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                            CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="Diagram" />
+                                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A9;" FontSize="9" Margin="5,1,0,0" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTemplateColumn Width="72" CanUserSort="False">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
@@ -482,12 +502,20 @@
                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
                                             </StackPanel>
 
-                                            <Button Style="{StaticResource PrimaryButton}" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button Style="{StaticResource PrimaryButton}" Margin="0,0,8,0" HorizontalAlignment="Left"
+                                                    Content="Show on diagram"
+                                                    Visibility="{Binding DataContext.IsCloudFlow, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
+                                                    Command="{Binding DataContext.ShowRunOnDiagramCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Draw this run on the flow's diagram: each step's outcome, duration and error" />
+                                            <Button Margin="0" HorizontalAlignment="Left"
                                                     Content="Open run in Power Automate"
                                                     Visibility="{Binding HasPortalUrl, Converter={StaticResource BoolToVis}}"
                                                     Command="{Binding DataContext.OpenRunCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}"
                                                     ToolTip="{Binding PortalUrl}" />
+                                            </StackPanel>
 
                                             <Grid Margin="0,12,0,0">
                                                 <Grid.ColumnDefinitions>

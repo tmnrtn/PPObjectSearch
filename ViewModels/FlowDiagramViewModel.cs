@@ -1,5 +1,7 @@
 using PPObjectSearch.Core;
+using System.Collections.ObjectModel;
 using PPObjectSearch.Models;
+using PPObjectSearch.PowerAutomate;
 using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
@@ -177,6 +179,99 @@ public sealed class FlowCardViewModel : FlowStepViewModel
         set => SetProperty(ref _isMatch, value);
     }
 
+    // ---------------------------------------------------------------- a run
+
+    private bool _inRun;
+    private FlowActionResult? _result;
+
+    /// <summary>The step's result in the run on show; null when it was never reached, or no run is shown.</summary>
+    public FlowActionResult? Result => _result;
+
+    /// <summary>Null when the diagram shows the design alone; NotRun when the run never reached the step.</summary>
+    public FlowStepOutcome? RunOutcome => _inRun ? _result?.Outcome ?? FlowStepOutcome.NotRun : null;
+
+    public bool InRun => _inRun;
+
+    /// <summary>Skipped and unreached steps fade back, so the path the run took stands out.</summary>
+    public bool IsDimmed => RunOutcome is FlowStepOutcome.Skipped or FlowStepOutcome.NotRun;
+
+    public string RunGlyph => RunOutcome switch
+    {
+        FlowStepOutcome.Succeeded => "\uE73E",
+        FlowStepOutcome.Failed => "\uE711",
+        FlowStepOutcome.Skipped => "\uE893",
+        FlowStepOutcome.TimedOut => "\uE823",
+        FlowStepOutcome.Cancelled => "\uE71A",
+        FlowStepOutcome.Running => "\uE895",
+        FlowStepOutcome.Waiting => "\uE916",
+        FlowStepOutcome.NotRun => "\uE738",
+        _ => "\uE946"
+    };
+
+    public string RunLabel => RunOutcome switch
+    {
+        FlowStepOutcome.Succeeded => "Succeeded",
+        FlowStepOutcome.Failed => "Failed",
+        FlowStepOutcome.Skipped => "Skipped",
+        FlowStepOutcome.TimedOut => "Timed out",
+        FlowStepOutcome.Cancelled => "Cancelled",
+        FlowStepOutcome.Running => "Running",
+        FlowStepOutcome.Waiting => "Waiting",
+        FlowStepOutcome.NotRun => "Did not run",
+        null => string.Empty,
+        _ => _result?.Status ?? "Unknown"
+    };
+
+    public string? DurationLabel => _result?.Duration is { } d ? FormatDuration(d) : null;
+
+    /// <summary>"Failed · 1.2 s" - the badge on the card.</summary>
+    public string RunBadge => DurationLabel is { } d && RunOutcome is not FlowStepOutcome.Skipped ? $"{RunLabel} · {d}" : RunLabel;
+
+    private string? _iterationLabel;
+    /// <summary>"4 iterations · 1 failed", on a loop once its iterations have been counted.</summary>
+    public string? IterationLabel
+    {
+        get => _iterationLabel;
+        internal set
+        {
+            if (SetProperty(ref _iterationLabel, value)) OnPropertyChanged(nameof(HasIterationLabel));
+        }
+    }
+
+    public bool HasIterationLabel => !string.IsNullOrEmpty(IterationLabel);
+
+    /// <summary>Inside a loop, a step's own result is its last pass; its iterations say the rest.</summary>
+    public bool IsInsideLoop
+    {
+        get
+        {
+            for (var parent = Parent; parent is not null; parent = parent.Parent)
+            {
+                if (parent.Kind is FlowNodeKind.ForEach or FlowNodeKind.Until) return true;
+            }
+
+            return false;
+        }
+    }
+
+    internal void SetResult(bool inRun, FlowActionResult? result)
+    {
+        _inRun = inRun;
+        _result = result;
+        IterationLabel = null;
+
+        OnPropertyChanged(nameof(Result));
+        OnPropertyChanged(nameof(InRun));
+        OnPropertyChanged(nameof(RunOutcome));
+        OnPropertyChanged(nameof(IsDimmed));
+        OnPropertyChanged(nameof(RunGlyph));
+        OnPropertyChanged(nameof(RunLabel));
+        OnPropertyChanged(nameof(DurationLabel));
+        OnPropertyChanged(nameof(RunBadge));
+    }
+
+    internal static string FormatDuration(TimeSpan d) => FlowRunFormat.Duration(d);
+
     internal string SearchText =>
         $"{Node.DisplayName} {Node.Name} {Node.TypeLabel} {Node.Connector} {Node.Operation} {Node.Detail} {Node.Description} {RunAfterSummary}";
 }
@@ -223,6 +318,11 @@ public sealed class FlowDiagramViewModel : ObservableObject
         ZoomOutCommand = new RelayCommand(_ => Zoom -= 0.1);
         ResetZoomCommand = new RelayCommand(_ => Zoom = 1);
         CopyMermaidCommand = new RelayCommand(_ => CopyMermaid());
+        JumpToFailureCommand = new RelayCommand(_ => JumpToFailure(), _ => FailedCards.Any());
+        ClearRunCommand = new RelayCommand(_ => ClearRun(), _ => IsRunMode);
+        ShowInputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: true), _ => InputsLink is not null);
+        ShowOutputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: false), _ => OutputsLink is not null);
+        ShowDefinitionCommand = new RelayCommand(_ => ClearContent(), _ => HasContent);
     }
 
     public FlowDesign Design { get; }
@@ -250,6 +350,450 @@ public sealed class FlowDiagramViewModel : ObservableObject
         get => _notice;
         private set => SetProperty(ref _notice, value);
     }
+
+    // ---------------------------------------------------------------- a run on the diagram
+
+    private PowerAutomateClient? _runClient;
+    private FlowRunDetail? _run;
+    private readonly Dictionary<string, Task<IReadOnlyList<FlowRepetition>>> _repetitions = new(StringComparer.Ordinal);
+
+    public RelayCommand JumpToFailureCommand { get; }
+    public RelayCommand ClearRunCommand { get; }
+    public AsyncRelayCommand ShowInputsCommand { get; }
+    public AsyncRelayCommand ShowOutputsCommand { get; }
+    public RelayCommand ShowDefinitionCommand { get; }
+
+    /// <summary>Raised when the diagram goes back to the design alone.</summary>
+    public event EventHandler? RunCleared;
+
+    private string? _runNotice;
+    /// <summary>"Reading run ...", or why a run could not be shown - in the banner's place.</summary>
+    public string? RunNotice
+    {
+        get => _runNotice;
+        private set
+        {
+            if (!SetProperty(ref _runNotice, value)) return;
+            OnPropertyChanged(nameof(HasRunNotice));
+            OnPropertyChanged(nameof(HasRunBanner));
+        }
+    }
+
+    public bool HasRunNotice => !string.IsNullOrEmpty(RunNotice);
+
+    private bool _isRunNoticeError;
+    public bool IsRunNoticeError
+    {
+        get => _isRunNoticeError;
+        private set => SetProperty(ref _isRunNoticeError, value);
+    }
+
+    /// <summary>The banner shows a run, or news about one.</summary>
+    public bool HasRunBanner => IsRunMode || HasRunNotice;
+
+    /// <summary>Says what is happening with a run that is not on show yet - or why it cannot be.</summary>
+    public void SetRunNotice(string? notice, bool isError = false)
+    {
+        IsRunNoticeError = isError;
+        RunNotice = notice;
+    }
+
+    public FlowRunDetail? Run => _run;
+    public bool IsRunMode => _run is not null;
+
+    /// <summary>"Run …CU01 · Failed".</summary>
+    public string RunHeading => _run is null
+        ? string.Empty
+        : $"Run {ShortRunName(_run.RunName)} · {RunStatusLabel(_run.Outcome, _run.Status)}";
+
+    /// <summary>"Started 2026-10-01 09:15:02 · took 12.4 s · 2 steps failed".</summary>
+    public string RunDetail
+    {
+        get
+        {
+            if (_run is null) return string.Empty;
+
+            var parts = new List<string>();
+            if (_run.StartTime is { } start) parts.Add($"Started {start:yyyy-MM-dd HH:mm:ss}");
+            if (_run.Duration is { } took) parts.Add($"took {FlowCardViewModel.FormatDuration(took)}");
+
+            var failed = FailedCards.Count();
+            if (failed > 0) parts.Add(failed == 1 ? "1 step failed" : $"{failed} steps failed");
+            if (_run.ViaAdminScope) parts.Add("read with environment admin access");
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string? RunError => _run?.ErrorMessage is { Length: > 0 } message
+        ? _run.ErrorCode is { Length: > 0 } code ? $"{code}: {message}" : message
+        : null;
+
+    public bool HasRunError => RunError is not null;
+
+    private string? _runMismatch;
+    /// <summary>
+    /// Steps the run reports that the flow no longer has. The diagram is the flow as it is now; a
+    /// step renamed or removed since the run has nowhere to show its result, so the gap is named
+    /// rather than left to read as "did not run".
+    /// </summary>
+    public string? RunMismatch
+    {
+        get => _runMismatch;
+        private set
+        {
+            if (SetProperty(ref _runMismatch, value)) OnPropertyChanged(nameof(HasRunMismatch));
+        }
+    }
+
+    public bool HasRunMismatch => RunMismatch is not null;
+
+    private bool _isRunFailed;
+    public bool IsRunFailed
+    {
+        get => _isRunFailed;
+        private set => SetProperty(ref _isRunFailed, value);
+    }
+
+    /// <summary>Failed steps, top to bottom - the order the diagram draws them.</summary>
+    private IEnumerable<FlowCardViewModel> FailedCards =>
+        _cards.Where(c => c.RunOutcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
+
+    /// <summary>
+    /// Colours the diagram by one run: each step's outcome and duration, skipped and unreached
+    /// steps faded, loops counted. The first failure, if any, is selected.
+    /// </summary>
+    public void ShowRun(FlowRunDetail run, PowerAutomateClient client)
+    {
+        SetRunNotice(null);
+        _run = run;
+        _runClient = client;
+        _repetitions.Clear();
+
+        var triggerName = Design.Triggers.Count == 1 ? Design.Triggers[0].Name : null;
+
+        foreach (var card in _cards)
+        {
+            FlowActionResult? result;
+            if (card.Kind == FlowNodeKind.Trigger)
+            {
+                // The run names its trigger; a flow has one, whatever it is called now.
+                result = run.Trigger is { } t && (t.Name == card.Node.Name || card.Node.Name == triggerName) ? t : null;
+            }
+            else
+            {
+                result = run.Actions.TryGetValue(card.Node.Name, out var r) ? r : null;
+            }
+
+            card.SetResult(inRun: true, result);
+        }
+
+        var drawn = _cards.Select(c => c.Node.Name).ToHashSet(StringComparer.Ordinal);
+        var missing = run.Actions.Keys.Where(name => !drawn.Contains(name)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        RunMismatch = missing.Count == 0
+            ? null
+            : (missing.Count == 1 ? "1 step in this run is" : $"{missing.Count} steps in this run are") +
+              " no longer in the flow (renamed or removed since), so the diagram cannot show " +
+              (missing.Count == 1 ? "it: " : "them: ") +
+              string.Join(", ", missing.Take(6).Select(n => n.Replace('_', ' '))) + (missing.Count > 6 ? ", ..." : ".") +
+              " The flow has changed since this run, so steps added since show as did not run.";
+
+        IsRunFailed = run.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut;
+        RaiseRunState();
+
+        _ = CountIterationsAsync();
+
+        if (FailedCards.Any()) JumpToFailure();
+    }
+
+    /// <summary>Back to the design alone.</summary>
+    public void ClearRun()
+    {
+        _run = null;
+        _runClient = null;
+        _repetitions.Clear();
+
+        foreach (var card in _cards) card.SetResult(inRun: false, result: null);
+
+        RunMismatch = null;
+        IsRunFailed = false;
+        RaiseRunState();
+        RunCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RaiseRunState()
+    {
+        OnPropertyChanged(nameof(Run));
+        OnPropertyChanged(nameof(IsRunMode));
+        OnPropertyChanged(nameof(HasRunBanner));
+        OnPropertyChanged(nameof(RunHeading));
+        OnPropertyChanged(nameof(RunDetail));
+        OnPropertyChanged(nameof(RunError));
+        OnPropertyChanged(nameof(HasRunError));
+        JumpToFailureCommand.RaiseCanExecuteChanged();
+        ClearRunCommand.RaiseCanExecuteChanged();
+        RefreshSelectedRun();
+    }
+
+    /// <summary>Selects the first failed step, opening whatever holds it.</summary>
+    private void JumpToFailure()
+    {
+        if (FailedCards.FirstOrDefault() is not { } failed) return;
+
+        for (var parent = failed.Parent; parent is not null; parent = parent.Parent) parent.IsExpanded = true;
+        Selected = failed;
+    }
+
+    /// <summary>
+    /// "4 iterations · 1 failed" on each loop that ran. A loop's own entry lists no iterations;
+    /// a step inside it lists one per pass, so the first such step that ran is asked.
+    /// </summary>
+    private async Task CountIterationsAsync()
+    {
+        var run = _run;
+
+        foreach (var loop in _cards.Where(c => c.Kind is FlowNodeKind.ForEach or FlowNodeKind.Until &&
+                                               c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun)))
+        {
+            var witness = _cards.FirstOrDefault(c =>
+                !c.IsContainer && NearestLoop(c) == loop &&
+                c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun));
+
+            if (witness is null) continue;
+
+            try
+            {
+                var repetitions = await RepetitionsAsync(witness.Node.Name);
+                if (!ReferenceEquals(run, _run)) return;
+
+                var failed = repetitions.Count(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
+                loop.IterationLabel = (repetitions.Count == 1 ? "1 iteration" : $"{repetitions.Count:N0} iterations") +
+                                      (failed > 0 ? $" · {failed:N0} failed" : string.Empty);
+            }
+            catch
+            {
+                // A count is a nicety; the diagram stands without it.
+            }
+        }
+    }
+
+    private static FlowCardViewModel? NearestLoop(FlowCardViewModel card)
+    {
+        for (var parent = card.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent.Kind is FlowNodeKind.ForEach or FlowNodeKind.Until) return parent;
+        }
+
+        return null;
+    }
+
+    private Task<IReadOnlyList<FlowRepetition>> RepetitionsAsync(string actionName)
+    {
+        if (_run is null || _runClient is null) return Task.FromResult<IReadOnlyList<FlowRepetition>>(Array.Empty<FlowRepetition>());
+
+        if (!_repetitions.TryGetValue(actionName, out var task))
+        {
+            task = _runClient.GetRepetitionsAsync(_run, actionName);
+            _repetitions[actionName] = task;
+        }
+
+        return task;
+    }
+
+    // ---------------------------------------------------------------- the selected step in the run
+
+    /// <summary>"Failed · 1.2 s · started 09:15:02".</summary>
+    public string SelectedRunStatus
+    {
+        get
+        {
+            if (Selected is not { InRun: true } card) return string.Empty;
+
+            var parts = new List<string> { card.RunLabel };
+            if (card.DurationLabel is { } d && card.RunOutcome is not FlowStepOutcome.Skipped) parts.Add(d);
+            if (card.Result?.StartTime is { } start) parts.Add($"started {start:HH:mm:ss}");
+            if (card.IsInsideLoop && card.Result is not null) parts.Add("last iteration");
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string? SelectedError => (SelectedIteration?.ErrorMessage ?? Selected?.Result?.ErrorMessage) is { Length: > 0 } message
+        ? (SelectedIteration?.ErrorCode ?? Selected?.Result?.ErrorCode) is { Length: > 0 } code ? $"{code}: {message}" : message
+        : null;
+
+    public bool HasSelectedError => SelectedError is not null;
+
+    public ObservableCollection<FlowRepetition> SelectedIterations { get; } = new();
+    public bool HasSelectedIterations => SelectedIterations.Count > 0;
+
+    private FlowRepetition? _selectedIteration;
+    /// <summary>An iteration of the selected step; its inputs and outputs replace the step's last pass.</summary>
+    public FlowRepetition? SelectedIteration
+    {
+        get => _selectedIteration;
+        set
+        {
+            if (!SetProperty(ref _selectedIteration, value)) return;
+
+            ClearContent();
+            OnPropertyChanged(nameof(SelectedError));
+            OnPropertyChanged(nameof(HasSelectedError));
+            RaiseContentCommands();
+        }
+    }
+
+    private string _iterationStatus = string.Empty;
+    public string IterationStatus
+    {
+        get => _iterationStatus;
+        private set => SetProperty(ref _iterationStatus, value);
+    }
+
+    private string? InputsLink => SelectedIteration?.InputsLink ?? Selected?.Result?.InputsLink;
+    private string? OutputsLink => SelectedIteration?.OutputsLink ?? Selected?.Result?.OutputsLink;
+
+    private string? _content;
+    private string _contentTitle = "Definition";
+    private string? _contentError;
+    private bool _isContentLoading;
+
+    /// <summary>The JSON in the side panel: the step's definition, or the inputs or outputs asked for.</summary>
+    public string? DetailCode => _content ?? Selected?.Node.Json;
+    public string DetailCodeTitle => _contentTitle;
+    public bool HasContent => _content is not null;
+
+    public string? ContentError
+    {
+        get => _contentError;
+        private set
+        {
+            if (SetProperty(ref _contentError, value)) OnPropertyChanged(nameof(HasContentError));
+        }
+    }
+
+    public bool HasContentError => ContentError is not null;
+
+    public bool IsContentLoading
+    {
+        get => _isContentLoading;
+        private set => SetProperty(ref _isContentLoading, value);
+    }
+
+    private int _selectionVersion;
+
+    /// <summary>On a new selection in a run: its iterations, if it is inside a loop.</summary>
+    private void RefreshSelectedRun()
+    {
+        _selectionVersion++;
+        SelectedIterations.Clear();
+        _selectedIteration = null;
+        OnPropertyChanged(nameof(SelectedIteration));
+        IterationStatus = string.Empty;
+        ClearContent();
+
+        OnPropertyChanged(nameof(SelectedRunStatus));
+        OnPropertyChanged(nameof(SelectedError));
+        OnPropertyChanged(nameof(HasSelectedError));
+        OnPropertyChanged(nameof(HasSelectedIterations));
+        RaiseContentCommands();
+
+        if (Selected is { InRun: true, IsInsideLoop: true, Result: not null } card && !card.IsContainer)
+        {
+            _ = LoadIterationsAsync(card, _selectionVersion);
+        }
+    }
+
+    private async Task LoadIterationsAsync(FlowCardViewModel card, int version)
+    {
+        IterationStatus = "Reading iterations...";
+
+        try
+        {
+            var repetitions = await RepetitionsAsync(card.Node.Name);
+            if (version != _selectionVersion) return;
+
+            foreach (var repetition in repetitions) SelectedIterations.Add(repetition);
+
+            var failed = repetitions.Count(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
+            IterationStatus = repetitions.Count == 0
+                ? "No iterations recorded."
+                : $"{repetitions.Count:N0} iteration(s)" + (failed > 0 ? $", {failed:N0} failed" : string.Empty) +
+                  " - pick one to see its inputs and outputs.";
+            OnPropertyChanged(nameof(HasSelectedIterations));
+        }
+        catch (Exception ex)
+        {
+            if (version == _selectionVersion) IterationStatus = "Could not read iterations - " + ex.Message;
+        }
+    }
+
+    private async Task ShowContentAsync(bool inputs)
+    {
+        var link = inputs ? InputsLink : OutputsLink;
+        if (link is null || _runClient is null) return;
+
+        var version = _selectionVersion;
+        var what = inputs ? "Inputs" : "Outputs";
+        var of = SelectedIteration is { } iteration ? $" of iteration {iteration.Label}" : string.Empty;
+
+        IsContentLoading = true;
+        ContentError = null;
+
+        try
+        {
+            var content = await _runClient.GetContentAsync(link);
+            if (version != _selectionVersion) return;
+
+            _content = content;
+            _contentTitle = what + of;
+        }
+        catch (Exception ex)
+        {
+            if (version == _selectionVersion) ContentError = $"Could not read the {what.ToLowerInvariant()} - {ex.Message}";
+        }
+        finally
+        {
+            IsContentLoading = false;
+            RaiseContent();
+        }
+    }
+
+    private void ClearContent()
+    {
+        _content = null;
+        _contentTitle = "Definition";
+        ContentError = null;
+        RaiseContent();
+    }
+
+    private void RaiseContent()
+    {
+        OnPropertyChanged(nameof(DetailCode));
+        OnPropertyChanged(nameof(DetailCodeTitle));
+        OnPropertyChanged(nameof(HasContent));
+        ShowDefinitionCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseContentCommands()
+    {
+        ShowInputsCommand.RaiseCanExecuteChanged();
+        ShowOutputsCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>The tail of a run name, which is what tells runs apart: "...CU01".</summary>
+    internal static string ShortRunName(string name) => name.Length > 12 ? "…" + name[^8..] : name;
+
+    internal static string RunStatusLabel(FlowStepOutcome outcome, string status) => outcome switch
+    {
+        FlowStepOutcome.Succeeded => "Succeeded",
+        FlowStepOutcome.Failed => "Failed",
+        FlowStepOutcome.TimedOut => "Timed out",
+        FlowStepOutcome.Cancelled => "Cancelled",
+        FlowStepOutcome.Running => "Running",
+        FlowStepOutcome.Waiting => "Waiting",
+        _ => status
+    };
 
     private void CopyMermaid()
     {
@@ -281,6 +825,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(SelectedRunAfter));
+            RefreshSelectedRun();
         }
     }
 

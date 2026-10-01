@@ -39,7 +39,12 @@ straight into the maker portal.
     something other than plain success, its connector is dashed red and shows the outcomes it
     waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
     connector or condition, and selecting one shows its JSON. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
-    README or pull request.
+    README or pull request. **Show on diagram** on a run in Run history
+    draws that run over the design, read step by step from the Power Automate API: each step's
+    outcome and duration, skipped and unreached steps faded, loops with their iteration count,
+    and the first failure selected with its error. A step inside a loop lists its iterations;
+    its inputs and outputs are fetched only when asked for, and never saved. Run details are
+    kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
     (and a warning when tracing is switched off).

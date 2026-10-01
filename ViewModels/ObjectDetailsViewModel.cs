@@ -75,11 +75,64 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         get => _flowDiagram;
         private set
         {
-            if (SetProperty(ref _flowDiagram, value)) OnPropertyChanged(nameof(HasFlowDiagram));
+            if (!SetProperty(ref _flowDiagram, value)) return;
+            OnPropertyChanged(nameof(HasFlowDiagram));
+            ShowRunOnDiagramCommand.RaiseCanExecuteChanged();
         }
     }
 
     public bool HasFlowDiagram => FlowDiagram is not null;
+
+    private bool _isDesignTabSelected;
+    /// <summary>Selecting the Design tab from code - a run asked to be shown on the diagram.</summary>
+    public bool IsDesignTabSelected
+    {
+        get => _isDesignTabSelected;
+        set => SetProperty(ref _isDesignTabSelected, value);
+    }
+
+    private PowerAutomate.PowerAutomateClient? _powerAutomate;
+    private AsyncRelayCommand? _showRunOnDiagramCommand;
+
+    /// <summary>A cloud flow run drawn on the Design tab, step by step, from the Power Automate API.</summary>
+    public AsyncRelayCommand ShowRunOnDiagramCommand => _showRunOnDiagramCommand ??= new AsyncRelayCommand(
+        p => ShowRunOnDiagramAsync(p as ProcessRun ?? SelectedRun),
+        p => CanShowOnDiagram(p as ProcessRun ?? SelectedRun));
+
+    private bool CanShowOnDiagram(ProcessRun? run) =>
+        IsCloudFlow && FlowDiagram is not null && !string.IsNullOrWhiteSpace(run?.Name);
+
+    private async Task ShowRunOnDiagramAsync(ProcessRun? run)
+    {
+        if (run is null || FlowDiagram is not { } diagram) return;
+
+        IsDesignTabSelected = false;
+        IsDesignTabSelected = true;
+
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            diagram.SetRunNotice(
+                "This environment's Power Platform id could not be found, so the run cannot be read from Power Automate. " +
+                "Add it under EnvironmentIds in settings.json.", isError: true);
+            return;
+        }
+
+        // The run's own record of the flow id is what Power Automate addresses it by.
+        var flowId = run.FlowId ?? Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString();
+
+        diagram.SetRunNotice($"Reading run {FlowDiagramViewModel.ShortRunName(run.Name)} from Power Automate...");
+
+        try
+        {
+            _powerAutomate ??= _client.CreatePowerAutomateClient();
+            var detail = await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name);
+            diagram.ShowRun(detail, _powerAutomate);
+        }
+        catch (Exception ex)
+        {
+            diagram.SetRunNotice(ex.Message, isError: true);
+        }
+    }
 
     private string _designStatus = "Reading the flow's definition...";
     /// <summary>Shown in place of the diagram while it loads, or when it could not be drawn.</summary>
@@ -438,7 +491,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         get => _selectedRun;
         set
         {
-            if (SetProperty(ref _selectedRun, value)) OpenRunCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _selectedRun, value)) return;
+            OpenRunCommand.RaiseCanExecuteChanged();
+            ShowRunOnDiagramCommand.RaiseCanExecuteChanged();
         }
     }
 
