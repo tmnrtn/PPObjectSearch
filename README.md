@@ -35,9 +35,10 @@ straight into the maker portal.
   - **Cloud flows**: recent run history from Dataverse, with each run's error and a link to the run
     in Power Automate, and the flow's JSON definition to copy or save. **Design** draws the flow
     as the designer does, read-only: trigger, steps in run-after order, parallel branches side by
-    side, and conditions, switches, loops and scopes that collapse. Steps that run only on failure
-    or time-out are badged, search finds a step by name, type or connector, and selecting one
-    shows its JSON. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
+    side, and conditions, switches, loops and scopes that collapse. Where a step runs after
+    something other than plain success, its connector is dashed red and shows the outcomes it
+    waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
+    connector or condition, and selecting one shows its JSON. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
     README or pull request.
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions

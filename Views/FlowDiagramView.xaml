@@ -83,10 +83,56 @@
             </StackPanel>
         </DataTemplate>
 
+        <!-- One outcome of a run-after condition: Succeeded, Failed, Timed out, Skipped. -->
+        <DataTemplate x:Key="StatusChip" DataType="{x:Type vm:FlowStatusChip}">
+            <Border x:Name="Chip" CornerRadius="9" Padding="6,1,7,1" Margin="0,0,4,0" Background="{DynamicResource Surface2}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="ChipGlyph" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="9"
+                               Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <TextBlock x:Name="ChipLabel" Text="{Binding Label}" FontSize="10" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static vm:RunAfterTone.Succeeded}">
+                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter TargetName="ChipGlyph" Property="Foreground" Value="{DynamicResource Green}" />
+                    <Setter TargetName="ChipLabel" Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static vm:RunAfterTone.Failed}">
+                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter TargetName="ChipGlyph" Property="Foreground" Value="{DynamicResource Red}" />
+                    <Setter TargetName="ChipLabel" Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tone}" Value="{x:Static vm:RunAfterTone.TimedOut}">
+                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter TargetName="ChipGlyph" Property="Foreground" Value="{DynamicResource Amber}" />
+                    <Setter TargetName="ChipLabel" Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- "after Try:" and its outcomes - one line per earlier step the condition names. -->
+        <DataTemplate x:Key="RunAfterCondition" DataType="{x:Type vm:FlowRunAfterCondition}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,1">
+                <TextBlock Text="{Binding AfterLabel}" FontSize="10" Foreground="{DynamicResource Faint}"
+                           VerticalAlignment="Center" Margin="0,0,6,0" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                <ItemsControl ItemsSource="{Binding Statuses}" ItemTemplate="{StaticResource StatusChip}"
+                              ItemsPanel="{StaticResource Row}" Focusable="False" />
+            </StackPanel>
+        </DataTemplate>
+
         <!-- A trigger or action. A container frames its branches beneath its card. -->
         <DataTemplate DataType="{x:Type vm:FlowCardViewModel}">
             <StackPanel HorizontalAlignment="Center">
-                <Rectangle Style="{StaticResource Connector}" />
+                <!-- Solid for plain success; dashed red, with the outcomes beneath, where the step
+                     runs only after something else - the way the designer draws it. -->
+                <Line x:Name="Wire" X1="1" Y1="0" X2="1" Y2="18" Width="2" Height="18" StrokeThickness="2"
+                      Stroke="{DynamicResource Border2}" HorizontalAlignment="Center" />
+                <ItemsControl x:Name="RunAfter" ItemsSource="{Binding RunAfterConditions}"
+                              ItemTemplate="{StaticResource RunAfterCondition}" HorizontalAlignment="Center"
+                              Margin="0,2,0,5" Focusable="False" Visibility="Collapsed"
+                              ToolTip="{Binding RunAfterSummary}" />
 
                 <Border x:Name="Frame" CornerRadius="8" HorizontalAlignment="Center">
                     <StackPanel>
@@ -135,20 +181,6 @@
                                                Margin="21,3,0,0" ToolTip="{Binding Detail}"
                                                Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}" />
 
-                                    <ItemsControl ItemsSource="{Binding RunAfterBadges}" Margin="21,5,0,0" Focusable="False"
-                                                  Visibility="{Binding HasRunAfterBadges, Converter={StaticResource BoolToVis}}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <ContentControl Style="{StaticResource PillAmber}" Content="{Binding}" Margin="0,0,4,2" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-
                                     <TextBlock Text="{Binding Description}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap"
                                                Foreground="{DynamicResource Muted}" Margin="21,4,0,0" MaxHeight="48"
                                                TextTrimming="CharacterEllipsis"
@@ -169,6 +201,14 @@
             </StackPanel>
 
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                    <Setter TargetName="Wire" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasRunAfterConditions}" Value="True">
+                    <Setter TargetName="Wire" Property="Stroke" Value="{DynamicResource Red}" />
+                    <Setter TargetName="Wire" Property="StrokeDashArray" Value="2 1.5" />
+                    <Setter TargetName="RunAfter" Property="Visibility" Value="Visible" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsContainer}" Value="True">
                     <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Surface2}" />
                     <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Border}" />

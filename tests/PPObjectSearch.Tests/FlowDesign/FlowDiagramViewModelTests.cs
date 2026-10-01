@@ -94,12 +94,79 @@ public class FlowDiagramViewModelTests
     }
 
     [Fact]
-    public void Error_handling_paths_carry_a_badge_in_plain_words()
+    public void A_step_that_runs_after_a_failure_shows_the_condition_on_its_connector()
+    {
+        var catcher = Card(Diagram(), "Catch");
+
+        Assert.True(catcher.HasRunAfterConditions);
+        var condition = Assert.Single(catcher.RunAfterConditions);
+        Assert.Equal("Try", condition.After);
+        Assert.Equal("after Try", condition.AfterLabel);
+        Assert.Equal(["Failed", "Timed out", "Skipped"], condition.Statuses.Select(c => c.Label));
+        Assert.Equal([RunAfterTone.Failed, RunAfterTone.TimedOut, RunAfterTone.Skipped], condition.Statuses.Select(c => c.Tone));
+        Assert.Equal("Runs if Try failed or timed out or was skipped", catcher.RunAfterSummary);
+    }
+
+    [Fact]
+    public void A_step_after_plain_success_shows_nothing_extra()
+    {
+        var email = Card(Diagram(), "Email");
+
+        Assert.False(email.HasRunAfterConditions);
+        Assert.Empty(email.RunAfterConditions);
+        Assert.Equal(string.Empty, email.RunAfterSummary);
+    }
+
+    [Fact]
+    public void A_join_shows_only_the_predecessors_with_conditions()
+    {
+        var d = new FlowDiagramViewModel(FlowDesignParser.Parse("""
+            { "triggers": {}, "actions": {
+              "A": { "type": "Compose" }, "B": { "type": "Compose" },
+              "Always": { "type": "Compose", "runAfter": { "A": ["Succeeded", "Failed"], "B": ["Succeeded"] } } } }
+            """));
+
+        var condition = Assert.Single(Card(d, "Always").RunAfterConditions);
+        Assert.Equal("A", condition.After);
+        Assert.Equal([RunAfterTone.Succeeded, RunAfterTone.Failed], condition.Statuses.Select(c => c.Tone));
+    }
+
+    [Fact]
+    public void Several_predecessors_with_conditions_each_get_a_line()
+    {
+        var d = new FlowDiagramViewModel(FlowDesignParser.Parse("""
+            { "triggers": {}, "actions": {
+              "A": { "type": "Compose" }, "B": { "type": "Compose" },
+              "Cleanup": { "type": "Compose", "runAfter": { "A": ["Failed"], "B": ["TimedOut"] } } } }
+            """));
+
+        Assert.Equal(["after A", "after B"], Card(d, "Cleanup").RunAfterConditions.Select(c => c.AfterLabel));
+    }
+
+    [Theory]
+    [InlineData("Succeeded", "Succeeded", RunAfterTone.Succeeded)]
+    [InlineData("FAILED", "Failed", RunAfterTone.Failed)]
+    [InlineData("TimedOut", "Timed out", RunAfterTone.TimedOut)]
+    [InlineData("Skipped", "Skipped", RunAfterTone.Skipped)]
+    [InlineData("Cancelled", "Cancelled", RunAfterTone.Other)]
+    public void Each_status_gets_its_chip(string status, string label, RunAfterTone tone)
+    {
+        var chip = FlowCardViewModel.Chip(status);
+
+        Assert.Equal(label, chip.Label);
+        Assert.Equal(tone, chip.Tone);
+        Assert.False(string.IsNullOrEmpty(chip.Glyph));
+    }
+
+    [Fact]
+    public void Searching_for_failed_finds_the_error_handlers()
     {
         var d = Diagram();
 
-        Assert.Equal(["Runs if Try failed or timed out or was skipped"], Card(d, "Catch").RunAfterBadges);
-        Assert.False(Card(d, "Email").HasRunAfterBadges);
+        d.SearchText = "failed";
+
+        Assert.Contains(Card(d, "Catch"), d.Cards.Where(c => c.IsMatch));
+        Assert.DoesNotContain(Card(d, "Email"), d.Cards.Where(c => c.IsMatch));
     }
 
     [Theory]
@@ -147,7 +214,8 @@ public class FlowDiagramViewModelTests
         d.CollapseAllCommand.Execute(null);
         Assert.False(Card(d, "Try").IsExpanded);
 
-        d.SearchText = "skip";
+        // "skip" alone would also find Catch, which runs if Try was skipped; the step's name is exact.
+        d.SearchText = "skip it";
 
         Assert.True(Card(d, "Skip it").IsMatch);
         Assert.Equal(1, d.MatchCount);

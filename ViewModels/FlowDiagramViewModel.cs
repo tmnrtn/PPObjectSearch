@@ -42,6 +42,28 @@ public sealed class FlowParallelViewModel : FlowStepViewModel
     public string Heading => $"Parallel · {Branches.Count} branches";
 }
 
+/// <summary>An outcome a step can wait on, for its colour.</summary>
+public enum RunAfterTone
+{
+    Succeeded,
+    Failed,
+    TimedOut,
+    Skipped,
+    Other
+}
+
+/// <summary>One outcome in a run-after condition, drawn as a coloured chip.</summary>
+public sealed record FlowStatusChip(string Label, string Glyph, RunAfterTone Tone);
+
+/// <summary>
+/// "After Try: Failed, Timed out" - the outcomes of one earlier step that let this step run.
+/// Only conditions other than plain success are drawn; success alone is the default and says nothing.
+/// </summary>
+public sealed record FlowRunAfterCondition(string After, IReadOnlyList<FlowStatusChip> Statuses)
+{
+    public string AfterLabel => $"after {After}";
+}
+
 /// <summary>A trigger or action, drawn as a card - with its branches below it if it is a container.</summary>
 public sealed class FlowCardViewModel : FlowStepViewModel
 {
@@ -50,11 +72,25 @@ public sealed class FlowCardViewModel : FlowStepViewModel
         Node = node;
         Parent = parent;
 
-        RunAfterBadges = node.RunAfter
+        RunAfterConditions = node.RunAfter
             .Where(r => !r.IsDefault)
-            .Select(r => $"Runs if {r.Action.Replace('_', ' ')} {string.Join(" or ", r.Statuses.Select(Outcome))}")
+            .Select(r => new FlowRunAfterCondition(r.Action.Replace('_', ' '), r.Statuses.Select(Chip).ToList()))
             .ToList();
+
+        RunAfterSummary = string.Join(Environment.NewLine, node.RunAfter
+            .Where(r => !r.IsDefault)
+            .Select(r => $"Runs if {r.Action.Replace('_', ' ')} {string.Join(" or ", r.Statuses.Select(Outcome))}"));
     }
+
+    /// <summary>The chip for one run-after status, as the designer words and colours it.</summary>
+    internal static FlowStatusChip Chip(string status) => status.ToLowerInvariant() switch
+    {
+        "succeeded" => new FlowStatusChip("Succeeded", "\uE73E", RunAfterTone.Succeeded),
+        "failed" => new FlowStatusChip("Failed", "\uE711", RunAfterTone.Failed),
+        "timedout" => new FlowStatusChip("Timed out", "\uE823", RunAfterTone.TimedOut),
+        "skipped" => new FlowStatusChip("Skipped", "\uE893", RunAfterTone.Skipped),
+        _ => new FlowStatusChip(status, "\uE946", RunAfterTone.Other)
+    };
 
     /// <summary>A run-after status as words: "TimedOut" reads "timed out".</summary>
     internal static string Outcome(string status) => status.ToLowerInvariant() switch
@@ -78,9 +114,15 @@ public sealed class FlowCardViewModel : FlowStepViewModel
     public FlowNodeCategory Category => Node.Category;
     public FlowNodeKind Kind => Node.Kind;
 
-    /// <summary>"Runs if Try failed or timedout" - the error-handling paths, which are easy to miss.</summary>
-    public IReadOnlyList<string> RunAfterBadges { get; }
-    public bool HasRunAfterBadges => RunAfterBadges.Count > 0;
+    /// <summary>
+    /// The run-after conditions other than plain success - drawn on the connector into the step,
+    /// where the designer draws them. Empty for an ordinary step, which then shows nothing extra.
+    /// </summary>
+    public IReadOnlyList<FlowRunAfterCondition> RunAfterConditions { get; }
+    public bool HasRunAfterConditions => RunAfterConditions.Count > 0;
+
+    /// <summary>"Runs if Try failed or timed out" - the conditions in words, for the tooltip and search.</summary>
+    public string RunAfterSummary { get; }
 
     public IReadOnlyList<FlowBranchViewModel> Branches { get; internal set; } = Array.Empty<FlowBranchViewModel>();
     public bool IsContainer => Node.IsContainer;
@@ -136,7 +178,7 @@ public sealed class FlowCardViewModel : FlowStepViewModel
     }
 
     internal string SearchText =>
-        $"{Node.DisplayName} {Node.Name} {Node.TypeLabel} {Node.Connector} {Node.Operation} {Node.Detail} {Node.Description}";
+        $"{Node.DisplayName} {Node.Name} {Node.TypeLabel} {Node.Connector} {Node.Operation} {Node.Detail} {Node.Description} {RunAfterSummary}";
 }
 
 /// <summary>
