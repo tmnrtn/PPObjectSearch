@@ -29,7 +29,9 @@ straight into the maker portal.
 - **Detail pane** — the selected object's related table, owner, id and layer state, with buttons to
   open it, see its solutions and dependencies, or copy its name, link or id. Right-click a row for
   the same copy actions; the pane can be hidden from the toolbar.
-- **Object details** (*Details…*) — solutions, layers and dependencies for any object, plus, by type:
+- **Object details** (*Details…*) — solutions, layers and dependencies for any object. Open as many
+  as you like: each opens a step down and right from the last, and **Close all details**
+  (`Ctrl+Shift+W`) in the sidebar closes them together. By type, details also show:
   - **Cloud flows**: recent run history from Dataverse, with each run's error and a link to the run
     in Power Automate, and the flow's JSON definition to copy or save. **Design** draws the flow
     as the designer does, read-only: trigger, steps in run-after order, parallel branches side by

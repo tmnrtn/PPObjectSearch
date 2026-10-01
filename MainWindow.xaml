@@ -19,6 +19,7 @@
         <KeyBinding Key="F" Modifiers="Ctrl+Shift" Command="{Binding GlobalSearchCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CompareCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl+Shift" Command="{Binding CompareDataCommand}" />
+        <KeyBinding Key="W" Modifiers="Ctrl+Shift" Command="{Binding CloseAllDetailsCommand}" />
     </Window.InputBindings>
 
     <Window.Resources>
@@ -190,6 +191,19 @@
                         <Grid>
                             <TextBlock Text="Compare data" VerticalAlignment="Center" />
                             <TextBlock Text="Ctrl+Shift+D" Style="{StaticResource Shortcut}" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Only there while there is something to close. -->
+                    <TextBlock Text="Open windows" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Muted}" Margin="8,16,8,6"
+                               Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}" />
+                    <Button Style="{StaticResource SidebarAction}" Command="{Binding CloseAllDetailsCommand}"
+                            Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Close every object details window, in every environment (Ctrl+Shift+W)">
+                        <Grid>
+                            <TextBlock Text="{Binding CloseAllDetailsLabel}" VerticalAlignment="Center" />
+                            <TextBlock Text="Ctrl+Shift+W" Style="{StaticResource Shortcut}" />
                         </Grid>
                     </Button>
                 </StackPanel>

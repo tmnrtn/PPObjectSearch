@@ -29,6 +29,14 @@ public sealed class ShellViewModel : ObservableObject
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
         MoveTabRightCommand = new RelayCommand(_ => MoveSelectedTab(+1));
         SignOutAllCommand = new AsyncRelayCommand(_ => SignOutAllAsync());
+        CloseAllDetailsCommand = new RelayCommand(_ => DetailsWindows.CloseAll(), _ => OpenDetailsCount > 0);
+        DetailsWindows.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(OpenDetailsCount));
+            OnPropertyChanged(nameof(HasOpenDetails));
+            OnPropertyChanged(nameof(CloseAllDetailsLabel));
+            CloseAllDetailsCommand.RaiseCanExecuteChanged();
+        };
         SetThemeCommand = new RelayCommand(p =>
         {
             if (Enum.TryParse<AppTheme>(p as string, out var theme)) Theme = theme;
@@ -44,6 +52,12 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand MoveTabLeftCommand { get; }
     public RelayCommand MoveTabRightCommand { get; }
     public AsyncRelayCommand SignOutAllCommand { get; }
+    public RelayCommand CloseAllDetailsCommand { get; }
+
+    /// <summary>Object details windows open across every tab.</summary>
+    public int OpenDetailsCount => DetailsWindows.Count;
+    public bool HasOpenDetails => OpenDetailsCount > 0;
+    public string CloseAllDetailsLabel => $"Close all details ({OpenDetailsCount})";
     public RelayCommand GlobalSearchCommand { get; }
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
