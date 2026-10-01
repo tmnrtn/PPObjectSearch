@@ -6,6 +6,14 @@ using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
+/// <summary>What the step pane's code shows: the step's definition, or its inputs or outputs in the run.</summary>
+public enum FlowCodePane
+{
+    Definition,
+    Inputs,
+    Outputs
+}
+
 /// <summary>A step in a drawn sequence: a card, or parallel branches.</summary>
 public abstract class FlowStepViewModel : ObservableObject
 {
@@ -341,6 +349,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         ShowInputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: true), _ => InputsLink is not null);
         ShowOutputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: false), _ => OutputsLink is not null);
         ShowDefinitionCommand = new RelayCommand(_ => ClearContent(), _ => HasContent);
+        CopyCodeCommand = new RelayCommand(_ => CopyCode(), _ => !string.IsNullOrEmpty(DetailCode));
     }
 
     public FlowDesign Design { get; }
@@ -387,7 +396,30 @@ public sealed class FlowDiagramViewModel : ObservableObject
     public string Notice
     {
         get => _notice;
-        private set => SetProperty(ref _notice, value);
+        private set
+        {
+            if (SetProperty(ref _notice, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    /// <summary>
+    /// The window's status bar while the diagram is on show: the last copy, or the run on show
+    /// and how its steps went, or the design's size.
+    /// </summary>
+    public string StatusLine
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(Notice)) return Notice;
+            if (_run is null) return Summary;
+
+            var steps = _cards.Count(c => c.Result is not null);
+            var failed = FailedCards.Count();
+            var skipped = _cards.Count(c => c.RunOutcome == FlowStepOutcome.Skipped);
+
+            return $"Showing run {ShortRunName(_run.RunName)} · {steps:N0} step(s), {failed:N0} failed, {skipped:N0} skipped" +
+                   " · run details are kept about 28 days";
+        }
     }
 
     // ---------------------------------------------------------------- a run on the diagram
@@ -487,6 +519,34 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
     public bool HasRunMismatch => RunMismatch is not null;
 
+    /// <summary>"Run failed" - the run strip's lead, in the outcome's colour.</summary>
+    public string RunOutcomeText => _run is null
+        ? string.Empty
+        : "Run " + RunStatusLabel(_run.Outcome, _run.Status).ToLowerInvariant();
+
+    /// <summary>"2026-09-30 22:14 · 4.2 s · trigger Modified" - the rest of the strip.</summary>
+    public string RunStripText
+    {
+        get
+        {
+            if (_run is null) return string.Empty;
+
+            var parts = new List<string>();
+            if (_run.StartTime is { } start) parts.Add($"{start:yyyy-MM-dd HH:mm}");
+            if (_run.Duration is { } took) parts.Add(FlowCardViewModel.FormatDuration(took));
+            if (_run.Trigger?.Name is { Length: > 0 } trigger) parts.Add("trigger " + trigger.Replace('_', ' '));
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>Everything the strip leaves out: the run id, the step count, the run's own error.</summary>
+    public string RunToolTip => _run is null
+        ? string.Empty
+        : string.Join(Environment.NewLine, new[] { RunHeading, RunDetail, RunError }.Where(t => !string.IsNullOrEmpty(t)));
+
+    public bool IsRunSucceeded => _run?.Outcome == FlowStepOutcome.Succeeded;
+
     private bool _isRunFailed;
     public bool IsRunFailed
     {
@@ -569,6 +629,11 @@ public sealed class FlowDiagramViewModel : ObservableObject
         OnPropertyChanged(nameof(RunDetail));
         OnPropertyChanged(nameof(RunError));
         OnPropertyChanged(nameof(HasRunError));
+        OnPropertyChanged(nameof(RunOutcomeText));
+        OnPropertyChanged(nameof(RunStripText));
+        OnPropertyChanged(nameof(RunToolTip));
+        OnPropertyChanged(nameof(IsRunSucceeded));
+        OnPropertyChanged(nameof(StatusLine));
         JumpToFailureCommand.RaiseCanExecuteChanged();
         ClearRunCommand.RaiseCanExecuteChanged();
         RefreshSelectedRun();
@@ -776,6 +841,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         var what = inputs ? "Inputs" : "Outputs";
         var of = SelectedIteration is { } iteration ? $" of iteration {iteration.Label}" : string.Empty;
 
+        _contentKind = inputs ? FlowCodePane.Inputs : FlowCodePane.Outputs;
         IsContentLoading = true;
         ContentError = null;
 
@@ -789,7 +855,11 @@ public sealed class FlowDiagramViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (version == _selectionVersion) ContentError = $"Could not read the {what.ToLowerInvariant()} - {ex.Message}";
+            if (version == _selectionVersion)
+            {
+                ContentError = $"Could not read the {what.ToLowerInvariant()} - {ex.Message}";
+                if (_content is null) _contentKind = FlowCodePane.Definition;
+            }
         }
         finally
         {
@@ -801,6 +871,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
     private void ClearContent()
     {
         _content = null;
+        _contentKind = FlowCodePane.Definition;
         _contentTitle = "Definition";
         ContentError = null;
         RaiseContent();
@@ -811,13 +882,67 @@ public sealed class FlowDiagramViewModel : ObservableObject
         OnPropertyChanged(nameof(DetailCode));
         OnPropertyChanged(nameof(DetailCodeTitle));
         OnPropertyChanged(nameof(HasContent));
+        OnPropertyChanged(nameof(IsDefinitionShown));
+        OnPropertyChanged(nameof(IsInputsShown));
+        OnPropertyChanged(nameof(IsOutputsShown));
         ShowDefinitionCommand.RaiseCanExecuteChanged();
+        CopyCodeCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseContentCommands()
     {
         ShowInputsCommand.RaiseCanExecuteChanged();
         ShowOutputsCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanShowInputs));
+        OnPropertyChanged(nameof(CanShowOutputs));
+    }
+
+    // ---------------------------------------------------------------- Definition | Inputs | Outputs
+
+    /// <summary>Which the code pane shows - set as soon as inputs or outputs are asked for.</summary>
+    private FlowCodePane _contentKind = FlowCodePane.Definition;
+
+    /// <summary>Inputs and outputs exist only for a step that ran, in the run on show.</summary>
+    public bool CanShowInputs => InputsLink is not null;
+    public bool CanShowOutputs => OutputsLink is not null;
+
+    // The switch's three segments. Choosing one does what the old buttons did; un-choosing is
+    // the other segment's business.
+    public bool IsDefinitionShown
+    {
+        get => _contentKind == FlowCodePane.Definition;
+        set
+        {
+            if (value && _contentKind != FlowCodePane.Definition) ClearContent();
+        }
+    }
+
+    public bool IsInputsShown
+    {
+        get => _contentKind == FlowCodePane.Inputs;
+        set
+        {
+            if (value && _contentKind != FlowCodePane.Inputs && CanShowInputs) _ = ShowContentAsync(inputs: true);
+        }
+    }
+
+    public bool IsOutputsShown
+    {
+        get => _contentKind == FlowCodePane.Outputs;
+        set
+        {
+            if (value && _contentKind != FlowCodePane.Outputs && CanShowOutputs) _ = ShowContentAsync(inputs: false);
+        }
+    }
+
+    public RelayCommand CopyCodeCommand { get; }
+
+    private void CopyCode()
+    {
+        var code = DetailCode ?? string.Empty;
+        Notice = ClipboardText.TryCopy(code, out var failure)
+            ? $"Copied the step's {DetailCodeTitle.ToLowerInvariant()} ({code.Length:N0} characters)."
+            : "Could not copy - " + failure;
     }
 
     /// <summary>The tail of a run name, which is what tells runs apart: "...CU01".</summary>
@@ -864,11 +989,16 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(SelectedRunAfter));
+            OnPropertyChanged(nameof(SelectedRunOutcome));
+            Notice = string.Empty;
             RefreshSelectedRun();
         }
     }
 
     public bool HasSelection => Selected is not null;
+
+    /// <summary>The selected step's outcome, for its pill in the step pane; null outside a run.</summary>
+    public FlowStepOutcome? SelectedRunOutcome => Selected is { InRun: true } card ? card.RunOutcome : null;
 
     /// <summary>Every run-after of the selected step, the default ones included.</summary>
     public string SelectedRunAfter => Selected?.Node.RunAfter is { Count: > 0 } runAfter

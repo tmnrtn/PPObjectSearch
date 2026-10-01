@@ -32,24 +32,30 @@ straight into the maker portal.
   A filter in use is highlighted, and **Clear** resets them all.
 - **Name as a maker portal link** — click to open the object in <https://make.powerapps.com>.
 - **Detail pane** — the selected object's related table, owner, id and layer state, with buttons to
-  open it, see its solutions and dependencies, or copy its name, link or id. Right-click a row for
-  the same copy actions; the pane can be hidden from the toolbar.
-- **Object details** (*Details…*) — solutions, layers and dependencies for any object. Open as many
-  as you like: each opens a step down and right from the last, and **Close all details**
+  open it, see its solutions and dependencies, or copy its name, link or id. **Open in details**
+  goes straight to a tab of the details window - Design, Run history or Definition for a flow;
+  Columns, Relationships, Forms or Views for a table. A cloud flow shows its last run, and how
+  many of its last 20 failed; an environment variable shows its current value. Right-click a row
+  for the same copy actions; the pane can be hidden from the toolbar.
+- **Object details** (*Details…*, or double-click a row) — solutions, layers and dependencies for
+  any object, with the type's own tabs first. Each window names the environment it came from. Open
+  as many as you like: each opens a step down and right from the last, and **Close all details**
   (`Ctrl+Shift+W`) in the sidebar closes them together. By type, details also show:
-  - **Cloud flows**: recent run history from Dataverse, with each run's error and a link to the run
-    in Power Automate, and the flow's JSON definition to copy or save. **Design** draws the flow
+  - **Cloud flows**: whether the flow is on, a link to it in Power Automate, recent run history
+    (Dataverse's, plus runs still in progress or just finished from Power Automate), with each
+    run's error and a link to the run, and the flow's JSON definition to copy or save. **Design** draws the flow
     as the designer does, read-only: trigger, steps in run-after order, parallel branches side by
     side, and conditions, switches, loops and scopes that collapse. Where a step runs after
     something other than plain success, its connector is dashed red and shows the outcomes it
     waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
     connector or condition, and selecting one shows its JSON. A "Run a child flow" step names
     the flow it calls. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
-    README or pull request. **Show on diagram** on a run in Run history
+    README or pull request. **Diagram** on a run in Run history
     draws that run over the design, read step by step from the Power Automate API: each step's
     outcome and duration, skipped and unreached steps faded, loops with their iteration count,
-    and the first failure selected with its error. A step inside a loop lists its iterations;
-    its inputs and outputs are fetched only when asked for, and never saved. Run details are
+    and the first failure selected with its error. The run sits in the diagram's toolbar, with
+    **First failure** and a button to clear it. A step inside a loop lists its iterations; a
+    step's **Inputs** and **Outputs** are fetched only when asked for, and never saved. Run details are
     kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
@@ -61,13 +67,15 @@ straight into the maker portal.
   - **Tables**: their columns, relationships, keys, forms and views; Dataverse's stored row count
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
     one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
-- **Solution history** — every import, upgrade, uninstall and export in an environment, with the
-  error for any that failed.
+- **Solution history** (in the sidebar, under the selected environment) — every import, upgrade,
+  uninstall and export in an environment, with the error for any that failed.
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
   environments are refused unless explicitly allowlisted, and deleting needs its own confirmation.
-- **Admin tools** (*Admin* on the toolbar) — sync an Entra group team with its Entra (RBAC)
+- **Environment admin** (in the sidebar, under the selected environment) — read-only views of
+  users, security roles, mailboxes and queues. See [Environment admin](#environment-admin).
+- **Admin tools** (in the sidebar, under the selected environment) — sync an Entra group team with its Entra (RBAC)
   group, and make a queue's members match a team's. Every change is previewed and confirmed first,
   under the same production guard.
 
@@ -246,9 +254,35 @@ The type check needs a Power Platform API token for the signed-in account. It is
 requested silently, so this never opens a sign-in window on its own; where no token is to be had,
 the environment simply reads as unknown and is guarded.
 
+## Environment admin
+
+**Users**, **Security roles**, **Mailboxes** and **Queues** in the sidebar, under the selected
+environment, open one window with a tab for each. It only reads. Each tab reads the first time it
+is opened, and links move between them: a user's role opens it on the Security roles tab, a
+queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues tab. **Back** and
+**Forward** (Alt+Left / Alt+Right, or the mouse's back and forward buttons) retrace those links.
+
+- **Users** — every user, searchable, filtered by user type (application user, or the access
+  mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled users
+  by default). A user shows their teams, and their security roles both direct and through each
+  team, each in the business unit it is held in, and their mailbox's approval and test result.
+- **Security roles** — each role once, at the business unit it is defined in. A role shows its
+  privileges as the role editor lays them out (a row per table, Create to Share, each with its
+  reach: User, BU, Parent, Org), its other privileges (Export to Excel, Bulk delete...), and the
+  users and teams holding it in any business unit.
+- **Mailboxes** — filtered by owner (users, queues), approval and test result. A mailbox shows its
+  approval (and the Exchange admin's), incoming, outgoing and appointment status and delivery
+  method, whether each is enabled, when it was last tested, and its email server profile. The
+  test result counts only the directions the mailbox delivers.
+- **Queues** — public or private, active by default. A queue shows its owner, business unit, item
+  count, email settings (which email it converts, unsolicited email, delivery, approval), its
+  mailbox's approval and test result, and its members.
+
 ## Admin tools
 
-**Admin** on an environment's toolbar opens two membership tools. Both only read until you ask
+**Entra team sync…** and **Queue membership sync…**, marked *WRITES* in the sidebar under the
+selected environment, are two membership tools. An environment allowed writes shows **Writes
+allowed** in the header of every window opened from it. Both only read until you ask
 for a preview of changes; nothing is written until you confirm it in a separate window that lists
 every user affected, states which environment it is writing to, and applies the
 [production guard](#the-production-guard). Removing anyone needs its own acknowledgement.

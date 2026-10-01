@@ -92,6 +92,15 @@ public sealed class MakerPortalLinkBuilder
                "/runs/" + Uri.EscapeDataString(runName.Trim());
     }
 
+    /// <summary>A cloud flow's details page in Power Automate.</summary>
+    public static string? BuildFlowUrl(string? environmentId, string? flowId)
+    {
+        if (string.IsNullOrWhiteSpace(environmentId) || string.IsNullOrWhiteSpace(flowId)) return null;
+
+        return "https://make.powerautomate.com/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
+               "/flows/" + Uri.EscapeDataString(flowId.Trim()) + "/details";
+    }
+
     public string? Build(SolutionComponentItem item, Guid solutionId)
     {
         if (_environmentId is null) return null;

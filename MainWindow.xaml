@@ -38,6 +38,15 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
+
+        <!-- In the shortcut's slot: marks the tools that change the environment. -->
+        <Style TargetType="TextBlock" x:Key="WritesTag">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -185,8 +194,65 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
+                    <!-- The selected environment's own tools, once it is connected. -->
+                    <StackPanel DataContext="{Binding SelectedSession}"
+                                Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                        <StackPanel Orientation="Horizontal" Margin="8,14,8,6">
+                            <Border Style="{StaticResource EnvBar}" Width="3" Height="11" Margin="0,0,7,0"
+                                    Tag="{Binding EnvironmentSku}" />
+                            <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                       MaxWidth="190" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SolutionHistoryCommand}"
+                                ToolTip="Imports, upgrades, uninstalls and exports in this environment, with the error for any that failed.">
+                            <TextBlock Text="Solution history" VerticalAlignment="Center" />
+                        </Button>
+                        <!-- Read-only: who is here, what they can do, and how mail reaches them. Two to a row, so the sidebar fits. -->
+                        <TextBlock Text="ADMIN · READ-ONLY" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Faint}"
+                                   Margin="8,8,8,4" />
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="0,0,1,2"
+                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Users"
+                                    ToolTip="Users, with their teams and security roles">
+                                <TextBlock Text="Users" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="1,0,0,2"
+                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Roles"
+                                    ToolTip="Privileges, and who holds each role">
+                                <TextBlock Text="Security roles" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="0,0,1,2"
+                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Mailboxes"
+                                    ToolTip="Server-side sync: approval and test results">
+                                <TextBlock Text="Mailboxes" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="1,0,0,2"
+                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
+                                    ToolTip="Owner, email settings, mailbox and members">
+                                <TextBlock Text="Queues" VerticalAlignment="Center" />
+                            </Button>
+                        </UniformGrid>
+
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding EntraTeamSyncCommand}"
+                                ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind. Previews and asks before writing.">
+                            <Grid>
+                                <TextBlock Text="Entra team sync…" VerticalAlignment="Center" />
+                                <TextBlock Text="WRITES" Style="{StaticResource WritesTag}" />
+                            </Grid>
+                        </Button>
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding QueueSyncCommand}"
+                                ToolTip="Make a queue's members match a team's members, adding and removing. Previews and asks before writing.">
+                            <Grid>
+                                <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" />
+                                <TextBlock Text="WRITES" Style="{StaticResource WritesTag}" />
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+
                     <TextBlock Text="Across environments" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,16,8,6" />
+                               Foreground="{DynamicResource Muted}" Margin="8,14,8,6" />
 
                     <Button Style="{StaticResource SidebarAction}" Command="{Binding GlobalSearchCommand}"
                             ToolTip="One keyword across every connected environment (Ctrl+Shift+F)">
@@ -212,7 +278,7 @@
 
                     <!-- Only there while there is something to close. -->
                     <TextBlock Text="Open windows" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,16,8,6"
+                               Foreground="{DynamicResource Muted}" Margin="8,14,8,6"
                                Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}" />
                     <Button Style="{StaticResource SidebarAction}" Command="{Binding CloseAllDetailsCommand}"
                             Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}"

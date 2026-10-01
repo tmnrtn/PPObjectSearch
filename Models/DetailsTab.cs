@@ -1,0 +1,119 @@
+namespace PPObjectSearch.Models;
+
+/// <summary>A tab of the object details window, so a caller can open it on the one it wants.</summary>
+public enum DetailsTab
+{
+    /// <summary>The type's own first tab - see <see cref="DetailsTabs.DefaultFor"/>.</summary>
+    Default,
+    Design,
+    Runs,
+    Source,
+    TraceLog,
+    Value,
+    Components,
+    Layers,
+    Dependencies
+}
+
+/// <summary>What an object is, as far as the details window's tabs are concerned.</summary>
+public enum ObjectKind
+{
+    Other,
+    CloudFlow,
+    ClassicWorkflow,
+    Plugin,
+    WebResource,
+    EnvironmentVariable,
+    Table
+}
+
+/// <summary>
+/// A detail-pane button that opens the details window on one tab - and, for a table, on one
+/// group of its components.
+/// </summary>
+public sealed record DetailsShortcut(string Label, DetailsTab Tab, TableChildKind? Group = null)
+{
+    public string ToolTip => Group is { } group
+        ? $"Open details on this table's {group.ToString().ToLowerInvariant()}s"
+        : $"Open details on the {Label} tab";
+}
+
+/// <summary>Which tabs an object has, in what order, and the shortcuts to them.</summary>
+public static class DetailsTabs
+{
+    private const int TableType = 1;
+    private const int ProcessType = 29;
+    private const int WebResourceType = 61;
+
+    // The category code is what to go by; the labels cover items loaded from a cache written
+    // before the code was kept. Dataverse labels category 5 "Modern Flow" and 0 "Workflow".
+    public static ObjectKind KindOf(SolutionComponentItem item) => item.ComponentType switch
+    {
+        TableType => ObjectKind.Table,
+        WebResourceType => ObjectKind.WebResource,
+        90 or 91 or 92 => ObjectKind.Plugin,
+        380 or 381 => ObjectKind.EnvironmentVariable,
+        ProcessType when IsCategory(item, 5, "Modern Flow", "Cloud Flow") => ObjectKind.CloudFlow,
+        ProcessType when IsCategory(item, 0, "Workflow", "Workflow (classic)") => ObjectKind.ClassicWorkflow,
+        _ => ObjectKind.Other
+    };
+
+    private static bool IsCategory(SolutionComponentItem item, int category, params string[] labels) =>
+        item.ProcessCategory is { } c ? c == category : labels.Contains(item.SubType);
+
+    /// <summary>The type's own tab, which is what the window is usually opened for.</summary>
+    public static DetailsTab DefaultFor(ObjectKind kind) => kind switch
+    {
+        ObjectKind.CloudFlow => DetailsTab.Design,
+        ObjectKind.ClassicWorkflow => DetailsTab.Runs,
+        ObjectKind.Plugin => DetailsTab.TraceLog,
+        ObjectKind.WebResource => DetailsTab.Source,
+        ObjectKind.EnvironmentVariable => DetailsTab.Value,
+        ObjectKind.Table => DetailsTab.Components,
+        _ => DetailsTab.Layers
+    };
+
+    /// <summary>The tabs the window shows for this kind, type-specific first.</summary>
+    public static IReadOnlyList<DetailsTab> TabsFor(ObjectKind kind)
+    {
+        IEnumerable<DetailsTab> own = kind switch
+        {
+            ObjectKind.CloudFlow => [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source],
+            ObjectKind.ClassicWorkflow => [DetailsTab.Runs],
+            ObjectKind.Plugin => [DetailsTab.TraceLog],
+            ObjectKind.WebResource => [DetailsTab.Source],
+            ObjectKind.EnvironmentVariable => [DetailsTab.Value],
+            ObjectKind.Table => [DetailsTab.Components],
+            _ => []
+        };
+
+        return own.Concat([DetailsTab.Layers, DetailsTab.Dependencies]).ToList();
+    }
+
+    /// <summary>A tab the kind does not have falls back to its default, rather than to a hidden tab.</summary>
+    public static DetailsTab Resolve(ObjectKind kind, DetailsTab requested) =>
+        requested != DetailsTab.Default && TabsFor(kind).Contains(requested) ? requested : DefaultFor(kind);
+
+    /// <summary>The detail pane's "Open in details" buttons for this object.</summary>
+    public static IReadOnlyList<DetailsShortcut> ShortcutsFor(SolutionComponentItem item) => KindOf(item) switch
+    {
+        ObjectKind.CloudFlow =>
+        [
+            new("Design", DetailsTab.Design),
+            new("Run history", DetailsTab.Runs),
+            new("Definition", DetailsTab.Source)
+        ],
+        ObjectKind.ClassicWorkflow => [new("System jobs", DetailsTab.Runs), new("Layers", DetailsTab.Layers)],
+        ObjectKind.Plugin => [new("Trace log", DetailsTab.TraceLog), new("Layers", DetailsTab.Layers)],
+        ObjectKind.WebResource => [new("Source", DetailsTab.Source), new("Layers", DetailsTab.Layers)],
+        ObjectKind.EnvironmentVariable => [new("Value", DetailsTab.Value)],
+        ObjectKind.Table =>
+        [
+            new("Columns", DetailsTab.Components, TableChildKind.Column),
+            new("Relationships", DetailsTab.Components, TableChildKind.Relationship),
+            new("Forms", DetailsTab.Components, TableChildKind.Form),
+            new("Views", DetailsTab.Components, TableChildKind.View)
+        ],
+        _ => [new("Layers", DetailsTab.Layers), new("Dependencies", DetailsTab.Dependencies)]
+    };
+}

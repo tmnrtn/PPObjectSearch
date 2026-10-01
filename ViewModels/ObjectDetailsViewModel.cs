@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using PPObjectSearch.Core;
@@ -34,7 +34,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         IReadOnlyDictionary<Guid, SolutionComponentItem> known,
         string? environmentId = null,
         Action<string?>? openUrl = null,
-        EnvironmentSessionViewModel? session = null)
+        EnvironmentSessionViewModel? session = null,
+        DetailsShortcut? openOn = null)
     {
         _openUrl = openUrl ?? DefaultOpenUrl;
         Session = session;
@@ -43,8 +44,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         _known = known;
         _environmentId = environmentId;
         Item = item;
+        Kind = DetailsTabs.KindOf(item);
+        _selectedTab = DetailsTabs.Resolve(Kind, openOn?.Tab ?? DetailsTab.Default);
+        _preferredGroup = openOn?.Group;
 
         OpenLinkCommand = new RelayCommand(_ => OpenUrl(item.MakerUrl), _ => item.MakerUrl is not null);
+        OpenInPowerAutomateCommand = new RelayCommand(_ => OpenUrl(FlowUrl), _ => FlowUrl is not null);
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
         ViewLayerChangesCommand = new RelayCommand(
             p => ShowLayerChanges(p as ComponentLayer ?? SelectedLayer),
@@ -62,6 +67,60 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
     public RelayCommand CopyIdCommand { get; }
 
+    // ---------------------------------------------------------------- tabs
+
+    /// <summary>What the object is, which decides its tabs and their order.</summary>
+    public ObjectKind Kind { get; }
+
+    private DetailsTab _selectedTab;
+    /// <summary>
+    /// The tab on show. It starts on the tab the caller asked for, or else the type's own first
+    /// tab, and moves when a run is asked to be shown on the diagram.
+    /// </summary>
+    public DetailsTab SelectedTab
+    {
+        get => _selectedTab;
+        set
+        {
+            if (SetProperty(ref _selectedTab, value)) OnPropertyChanged(nameof(StatusText));
+        }
+    }
+
+    /// <summary>For a table opened on one group of its components - its columns, say.</summary>
+    private readonly TableChildKind? _preferredGroup;
+
+    /// <summary>"System jobs" for a classic workflow, whose runs are system jobs.</summary>
+    public string RunsTabHeader => IsClassicWorkflow ? "System jobs" : "Run history";
+
+    // ---------------------------------------------------------------- flow state and Power Automate
+
+    /// <summary>The flow in Power Automate. Null for anything but a cloud flow, or where the environment id is unknown.</summary>
+    public string? FlowUrl => IsCloudFlow
+        ? MakerPortalLinkBuilder.BuildFlowUrl(_environmentId, Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString())
+        : null;
+
+    public bool HasFlowUrl => FlowUrl is not null;
+
+    public RelayCommand OpenInPowerAutomateCommand { get; }
+
+    private bool? _isFlowOn;
+    /// <summary>Whether the cloud flow is turned on; null until read, and for anything else.</summary>
+    public bool? IsFlowOn
+    {
+        get => _isFlowOn;
+        private set
+        {
+            if (SetProperty(ref _isFlowOn, value)) OnPropertyChanged(nameof(FlowStateLabel));
+        }
+    }
+
+    public string? FlowStateLabel => IsFlowOn switch
+    {
+        true => "On",
+        false => "Off",
+        null => null
+    };
+
     // ---------------------------------------------------------------- web resource content / flow definition
 
     private const int WebResourceComponentType = 61;
@@ -71,7 +130,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     /// <summary>Web resources have content, cloud flows a JSON definition; both show as text.</summary>
     public bool HasSource => IsWebResource || IsCloudFlow;
 
-    public string SourceTabHeader => IsCloudFlow ? "Definition" : "Content";
+    public string SourceTabHeader => IsCloudFlow ? "Definition" : "Source";
 
     private FlowDiagramViewModel? _flowDiagram;
     /// <summary>A cloud flow drawn as the designer draws it, once its definition has been read.</summary>
@@ -80,21 +139,30 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         get => _flowDiagram;
         private set
         {
+            var previous = _flowDiagram;
             if (!SetProperty(ref _flowDiagram, value)) return;
+            if (previous is not null) previous.PropertyChanged -= OnDiagramChanged;
+            if (value is not null) value.PropertyChanged += OnDiagramChanged;
             OnPropertyChanged(nameof(HasFlowDiagram));
+            OnPropertyChanged(nameof(StatusText));
             ShowRunOnDiagramCommand.RaiseCanExecuteChanged();
         }
     }
 
     public bool HasFlowDiagram => FlowDiagram is not null;
 
-    private bool _isDesignTabSelected;
-    /// <summary>Selecting the Design tab from code - a run asked to be shown on the diagram.</summary>
-    public bool IsDesignTabSelected
+    private void OnDiagramChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        get => _isDesignTabSelected;
-        set => SetProperty(ref _isDesignTabSelected, value);
+        if (e.PropertyName is nameof(FlowDiagramViewModel.StatusLine)) OnPropertyChanged(nameof(StatusText));
     }
+
+    /// <summary>
+    /// The status bar: on the Design tab, the diagram's own line - the run on show and how its
+    /// steps went; elsewhere, what the window read.
+    /// </summary>
+    public string StatusText => SelectedTab == DetailsTab.Design && FlowDiagram is { } diagram && !IsBusy
+        ? diagram.StatusLine
+        : Status;
 
     private PowerAutomate.PowerAutomateClient? _powerAutomate;
     private AsyncRelayCommand? _showRunOnDiagramCommand;
@@ -111,8 +179,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         if (run is null || FlowDiagram is not { } diagram) return;
 
-        IsDesignTabSelected = false;
-        IsDesignTabSelected = true;
+        SelectedTab = DetailsTab.Design;
 
         if (string.IsNullOrWhiteSpace(_environmentId))
         {
@@ -269,7 +336,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             if (IsCloudFlow)
             {
-                var definition = await _client.GetCloudFlowDefinitionAsync(Item.ObjectId);
+                var flow = await _client.GetCloudFlowAsync(Item.ObjectId);
+                var definition = flow.Definition;
+                IsFlowOn = flow.IsOn;
                 await LoadFlowDiagramAsync(definition);
                 SourceLanguage = CodeLanguage.Json;
                 SourceText = string.IsNullOrWhiteSpace(definition) ? null : TextDiff.Prettify(definition);
@@ -369,8 +438,26 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public string RowCountText
     {
         get => _rowCountText;
-        private set => SetProperty(ref _rowCountText, value);
+        private set
+        {
+            if (!SetProperty(ref _rowCountText, value)) return;
+            OnPropertyChanged(nameof(RowCountValue));
+            OnPropertyChanged(nameof(RowCountUnit));
+        }
     }
+
+    /// <summary>The count alone - "~36,250,112" - for the header, which puts "rows" beneath it.</summary>
+    public string RowCountValue => RowCountText switch
+    {
+        var t when t.EndsWith(" rows", StringComparison.Ordinal) => t[..^5],
+        var t when t.EndsWith(" row", StringComparison.Ordinal) => t[..^4],
+        var t => t
+    };
+
+    /// <summary>"rows" under a count; nothing under "Counting..." or "Count failed".</summary>
+    public string RowCountUnit => RowCountText.EndsWith(" rows", StringComparison.Ordinal) ? "rows"
+        : RowCountText.EndsWith(" row", StringComparison.Ordinal) ? "row"
+        : string.Empty;
 
     private string? _rowCountDetail;
     /// <summary>How the count was reached, and the daily snapshot beside it.</summary>
@@ -478,11 +565,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
     // The category code is what to go by; the labels cover items loaded from a cache written
     // before the code was kept. Dataverse labels category 5 "Modern Flow" and 0 "Workflow".
-    public bool IsCloudFlow => Item.ComponentType == ProcessComponentType &&
-                               (Item.ProcessCategory is { } c ? c == 5 : Item.SubType is "Modern Flow" or "Cloud Flow");
+    public bool IsCloudFlow => Kind == ObjectKind.CloudFlow;
 
-    public bool IsClassicWorkflow => Item.ComponentType == ProcessComponentType &&
-                                     (Item.ProcessCategory is { } c ? c == 0 : Item.SubType is "Workflow" or "Workflow (classic)");
+    public bool IsClassicWorkflow => Kind == ObjectKind.ClassicWorkflow;
 
     /// <summary>Cloud flows have runs, classic workflows have system jobs; both land in one tab.</summary>
     public bool HasRunHistory => IsCloudFlow || IsClassicWorkflow;
@@ -874,14 +959,20 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        private set
+        {
+            if (SetProperty(ref _isBusy, value)) OnPropertyChanged(nameof(StatusText));
+        }
     }
 
     private string _status = string.Empty;
     public string Status
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        private set
+        {
+            if (SetProperty(ref _status, value)) OnPropertyChanged(nameof(StatusText));
+        }
     }
 
     public async Task LoadAsync()
@@ -1032,7 +1123,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             });
         }
 
-        SelectedChildGroup = ChildGroups.FirstOrDefault(g => !g.IsEmpty) ?? ChildGroups.FirstOrDefault();
+        // Opened from a "Columns" or "Views" shortcut: that group, even when it is empty.
+        SelectedChildGroup = ChildGroups.FirstOrDefault(g => g.Kind == _preferredGroup)
+                             ?? ChildGroups.FirstOrDefault(g => !g.IsEmpty)
+                             ?? ChildGroups.FirstOrDefault();
     }
 
     private static async Task<IReadOnlyList<TableChild>> GatherAsync(

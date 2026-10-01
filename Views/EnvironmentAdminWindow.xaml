@@ -1,0 +1,1206 @@
+<Window x:Class="PPObjectSearch.Views.EnvironmentAdminWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
+        xmlns:models="clr-namespace:PPObjectSearch.Models"
+        xmlns:vm="clr-namespace:PPObjectSearch.ViewModels"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Height="800" Width="1320"
+        MinHeight="540" MinWidth="980"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="DetailKey">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Margin" Value="0,0,10,6" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="DetailValue">
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <!-- A pane's heading row: 34 tall, heading at left, extras at right. -->
+        <Style TargetType="Border" x:Key="PaneHeading">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="BorderThickness" Value="0,1,0,1" />
+            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader" x:Key="PaneFirstHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="Padding" Value="16,0,8,0" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="CellPaneFirst" BasedOn="{StaticResource Cell}">
+            <Setter Property="Margin" Value="16,0,8,0" />
+        </Style>
+
+        <!-- How far a privilege reaches: nothing, then User, BU, Parent, Org in deepening colour. -->
+        <Style TargetType="ContentControl" x:Key="DepthPill" BasedOn="{StaticResource StatusPill}">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.None}">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.User}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.BusinessUnit}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.ParentChild}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Link}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.Organization}">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- emailrouteraccessapproval: 1 Approved, 2 Pending, 3 Rejected. -->
+        <Style TargetType="ContentControl" x:Key="ApprovalPill" BasedOn="{StaticResource StatusPill}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Approval}" Value="1">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Approval}" Value="2">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Approval}" Value="3">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ContentControl" x:Key="TestPill" BasedOn="{StaticResource StatusPill}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding TestStatus}" Value="{x:Static models:MailboxTestStatus.Passed}">
+                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TestStatus}" Value="{x:Static models:MailboxTestStatus.Partial}">
+                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TestStatus}" Value="{x:Static models:MailboxTestStatus.Failed}">
+                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TestStatus}" Value="{x:Static models:MailboxTestStatus.Pending}">
+                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Enabled / Disabled, for users and members. -->
+        <Style TargetType="ContentControl" x:Key="UserStatusPill" BasedOn="{StaticResource StatusPill}">
+            <Setter Property="Content" Value="Enabled" />
+            <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                    <Setter Property="Content" Value="Disabled" />
+                    <Setter Property="Background" Value="{DynamicResource Surface2}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- "Nothing selected" in place of a detail pane. -->
+        <Style TargetType="TextBlock" x:Key="EmptyDetail">
+            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Margin" Value="16,14" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <!-- A privilege column: its depth as a pill. -->
+        <DataTemplate x:Key="DepthCell">
+            <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding}" Content="{Binding Converter={StaticResource DepthShort}}" />
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Header: the environment, then what the window is. Read-only throughout. -->
+            <StackPanel Grid.Row="0" Margin="18,12,18,6">
+                <local:EnvironmentLine DataContext="{Binding Session}" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Environment admin" Style="{StaticResource WindowHeading}" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource Chip}" Content="Read-only" Margin="8,2,0,0" VerticalAlignment="Center"
+                                    ToolTip="Nothing in this window changes the environment" />
+                </StackPanel>
+            </StackPanel>
+
+            <TabControl Grid.Row="1" SelectedValuePath="Tag" SelectedValue="{Binding SelectedTab}">
+
+                <!-- ============================================================ users -->
+                <!-- The first tab steps right to make room for Back and Forward. -->
+                <TabItem Header="Users" Tag="{x:Static vm:AdminTab.Users}" Margin="58,0,0,0"
+                         core:Ui.Count="{Binding Users.CountAll, StringFormat=N0}">
+                    <Grid DataContext="{Binding Users}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="16,10,16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Style="{StaticResource Segmented}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="UserStatus"
+                                                 core:Ui.DotBrush="{DynamicResource Muted}" core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                                 IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Enabled" GroupName="UserStatus"
+                                                 core:Ui.DotBrush="{DynamicResource Green}" core:Ui.Count="{Binding CountEnabled, StringFormat=N0}"
+                                                 IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Enabled}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Disabled" GroupName="UserStatus"
+                                                 core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountDisabled, StringFormat=N0}"
+                                                 IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Disabled}" />
+                                </StackPanel>
+                            </Border>
+
+                            <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" Padding="7,0"
+                                      core:Ui.InlineLabel="Type" ItemsSource="{Binding TypeOptions}" SelectedItem="{Binding SelectedType}"
+                                      ToolTip="Application user, or the access mode: Read-Write, Administrative, Read, Non-interactive..." />
+                            <ComboBox Grid.Column="2" Margin="8,0,0,0" MinWidth="150" MaxWidth="300" Padding="7,0"
+                                      core:Ui.InlineLabel="Business unit" ItemsSource="{Binding UnitOptions}" SelectedItem="{Binding SelectedUnit}" />
+
+                            <TextBox Grid.Column="3" Height="30" Margin="8,0,0,0"
+                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title or object id"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                            <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                                    Command="{Binding RefreshCommand}" ToolTip="Read the users again" />
+                        </Grid>
+
+                        <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+                        <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="440" />
+                                <ColumnDefinition Width="470" MinWidth="360" />
+                            </Grid.ColumnDefinitions>
+
+                            <DataGrid ItemsSource="{Binding View}" SelectedItem="{Binding SelectedUser}" SelectionMode="Single" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Name" Width="*" MinWidth="200" SortMemberPath="FullName"
+                                                            HeaderStyle="{StaticResource FirstHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Style="{StaticResource CellFirst}" ToolTip="{Binding DomainName}">
+                                                    <Run Text="{Binding FullName, Mode=OneWay}" />
+                                                    <Run Text="{Binding DomainName, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Faint}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Type" Width="130" Binding="{Binding UserType}" ElementStyle="{StaticResource Cell}" />
+                                    <DataGridTextColumn Header="Business unit" Width="150" Binding="{Binding BusinessUnit}" ElementStyle="{StaticResource CellMuted}" />
+                                    <DataGridTemplateColumn Header="Status" Width="86" SortMemberPath="StatusLabel">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ContentControl Style="{StaticResource UserStatusPill}" Margin="8,0" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- The selected user -->
+                            <!-- Drag the pane's left edge to resize it. -->
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                          Background="Transparent" Panel.ZIndex="1" ResizeDirection="Columns"
+                                          ToolTip="Drag to resize" />
+                            <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select a user to see their teams and security roles.">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyDetail}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedUser}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Grid Visibility="{Binding SelectedUser, Converter={StaticResource EmptyToCollapsed}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Margin="16,14,16,10">
+                                            <TextBlock Text="{Binding SelectedUser.FullName}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding SelectedUser.DomainName}" Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
+                                                       Margin="0,2,0,0" TextWrapping="Wrap" />
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedUser.UserType}" />
+                                                <ContentControl Style="{StaticResource UserStatusPill}" Margin="0,0,4,4" DataContext="{Binding SelectedUser}" />
+                                            </WrapPanel>
+
+                                            <!-- Two pairs to a row; the long values span. -->
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="96" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="96" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Text="Business unit" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                           Text="{Binding SelectedUser.BusinessUnit, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Title" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding SelectedUser.Title, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="1" Text="License" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                           Text="{Binding SelectedUser.LicenseType, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Email" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="3" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}" />
+                                                <TextBlock Grid.Row="2" Text="Entra id" Style="{StaticResource DetailKey}" />
+                                                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource CodeBox}" Padding="0" FontSize="11"
+                                                         Background="Transparent" Margin="0,0,0,6"
+                                                         Text="{Binding SelectedUser.AadObjectId, Mode=OneWay, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="3" Text="Mailbox" Style="{StaticResource DetailKey}" />
+                                                <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <StackPanel Orientation="Horizontal" DataContext="{Binding Mailbox}"
+                                                                Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                                        <ContentControl Style="{StaticResource ApprovalPill}" Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
+                                                        <ContentControl Style="{StaticResource TestPill}" Content="{Binding TestLabel}" Margin="4,0,0,0" />
+                                                    </StackPanel>
+                                                    <Button Style="{StaticResource LinkButton}" Content="Show mailbox →" Margin="6,0,0,0" Height="20" Padding="2,0"
+                                                            Command="{Binding ShowMailboxCommand}"
+                                                            Visibility="{Binding SelectedUser.DefaultMailboxId, Converter={StaticResource EmptyToCollapsed}}" />
+                                                    <TextBlock Text="—">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding SelectedUser.DefaultMailboxId}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Security roles | Teams: one list at a time, at full height. -->
+                                        <Border Grid.Row="1" Padding="16,8" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,1">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                                           Visibility="{Binding IsRolesView, Converter={StaticResource BoolToVis}}">
+                                                    <Run Text="{Binding DirectRoleCount, Mode=OneWay}" /><Run Text=" direct · " /><Run
+                                                         Text="{Binding TeamRoleCount, Mode=OneWay}" /><Run Text=" via teams" />
+                                                </TextBlock>
+                                                <Border Style="{StaticResource Segmented}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Security roles" GroupName="UserDetail"
+                                                                     core:Ui.Count="{Binding RoleAssignments.Count}"
+                                                                     IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Roles}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Teams" GroupName="UserDetail"
+                                                                     core:Ui.Count="{Binding Teams.Count}"
+                                                                     IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Teams}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DockPanel>
+                                        </Border>
+
+                                        <Grid Grid.Row="2">
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding RoleAssignments}" IsReadOnly="True"
+                                                      Visibility="{Binding IsRolesView, Converter={StaticResource BoolToVis}}">
+                                                <DataGrid.Columns>
+                                                    <DataGridTemplateColumn Header="Role" Width="*" SortMemberPath="RoleName"
+                                                                            HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Style="{StaticResource CellPaneFirst}" ToolTip="Show this role's privileges">
+                                                                    <Hyperlink Command="{Binding DataContext.ShowRoleCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                               CommandParameter="{Binding}">
+                                                                        <Run Text="{Binding RoleName, Mode=OneWay}" />
+                                                                    </Hyperlink>
+                                                                </TextBlock>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTextColumn Header="Business unit" Width="120" Binding="{Binding BusinessUnit}"
+                                                                        ElementStyle="{StaticResource CellMuted}" />
+                                                    <DataGridTextColumn Header="Via" Width="130" Binding="{Binding Via}">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                                                <Setter Property="ToolTip" Value="{Binding Via}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsDirect}" Value="True">
+                                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Teams}" IsReadOnly="True"
+                                                      Visibility="{Binding IsRolesView, Converter={StaticResource NotBoolToVis}}">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Team" Width="*" Binding="{Binding Name}"
+                                                                        HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellPaneFirst}" />
+                                                    <DataGridTextColumn Header="Type" Width="120" Binding="{Binding TypeDisplay}" ElementStyle="{StaticResource CellMuted}" />
+                                                    <DataGridTextColumn Header="Business unit" Width="120" Binding="{Binding BusinessUnit}"
+                                                                        ElementStyle="{StaticResource CellMuted}" />
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+
+                                            <!-- Why the list is empty, or still loading - where the rows would be. -->
+                                            <TextBlock Text="{Binding DetailStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                       TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                       Visibility="{Binding RoleAssignments.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                        </Grid>
+                                    </Grid>
+
+                                    <ProgressBar Style="{StaticResource BusyBar}" VerticalAlignment="Top"
+                                                 Visibility="{Binding IsLoadingDetails, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ShowingSummary}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- ============================================================ security roles -->
+                <TabItem Header="Security roles" Tag="{x:Static vm:AdminTab.Roles}" core:Ui.Count="{Binding Roles.CountAll, StringFormat=N0}">
+                    <Grid DataContext="{Binding Roles}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="16,10,16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Style="{StaticResource Segmented}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="RoleManaged"
+                                                 core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                                 IsChecked="{Binding ManagedFilter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Managed" GroupName="RoleManaged"
+                                                 core:Ui.Count="{Binding CountManaged, StringFormat=N0}"
+                                                 IsChecked="{Binding ManagedFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Managed}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Unmanaged" GroupName="RoleManaged"
+                                                 core:Ui.Count="{Binding CountUnmanaged, StringFormat=N0}"
+                                                 IsChecked="{Binding ManagedFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Unmanaged}" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBox Grid.Column="1" Height="30" Margin="8,0,0,0"
+                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Role or business unit"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                                    Command="{Binding RefreshCommand}" ToolTip="Read the roles again" />
+                        </Grid>
+
+                        <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+                        <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="300" MinWidth="240" />
+                                <ColumnDefinition Width="*" MinWidth="560" />
+                            </Grid.ColumnDefinitions>
+
+                            <DataGrid ItemsSource="{Binding View}" SelectedItem="{Binding SelectedRole}" SelectionMode="Single" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Role" Width="*" Binding="{Binding Name}"
+                                                        HeaderStyle="{StaticResource FirstHeader}">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource CellFirst}">
+                                                <Setter Property="ToolTip" Value="{Binding BusinessUnit}" />
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="State" Width="86" Binding="{Binding ManagedLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- The selected role -->
+                            <!-- Drag the pane's left edge to resize it. -->
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                          Background="Transparent" Panel.ZIndex="1" ResizeDirection="Columns"
+                                          ToolTip="Drag to resize" />
+                            <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select a role to see its privileges and who holds it.">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyDetail}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedRole}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Grid Visibility="{Binding SelectedRole, Converter={StaticResource EmptyToCollapsed}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Name and chips; then which of the three views is on show. -->
+                                        <DockPanel Grid.Row="0" Margin="16,12,16,8">
+                                            <Border DockPanel.Dock="Right" Style="{StaticResource Segmented}" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Table privileges" GroupName="RoleDetail"
+                                                                 core:Ui.Count="{Binding Privileges.Count}"
+                                                                 IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Privileges}" />
+                                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Other" GroupName="RoleDetail"
+                                                                 core:Ui.Count="{Binding MiscPrivileges.Count}"
+                                                                 ToolTip="Privileges not tied to one table: Export to Excel, Bulk delete, Go mobile..."
+                                                                 IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Other}" />
+                                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Held by" GroupName="RoleDetail"
+                                                                 core:Ui.Count="{Binding Holders.Count}"
+                                                                 ToolTip="{Binding HolderStatus}"
+                                                                 IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=HeldBy}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <WrapPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding SelectedRole.Name}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                           Margin="0,0,8,0" TextTrimming="CharacterEllipsis" />
+                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0" Content="{Binding SelectedRole.ManagedLabel}" />
+                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0"
+                                                                Content="{Binding SelectedRole.BusinessUnit, TargetNullValue=—}"
+                                                                ToolTip="The business unit the role is defined in. Dataverse copies it into every other one." />
+                                            </WrapPanel>
+                                        </DockPanel>
+
+                                        <!-- Table privileges only: search, granted only, and the reach legend. -->
+                                        <DockPanel Grid.Row="1" Margin="16,0,16,10"
+                                                   Visibility="{Binding IsPrivilegesView, Converter={StaticResource BoolToVis}}">
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="Reach" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.User}" Content="User" Margin="0,0,4,0"
+                                                                ToolTip="Records the user owns" />
+                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.BusinessUnit}" Content="BU" Margin="0,0,4,0"
+                                                                ToolTip="Records in the user's business unit" />
+                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.ParentChild}" Content="Parent" Margin="0,0,4,0"
+                                                                ToolTip="Records in the user's business unit and the units beneath it" />
+                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.Organization}" Content="Org"
+                                                                ToolTip="Every record in the organization" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBox Width="200" Height="28" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Table"
+                                                         Text="{Binding PrivilegeSearch, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                                                <CheckBox Content="Granted only" IsChecked="{Binding GrantedOnly}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                                          ToolTip="Hide tables the role grants nothing on" />
+                                            </StackPanel>
+                                        </DockPanel>
+
+                                        <Grid Grid.Row="2">
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Privileges}">
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding PrivilegesView}" IsReadOnly="True"
+                                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Table" Width="*" MinWidth="160" Binding="{Binding Table}"
+                                                                        HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource CellPaneFirst}">
+                                                                <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+                                                                <Setter Property="FontSize" Value="11" />
+                                                                <Setter Property="ToolTip" Value="{Binding Table}" />
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                    <DataGridTemplateColumn Header="Create" Width="62" SortMemberPath="Create">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Create}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Read" Width="62" SortMemberPath="Read">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Read}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Write" Width="62" SortMemberPath="Write">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Write}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Delete" Width="62" SortMemberPath="Delete">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Delete}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Append" Width="62" SortMemberPath="Append">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Append}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Append to" Width="72" SortMemberPath="AppendTo">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding AppendTo}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Assign" Width="62" SortMemberPath="Assign">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Assign}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Share" Width="62" SortMemberPath="Share">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Share}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                            <!-- A privilege read that failed, or a role with none, says so where the grid would be. -->
+                                            <TextBlock Text="{Binding DetailStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                       TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                       Visibility="{Binding Privileges.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
+
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding MiscPrivileges}" IsReadOnly="True"
+                                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                                                      Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Other}">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Privilege" Width="*" Binding="{Binding Name}"
+                                                                        HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellPaneFirst}" />
+                                                    <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTextColumn Header="Reaches" Width="150" Binding="{Binding DepthLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=HeldBy}">
+                                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Holders}" IsReadOnly="True"
+                                                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="Name"
+                                                                                HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Style="{StaticResource CellPaneFirst}" ToolTip="{Binding Detail}">
+                                                                        <Hyperlink Command="{Binding DataContext.ShowHolderCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                                   CommandParameter="{Binding}">
+                                                                            <Run Text="{Binding Name, Mode=OneWay}" />
+                                                                        </Hyperlink>
+                                                                    </TextBlock>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTextColumn Header="Kind" Width="64" Binding="{Binding Kind}" ElementStyle="{StaticResource CellMuted}" />
+                                                        <DataGridTextColumn Header="Business unit" Width="150" Binding="{Binding BusinessUnit}"
+                                                                            ElementStyle="{StaticResource CellMuted}" />
+                                                        <DataGridTextColumn Header="Detail" Width="200" Binding="{Binding Detail}"
+                                                                            ElementStyle="{StaticResource CellFaint}" />
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <TextBlock Text="{Binding HolderStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                           TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                           Visibility="{Binding Holders.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
+
+                                        </Grid>
+                                    </Grid>
+
+                                    <ProgressBar Style="{StaticResource BusyBar}" VerticalAlignment="Top"
+                                                 Visibility="{Binding IsLoadingDetails, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ShowingSummary}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- ============================================================ mailboxes -->
+                <TabItem Header="Mailboxes" Tag="{x:Static vm:AdminTab.Mailboxes}" core:Ui.Count="{Binding Mailboxes.CountAll, StringFormat=N0}">
+                    <Grid DataContext="{Binding Mailboxes}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="16,10,16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Style="{StaticResource Segmented}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="MailboxOwner"
+                                                 core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                                 IsChecked="{Binding OwnerFilter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Users" GroupName="MailboxOwner"
+                                                 core:Ui.Count="{Binding CountUsers, StringFormat=N0}"
+                                                 IsChecked="{Binding OwnerFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Users}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Queues" GroupName="MailboxOwner"
+                                                 core:Ui.Count="{Binding CountQueues, StringFormat=N0}"
+                                                 IsChecked="{Binding OwnerFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Queues}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Other" GroupName="MailboxOwner"
+                                                 core:Ui.Count="{Binding CountOther, StringFormat=N0}"
+                                                 IsChecked="{Binding OwnerFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Other}" />
+                                </StackPanel>
+                            </Border>
+
+                            <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="150" Padding="7,0"
+                                      core:Ui.InlineLabel="Approval" ItemsSource="{Binding ApprovalOptions}" SelectedItem="{Binding SelectedApproval}"
+                                      ToolTip="Whether an administrator has approved the mailbox's email address for server-side sync." />
+                            <ComboBox Grid.Column="2" Margin="8,0,0,0" MinWidth="150" Padding="7,0"
+                                      core:Ui.InlineLabel="Test" ItemsSource="{Binding TestOptions}" SelectedItem="{Binding SelectedTest}"
+                                      ToolTip="What the last Test &amp; Enable said, over the directions the mailbox delivers." />
+
+                            <TextBox Grid.Column="3" Height="30" Margin="8,0,0,0"
+                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, address, owner or profile"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                            <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                                    Command="{Binding RefreshCommand}" ToolTip="Read the mailboxes again" />
+                        </Grid>
+
+                        <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+                        <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="480" />
+                                <ColumnDefinition Width="470" MinWidth="360" />
+                            </Grid.ColumnDefinitions>
+
+                            <DataGrid ItemsSource="{Binding View}" SelectedItem="{Binding SelectedMailbox}" SelectionMode="Single" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Mailbox" Width="*" MinWidth="200" SortMemberPath="Name"
+                                                            HeaderStyle="{StaticResource FirstHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Style="{StaticResource CellFirst}" ToolTip="{Binding EmailAddress}">
+                                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    <Run Text="{Binding EmailAddress, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Faint}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Owner" Width="64" Binding="{Binding OwnerKind}" ElementStyle="{StaticResource CellMuted}" />
+                                    <DataGridTemplateColumn Header="Approval" Width="128" SortMemberPath="ApprovalLabel">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ContentControl Style="{StaticResource ApprovalPill}" Margin="8,0"
+                                                                Content="{Binding ApprovalLabel, TargetNullValue=Empty}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Test" Width="112" SortMemberPath="TestLabel">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ContentControl Style="{StaticResource TestPill}" Margin="8,0" Content="{Binding TestLabel}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- The selected mailbox -->
+                            <!-- Drag the pane's left edge to resize it. -->
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                          Background="Transparent" Panel.ZIndex="1" ResizeDirection="Columns"
+                                          ToolTip="Drag to resize" />
+                            <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select a mailbox to see its approval, tests and delivery settings.">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyDetail}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedMailbox}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <ScrollViewer x:Name="MailboxPane" VerticalScrollBarVisibility="Auto"
+                                                  Visibility="{Binding SelectedMailbox, Converter={StaticResource EmptyToCollapsed}}">
+                                        <StackPanel Margin="16,14,16,14">
+                                            <TextBlock Text="{Binding SelectedMailbox.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding SelectedMailbox.EmailAddress, TargetNullValue='No email address'}" Style="{StaticResource Mono}"
+                                                       Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                            <WrapPanel Margin="0,8,0,0" DataContext="{Binding SelectedMailbox}">
+                                                <ContentControl Style="{StaticResource ApprovalPill}" Margin="0,0,4,4"
+                                                                Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
+                                                <ContentControl Style="{StaticResource TestPill}" Margin="0,0,4,4" Content="{Binding TestLabel}" />
+                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Inactive"
+                                                                Visibility="{Binding IsActive, Converter={StaticResource NotBoolToVis}}" />
+                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Forward mailbox"
+                                                                Visibility="{Binding IsForwardMailbox, Converter={StaticResource BoolToVis}}" />
+                                            </WrapPanel>
+
+                                            <!-- Owner and approval, two pairs to a row. -->
+                                            <Grid Margin="0,8,0,0" DataContext="{Binding SelectedMailbox}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="96" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="96" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Text="Owner" Style="{StaticResource DetailKey}" />
+                                                <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock>
+                                                        <Run Text="{Binding RegardingName, Mode=OneWay, TargetNullValue=—}" />
+                                                        <Run Text="{Binding OwnerKind, Mode=OneWay, StringFormat=({0})}" Foreground="{DynamicResource Muted}" />
+                                                    </TextBlock>
+                                                    <Button Style="{StaticResource LinkButton}" Content="Show →" Height="20" Padding="4,0" Margin="4,0,0,0"
+                                                            Command="{Binding DataContext.ShowOwnerCommand, ElementName=MailboxPane}" />
+                                                </StackPanel>
+
+                                                <TextBlock Grid.Row="1" Text="Approval" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                           Text="{Binding ApprovalLabel, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Exchange admin" Style="{StaticResource DetailKey}"
+                                                           ToolTip="Whether an Exchange (Microsoft 365) administrator has approved the address too." />
+                                                <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding ApprovedByExchangeAdmin, Converter={StaticResource YesNo}}" />
+
+                                                <TextBlock Grid.Row="2" Text="Last tested" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                           Text="{Binding TestCompletedOn, StringFormat={}{0:yyyy-MM-dd HH:mm}, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="2" Text="Test scheduled" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding TestScheduled, Converter={StaticResource YesNo}}" />
+
+                                                <TextBlock Grid.Row="3" Text="Server profile" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding ServerProfile, TargetNullValue=—}" />
+                                            </Grid>
+
+                                            <!-- Each direction: its last result, how it is delivered, and whether it is enabled. -->
+                                            <TextBlock Text="Delivery" Style="{StaticResource SectionHeading}" Margin="0,10,0,6" />
+                                            <Grid DataContext="{Binding SelectedMailbox}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="96" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Text="Incoming" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource DetailValue}">
+                                                    <Run Text="{Binding IncomingStatusLabel, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding IncomingDeliveryLabel, Mode=OneWay, StringFormat=· {0}}" Foreground="{DynamicResource Muted}" />
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource DetailValue}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                                           Text="{Binding EnabledForIncoming, Converter={StaticResource YesNo}, StringFormat=Enabled: {0}}" />
+
+                                                <TextBlock Grid.Row="1" Text="Outgoing" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}">
+                                                    <Run Text="{Binding OutgoingStatusLabel, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding OutgoingDeliveryLabel, Mode=OneWay, StringFormat=· {0}}" Foreground="{DynamicResource Muted}" />
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource DetailValue}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                                           Text="{Binding EnabledForOutgoing, Converter={StaticResource YesNo}, StringFormat=Enabled: {0}}" />
+
+                                                <TextBlock Grid.Row="2" Text="Appointments" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding AppointmentsStatusLabel, TargetNullValue=—}" FontWeight="SemiBold" />
+                                                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource DetailValue}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                                           Text="{Binding EnabledForAppointments, Converter={StaticResource YesNo}, StringFormat=Enabled: {0}}" />
+                                            </Grid>
+
+                                            <TextBlock Text="Mailbox id" Style="{StaticResource DetailKey}" Margin="0,10,0,2" />
+                                            <TextBox Style="{StaticResource CodeBox}" Padding="0" FontSize="11" Background="Transparent"
+                                                     Text="{Binding SelectedMailbox.MailboxId, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ShowingSummary}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- ============================================================ queues -->
+                <TabItem Header="Queues" Tag="{x:Static vm:AdminTab.Queues}" core:Ui.Count="{Binding Queues.CountAll, StringFormat=N0}">
+                    <Grid DataContext="{Binding Queues}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="16,10,16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Style="{StaticResource Segmented}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="All" GroupName="QueueType"
+                                                 core:Ui.Count="{Binding CountAll, StringFormat=N0}"
+                                                 IsChecked="{Binding TypeFilter, Converter={StaticResource EnumEquals}, ConverterParameter=All}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Public" GroupName="QueueType"
+                                                 core:Ui.Count="{Binding CountPublic, StringFormat=N0}"
+                                                 IsChecked="{Binding TypeFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Public}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Private" GroupName="QueueType"
+                                                 core:Ui.Count="{Binding CountPrivate, StringFormat=N0}"
+                                                 IsChecked="{Binding TypeFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Private}" />
+                                </StackPanel>
+                            </Border>
+
+                            <CheckBox Grid.Column="1" Content="Active only" IsChecked="{Binding ActiveOnly}" Margin="12,0,0,0"
+                                      VerticalAlignment="Center" />
+
+                            <TextBox Grid.Column="2" Height="30" Margin="12,0,0,0"
+                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Queue, address, owner or business unit"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                                    Command="{Binding RefreshCommand}" ToolTip="Read the queues again" />
+                        </Grid>
+
+                        <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
+                        <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="440" />
+                                <ColumnDefinition Width="470" MinWidth="360" />
+                            </Grid.ColumnDefinitions>
+
+                            <DataGrid ItemsSource="{Binding View}" SelectedItem="{Binding SelectedQueue}" SelectionMode="Single" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Queue" Width="*" MinWidth="200" SortMemberPath="Name"
+                                                            HeaderStyle="{StaticResource FirstHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Style="{StaticResource CellFirst}" ToolTip="{Binding EmailAddress}">
+                                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    <Run Text="{Binding EmailAddress, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Faint}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Type" Width="70" Binding="{Binding TypeLabel}" ElementStyle="{StaticResource Cell}" />
+                                    <DataGridTextColumn Header="Owner" Width="170" Binding="{Binding OwnerLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                    <DataGridTextColumn Header="Members" Width="76" Binding="{Binding MemberCount}" SortMemberPath="MemberCount"
+                                                        ElementStyle="{StaticResource CellMuted}" />
+                                    <DataGridTextColumn Header="Items" Width="66" Binding="{Binding ItemCount}" SortMemberPath="ItemCount"
+                                                        ElementStyle="{StaticResource CellMuted}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- The selected queue -->
+                            <!-- Drag the pane's left edge to resize it. -->
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                          Background="Transparent" Panel.ZIndex="1" ResizeDirection="Columns"
+                                          ToolTip="Drag to resize" />
+                            <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <Grid>
+                                    <TextBlock Text="Select a queue to see its owner, email settings, mailbox and members.">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyDetail}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedQueue}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Grid Visibility="{Binding SelectedQueue, Converter={StaticResource EmptyToCollapsed}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" MinHeight="80" />
+                                        </Grid.RowDefinitions>
+
+                                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="440">
+                                            <StackPanel Margin="16,14,16,10">
+                                                <TextBlock Text="{Binding SelectedQueue.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding SelectedQueue.EmailAddress, TargetNullValue='No email address'}" Style="{StaticResource Mono}"
+                                                           Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                                <WrapPanel Margin="0,8,0,0">
+                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedQueue.TypeLabel}" />
+                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Inactive"
+                                                                    Visibility="{Binding SelectedQueue.IsActive, Converter={StaticResource NotBoolToVis}}" />
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding SelectedQueue.Description}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                                           Margin="0,4,0,0" Visibility="{Binding SelectedQueue.Description, Converter={StaticResource EmptyToCollapsed}}" />
+
+                                                <Grid Margin="0,8,0,0" DataContext="{Binding SelectedQueue}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="96" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="96" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <TextBlock Grid.Row="0" Text="Owner" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}" Text="{Binding OwnerLabel}" />
+                                                    <TextBlock Grid.Row="1" Text="Business unit" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                               Text="{Binding BusinessUnit, TargetNullValue=—}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Items" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                               Text="{Binding ItemCount, TargetNullValue=—}" />
+                                                </Grid>
+
+                                                <TextBlock Text="Email settings" Style="{StaticResource SectionHeading}" Margin="0,8,0,6" />
+                                                <Grid DataContext="{Binding SelectedQueue}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="96" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="96" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <TextBlock Grid.Row="0" Text="Converts" Style="{StaticResource DetailKey}"
+                                                               ToolTip="Which incoming email becomes a queue item (incoming email filtering)." />
+                                                    <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                               Text="{Binding IncomingFilteringLabel, TargetNullValue=—}" />
+                                                    <TextBlock Grid.Row="1" Text="Incoming" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                               Text="{Binding IncomingDeliveryLabel, TargetNullValue=—}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Outgoing" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                               Text="{Binding OutgoingDeliveryLabel, TargetNullValue=—}" />
+                                                    <TextBlock Grid.Row="2" Text="Unsolicited" Style="{StaticResource DetailKey}"
+                                                               ToolTip="Whether unsolicited email is ignored." />
+                                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                               Text="{Binding IgnoreUnsolicited, Converter={StaticResource YesNo}, StringFormat=Ignored: {0}}" />
+                                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Approval" Style="{StaticResource DetailKey}" />
+                                                    <TextBlock Grid.Row="2" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                               ToolTip="{Binding ApprovedByExchangeAdmin, Converter={StaticResource YesNo}, StringFormat=Approved by an Exchange admin: {0}}">
+                                                        <Run Text="{Binding ApprovalLabel, Mode=OneWay, TargetNullValue=—}" />
+                                                    </TextBlock>
+                                                </Grid>
+
+                                                <TextBlock Text="Mailbox" Style="{StaticResource SectionHeading}" Margin="0,8,0,6" />
+                                                <TextBlock Text="No mailbox" Foreground="{DynamicResource Faint}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SelectedQueue.MailboxId}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <WrapPanel Visibility="{Binding SelectedQueue.MailboxId, Converter={StaticResource EmptyToCollapsed}}">
+                                                    <StackPanel Orientation="Horizontal" DataContext="{Binding Mailbox}" Margin="0,0,6,4"
+                                                                Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                                        <ContentControl Style="{StaticResource ApprovalPill}" Margin="0,0,4,0"
+                                                                        Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
+                                                        <ContentControl Style="{StaticResource TestPill}" Content="{Binding TestLabel}" />
+                                                    </StackPanel>
+                                                    <Button Style="{StaticResource LinkButton}" Content="Show mailbox →" Height="20" Padding="2,0" Margin="0,0,0,4"
+                                                            Command="{Binding ShowMailboxCommand}" ToolTip="{Binding SelectedQueue.MailboxName}" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </ScrollViewer>
+
+                                        <Border Grid.Row="1" Padding="16,0" Height="34" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,1"
+                                                Background="{DynamicResource Surface2}">
+                                            <DockPanel VerticalAlignment="Center">
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Members.Count}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                                <TextBlock Text="Members" Style="{StaticResource SectionHeading}" />
+                                            </DockPanel>
+                                        </Border>
+                                        <Grid Grid.Row="2">
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Members}" IsReadOnly="True">
+                                                <DataGrid.Columns>
+                                                    <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="FullName"
+                                                                            HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Style="{StaticResource CellPaneFirst}" ToolTip="{Binding DomainName}">
+                                                                    <Hyperlink Command="{Binding DataContext.ShowMemberCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                               CommandParameter="{Binding}">
+                                                                        <Run Text="{Binding FullName, Mode=OneWay}" />
+                                                                    </Hyperlink>
+                                                                </TextBlock>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridTemplateColumn Header="Status" Width="86">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <ContentControl Style="{StaticResource UserStatusPill}" Margin="8,0" />
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                            <TextBlock Text="{Binding DetailStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                       TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                       Visibility="{Binding Members.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                        </Grid>
+                                    </Grid>
+
+                                    <ProgressBar Style="{StaticResource BusyBar}" VerticalAlignment="Top"
+                                                 Visibility="{Binding IsLoadingDetails, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ShowingSummary}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+
+            <!-- Back and Forward, in the tab strip's row, left of the first tab. -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,3,0,0">
+                <Button Content="&#xE72B;" Width="26" Height="26" Command="{Binding BackCommand}"
+                        ToolTip="{Binding BackToolTip}" ToolTipService.ShowOnDisabled="True">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="&#xE72A;" Width="26" Height="26" Margin="2,0,0,0" Command="{Binding ForwardCommand}"
+                        ToolTip="{Binding ForwardToolTip}" ToolTipService.ShowOnDisabled="True">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

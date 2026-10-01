@@ -19,6 +19,9 @@ public sealed record WebResourceContent(string Name, int Type, string TypeLabel,
     };
 }
 
+/// <summary>A cloud flow's definition (workflow.clientdata) and whether it is on; null when unknown.</summary>
+public sealed record CloudFlowDefinition(string? Definition, bool? IsOn);
+
 public sealed partial class DataverseClient
 {
     /// <summary>webresource.webresourcetype values whose content is text worth showing.</summary>
@@ -69,11 +72,16 @@ public sealed partial class DataverseClient
     /// A cloud flow's definition - workflow.clientdata, the JSON that the flow designer saves and
     /// that export packages carry as the flow's .json file. Null when the flow has none.
     /// </summary>
-    public async Task<string?> GetCloudFlowDefinitionAsync(Guid workflowId, CancellationToken ct = default)
+    public async Task<string?> GetCloudFlowDefinitionAsync(Guid workflowId, CancellationToken ct = default) =>
+        (await GetCloudFlowAsync(workflowId, ct).ConfigureAwait(false)).Definition;
+
+    /// <summary>The definition, and whether the flow is turned on (statecode 1, Activated).</summary>
+    public async Task<CloudFlowDefinition> GetCloudFlowAsync(Guid workflowId, CancellationToken ct = default)
     {
         using var doc = await GetJsonAsync(
-            EnvironmentUrl + ApiPath + $"workflows({workflowId})?$select=clientdata", ct).ConfigureAwait(false);
+            EnvironmentUrl + ApiPath + $"workflows({workflowId})?$select=clientdata,statecode", ct).ConfigureAwait(false);
 
-        return JsonHelper.GetString(doc.RootElement, "clientdata");
+        var state = JsonHelper.GetInt(doc.RootElement, "statecode");
+        return new CloudFlowDefinition(JsonHelper.GetString(doc.RootElement, "clientdata"), state is null ? null : state == 1);
     }
 }

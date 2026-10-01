@@ -26,10 +26,11 @@ public sealed partial class DataverseClient
     /// </summary>
     public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth);
 
-    public async Task<IReadOnlyList<ProcessRun>> GetCloudFlowRunsAsync(Guid workflowId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProcessRun>> GetCloudFlowRunsAsync(
+        Guid workflowId, CancellationToken ct = default, int top = MaxRunHistory)
     {
         var baseUrl = EnvironmentUrl + ApiPath +
-                      $"flowruns?$select={SelectFlowRun}&$filter=_workflow_value eq {workflowId}&$top={MaxRunHistory}";
+                      $"flowruns?$select={SelectFlowRun}&$filter=_workflow_value eq {workflowId}&$top={top}";
 
         JsonDocument doc;
         try

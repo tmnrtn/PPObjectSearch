@@ -50,6 +50,7 @@ public sealed class EntraMatchRowViewModel : ObservableObject
             if (!SetProperty(ref _diagnosis, value)) return;
             OnPropertyChanged(nameof(DiagnosisLabel));
             OnPropertyChanged(nameof(DiagnosisDetail));
+            OnPropertyChanged(nameof(AccountFlags));
         }
     }
 
@@ -63,11 +64,53 @@ public sealed class EntraMatchRowViewModel : ObservableObject
             if (!SetProperty(ref _groupDiagnosis, value)) return;
             OnPropertyChanged(nameof(DiagnosisLabel));
             OnPropertyChanged(nameof(DiagnosisDetail));
+            OnPropertyChanged(nameof(AccountFlags));
         }
     }
 
     public string? DiagnosisLabel => Diagnosis?.Label ?? GroupDiagnosis?.Label;
     public string? DiagnosisDetail => Diagnosis?.Detail ?? GroupDiagnosis?.Detail;
+
+    /// <summary>
+    /// What is wrong with the account, if anything: "Entra disabled", "DV disabled", "Not in
+    /// Entra". Empty for a healthy account - the column only speaks up when there is a problem.
+    /// </summary>
+    public IReadOnlyList<string> AccountFlags
+    {
+        get
+        {
+            var flags = new List<string>();
+
+            if (Diagnosis?.Category is DiagnosisCategory.EntraNotFound or DiagnosisCategory.StaleObjectId)
+            {
+                flags.Add("Not in Entra");
+            }
+            else if (EntraEnabled == false || Diagnosis?.EntraUser?.AccountEnabled == false ||
+                     Diagnosis?.Category == DiagnosisCategory.EntraDisabled ||
+                     GroupDiagnosis?.Category == GroupOnlyCategory.EntraDisabled)
+            {
+                flags.Add("Entra disabled");
+            }
+
+            if (DataverseDisabled == true || GroupDiagnosis?.SystemUser?.IsDisabled == true ||
+                Diagnosis?.Category == DiagnosisCategory.DataverseDisabled ||
+                GroupDiagnosis?.Category == GroupOnlyCategory.DataverseDisabled)
+            {
+                flags.Add("DV disabled");
+            }
+
+            return flags;
+        }
+    }
+
+    /// <summary>The detail the grid leaves out: how the two sides were matched, and the Entra object id.</summary>
+    public string RowToolTip => string.Join(Environment.NewLine, new[]
+    {
+        DiagnosisDetail,
+        MatchedOn is { Length: > 0 } on ? "Matched on " + on : null,
+        EntraObjectId is { Length: > 0 } id ? "Entra object id " + id : null,
+        AccessMode is { Length: > 0 } mode ? "Access mode " + mode : null
+    }.Where(line => !string.IsNullOrEmpty(line)));
 }
 
 /// <summary>
@@ -148,6 +191,48 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     }
 
     public bool HasTeam => SelectedTeam is not null;
+
+    private DateTimeOffset? _lastRead;
+    private System.Windows.Threading.DispatcherTimer? _ageTimer;
+
+    /// <summary>"Read 2 min ago" beside the refresh button - how stale the comparison is.</summary>
+    public string LastReadLabel => _lastRead is { } at ? "Read " + Ago(DateTimeOffset.Now - at) : string.Empty;
+
+    internal static string Ago(TimeSpan age) => age.TotalSeconds < 60 ? "just now"
+        : age.TotalMinutes < 60 ? $"{(int)age.TotalMinutes} min ago"
+        : age.TotalHours < 24 ? $"{(int)age.TotalHours} h ago"
+        : "over a day ago";
+
+    private void MarkRead()
+    {
+        _lastRead = DateTimeOffset.Now;
+        OnPropertyChanged(nameof(LastReadLabel));
+
+        if (_ageTimer is null)
+        {
+            _ageTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            _ageTimer.Tick += (_, _) => OnPropertyChanged(nameof(LastReadLabel));
+            _ageTimer.Start();
+        }
+    }
+
+    // ---------------------------------------------------------------- the write buttons' counts
+
+    /// <summary>
+    /// How many users Remove leftovers would offer: every 'team only' user until a diagnosis has
+    /// said which of them the sync really leaves behind.
+    /// </summary>
+    public int LeftoverCount => IsDiagnosed
+        ? Rows.Count(r => r.Status == EntraMatchStatus.DataverseOnly && r.Diagnosis is { } d && MembershipPlanner.CanRemove(d.Category))
+        : CountDataverseOnly;
+
+    /// <summary>How many Pull in group members would offer, on the same terms.</summary>
+    public int PullInCount => IsGroupDiagnosed
+        ? Rows.Count(r => r.Status == EntraMatchStatus.EntraOnly && r.GroupDiagnosis is { } d && MembershipPlanner.CanPullIn(d.Category))
+        : CountEntraOnly;
+
+    public string RemoveLeftoversLabel => HasComparison ? $"Remove leftovers ({LeftoverCount:N0})…" : "Remove leftovers…";
+    public string PullInLabel => HasComparison ? $"Pull in group members ({PullInCount:N0})…" : "Pull in group members…";
 
     private EntraGroup? _group;
     public EntraGroup? Group
@@ -337,6 +422,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
             Warnings = string.Join("  ", warnings);
             HasComparison = true;
+            MarkRead();
 
             Status = $"Read at {DateTime.Now:T}. Dataverse syncs group teams lazily, on sign-in: 'group only' is usually someone who " +
                      "has not used the environment since joining; 'team only' is usually someone removed but not yet re-synced.";
@@ -920,6 +1006,10 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PullInHint));
         OnPropertyChanged(nameof(CopyScriptHint));
         OnPropertyChanged(nameof(NeedsUserSyncCount));
+        OnPropertyChanged(nameof(LeftoverCount));
+        OnPropertyChanged(nameof(PullInCount));
+        OnPropertyChanged(nameof(RemoveLeftoversLabel));
+        OnPropertyChanged(nameof(PullInLabel));
         CopyUserSyncScriptCommand.RaiseCanExecuteChanged();
 
         ReloadCommand.RaiseCanExecuteChanged();
@@ -944,6 +1034,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _ageTimer?.Stop();
         _loadCts?.Cancel();
         _graph.Dispose();
     }

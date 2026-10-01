@@ -1,0 +1,24 @@
+<UserControl x:Class="PPObjectSearch.Views.EnvironmentLine"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False">
+    <!--
+        The first line of every per-environment window's header: the environment's colour, name,
+        type and host, at 11px with 7px gaps. DataContext is the tab (EnvironmentSessionViewModel)
+        the window was opened from.
+    -->
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,4" TextElement.FontSize="11">
+        <Border Style="{StaticResource EnvBar}" Height="12" Margin="0,0,7,0" Tag="{Binding EnvironmentSku}" />
+        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <ContentControl Style="{StaticResource EnvTypeBadge}" Margin="7,0,0,0" Tag="{Binding EnvironmentSku}"
+                        Content="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}}"
+                        ToolTip="{Binding EnvironmentTypeDescription}" />
+        <!-- Allowlisted: reconciling and the admin tools may change it, production or not. -->
+        <ContentControl Style="{StaticResource ChipAmber}" Margin="7,0,0,0" Content="Writes allowed" FontWeight="SemiBold"
+                        FontSize="10" VerticalAlignment="Center"
+                        ToolTip="This environment is in AllowProductionWrites, so reconciling and the admin tools may change it."
+                        Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
+        <TextBlock Text="{Binding EnvironmentHost}" Foreground="{DynamicResource Muted}"
+                   Margin="7,0,0,0" VerticalAlignment="Center" />
+    </StackPanel>
+</UserControl>

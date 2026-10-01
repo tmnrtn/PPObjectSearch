@@ -63,6 +63,12 @@ public partial class EnvironmentSessionView : UserControl
         }
     }
 
+    /// <summary>Profiles may have come and gone since the menu last opened.</summary>
+    private void AccountMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is EnvironmentSessionViewModel session) session.RaiseBrowserProfile();
+    }
+
     /// <summary>
     /// A connected tab is there to be searched; a new tab needs its URL first.
     /// </summary>

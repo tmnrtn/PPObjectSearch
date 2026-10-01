@@ -116,7 +116,21 @@
                                    Foreground="{DynamicResource Muted}" />
                     </StackPanel>
                     <Button.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu Opened="AccountMenu_Opened">
+                            <!-- Where this environment's links and sign-ins open - the sidebar's menu, here too. -->
+                            <MenuItem Header="{Binding BrowserProfileLabel}" HeaderStringFormat="Links open in {0}" IsEnabled="False" />
+                            <MenuItem Header="Open links in" ItemsSource="{Binding BrowserProfileOptions}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Header" Value="{Binding Label}" />
+                                        <Setter Property="IsChecked" Value="{Binding IsSelected, Mode=OneWay}" />
+                                        <Setter Property="Command"
+                                                Value="{Binding DataContext.SetBrowserProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <Separator />
                             <MenuItem Header="Switch account..." Command="{Binding SwitchAccountCommand}"
                                       ToolTip="Sign this tab in with a different account or tenant." />
                             <MenuItem Header="Copy tenant id" Command="{Binding CopyTenantIdCommand}" />
@@ -194,34 +208,30 @@
                         Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVis}}" />
             </WrapPanel>
 
+            <!-- The environment's own tools (solution history, admin) are in the sidebar. -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
-                <Button Margin="0,0,6,0" core:Ui.OpensMenu="True" IsEnabled="{Binding IsConnected}"
-                        ToolTip="Team and queue membership tools. Each previews its changes and asks you to confirm before writing.">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Admin" VerticalAlignment="Center" />
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="6,1,0,0" />
-                    </StackPanel>
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Entra team sync…" Command="{Binding EntraTeamSyncCommand}"
-                                      ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind." />
-                            <MenuItem Header="Queue membership sync…" Command="{Binding QueueSyncCommand}"
-                                      ToolTip="Make a queue's members match a team's members, adding and removing." />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
-                <Button Content="Solution history" Margin="0,0,6,0"
-                        Command="{Binding SolutionHistoryCommand}"
-                        ToolTip="Imports, upgrades, uninstalls and exports in this environment, with the error for any that failed." />
                 <Button Content="Check layers"
                         Command="{Binding CheckUnmanagedLayersCommand}"
                         ToolTip="Queries Dataverse's solution layers for every object currently on screen that hasn't been checked yet - one request per object, so narrowing the filters first is faster." />
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
-                <Button Style="{StaticResource IconButton}" Content="&#xE8A0;" Margin="6,0,0,0"
+                <Button Content="&#xE8A0;" Margin="6,0,0,0"
                         Command="{Binding ToggleDetailPaneCommand}"
-                        ToolTip="Show or hide the detail pane" />
+                        ToolTip="Show or hide the detail pane">
+                    <!-- On while the pane is open, like an active filter. -->
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDetailPaneOpen}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                    <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Link}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </StackPanel>
         </Grid>
 
@@ -458,6 +468,62 @@
                                            FontFamily="{StaticResource MonoFont}" FontSize="11"
                                            TextWrapping="Wrap" Text="{Binding ObjectId}" />
                             </Grid>
+
+                            <!-- A cloud flow's latest run, read with the selection. -->
+                            <Border Margin="16,4,16,6" Padding="10,8" CornerRadius="6" BorderThickness="1"
+                                    BorderBrush="{DynamicResource Border}"
+                                    DataContext="{Binding DataContext.LatestRun, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                   Text="{Binding Run.StartTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}" />
+                                        <TextBlock Text="Last run" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" />
+                                    </DockPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <ContentControl Style="{StaticResource OutcomePill}" Content="{Binding Run.Status}" />
+                                        <TextBlock Text="{Binding FailedLabel}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                   Margin="7,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding ErrorLine}" FontSize="11" Foreground="{DynamicResource Red}"
+                                               Margin="0,6,0,0" TextWrapping="Wrap" MaxHeight="44" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Run.ErrorMessage}"
+                                               Visibility="{Binding ErrorLine, Converter={StaticResource EmptyToCollapsed}}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- An environment variable's value, in place of reading it in the window. -->
+                            <StackPanel Margin="16,4,16,6"
+                                        Visibility="{Binding DataContext.SelectedVariableValue, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource EmptyToCollapsed}}">
+                                <TextBlock Text="Current value" Style="{StaticResource Label}" />
+                                <TextBlock Text="{Binding DataContext.SelectedVariableValue, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           ToolTip="{Binding DataContext.SelectedVariable.EffectiveSource, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,4,0,0"
+                                           TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <!-- Straight to a tab of the details window. -->
+                            <TextBlock Text="Open in details" Style="{StaticResource Label}" Margin="16,6,16,0" />
+                            <ItemsControl Margin="16,6,10,6"
+                                          ItemsSource="{Binding DataContext.DetailShortcuts, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SmallButton}" Margin="0,0,6,6" ToolTip="{Binding ToolTip}"
+                                                Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Label}" />
+                                                <TextBlock Text="→" Foreground="{DynamicResource Faint}" Margin="5,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
                             <StackPanel Orientation="Horizontal" Margin="16,6,16,12">

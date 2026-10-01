@@ -249,7 +249,8 @@ public sealed partial class DataverseClient
 
     // ---------------------------------------------------------------- reading
 
-    private async Task<IReadOnlyList<T>> ReadRowsAsync<T>(string url, Func<JsonElement, T?> read, CancellationToken ct)
+    private async Task<IReadOnlyList<T>> ReadRowsAsync<T>(
+        string url, Func<JsonElement, T?> read, CancellationToken ct, string annotations = Annotations.Formatted)
         where T : class
     {
         var rows = new List<T>();
@@ -258,7 +259,7 @@ public sealed partial class DataverseClient
         {
             ct.ThrowIfCancellationRequested();
 
-            using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
+            using var doc = await GetJsonAsync(url, ct, annotations).ConfigureAwait(false);
 
             if (doc.RootElement.TryGetProperty("value", out var value))
             {

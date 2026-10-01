@@ -335,79 +335,125 @@
         </Grid.RowDefinitions>
 
         <!-- ============================================================ toolbar -->
-        <Border Grid.Row="0" Padding="12,8" Background="{DynamicResource Surface}"
+        <!-- One band above the diagram: search, the run on show, then copy, expand and zoom. -->
+        <Border Grid.Row="0" Height="40" Padding="12,0" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1">
-            <DockPanel>
+            <DockPanel VerticalAlignment="Center">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource SmallButton}" Content="Copy as Mermaid" Margin="0,0,14,0"
+                    <Button Style="{StaticResource SmallButton}" Content="Copy as Mermaid" Margin="0,0,8,0"
                             Command="{Binding CopyMermaidCommand}"
                             ToolTip="Copy the flow as a Mermaid flowchart, to paste into a wiki, a README or a pull request." />
-                    <Button Style="{StaticResource SmallButton}" Content="Expand all" Command="{Binding ExpandAllCommand}" />
-                    <Button Style="{StaticResource SmallButton}" Content="Collapse all" Margin="6,0,14,0"
-                            Command="{Binding CollapseAllCommand}" />
-                    <Button Style="{StaticResource IconButton}" Content="&#xE71F;" Width="26" Height="26"
-                            Command="{Binding ZoomOutCommand}" ToolTip="Zoom out (Ctrl+wheel)" />
-                    <Button Style="{StaticResource GhostButton}" Content="{Binding ZoomLabel}" MinWidth="48" Height="26"
-                            Command="{Binding ResetZoomCommand}" ToolTip="Back to 100%" />
-                    <Button Style="{StaticResource IconButton}" Content="&#xE8A3;" Width="26" Height="26"
-                            Command="{Binding ZoomInCommand}" ToolTip="Zoom in (Ctrl+wheel)" />
+
+                    <!-- Expand all | Collapse all, joined. -->
+                    <Border BorderBrush="{DynamicResource Border2}" BorderThickness="1" CornerRadius="4" Margin="0,0,8,0"
+                            Background="{DynamicResource Surface}" ClipToBounds="True">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource SmallButton}" Content="Expand all" BorderThickness="0"
+                                    Height="22" Background="Transparent" Command="{Binding ExpandAllCommand}" />
+                            <Rectangle Width="1" Fill="{DynamicResource Border2}" />
+                            <Button Style="{StaticResource SmallButton}" Content="Collapse all" BorderThickness="0"
+                                    Height="22" Background="Transparent" Command="{Binding CollapseAllCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- − | 100% | +, joined; the middle resets. -->
+                    <Border BorderBrush="{DynamicResource Border2}" BorderThickness="1" CornerRadius="4"
+                            Background="{DynamicResource Surface}" ClipToBounds="True">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource SmallButton}" Content="−" Width="26" Padding="0" BorderThickness="0"
+                                    Height="22" Background="Transparent" Command="{Binding ZoomOutCommand}"
+                                    ToolTip="Zoom out (Ctrl+wheel)" />
+                            <Rectangle Width="1" Fill="{DynamicResource Border2}" />
+                            <Button Style="{StaticResource SmallButton}" Content="{Binding ZoomLabel}" MinWidth="46" BorderThickness="0"
+                                    Height="22" Background="Transparent" Command="{Binding ResetZoomCommand}" ToolTip="Back to 100%" />
+                            <Rectangle Width="1" Fill="{DynamicResource Border2}" />
+                            <Button Style="{StaticResource SmallButton}" Content="+" Width="26" Padding="0" BorderThickness="0"
+                                    Height="22" Background="Transparent" Command="{Binding ZoomInCommand}"
+                                    ToolTip="Zoom in (Ctrl+wheel)" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
-                <TextBox Width="260" Height="28" HorizontalAlignment="Left"
-                         core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Find a step - name, type, connector"
+                <TextBox Width="230" Height="26" VerticalAlignment="Center"
+                         core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Find a step"
+                         ToolTip="Name, type or connector"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                 <TextBlock Text="{Binding MatchLabel}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
-                           Margin="10,0,0,0" />
-                <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Faint}" VerticalAlignment="Center"
-                           Margin="14,0,0,0" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource Green}" VerticalAlignment="Center"
-                           Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Notice}" />
+                           Margin="10,0,0,0" Visibility="{Binding MatchLabel, Converter={StaticResource EmptyToCollapsed}}" />
+
+                <Rectangle Width="1" Height="20" Fill="{DynamicResource Border}" Margin="12,0" VerticalAlignment="Center"
+                           Visibility="{Binding HasRunBanner, Converter={StaticResource BoolToVis}}" />
+
+                <!-- The run on show: outcome, when, how long, the trigger. The rest is in its tooltip. -->
+                <Border CornerRadius="4" Padding="8,0,4,0" Height="26" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        ToolTip="{Binding RunToolTip}"
+                        Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRunSucceeded}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsRunFailed}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding RunOutcomeText}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRunSucceeded}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsRunFailed}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding RunStripText}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Button Style="{StaticResource RowButton}" Content="First failure" Margin="8,0,0,0"
+                                Background="{DynamicResource Surface}"
+                                Command="{Binding JumpToFailureCommand}"
+                                Visibility="{Binding IsRunFailed, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Select the first step that failed, opening whatever holds it" />
+                        <Button Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0" Margin="4,0,0,0"
+                                FontFamily="{StaticResource IconFont}" FontSize="9" Content="&#xE8BB;"
+                                Foreground="{DynamicResource Muted}"
+                                Command="{Binding ClearRunCommand}" ToolTip="Show the flow's design without this run" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Loading, or why a run cannot be shown: in the strip's place, the same height. -->
+                <Border CornerRadius="4" Padding="8,0" Height="26" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        ToolTip="{Binding RunNotice}"
+                        Visibility="{Binding HasRunNotice, Converter={StaticResource BoolToVis}}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Surface2}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRunNoticeError}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding RunNotice}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </Border>
             </DockPanel>
         </Border>
 
-        <!-- ============================================================ the run on show -->
-        <Border Grid.Row="1" Padding="14,8" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
-                Visibility="{Binding HasRunBanner, Converter={StaticResource BoolToVis}}">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsRunFailed}" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource RedSoft}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HasRunNotice}" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource Surface2}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsRunNoticeError}" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <DockPanel>
-                <!-- Loading, or why a run could not be shown. -->
-                <TextBlock DockPanel.Dock="Top" Text="{Binding RunNotice}" TextWrapping="Wrap"
-                           Visibility="{Binding HasRunNotice, Converter={StaticResource BoolToVis}}" />
-
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0"
-                            Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
-                    <Button Style="{StaticResource SmallButton}" Content="Jump to first failure" Margin="0,0,6,0"
-                            Command="{Binding JumpToFailureCommand}"
-                            ToolTip="Select the first step that failed, opening whatever holds it" />
-                    <Button Style="{StaticResource SmallButton}" Content="Back to design" Command="{Binding ClearRunCommand}"
-                            ToolTip="Show the flow's design without this run" />
-                </StackPanel>
-                <StackPanel Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding RunHeading}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding RunDetail}" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,2,0,0"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding RunMismatch}" FontSize="11" Foreground="{DynamicResource Amber}" Margin="0,4,0,0"
-                               TextWrapping="Wrap" Visibility="{Binding HasRunMismatch, Converter={StaticResource BoolToVis}}" />
-                    <TextBlock Text="{Binding RunError}" FontSize="11" Foreground="{DynamicResource Red}" Margin="0,4,0,0"
-                               TextWrapping="Wrap" MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding RunError}"
-                               Visibility="{Binding HasRunError, Converter={StaticResource BoolToVis}}" />
-                </StackPanel>
-            </DockPanel>
+        <!-- Steps the run names that the flow no longer has. -->
+        <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="12,8,12,0"
+                Visibility="{Binding HasRunMismatch, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="{Binding RunMismatch}" TextWrapping="Wrap" />
         </Border>
 
         <Border Grid.Row="2" Style="{StaticResource Banner}" Margin="12,8,12,0"
@@ -419,7 +465,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="300" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="380" MinWidth="240" />
+                <ColumnDefinition Width="340" MinWidth="240" />
             </Grid.ColumnDefinitions>
 
             <!-- ============================================================ the diagram -->
@@ -442,69 +488,118 @@
                            HorizontalAlignment="Center" Margin="0,60,0,0" TextWrapping="Wrap"
                            Visibility="{Binding HasSelection, Converter={StaticResource NotBoolToVis}}" />
 
-                <Grid Margin="14,12,14,0" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
+                <Grid Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0">
-                        <TextBlock Text="{Binding Selected.Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding Selected.Summary}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
-                                   Margin="0,2,0,0" />
-                        <TextBlock Foreground="{DynamicResource Faint}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap">
-                            <Run Text="Name in the definition:" />
-                            <Run Text="{Binding Selected.Node.Name, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" />
-                            <Run Text="·" />
-                            <Run Text="{Binding Selected.Node.Type, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" />
-                        </TextBlock>
-                        <TextBlock Text="{Binding Selected.Description}" FontStyle="Italic" TextWrapping="Wrap" Margin="0,8,0,0"
-                                   Foreground="{DynamicResource Muted}"
-                                   Visibility="{Binding Selected.HasDescription, Converter={StaticResource BoolToVis}}" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="1">
-                        <TextBlock Text="Runs after" Style="{StaticResource DetailHeading}" />
-                        <TextBlock Text="{Binding SelectedRunAfter}" TextWrapping="Wrap" />
-
-                        <!-- The step in the run on show. -->
-                        <StackPanel Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Text="In this run" Style="{StaticResource DetailHeading}" />
-                            <TextBlock Text="{Binding SelectedRunStatus}" TextWrapping="Wrap" />
-                            <TextBox Text="{Binding SelectedError, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
-                                     BorderThickness="0" Background="{DynamicResource RedSoft}" Foreground="{DynamicResource Red}"
-                                     Padding="6,4" Margin="0,6,0,0" MaxHeight="96" VerticalScrollBarVisibility="Auto"
-                                     Visibility="{Binding HasSelectedError, Converter={StaticResource BoolToVis}}" />
-
-                            <TextBlock Text="{Binding IterationStatus}" FontSize="11" Foreground="{DynamicResource Muted}"
-                                       TextWrapping="Wrap" Margin="0,8,0,4"
-                                       Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
-                            <ListBox ItemsSource="{Binding SelectedIterations}" SelectedItem="{Binding SelectedIteration}"
-                                     DisplayMemberPath="Summary" MaxHeight="130"
-                                     Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}" />
-
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button Style="{StaticResource SmallButton}" Content="Show inputs" Command="{Binding ShowInputsCommand}"
-                                        ToolTip="Read what the step was given. Fetched only when you ask, and never saved." />
-                                <Button Style="{StaticResource SmallButton}" Content="Show outputs" Margin="6,0,0,0"
-                                        Command="{Binding ShowOutputsCommand}"
-                                        ToolTip="Read what the step returned. Fetched only when you ask, and never saved." />
-                                <Button Style="{StaticResource LinkButton}" Content="Back to definition" Margin="10,0,0,0"
-                                        Command="{Binding ShowDefinitionCommand}"
-                                        Visibility="{Binding HasContent, Converter={StaticResource BoolToVis}}" />
-                            </StackPanel>
-                            <TextBlock Text="Reading..." FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,4,0,0"
-                                       Visibility="{Binding IsContentLoading, Converter={StaticResource BoolToVis}}" />
-                            <TextBlock Text="{Binding ContentError}" FontSize="11" Foreground="{DynamicResource Red}"
-                                       TextWrapping="Wrap" Margin="0,4,0,0"
-                                       Visibility="{Binding HasContentError, Converter={StaticResource BoolToVis}}" />
+                    <!-- Title, summary, and the name and type the definition knows it by. -->
+                    <Border Grid.Row="0" Padding="14,12,14,10" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Selected.Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Selected.Summary}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       Margin="0,2,0,0" />
+                            <TextBlock Foreground="{DynamicResource Faint}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap">
+                                <Run Text="{Binding Selected.Node.Name, Mode=OneWay}" /><Run Text=" · " /><Run
+                                     Text="{Binding Selected.Node.Type, Mode=OneWay}" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding Selected.Description}" FontStyle="Italic" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Foreground="{DynamicResource Muted}"
+                                       Visibility="{Binding Selected.HasDescription, Converter={StaticResource BoolToVis}}" />
                         </StackPanel>
+                    </Border>
 
-                        <TextBlock Text="{Binding DetailCodeTitle}" Style="{StaticResource DetailHeading}" />
+                    <!-- Runs after, and the step in the run on show. -->
+                    <Border Grid.Row="1" Padding="14,10" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="84" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Runs after" Foreground="{DynamicResource Muted}" />
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedRunAfter}" TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="1" Text="In this run" Foreground="{DynamicResource Muted}" Margin="0,8,0,0"
+                                       Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedRunStatus}" TextWrapping="Wrap"
+                                       Margin="0,8,0,0" FontWeight="SemiBold"
+                                       Visibility="{Binding IsRunMode, Converter={StaticResource BoolToVis}}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedRunOutcome}" Value="{x:Static models:FlowStepOutcome.Succeeded}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedRunOutcome}" Value="{x:Static models:FlowStepOutcome.Failed}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedRunOutcome}" Value="{x:Static models:FlowStepOutcome.TimedOut}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedRunOutcome}" Value="{x:Static models:FlowStepOutcome.Skipped}">
+                                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <!-- The error, any iterations, and the code switch. -->
+                    <StackPanel Grid.Row="2" Margin="14,10,14,0">
+                        <Border Background="{DynamicResource RedSoft}" CornerRadius="4" Padding="8,6" Margin="0,0,0,10"
+                                Visibility="{Binding HasSelectedError, Converter={StaticResource BoolToVis}}">
+                            <TextBox Text="{Binding SelectedError, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                                     BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Red}"
+                                     FontSize="11" Padding="0" MaxHeight="96" VerticalScrollBarVisibility="Auto" />
+                        </Border>
+
+                        <TextBlock Text="{Binding IterationStatus}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   TextWrapping="Wrap" Margin="0,0,0,4"
+                                   Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                        <ListBox ItemsSource="{Binding SelectedIterations}" SelectedItem="{Binding SelectedIteration}"
+                                 DisplayMemberPath="Summary" MaxHeight="130" Margin="0,0,0,10"
+                                 Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}" />
+
+                        <DockPanel Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Copy"
+                                    VerticalAlignment="Center" Command="{Binding CopyCodeCommand}"
+                                    ToolTip="{Binding DetailCodeTitle, StringFormat=Copy the {0}}" />
+                            <Border Style="{StaticResource Segmented}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Definition"
+                                                 IsChecked="{Binding IsDefinitionShown}" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Inputs"
+                                                 IsChecked="{Binding IsInputsShown}" IsEnabled="{Binding CanShowInputs}"
+                                                 ToolTip="What the step was given, in the run on show. Fetched only when you ask, and never saved."
+                                                 ToolTipService.ShowOnDisabled="True" />
+                                    <RadioButton Style="{StaticResource SegmentedToggle}" Content="Outputs"
+                                                 IsChecked="{Binding IsOutputsShown}" IsEnabled="{Binding CanShowOutputs}"
+                                                 ToolTip="What the step returned, in the run on show. Fetched only when you ask, and never saved."
+                                                 ToolTipService.ShowOnDisabled="True" />
+                                </StackPanel>
+                            </Border>
+                        </DockPanel>
+
+                        <TextBlock Text="Reading..." FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,6"
+                                   Visibility="{Binding IsContentLoading, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding ContentError}" FontSize="11" Foreground="{DynamicResource Red}"
+                                   TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Visibility="{Binding HasContentError, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
 
-                    <Border Grid.Row="2" BorderBrush="{DynamicResource Border}" BorderThickness="1" Margin="0,0,0,12">
+                    <Border Grid.Row="3" BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="4"
+                            Background="{DynamicResource Surface2}" Margin="14,0,14,12" ClipToBounds="True">
                         <local:CodeView Code="{Binding DetailCode}" Syntax="Json" />
                     </Border>
                 </Grid>

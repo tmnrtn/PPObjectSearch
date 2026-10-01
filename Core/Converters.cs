@@ -16,8 +16,9 @@ public sealed class NotBoolConverter : IValueConverter
 /// <summary>Collapses a panel that is driven by a collection's count rather than a flag.</summary>
 public sealed class CountToVisibilityConverter : IValueConverter
 {
+    /// <summary>Visible for a count above zero; "invert" for an empty-list message, visible at zero.</summary>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is int count && count > 0
+        (value is int count && count > 0) != (parameter as string == "invert")
             ? System.Windows.Visibility.Visible
             : System.Windows.Visibility.Collapsed;
 
@@ -144,6 +145,34 @@ public sealed class YesNoConverter : IValueConverter
         false => "No",
         _ => "—"
     };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        System.Windows.Data.Binding.DoNothing;
+}
+
+/// <summary>A privilege depth as the role grid shows it: User, BU, Parent, Org - or nothing for none.</summary>
+public sealed class PrivilegeDepthShortConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
+    {
+        Models.PrivilegeDepth.User => "User",
+        Models.PrivilegeDepth.BusinessUnit => "BU",
+        Models.PrivilegeDepth.ParentChild => "Parent",
+        Models.PrivilegeDepth.Organization => "Org",
+        _ => string.Empty
+    };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        System.Windows.Data.Binding.DoNothing;
+}
+
+/// <summary>Visible when the bound enum has the value named by the parameter - one of several views.</summary>
+public sealed class EnumToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is not null && parameter is not null && string.Equals(value.ToString(), parameter.ToString(), StringComparison.Ordinal)
+            ? System.Windows.Visibility.Visible
+            : System.Windows.Visibility.Collapsed;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         System.Windows.Data.Binding.DoNothing;

@@ -209,3 +209,42 @@ public sealed class SolutionHistoryEntry
     public string SearchText => string.Join(" ", SolutionName, Version, PublisherName, PackageName, Operation, SubOperation, ErrorCode)
         .ToLowerInvariant();
 }
+
+/// <summary>
+/// A cloud flow's latest run and how its recent runs went - the main window's detail pane card,
+/// read when the flow is selected rather than for every row.
+/// </summary>
+public sealed class LatestRunSummary
+{
+    public required ProcessRun Run { get; init; }
+
+    /// <summary>How many of the runs looked at failed, and how many were looked at.</summary>
+    public int Failed { get; init; }
+    public int Considered { get; init; }
+
+    /// <summary>For the pill's colour, which follows the row's Outcome.</summary>
+    public RunOutcome Outcome => Run.Outcome;
+
+    public string FailedLabel => Considered <= 1
+        ? (Failed == 1 ? "the only run failed" : "the only run")
+        : $"{Failed} of last {Considered} failed";
+
+    /// <summary>The error's first line; the detail is in the details window.</summary>
+    public string? ErrorLine => string.IsNullOrWhiteSpace(Run.ErrorMessage)
+        ? null
+        : Run.ErrorMessage.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+
+    public static LatestRunSummary? From(IReadOnlyList<ProcessRun> runs)
+    {
+        if (runs.Count == 0) return null;
+
+        var newest = runs.OrderByDescending(r => r.StartTime ?? DateTimeOffset.MinValue).ToList();
+        return new LatestRunSummary
+        {
+            Run = newest[0],
+            Failed = newest.Count(r => r.Outcome == RunOutcome.Failed),
+            Considered = newest.Count
+        };
+    }
+}
