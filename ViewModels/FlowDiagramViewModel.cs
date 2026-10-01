@@ -1,5 +1,6 @@
 using PPObjectSearch.Core;
 using PPObjectSearch.Models;
+using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
@@ -148,10 +149,12 @@ public sealed class FlowDiagramViewModel : ObservableObject
     public const double MaxZoom = 1.5;
 
     private readonly List<FlowCardViewModel> _cards = new();
+    private readonly string? _flowName;
 
-    public FlowDiagramViewModel(FlowDesign design)
+    public FlowDiagramViewModel(FlowDesign design, string? flowName = null)
     {
         Design = design;
+        _flowName = flowName;
 
         var steps = new List<FlowStepViewModel>();
 
@@ -177,6 +180,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         ZoomInCommand = new RelayCommand(_ => Zoom += 0.1);
         ZoomOutCommand = new RelayCommand(_ => Zoom -= 0.1);
         ResetZoomCommand = new RelayCommand(_ => Zoom = 1);
+        CopyMermaidCommand = new RelayCommand(_ => CopyMermaid());
     }
 
     public FlowDesign Design { get; }
@@ -192,6 +196,27 @@ public sealed class FlowDiagramViewModel : ObservableObject
     public RelayCommand ZoomInCommand { get; }
     public RelayCommand ZoomOutCommand { get; }
     public RelayCommand ResetZoomCommand { get; }
+    public RelayCommand CopyMermaidCommand { get; }
+
+    /// <summary>The whole flow as a Mermaid flowchart, for documentation.</summary>
+    public string Mermaid => FlowMermaidExporter.ToMermaid(Design, _flowName);
+
+    private string _notice = string.Empty;
+    /// <summary>A short confirmation in the toolbar - what the last copy did.</summary>
+    public string Notice
+    {
+        get => _notice;
+        private set => SetProperty(ref _notice, value);
+    }
+
+    private void CopyMermaid()
+    {
+        var mermaid = Mermaid;
+
+        Notice = ClipboardText.TryCopy(mermaid, out var failure)
+            ? $"Copied as Mermaid ({mermaid.Split('\n').Length:N0} lines) - paste it into a wiki, README or mermaid.live."
+            : "Could not copy - " + failure;
+    }
 
     public string Summary =>
         $"{Design.ActionCount:N0} step(s)" + (Design.Triggers.Count == 1 ? $" after the trigger" : string.Empty) +

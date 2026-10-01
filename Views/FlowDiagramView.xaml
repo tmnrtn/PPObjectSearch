@@ -247,6 +247,9 @@
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource SmallButton}" Content="Copy as Mermaid" Margin="0,0,14,0"
+                            Command="{Binding CopyMermaidCommand}"
+                            ToolTip="Copy the flow as a Mermaid flowchart, to paste into a wiki, a README or a pull request." />
                     <Button Style="{StaticResource SmallButton}" Content="Expand all" Command="{Binding ExpandAllCommand}" />
                     <Button Style="{StaticResource SmallButton}" Content="Collapse all" Margin="6,0,14,0"
                             Command="{Binding CollapseAllCommand}" />
@@ -265,6 +268,8 @@
                            Margin="10,0,0,0" />
                 <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Faint}" VerticalAlignment="Center"
                            Margin="14,0,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource Green}" VerticalAlignment="Center"
+                           Margin="14,0,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Notice}" />
             </DockPanel>
         </Border>
 

@@ -182,7 +182,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             var design = await Task.Run(() => FlowDesignParser.Parse(definition));
-            FlowDiagram = new FlowDiagramViewModel(design);
+            FlowDiagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
         }
         catch (Exception ex)
         {

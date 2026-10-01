@@ -35,7 +35,8 @@ straight into the maker portal.
     as the designer does, read-only: trigger, steps in run-after order, parallel branches side by
     side, and conditions, switches, loops and scopes that collapse. Steps that run only on failure
     or time-out are badged, search finds a step by name, type or connector, and selecting one
-    shows its JSON.
+    shows its JSON. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
+    README or pull request.
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
     (and a warning when tracing is switched off).
