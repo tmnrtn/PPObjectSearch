@@ -210,7 +210,15 @@
             </ScrollViewer>
 
             <Grid Grid.Row="2">
-                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{x:Static core:AppVersion.Label}" ToolTip="{x:Static core:AppVersion.Description}"
+                           FontSize="11" Foreground="{DynamicResource Faint}" Margin="8,0,0,6" />
+
+                <Button Grid.Row="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
                         Margin="0,0,34,0" Content="Sign out all"
                         ToolTip="Forget every signed-in account across all tenants."
                         Command="{Binding SignOutAllCommand}">
@@ -226,7 +234,7 @@
                     </Button.Style>
                 </Button>
 
-                <Button HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
+                <Button Grid.Row="1" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
                         Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
                         Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
                         core:Ui.OpensMenu="True">
