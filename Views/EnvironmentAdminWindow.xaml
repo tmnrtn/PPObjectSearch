@@ -147,11 +147,60 @@
             </StackPanel>
 
             <TabControl Grid.Row="1" SelectedValuePath="Tag" SelectedValue="{Binding SelectedTab}">
+                <!-- The app's tab strip, with Back and Forward ahead of the tabs rather than over them. -->
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="10,0">
+                                <DockPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Button Content="&#xE72B;" Width="26" Height="26" Command="{Binding BackCommand}"
+                                        ToolTip="{Binding BackToolTip}" ToolTipService.ShowOnDisabled="True">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                                            <Setter Property="FontSize" Value="12" />
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="&#xE72A;" Width="26" Height="26" Margin="2,0,0,0" Command="{Binding ForwardCommand}"
+                                        ToolTip="{Binding ForwardToolTip}" ToolTipService.ShowOnDisabled="True">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                                            <Setter Property="FontSize" Value="12" />
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                                    <TabPanel IsItemsHost="True" />
+                                </DockPanel>
+                            </Border>
+                            <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
 
                 <!-- ============================================================ users -->
-                <!-- The first tab steps right to make room for Back and Forward. -->
-                <TabItem Header="Users" Tag="{x:Static vm:AdminTab.Users}" Margin="58,0,0,0"
-                         core:Ui.Count="{Binding Users.CountAll, StringFormat=N0}">
+                <TabItem Header="Users" Tag="{x:Static vm:AdminTab.Users}" core:Ui.Count="{Binding Users.CountAll, StringFormat=N0}">
                     <Grid DataContext="{Binding Users}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -1166,41 +1215,6 @@
                 </TabItem>
             </TabControl>
 
-            <!-- Back and Forward, in the tab strip's row, left of the first tab. -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,3,0,0">
-                <Button Content="&#xE72B;" Width="26" Height="26" Command="{Binding BackCommand}"
-                        ToolTip="{Binding BackToolTip}" ToolTipService.ShowOnDisabled="True">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
-                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
-                            <Setter Property="FontSize" Value="12" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
-                            <Style.Triggers>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-                <Button Content="&#xE72A;" Width="26" Height="26" Margin="2,0,0,0" Command="{Binding ForwardCommand}"
-                        ToolTip="{Binding ForwardToolTip}" ToolTipService.ShowOnDisabled="True">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
-                            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
-                            <Setter Property="FontSize" Value="12" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
-                            <Style.Triggers>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Foreground" Value="{DynamicResource Faint}" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-            </StackPanel>
         </Grid>
     </Border>
 </Window>
