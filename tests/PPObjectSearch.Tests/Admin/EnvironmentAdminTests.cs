@@ -626,4 +626,79 @@ public class EnvironmentAdminTests
 
         Assert.Equal("the default browser", session.BrowserProfileLabel);
     }
+    // ---------------------------------------------------------------- field security profiles
+
+    private static FakeHttpHandler FieldSecurityHandler(bool profilesFail = false)
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "systemusers?", Users())
+            .OnJson(HttpMethod.Get, $"systemusers({Alice})/teammembership_association", Value(
+                new Dictionary<string, object?> { ["teamid"] = TeamA, ["name"] = "Service Desk", ["isdefault"] = false }))
+            .OnJson(HttpMethod.Get, $"systemusers({Alice})/systemuserroles_association", Value(
+                new Dictionary<string, object?> { ["roleid"] = RoleCopy, ["name"] = "Basic User" }))
+            .OnJson(HttpMethod.Get, $"teams({TeamA})/teamroles_association", Value());
+
+        if (profilesFail)
+        {
+            return handler
+                .OnError(HttpMethod.Get, "profiles_association", HttpStatusCode.Forbidden, "Principal lacks prvReadFieldSecurityProfile")
+                .OnJson(HttpMethod.Get, "", Value());
+        }
+
+        return handler
+            .OnJson(HttpMethod.Get, $"systemusers({Alice})/systemuserprofiles_association", Value(
+                new Dictionary<string, object?> { ["fieldsecurityprofileid"] = Guid.NewGuid(), ["name"] = "Salary readers", ["ismanaged"] = false }))
+            .OnJson(HttpMethod.Get, $"teams({TeamA})/teamprofiles_association", Value(
+                new Dictionary<string, object?> { ["fieldsecurityprofileid"] = Guid.NewGuid(), ["name"] = "Case notes", ["ismanaged"] = true, ["description"] = "Secured case fields" }))
+            .OnJson(HttpMethod.Get, "", Value());
+    }
+
+    [Fact]
+    public async Task A_users_field_security_profiles_come_directly_and_through_each_team()
+    {
+        var admin = Admin(FieldSecurityHandler());
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
+        await Settle();
+
+        var profiles = admin.Users.FieldProfiles;
+        Assert.Equal(["Salary readers", "Case notes"], profiles.Select(p => p.Name));
+        Assert.Equal("Direct", profiles[0].Via);
+        Assert.Equal("Unmanaged", profiles[0].ManagedLabel);
+        Assert.Equal("Team: Service Desk", profiles[1].Via);
+        Assert.Equal("Secured case fields", profiles[1].Description);
+        Assert.Equal(string.Empty, admin.Users.FieldProfileStatus);
+    }
+
+    [Fact]
+    public async Task Field_security_that_cannot_be_read_says_so_and_leaves_the_roles()
+    {
+        var admin = Admin(FieldSecurityHandler(profilesFail: true));
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
+        await Settle();
+
+        Assert.Empty(admin.Users.FieldProfiles);
+        Assert.Contains("Could not read field security profiles", admin.Users.FieldProfileStatus);
+        Assert.Equal("Basic User", Assert.Single(admin.Users.RoleAssignments).RoleName);
+        Assert.DoesNotContain("Could not read", admin.Users.DetailStatus);
+    }
+
+    [Fact]
+    public async Task A_user_with_no_field_security_profile_is_told_what_that_means()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "systemusers?", Users())
+            .OnJson(HttpMethod.Get, "", Value());
+        var admin = Admin(handler);
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Bob);
+        await Settle();
+
+        Assert.Contains("no access to secured columns", admin.Users.FieldProfileStatus);
+        Assert.Contains(handler.Requests, r => r.Url.Contains($"systemusers({Bob})/systemuserprofiles_association"));
+    }
 }

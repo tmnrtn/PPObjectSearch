@@ -390,14 +390,18 @@
                                                         <RadioButton Style="{StaticResource SegmentedToggle}" Content="Teams" GroupName="UserDetail"
                                                                      core:Ui.Count="{Binding Teams.Count}"
                                                                      IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Teams}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Field security" GroupName="UserDetail"
+                                                                     core:Ui.Count="{Binding FieldProfiles.Count}"
+                                                                     ToolTip="Field security profiles, direct and through teams: access to secured columns, which roles do not grant."
+                                                                     IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=FieldSecurity}" />
                                                     </StackPanel>
                                                 </Border>
                                             </DockPanel>
                                         </Border>
 
                                         <Grid Grid.Row="2">
-                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding RoleAssignments}" IsReadOnly="True"
-                                                      Visibility="{Binding IsRolesView, Converter={StaticResource BoolToVis}}">
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Roles}">
+                                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding RoleAssignments}" IsReadOnly="True">
                                                 <DataGrid.Columns>
                                                     <DataGridTemplateColumn Header="Role" Width="*" SortMemberPath="RoleName"
                                                                             HeaderStyle="{StaticResource PaneFirstHeader}">
@@ -429,8 +433,14 @@
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
+                                            <!-- Why the list is empty, or still loading - where the rows would be. -->
+                                            <TextBlock Text="{Binding DetailStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                       TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                       Visibility="{Binding RoleAssignments.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
+
                                             <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Teams}" IsReadOnly="True"
-                                                      Visibility="{Binding IsRolesView, Converter={StaticResource NotBoolToVis}}">
+                                                      Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Teams}">
                                                 <DataGrid.Columns>
                                                     <DataGridTextColumn Header="Team" Width="*" Binding="{Binding Name}"
                                                                         HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellPaneFirst}" />
@@ -440,10 +450,37 @@
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
-                                            <!-- Why the list is empty, or still loading - where the rows would be. -->
-                                            <TextBlock Text="{Binding DetailStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
-                                                       TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
-                                                       Visibility="{Binding RoleAssignments.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=FieldSecurity}">
+                                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding FieldProfiles}" IsReadOnly="True">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Profile" Width="*" Binding="{Binding Name}"
+                                                                            HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellPaneFirst}">
+                                                                    <Setter Property="ToolTip" Value="{Binding Description}" />
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                        <DataGridTextColumn Header="State" Width="90" Binding="{Binding ManagedLabel}"
+                                                                            ElementStyle="{StaticResource CellMuted}" />
+                                                        <DataGridTextColumn Header="Via" Width="130" Binding="{Binding Via}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                                                    <Setter Property="ToolTip" Value="{Binding Via}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsDirect}" Value="True">
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <TextBlock Text="{Binding FieldProfileStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                           TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                           Visibility="{Binding FieldProfiles.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
                                         </Grid>
                                     </Grid>
 

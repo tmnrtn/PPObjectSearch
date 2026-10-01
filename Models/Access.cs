@@ -47,6 +47,26 @@ public sealed record RoleAssignment(
     public Guid DefinitionId => RootRoleId ?? RoleId;
 }
 
+/// <summary>
+/// A field security profile a user holds - directly, or through a team. It grants read, create
+/// and update on secured columns, which security roles do not.
+/// </summary>
+public sealed record FieldProfileAssignment(
+    Guid ProfileId,
+    string Name,
+    string? Description,
+    bool IsManaged,
+    Guid? TeamId,
+    string? TeamName)
+{
+    public bool IsDirect => TeamId is null;
+
+    /// <summary>"Direct", or "Team: Service Desk".</summary>
+    public string Via => IsDirect ? "Direct" : $"Team: {TeamName}";
+
+    public string ManagedLabel => IsManaged ? "Managed" : "Unmanaged";
+}
+
 /// <summary>A security role, at the business unit it was defined in.</summary>
 public sealed record SecurityRoleInfo(Guid RoleId, string Name, string? BusinessUnit, bool IsManaged, DateTimeOffset? ModifiedOn)
 {

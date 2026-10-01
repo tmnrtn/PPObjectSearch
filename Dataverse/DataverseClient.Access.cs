@@ -98,6 +98,31 @@ public sealed partial class DataverseClient
             teamName);
     }
 
+    private const string FieldProfileSelect = "fieldsecurityprofileid,name,description,ismanaged";
+
+    /// <summary>The field security profiles assigned to the user themselves.</summary>
+    public Task<IReadOnlyList<FieldProfileAssignment>> GetUserFieldProfilesAsync(Guid systemUserId, CancellationToken ct = default) =>
+        ReadRowsAsync(EnvironmentUrl + ApiPath + $"systemusers({systemUserId})/systemuserprofiles_association?$select={FieldProfileSelect}",
+            row => ReadFieldProfile(row, null, null), ct);
+
+    /// <summary>The field security profiles assigned to a team, which every member holds through it.</summary>
+    public Task<IReadOnlyList<FieldProfileAssignment>> GetTeamFieldProfilesAsync(Guid teamId, string teamName, CancellationToken ct = default) =>
+        ReadRowsAsync(EnvironmentUrl + ApiPath + $"teams({teamId})/teamprofiles_association?$select={FieldProfileSelect}",
+            row => ReadFieldProfile(row, teamId, teamName), ct);
+
+    private static FieldProfileAssignment? ReadFieldProfile(JsonElement row, Guid? teamId, string? teamName)
+    {
+        if (!Guid.TryParse(JsonHelper.GetString(row, "fieldsecurityprofileid"), out var id)) return null;
+
+        return new FieldProfileAssignment(
+            id,
+            JsonHelper.GetString(row, "name") ?? "(unnamed profile)",
+            JsonHelper.GetString(row, "description"),
+            JsonHelper.GetBool(row, "ismanaged") ?? false,
+            teamId,
+            teamName);
+    }
+
     // ---------------------------------------------------------------- security roles
 
     /// <summary>

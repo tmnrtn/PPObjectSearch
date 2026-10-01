@@ -265,7 +265,9 @@ queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues t
 - **Users** — every user, searchable, filtered by user type (application user, or the access
   mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled users
   by default). A user shows their teams, and their security roles both direct and through each
-  team, each in the business unit it is held in, and their mailbox's approval and test result.
+  team, each in the business unit it is held in, their field security profiles (direct and through
+teams - access to secured columns, which roles do not grant), and their mailbox's approval and
+test result.
 - **Security roles** — each role once, at the business unit it is defined in. A role shows its
   privileges as the role editor lays them out (a row per table, Create to Share, each with its
   reach: User, BU, Parent, Org), its other privileges (Export to Excel, Bulk delete...), and the

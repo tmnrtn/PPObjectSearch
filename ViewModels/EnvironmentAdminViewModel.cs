@@ -22,7 +22,7 @@ public enum MailboxOwnerFilter { All, Users, Queues, Other }
 public enum QueueTypeFilter { All, Public, Private }
 
 /// <summary>What the selected user's pane lists below their properties.</summary>
-public enum UserDetailView { Roles, Teams }
+public enum UserDetailView { Roles, Teams, FieldSecurity }
 
 /// <summary>What the selected role's pane shows.</summary>
 public enum RoleDetailView { Privileges, Other, HeldBy }
@@ -425,6 +425,13 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     /// <summary>Direct roles first, then each team's, by name.</summary>
     public ObservableCollection<RoleAssignment> RoleAssignments { get; } = new();
 
+    /// <summary>Field security profiles, direct first, then each team's.</summary>
+    public ObservableCollection<FieldProfileAssignment> FieldProfiles { get; } = new();
+
+    private string _fieldProfileStatus = string.Empty;
+    /// <summary>Why the field security list is empty - none held, or the read failed.</summary>
+    public string FieldProfileStatus { get => _fieldProfileStatus; private set => SetProperty(ref _fieldProfileStatus, value); }
+
     private MailboxInfo? _mailbox;
     public MailboxInfo? Mailbox { get => _mailbox; private set => SetProperty(ref _mailbox, value); }
 
@@ -442,6 +449,8 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         var request = ++DetailRequest;
         Teams.Clear();
         RoleAssignments.Clear();
+        FieldProfiles.Clear();
+        FieldProfileStatus = string.Empty;
         Mailbox = null;
         RaiseRoleCounts();
 
@@ -467,6 +476,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
             // Every team's roles, together - a user in a dozen teams should not wait for a dozen round trips in a row.
             var viaTeams = await Task.WhenAll(teams.Select(t => Client.GetTeamRolesAsync(t.TeamId, t.Name)));
+            var profiles = await ReadFieldProfilesAsync(user.SystemUserId, teams);
             MailboxInfo? mailbox = null;
             try
             {
@@ -491,6 +501,16 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
                 RoleAssignments.Add(role);
             }
 
+            if (profiles.Error is { } error)
+            {
+                FieldProfileStatus = "Could not read field security profiles - " + error;
+            }
+            else
+            {
+                foreach (var profile in profiles.Found) FieldProfiles.Add(profile);
+                if (FieldProfiles.Count == 0) FieldProfileStatus = "No field security profile, directly or through a team - so no access to secured columns.";
+            }
+
             Mailbox = mailbox;
             RaiseRoleCounts();
 
@@ -504,6 +524,31 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         finally
         {
             if (request == DetailRequest) IsLoadingDetails = false;
+        }
+    }
+
+    /// <summary>
+    /// The user's field security profiles, direct and through every team. Read on its own, so a
+    /// failure here - a privilege the reader lacks - does not cost the roles.
+    /// </summary>
+    private async Task<(IReadOnlyList<FieldProfileAssignment> Found, string? Error)> ReadFieldProfilesAsync(
+        Guid systemUserId, IReadOnlyList<TeamInfo> teams)
+    {
+        try
+        {
+            var direct = Client.GetUserFieldProfilesAsync(systemUserId);
+            var viaTeams = await Task.WhenAll(teams.Select(t => Client.GetTeamFieldProfilesAsync(t.TeamId, t.Name)));
+
+            var found = (await direct).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Concat(viaTeams.SelectMany(p => p)
+                    .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.TeamName))
+                .ToList();
+
+            return (found, null);
+        }
+        catch (Exception ex)
+        {
+            return ([], ex.Message);
         }
     }
 
