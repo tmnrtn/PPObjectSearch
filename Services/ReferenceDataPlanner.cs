@@ -89,6 +89,18 @@ public sealed class ReferenceDataPlanner
 
         var valueColumns = shared.Where(c => !excludedSet.Contains(c.LogicalName)).ToList();
 
+        // An amount means nothing without its currency: compared alone, 100 EUR matches 100 USD, and
+        // written alone it lands in whatever currency the target defaults to. So wherever money is
+        // compared, the currency is too, whatever the saved exclusions say.
+        if (valueColumns.Any(c => c.IsMoney) &&
+            !valueColumns.Any(c => c.LogicalName.Equals(SystemColumns.Currency, StringComparison.OrdinalIgnoreCase)) &&
+            shared.FirstOrDefault(c => c.LogicalName.Equals(SystemColumns.Currency, StringComparison.OrdinalIgnoreCase)) is { } currency)
+        {
+            valueColumns.Add(currency);
+            warnings.Add($"{logicalName}: {SystemColumns.Currency} is compared because money columns are - " +
+                         "an amount is only the same in the same currency.");
+        }
+
         if (valueColumns.Count == 0)
         {
             warnings.Add($"{logicalName}: every column is excluded, so only presence is compared.");

@@ -62,6 +62,7 @@ public sealed record EntityColumn(
     };
 
     public bool IsNumeric => NumericTypes.Contains(TypeName);
+    public bool IsMoney => TypeName == "MoneyType";
     public bool IsDateTime => TypeName == "DateTimeType";
     public bool IsBoolean => TypeName == "BooleanType";
     public bool IsUniqueIdentifier => TypeName == "UniqueidentifierType";

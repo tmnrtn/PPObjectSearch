@@ -120,6 +120,12 @@ public sealed class ReferenceDataWriter
             var plan = item.Row.Plan;
             var entitySet = TargetEntitySet(plan.Entity);
 
+            if (item.Action != ReconcileAction.Delete && MoneyWithoutCurrency(plan) is { } money)
+            {
+                return Fail(item, $"money column(s) {money} would be written without {SystemColumns.Currency}, " +
+                                  "so the amount could land in the wrong currency. Compare the currency column too.");
+            }
+
             switch (item.Action)
             {
                 case ReconcileAction.Delete:
@@ -185,6 +191,16 @@ public sealed class ReferenceDataWriter
         {
             return Fail(item, ex.Message);
         }
+    }
+
+    private static string? MoneyWithoutCurrency(EntityComparePlan plan)
+    {
+        var money = plan.ValueColumns.Where(c => c.IsMoney && (c.IsValidForCreate || c.IsValidForUpdate)).ToList();
+        if (money.Count == 0) return null;
+
+        return plan.ValueColumns.Any(c => c.LogicalName.Equals(SystemColumns.Currency, StringComparison.OrdinalIgnoreCase))
+            ? null
+            : string.Join(", ", money.Select(c => c.LogicalName));
     }
 
     private static ReconcileOutcome Fail(ReconcilePlanItem item, string message) =>

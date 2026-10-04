@@ -137,7 +137,6 @@ public class ReferenceDataConfigTests
     [InlineData("modifiedby")]
     [InlineData("ownerid")]
     [InlineData("versionnumber")]
-    [InlineData("transactioncurrencyid")]
     [InlineData("exchangerate")]
     [InlineData("OverriddenCreatedOn")]
     [InlineData("ModifiedOn")]

@@ -97,8 +97,11 @@ public static class SystemColumns
         "ownerid", "owninguser", "owningteam", "owningbusinessunit",
         "organizationid", "businessunitid", "solutionid", "supportinguser",
         "componentstate", "overwritetime", "ismanaged", "iscustomizable",
-        "introducedversion", "exchangerate", "transactioncurrencyid"
+        "introducedversion", "exchangerate"
     };
+
+    /// <summary>The currency a row's money columns are in. Never noise: 100 EUR is not 100 USD.</summary>
+    public const string Currency = "transactioncurrencyid";
 
     public static bool IsNoise(string logicalName) => Names.Contains(logicalName);
 

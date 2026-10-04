@@ -77,6 +77,32 @@ public class ReferenceDataPlannerTests
         return config;
     }
 
+    [Fact]
+    public async Task Money_brings_its_currency_into_the_comparison_even_when_excluded()
+    {
+        var columns = StandardSource.Append(Attr("transactioncurrencyid", "LookupType")).ToArray();
+        var env = Standard(columns, columns);
+
+        var result = await env.Planner().BuildAsync(
+            Config(c => c.ExcludedColumns = new List<string> { "new_thingid", "transactioncurrencyid" }), true);
+
+        Assert.Contains(result.Plan!.ValueColumns, c => c.LogicalName == "transactioncurrencyid");
+        Assert.Contains(result.Warnings, w => w.Contains("transactioncurrencyid is compared because money"));
+    }
+
+    [Fact]
+    public async Task Currency_is_left_alone_where_no_money_is_compared()
+    {
+        var columns = StandardSource.Append(Attr("transactioncurrencyid", "LookupType")).ToArray();
+        var env = Standard(columns, columns);
+
+        var result = await env.Planner().BuildAsync(
+            Config(c => c.ExcludedColumns = new List<string> { "new_thingid", "new_amount", "transactioncurrencyid" }), true);
+
+        Assert.DoesNotContain(result.Plan!.ValueColumns, c => c.LogicalName == "transactioncurrencyid");
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("transactioncurrencyid"));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

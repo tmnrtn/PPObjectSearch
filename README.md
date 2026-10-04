@@ -152,7 +152,9 @@ environment.
    - **Row filter** — an optional OData `$filter` (e.g. `statecode eq 0`), applied to both sides.
    - **Columns to compare** — every readable column, minus the primary id and the
      created/modified/owner housekeeping columns, which differ for every deployed row and would
-     bury the real differences. **Defaults** puts that back.
+     bury the real differences. **Defaults** puts that back. Wherever a money column is compared
+     the row's currency (`transactioncurrencyid`) is compared and written with it, even if it was
+     excluded - 100 EUR is not 100 USD.
 4. **Compare**. Each row lands as *only in source*, *only in target*, *values differ* or *match*,
    and selecting one shows its differing columns side by side (untick **Differences only** to see
    every compared column). The filter above the grid switches between the statuses, and each

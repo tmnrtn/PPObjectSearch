@@ -14,6 +14,7 @@ public class ReferenceDataWriterTests
     private static readonly EntityColumn IdColumn = Col(PrimaryId, "UniqueidentifierType", primaryId: true);
     private static readonly EntityColumn Name = Col("new_name", primaryName: true);
     private static readonly EntityColumn Amount = Col("new_amount", "MoneyType");
+    private static readonly EntityColumn Currency = Lookup("transactioncurrencyid");
     private static readonly EntityColumn Count = Col("new_count", "IntegerType");
     private static readonly EntityColumn Flag = Col("new_flag", "BooleanType");
     private static readonly EntityColumn Calculated = Col("new_calc", "DecimalType", validForCreate: false, validForUpdate: false);
@@ -330,7 +331,7 @@ public class ReferenceDataWriterTests
             .With("new_secret", "not compared")
             .Build();
 
-        var item = Compared(new[] { IdColumn, Code, Name, Amount, Count, Flag }, source, null);
+        var item = Compared(new[] { IdColumn, Code, Name, Amount, Currency, Count, Flag }, source, null);
         Assert.Equal(ReconcileAction.Create, item.Action);
 
         var outcome = await Writer(handler).ApplyAsync(item);
@@ -373,7 +374,7 @@ public class ReferenceDataWriterTests
     public async Task Apply_create_sends_empty_values_as_null()
     {
         var handler = new FakeHttpHandler().OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
-        var item = Compared(new[] { Name, Amount }, Row(G(1)).With("new_code", "A").With("new_name", null).Build(), null);
+        var item = Compared(new[] { Name, Amount, Currency }, Row(G(1)).With("new_code", "A").With("new_name", null).Build(), null);
 
         await Writer(handler).ApplyAsync(item);
 
@@ -782,7 +783,7 @@ public class ReferenceDataWriterTests
         var source = Row(G(1)).With("new_code", "A").With("new_name", "Alpha").With("new_amount", "10.00").With("new_count", "5").With("new_flag", "true").Build();
         var target = Row(G(2)).With("new_code", "A").With("new_name", "Alpha").With("new_amount", "10").With("new_count", "4").With("new_flag", "false").Build();
 
-        var item = Compared(new[] { Name, Amount, Count, Flag }, source, target);
+        var item = Compared(new[] { Name, Amount, Currency, Count, Flag }, source, target);
         Assert.Equal(ReconcileAction.Update, item.Action);
 
         var outcome = await Writer(handler).ApplyAsync(item);
@@ -847,6 +848,19 @@ public class ReferenceDataWriterTests
             $"nothing could be written - the primary id ({PrimaryId}) differs, and an update cannot change a row's id; " +
             "read-only in Dataverse: new_calc.",
             outcome.Message);
+    }
+
+    [Fact]
+    public async Task Money_is_never_written_without_its_currency()
+    {
+        var handler = new FakeHttpHandler();
+        var source = Row(G(1)).With("new_code", "A").With("new_amount", "100").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Amount }, source, null));
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("wrong currency", outcome.Message);
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
