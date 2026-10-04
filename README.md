@@ -423,6 +423,19 @@ are read once per tab, a chunk of rows per request, and read again only for comp
 since - so a second search is instant. **Find usages** on a table's column (Table components tab)
 and on an environment variable (Value tab) runs the same search for that name.
 
+## Dependency graph
+
+**Explore graph…** on a component's Dependencies tab opens its dependencies as a tree in both
+directions - *what depends on this* and *what this needs* - read a level at a time as each node is
+expanded. Each node shows its type, whether it is managed, and whether it is **outside the
+solution** being viewed, since those are the dependencies that surprise people at import.
+
+**What breaks if I remove this?** (Removal impact tab) follows the dependents transitively, up to
+four levels or 300 components, and lists everything that would be affected - what lies outside the
+solution first. Double-click any component in the solution to open its details. **Copy as
+Mermaid** copies the removal impact, or the tree as expanded, as a Mermaid flowchart whose arrows
+read "depends on".
+
 ## Readiness check
 
 **Readiness check** (`Ctrl+Shift+R`, in the sidebar) asks whether a solution will import cleanly

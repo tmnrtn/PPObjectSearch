@@ -904,9 +904,14 @@
 
                             <DockPanel Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <DockPanel>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Explore graph…"
+                                            Command="{Binding ExploreDependenciesCommand}"
+                                            ToolTip="Expand dependencies level by level, see what breaks if this is removed, and copy it as Mermaid" />
                                     <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
                                                Text="Depends on this (blocks deletion)"
                                                ToolTip="Components that would break if this object were deleted." />
+                                    </DockPanel>
                                 </Border>
                                 <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Dependents}" IsReadOnly="True">
                                     <DataGrid.Columns>

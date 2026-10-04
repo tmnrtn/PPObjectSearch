@@ -420,6 +420,22 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
+    // ---------------------------------------------------------------- dependency graph
+
+    private RelayCommand? _exploreDependenciesCommand;
+    /// <summary>The dependency tree in both directions, and what breaks if this is removed.</summary>
+    public RelayCommand ExploreDependenciesCommand => _exploreDependenciesCommand ??= new RelayCommand(_ =>
+    {
+        var viewModel = new DependencyExplorerViewModel(_client, Item, _known,
+            Session is { } session ? item => session.OpenDetails(item) : null);
+
+        new Views.DependencyExplorerWindow
+        {
+            DataContext = viewModel,
+            Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
+        }.Show();
+    });
+
     // ---------------------------------------------------------------- find usages
 
     private RelayCommand? _findUsagesCommand;
