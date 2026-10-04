@@ -136,7 +136,7 @@ public sealed class ReferenceDataWriter
 
                     var skipped = new List<string>();
 
-                    var body = await BuildBodyAsync(source, plan.ValueColumns, true, skipped, ct)
+                    var body = await BuildBodyAsync(source, plan.ValueColumns, true, plan.MatchLookupsByName, skipped, ct)
                         .ConfigureAwait(false);
 
                     // The source id travels with the row so the two environments converge on one
@@ -144,6 +144,7 @@ public sealed class ReferenceDataWriter
                     body[plan.Entity.PrimaryIdAttribute] = source.Id.ToString();
 
                     await _target.CreateRecordAsync(entitySet, source.Id, body, ct).ConfigureAwait(false);
+                    Remember(plan.Entity, source.PrimaryName, source.Id);
                     return new ReconcileOutcome(item, true, $"Created with id {source.Id}.{Note(skipped)}");
                 }
 
@@ -156,7 +157,7 @@ public sealed class ReferenceDataWriter
                     if (columns.Count == 0) return new ReconcileOutcome(item, true, "Nothing to change.");
 
                     var skipped = new List<string>();
-                    var body = await BuildBodyAsync(source, columns, false, skipped, ct).ConfigureAwait(false);
+                    var body = await BuildBodyAsync(source, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
 
                     // Rows matched on another key can still carry different primary ids. An update
                     // cannot change a row's id, so that difference is reported rather than written.
@@ -172,6 +173,7 @@ public sealed class ReferenceDataWriter
                     }
 
                     await _target.UpdateRecordAsync(entitySet, target.Id, body, ct).ConfigureAwait(false);
+                    Remember(plan.Entity, source.PrimaryName, target.Id);
                     return new ReconcileOutcome(item, true,
                         $"Updated {body.Count} column(s).{Note(skipped)}" +
                         (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty));
@@ -208,6 +210,7 @@ public sealed class ReferenceDataWriter
         DataRecord source,
         IReadOnlyList<EntityColumn> columns,
         bool isCreate,
+        bool matchLookupsByName,
         List<string> skipped,
         CancellationToken ct)
     {
@@ -231,7 +234,7 @@ public sealed class ReferenceDataWriter
 
             if (column.IsLookup)
             {
-                await AddLookupAsync(body, source, column, raw, isCreate, ct).ConfigureAwait(false);
+                await AddLookupAsync(body, source, column, raw, isCreate, matchLookupsByName, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -247,6 +250,7 @@ public sealed class ReferenceDataWriter
         EntityColumn column,
         string? raw,
         bool isCreate,
+        bool matchLookupsByName,
         CancellationToken ct)
     {
         var navigation = source.NavigationProperties.TryGetValue(column.SelectName, out var nav) ? nav : null;
@@ -289,6 +293,22 @@ public sealed class ReferenceDataWriter
                 $"Lookup '{column.LogicalName}' points at '{targetTable}', which is not in the target environment.");
         }
 
+        // Compared by id, the ids agree between the environments, so the reference is bound by id -
+        // once it is known to exist there. Resolving by name instead would fail on names that are
+        // not unique even though the very row the source points at is in the target.
+        if (!matchLookupsByName && Guid.TryParse(raw, out var sourceId))
+        {
+            if (!await _target.RecordExistsAsync(related, sourceId, ct).ConfigureAwait(false))
+            {
+                throw new DataverseException(
+                    $"Lookup '{column.LogicalName}' points at {related.LogicalName} {sourceId}, which does not exist " +
+                    "in the target environment.");
+            }
+
+            body[$"{navigation}@odata.bind"] = $"/{related.EntitySetName}({sourceId})";
+            return;
+        }
+
         var label = source.Label(column.SelectName);
 
         if (string.IsNullOrWhiteSpace(label))
@@ -317,11 +337,122 @@ public sealed class ReferenceDataWriter
         if (_resolved.TryGetValue(key, out var cached)) return cached;
 
         // An ambiguous name throws out of here rather than being cached, so the failure is
-        // reported against every row that depends on it instead of only the first.
+        // reported against every row that depends on it instead of only the first. Nor is "not
+        // found" cached: the row may be created later in this same run.
         var id = await _target.ResolveByNameAsync(related, label, ct).ConfigureAwait(false);
 
-        _resolved[key] = id;
+        if (id is not null) _resolved[key] = id;
         return id;
+    }
+
+    /// <summary>A row this run has just written is a lookup target for the rows after it.</summary>
+    private void Remember(EntitySummary entity, string? name, Guid id)
+    {
+        if (!string.IsNullOrWhiteSpace(name)) _resolved[(entity.LogicalName, name)] = id;
+    }
+
+    /// <summary>
+    /// The order to write a run in. Creates and updates go first, tables before the tables whose
+    /// lookups point at them, and within a table that points at itself, parents before children -
+    /// so a row is in the target by the time anything referring to it is written. Deletes follow,
+    /// in the reverse order, so a child goes before the parent it depends on.
+    /// </summary>
+    public static IReadOnlyList<T> OrderForWriting<T>(IEnumerable<T> items, Func<T, ReconcilePlanItem> itemOf)
+    {
+        var list = items.ToList();
+        var tables = list.Select(i => itemOf(i).Table).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        // Table -> tables in this run that its rows point at.
+        var dependsOn = tables.ToDictionary(t => t, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in list.Select(itemOf))
+        {
+            if (item.Row.Source is not { } source) continue;
+
+            foreach (var target in source.LookupTargets.Values)
+            {
+                if (target is not null && dependsOn.ContainsKey(target) &&
+                    !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase))
+                {
+                    dependsOn[item.Table].Add(target);
+                }
+            }
+        }
+
+        // Depth-first topological order; a cycle between tables keeps the order it was found in.
+        var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Visit(string table)
+        {
+            if (rank.ContainsKey(table) || !visiting.Add(table)) return;
+            foreach (var parent in dependsOn[table]) Visit(parent);
+            visiting.Remove(table);
+            rank[table] = rank.Count;
+        }
+
+        foreach (var table in tables) Visit(table);
+
+        var depth = SelfReferenceDepths(list.Select(itemOf).ToList());
+
+        var writes = list.Where(i => itemOf(i).Action != ReconcileAction.Delete)
+            .OrderBy(i => rank[itemOf(i).Table])
+            .ThenBy(i => depth.TryGetValue(itemOf(i), out var d) ? d : 0);
+
+        var deletes = list.Where(i => itemOf(i).Action == ReconcileAction.Delete)
+            .OrderByDescending(i => rank[itemOf(i).Table]);
+
+        return writes.Concat(deletes).ToList();
+    }
+
+    /// <summary>
+    /// For rows of a table that points at itself: how many ancestors in this run each has, found by
+    /// following the lookup's label to another row of the run with that name.
+    /// </summary>
+    private static Dictionary<ReconcilePlanItem, int> SelfReferenceDepths(List<ReconcilePlanItem> items)
+    {
+        var depths = new Dictionary<ReconcilePlanItem, int>();
+
+        foreach (var table in items.GroupBy(i => i.Table, StringComparer.OrdinalIgnoreCase))
+        {
+            var byName = table
+                .Where(i => i.Row.Source?.PrimaryName is { Length: > 0 })
+                .GroupBy(i => i.Row.Source!.PrimaryName!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            ReconcilePlanItem? ParentOf(ReconcilePlanItem item)
+            {
+                if (item.Row.Source is not { } source) return null;
+
+                foreach (var (column, target) in source.LookupTargets)
+                {
+                    if (!string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (source.Label(column) is { Length: > 0 } label && byName.TryGetValue(label, out var parent) &&
+                        !ReferenceEquals(parent, item))
+                    {
+                        return parent;
+                    }
+                }
+
+                return null;
+            }
+
+            foreach (var item in table)
+            {
+                var depth = 0;
+                var seen = new HashSet<ReconcilePlanItem> { item };
+
+                for (var parent = ParentOf(item); parent is not null && seen.Add(parent); parent = ParentOf(parent))
+                {
+                    depth++;
+                }
+
+                depths[item] = depth;
+            }
+        }
+
+        return depths;
     }
 
     /// <summary>

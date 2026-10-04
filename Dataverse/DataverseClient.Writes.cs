@@ -116,11 +116,57 @@ public sealed partial class DataverseClient
 
         if (matches.Count > 1)
         {
+            // An inactive row that shares the name is usually a retired copy; if exactly one active
+            // row carries it, that is the one meant. Not every table has statecode, so a query that
+            // fails here simply leaves the name ambiguous.
+            if (await ResolveActiveByNameAsync(entity, literal, ct).ConfigureAwait(false) is { } active) return active;
+
             throw new DataverseException(
                 $"'{label}' matches {matches.Count} rows of {entity.LogicalName}, so the reference is ambiguous.");
         }
 
         return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private async Task<Guid?> ResolveActiveByNameAsync(EntitySummary entity, string literal, CancellationToken ct)
+    {
+        var url = EnvironmentUrl + ApiPath + entity.EntitySetName +
+                  $"?$select={entity.PrimaryIdAttribute}&$top=2" +
+                  $"&$filter={entity.PrimaryNameAttribute} eq '{literal}' and statecode eq 0";
+
+        try
+        {
+            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+            if (!doc.RootElement.TryGetProperty("value", out var value) || value.GetArrayLength() != 1) return null;
+
+            return Guid.TryParse(JsonHelper.GetString(value[0], entity.PrimaryIdAttribute), out var id) ? id : null;
+        }
+        catch (DataverseException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a row with this id exists in the table - for binding a lookup by id.</summary>
+    public async Task<bool> RecordExistsAsync(EntitySummary entity, Guid id, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(entity.EntitySetName))
+        {
+            throw new DataverseException(
+                $"{entity.LogicalName} has no entity set name, so its rows cannot be queried.");
+        }
+
+        try
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + $"{entity.EntitySetName}({id})?$select={entity.PrimaryIdAttribute}", ct)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
     }
 
     private static StringContent JsonContent(IReadOnlyDictionary<string, object?> values)

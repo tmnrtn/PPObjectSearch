@@ -558,7 +558,154 @@ public class ReferenceDataWriterTests
         Assert.False(first.Succeeded);
         Assert.False(second.Succeeded);
         Assert.Contains("ambiguous", second.Message);
-        Assert.Equal(2, handler.Requests.Count(r => r.Method == HttpMethod.Get));
+
+        // Each attempt asks by name and then, finding several, for the one active row.
+        Assert.Equal(4, handler.Requests.Count(r => r.Method == HttpMethod.Get));
+    }
+
+    [Fact]
+    public async Task Apply_prefers_the_one_active_row_when_a_name_is_shared()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "statecode eq 0", ParentsResponse(G(502)))
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(501), G(502)))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent },
+            Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build(), null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        var body = BodyOf(handler.Requests.Last());
+        Assert.Equal($"/new_parents({G(502)})", body.GetProperty("new_ParentId@odata.bind").GetString());
+    }
+
+    [Fact]
+    public async Task Apply_does_not_remember_a_lookup_that_matched_nothing()
+    {
+        var found = false;
+        var handler = new FakeHttpHandler()
+            .On(HttpMethod.Get, "new_parents?", _ => FakeHttpHandler.Json(found ? ParentsResponse(G(500)) : ParentsResponse()))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+        var writer = Writer(handler);
+
+        var first = await writer.ApplyAsync(Compared(new[] { Parent },
+            Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Later").Build(), null));
+
+        found = true;
+        var second = await writer.ApplyAsync(Compared(new[] { Parent },
+            Row(G(2)).With("new_code", "B").WithLookup("new_parentid", G(10), "Later").Build(), null));
+
+        Assert.False(first.Succeeded);
+        Assert.True(second.Succeeded, second.Message);
+    }
+
+    [Fact]
+    public async Task A_row_created_in_the_run_resolves_lookups_written_after_it()
+    {
+        // A self-referencing table: the parent is created first, then a child names it.
+        var self = Lookup("new_parentthingid");
+        var handler = new FakeHttpHandler().OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+        var writer = Writer(handler);
+
+        var parent = Row(G(1)).With("new_code", "P").Named("Parent row").Build();
+        var child = Row(G(2)).With("new_code", "C").Named("Child row")
+            .WithLookup("new_parentthingid", G(1), "Parent row", targetTable: Table, navigation: "new_ParentThingId").Build();
+
+        Assert.True((await writer.ApplyAsync(Compared(new[] { self }, parent, null))).Succeeded);
+        var outcome = await writer.ApplyAsync(Compared(new[] { self }, child, null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.DoesNotContain(handler.Requests, r => r.Method == HttpMethod.Get);
+        Assert.Equal($"/new_things({G(1)})", BodyOf(handler.Requests[1]).GetProperty("new_ParentThingId@odata.bind").GetString());
+    }
+
+    [Fact]
+    public async Task Lookups_compared_by_id_are_bound_by_id_once_the_row_is_found()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"new_parents({G(10)})", "{\"new_parentid\":\"" + G(10) + "\"}")
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+
+        var plan = Plan(new[] { Code }, new[] { Parent }, matchLookupsByName: false);
+        var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build();
+        var item = Assert.Single(ReferenceDataWriter.Plan(
+            ReferenceDataComparer.Compare(plan, new[] { source }, Array.Empty<DataRecord>()).Rows,
+            new ReconcileOptions(true, true, true)));
+
+        var outcome = await Writer(handler).ApplyAsync(item);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("$filter"));
+        Assert.Equal($"/new_parents({G(10)})", BodyOf(handler.Requests.Last()).GetProperty("new_ParentId@odata.bind").GetString());
+    }
+
+    [Fact]
+    public async Task A_lookup_compared_by_id_fails_when_that_row_is_not_in_the_target()
+    {
+        var handler = new FakeHttpHandler();
+        var plan = Plan(new[] { Code }, new[] { Parent }, matchLookupsByName: false);
+        var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build();
+        var item = Assert.Single(ReferenceDataWriter.Plan(
+            ReferenceDataComparer.Compare(plan, new[] { source }, Array.Empty<DataRecord>()).Rows,
+            new ReconcileOptions(true, true, true)));
+
+        var outcome = await Writer(handler).ApplyAsync(item);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("does not exist", outcome.Message);
+        Assert.DoesNotContain(handler.Requests, r => r.Method == HttpMethod.Post);
+    }
+
+    [Fact]
+    public void Writes_are_ordered_parents_first_and_deletes_last_children_first()
+    {
+        var parentTable = Plan(new[] { Code }, new[] { Name }, entity: ParentTable);
+        var thingPlan = Plan(new[] { Code }, new[] { Parent, Name });
+
+        RecordComparison Only(EntityComparePlan plan, DataRecord? source, DataRecord? target) =>
+            Assert.Single(ReferenceDataComparer.Compare(plan,
+                source is null ? Array.Empty<DataRecord>() : new[] { source },
+                target is null ? Array.Empty<DataRecord>() : new[] { target }).Rows);
+
+        var childCreate = Only(thingPlan, Row(G(1)).With("new_code", "C").WithLookup("new_parentid", G(9), "P").Build(), null);
+        var parentCreate = Only(parentTable, Row(G(9)).With("new_code", "P").Named("P").Build(), null);
+        var parentDelete = Only(parentTable, null, Row(G(8)).With("new_code", "Q").Build());
+        var childDelete = Only(thingPlan, null, Row(G(7)).With("new_code", "D").Build());
+
+        // A child delete that only names its table still follows the table order once a create
+        // in the same run has shown which table points at which.
+        var items = ReferenceDataWriter.Plan(new[] { parentDelete, childCreate, childDelete, parentCreate },
+            new ReconcileOptions(true, true, true));
+
+        var ordered = ReferenceDataWriter.OrderForWriting(items, i => i);
+
+        Assert.Equal(
+            new[] { (ReconcileAction.Create, "new_parent"), (ReconcileAction.Create, Table),
+                    (ReconcileAction.Delete, Table), (ReconcileAction.Delete, "new_parent") },
+            ordered.Select(i => (i.Action, i.Table)));
+    }
+
+    [Fact]
+    public void Rows_of_a_self_referencing_table_are_written_parent_before_child()
+    {
+        var self = Lookup("new_parentthingid");
+        var plan = Plan(new[] { Code }, new[] { self, Name });
+
+        DataRecord Node(int id, string name, string? parent) =>
+            (parent is null
+                ? Row(G(id)).With("new_code", name).Named(name)
+                : Row(G(id)).With("new_code", name).Named(name)
+                    .WithLookup("new_parentthingid", G(99), parent, targetTable: Table, navigation: "new_ParentThingId"))
+            .Build();
+
+        var rows = ReferenceDataComparer.Compare(plan,
+            new[] { Node(3, "grandchild", "child"), Node(2, "child", "root"), Node(1, "root", null) },
+            Array.Empty<DataRecord>()).Rows;
+
+        var ordered = ReferenceDataWriter.OrderForWriting(
+            ReferenceDataWriter.Plan(rows, new ReconcileOptions(true, true, true)), i => i);
+
+        Assert.Equal(new[] { "root", "child", "grandchild" }, ordered.Select(i => i.Name));
     }
 
     [Fact]

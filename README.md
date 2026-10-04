@@ -208,7 +208,13 @@ separate acknowledgement naming how many rows will go — Dataverse deletes cann
 - **Lookups are resolved by name** against the target: the label the source showed is looked up in
   the table the lookup actually points at. If nothing matches, or several rows do, that record is
   abandoned with the reason — a reference row written with a missing or guessed reference is worse
-  than one not written.
+  than one not written. Where a name is shared but only one of those rows is active, that one is
+  used. With **Match lookups by name** unticked, a lookup is bound by its id instead, once that row
+  is found in the target.
+- **Rows are written parents first.** Creates and updates go table by table, a table before the
+  tables that point at it (and, in a table that points at itself, a parent before its children),
+  and a row written earlier in the run resolves the lookups of the rows after it. Deletes go
+  last, children first.
 - **Read-only columns are left out**, not failed on. Calculated and rollup columns read like any
   other but Dataverse refuses them on write, so they are skipped and named in the result.
 - Rows are written one at a time and each reports its own result, so a failure part-way through
