@@ -25,6 +25,16 @@ public static class DiffDocument
     private const double LineHeight = 19;
     private const double GutterWidth = 36;
 
+    /// <summary>Roughly one monospace character at the document's font size.</summary>
+    private const double CharWidth = 7.5;
+
+    /// <summary>
+    /// Each line is a paragraph with its own elements, and a FlowDocument does not virtualise, so
+    /// a diff is drawn up to this many rows and says how many more there are - a definition of tens
+    /// of thousands of lines would otherwise hang the window while it is built.
+    /// </summary>
+    private const int MaxRenderedRows = 20000;
+
     public static readonly DependencyProperty RowsProperty = DependencyProperty.RegisterAttached(
         "Rows",
         typeof(IEnumerable),
@@ -58,19 +68,35 @@ public static class DiffDocument
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
 
             // Wrapping would let the two panes drift out of step, so lines are kept whole and
-            // the panes scroll sideways together instead.
+            // the panes scroll sideways together instead - wide enough for the longest line.
             PageWidth = 4000
         };
         document.SetResourceReference(TextElement.FontFamilyProperty, "MonoFont");
         document.SetResourceReference(TextElement.ForegroundProperty, "Text");
 
+        var rows = (GetRows(box) ?? Array.Empty<object>()).OfType<DiffRow>().ToList();
+
+        var longest = rows.Count == 0 ? 0 : rows.Max(r => Math.Max(Length(r.Left), Length(r.Right)));
+        document.PageWidth = Math.Max(4000, GutterWidth + 16 + longest * CharWidth);
+
         var number = 0;
-        foreach (var row in (GetRows(box) ?? Array.Empty<object>()).OfType<DiffRow>())
+        foreach (var row in rows.Take(MaxRenderedRows))
         {
             var present = (side == DiffSide.Left ? row.Left : row.Right) is not null;
             if (present) number++;
 
             document.Blocks.Add(BuildLine(row, side, present ? number : null));
+        }
+
+        if (rows.Count > MaxRenderedRows)
+        {
+            var more = new Paragraph(new Run(
+                $"... {rows.Count - MaxRenderedRows:N0} more line(s) not shown. Copy the value to see it whole."))
+            {
+                Margin = new Thickness(GutterWidth, 4, 0, 0)
+            };
+            more.SetResourceReference(TextElement.ForegroundProperty, "Faint");
+            document.Blocks.Add(more);
         }
 
         if (document.Blocks.Count == 0)
@@ -82,6 +108,8 @@ public static class DiffDocument
 
         box.Document = document;
     }
+
+    private static int Length(IReadOnlyList<DiffRun>? runs) => runs?.Sum(r => r.Text.Length) ?? 0;
 
     private static Paragraph BuildLine(DiffRow row, DiffSide side, int? lineNumber)
     {

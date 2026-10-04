@@ -144,7 +144,7 @@
             <RichTextBox x:Name="BeforePane" Grid.Row="1" Grid.Column="0"
                          Style="{StaticResource DiffPane}"
                          views:DiffDocument.Side="Left"
-                         views:DiffDocument.Rows="{Binding SelectedChange.Diff}" />
+                         views:DiffDocument.Rows="{Binding SelectedChange.Diff, IsAsync=True}" />
 
             <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Width="1" HorizontalAlignment="Stretch"
                           Background="{DynamicResource Border}" />
@@ -152,7 +152,7 @@
             <RichTextBox x:Name="AfterPane" Grid.Row="1" Grid.Column="2"
                          Style="{StaticResource DiffPane}"
                          views:DiffDocument.Side="Right"
-                         views:DiffDocument.Rows="{Binding SelectedChange.Diff}" />
+                         views:DiffDocument.Rows="{Binding SelectedChange.Diff, IsAsync=True}" />
         </Grid>
     </Grid>
 </UserControl>

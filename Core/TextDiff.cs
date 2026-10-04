@@ -34,9 +34,16 @@ public sealed class DiffRow
 /// </summary>
 public static class TextDiff
 {
-    /// <summary>The line-alignment table is O(n*m), so past this size the cheap index-wise
-    /// pairing below is used instead. It is worse, but it returns.</summary>
+    /// <summary>The line-alignment table is O(n*m), so past this size (after the lines the two
+    /// sides share at either end are set aside) the Myers diff below is used instead.</summary>
     private const int MaxLinesForAlignment = 1200;
+
+    /// <summary>
+    /// Myers is O((n+m)·D) for D differing lines, and keeps O(D²) for the way back. Past this many
+    /// differences the two texts have little in common and lines are paired by position - worse,
+    /// but it returns.
+    /// </summary>
+    private const int MaxEditsForMyers = 2000;
 
     /// <summary>Same tradeoff one level down: a line with more tokens than this is highlighted
     /// whole rather than word by word.</summary>
@@ -59,9 +66,39 @@ public static class TextDiff
         if (left.Length == 0) return right.Select(AddedRow).ToList();
         if (right.Length == 0) return left.Select(RemovedRow).ToList();
 
-        return left.Length > MaxLinesForAlignment || right.Length > MaxLinesForAlignment
-            ? PairByIndex(left, right)
-            : Align(left, right);
+        // A change to a large definition usually touches a few lines in the middle. The lines the
+        // two sides share at the start and end are set aside first, so only the part that differs
+        // is aligned - which is usually small enough for the exact alignment.
+        var prefix = 0;
+        while (prefix < left.Length && prefix < right.Length &&
+               string.Equals(left[prefix], right[prefix], StringComparison.Ordinal))
+        {
+            prefix++;
+        }
+
+        var suffix = 0;
+        while (suffix < left.Length - prefix && suffix < right.Length - prefix &&
+               string.Equals(left[^(suffix + 1)], right[^(suffix + 1)], StringComparison.Ordinal))
+        {
+            suffix++;
+        }
+
+        var leftMiddle = left[prefix..^suffix];
+        var rightMiddle = right[prefix..^suffix];
+
+        var rows = new List<DiffRow>(Math.Max(left.Length, right.Length));
+        for (var i = 0; i < prefix; i++) rows.Add(UnchangedRow(left[i]));
+
+        if (leftMiddle.Length == 0) rows.AddRange(rightMiddle.Select(AddedRow));
+        else if (rightMiddle.Length == 0) rows.AddRange(leftMiddle.Select(RemovedRow));
+        else if (leftMiddle.Length <= MaxLinesForAlignment && rightMiddle.Length <= MaxLinesForAlignment)
+            rows.AddRange(Align(leftMiddle, rightMiddle));
+        else
+            rows.AddRange(Myers(leftMiddle, rightMiddle) ?? PairByIndex(leftMiddle, rightMiddle));
+
+        for (var i = left.Length - suffix; i < left.Length; i++) rows.Add(UnchangedRow(left[i]));
+
+        return rows;
     }
 
     /// <summary>
@@ -185,6 +222,128 @@ public static class TextDiff
         while (y < right.Length) added.Add(right[y++]);
         Flush();
 
+        return rows;
+    }
+
+    /// <summary>
+    /// Myers' O(ND) diff over lines interned to numbers, for texts too large for the O(n·m) table.
+    /// Null when they differ in more than <see cref="MaxEditsForMyers"/> lines.
+    /// </summary>
+    private static IReadOnlyList<DiffRow>? Myers(string[] left, string[] right)
+    {
+        var ids = new Dictionary<string, int>(StringComparer.Ordinal);
+        int Id(string line) => ids.TryGetValue(line, out var id) ? id : ids[line] = ids.Count;
+
+        var a = left.Select(Id).ToArray();
+        var b = right.Select(Id).ToArray();
+        int n = a.Length, m = b.Length;
+
+        // trace[d][k + d] is the furthest x reached on diagonal k after d edits.
+        var trace = new List<int[]>();
+        var v = new int[2 * (n + m) + 3];
+        var offset = n + m + 1;
+        var found = -1;
+
+        for (var d = 0; d <= Math.Min(n + m, MaxEditsForMyers) && found < 0; d++)
+        {
+            for (var k = -d; k <= d; k += 2)
+            {
+                var x = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1])
+                    ? v[offset + k + 1]
+                    : v[offset + k - 1] + 1;
+                var y = x - k;
+
+                while (x < n && y < m && a[x] == b[y])
+                {
+                    x++;
+                    y++;
+                }
+
+                v[offset + k] = x;
+
+                if (x >= n && y >= m)
+                {
+                    found = d;
+                    break;
+                }
+            }
+
+            trace.Add(v[(offset - d)..(offset + d + 1)]);
+        }
+
+        if (found < 0) return null;
+
+        // Walk back from the end, then replay forwards with the same buffering as Align, so runs
+        // of removals and insertions still pair up into Modified rows.
+        var steps = new List<(char Op, int X, int Y)>();
+        int cx = n, cy = m;
+
+        for (var d = found; d > 0; d--)
+        {
+            var previous = trace[d - 1];
+            int At(int k) => previous[k + d - 1];
+
+            var k = cx - cy;
+            var prevK = k == -d || (k != d && At(k - 1) < At(k + 1)) ? k + 1 : k - 1;
+            var prevX = At(prevK);
+            var prevY = prevX - prevK;
+
+            while (cx > prevX && cy > prevY)
+            {
+                steps.Add(('=', cx - 1, cy - 1));
+                cx--;
+                cy--;
+            }
+
+            steps.Add(cx == prevX ? ('+', cx, cy - 1) : ('-', cx - 1, cy));
+            cx = prevX;
+            cy = prevY;
+        }
+
+        while (cx > 0 && cy > 0)
+        {
+            steps.Add(('=', cx - 1, cy - 1));
+            cx--;
+            cy--;
+        }
+
+        steps.Reverse();
+
+        var rows = new List<DiffRow>(steps.Count);
+        var removed = new List<string>();
+        var added = new List<string>();
+
+        void Flush()
+        {
+            for (var i = 0; i < Math.Max(removed.Count, added.Count); i++)
+            {
+                if (i >= removed.Count) rows.Add(AddedRow(added[i]));
+                else if (i >= added.Count) rows.Add(RemovedRow(removed[i]));
+                else rows.Add(ModifiedRow(removed[i], added[i]));
+            }
+
+            removed.Clear();
+            added.Clear();
+        }
+
+        foreach (var (op, x, y) in steps)
+        {
+            switch (op)
+            {
+                case '=':
+                    Flush();
+                    rows.Add(UnchangedRow(left[x]));
+                    break;
+                case '-':
+                    removed.Add(left[x]);
+                    break;
+                default:
+                    added.Add(right[y]);
+                    break;
+            }
+        }
+
+        Flush();
         return rows;
     }
 

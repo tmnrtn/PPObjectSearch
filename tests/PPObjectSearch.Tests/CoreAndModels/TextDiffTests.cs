@@ -8,6 +8,66 @@ public class TextDiffTests
 
     private static string N(string s) => s.Replace("\r\n", "\n");
 
+    private static string Lines(IEnumerable<string> lines) => string.Join("\n", lines);
+
+    /// <summary>What each side reads as, put back together from the rows - must be the input.</summary>
+    private static (string Left, string Right) Rebuild(IReadOnlyList<DiffRow> rows) =>
+        (Lines(rows.Where(r => r.Left is not null).Select(r => Text(r.Left))),
+         Lines(rows.Where(r => r.Right is not null).Select(r => Text(r.Right))));
+
+    [Fact]
+    public void A_line_inserted_near_the_top_of_a_large_text_is_one_added_row()
+    {
+        // Past the old 1,200-line limit lines were paired by position, so every line after the
+        // insertion read as modified.
+        var before = Enumerable.Range(0, 5000).Select(i => $"  \"line{i}\": {i},").ToList();
+        var after = before.Take(3).Append("  \"inserted\": true,").Concat(before.Skip(3)).ToList();
+
+        var rows = TextDiff.Compare(Lines(before), Lines(after));
+
+        Assert.Equal(5001, rows.Count);
+        var added = Assert.Single(rows, r => r.Kind != DiffKind.Unchanged);
+        Assert.Equal(DiffKind.Added, added.Kind);
+        Assert.Equal("  \"inserted\": true,", Text(added.Right));
+    }
+
+    [Fact]
+    public void Scattered_changes_in_large_texts_are_aligned_not_paired_by_position()
+    {
+        var random = new Random(42);
+        var before = Enumerable.Range(0, 3000).Select(i => $"row {i}").ToList();
+        var after = new List<string>(before);
+
+        // Insertions, deletions and edits all through the text, so the middle stays large.
+        for (var i = 0; i < 40; i++)
+        {
+            var at = random.Next(after.Count);
+            switch (i % 3)
+            {
+                case 0: after.Insert(at, $"new {i}"); break;
+                case 1: after.RemoveAt(at); break;
+                default: after[at] = after[at] + " edited"; break;
+            }
+        }
+
+        var rows = TextDiff.Compare(Lines(before), Lines(after));
+
+        Assert.Equal((Lines(before), Lines(after)), Rebuild(rows));
+        Assert.True(rows.Count(r => r.Kind != DiffKind.Unchanged) <= 60,
+            "a handful of edits should not read as thousands of changed lines");
+    }
+
+    [Fact]
+    public void Texts_with_almost_nothing_in_common_still_return()
+    {
+        var before = Enumerable.Range(0, 3000).Select(i => $"a{i}").ToList();
+        var after = Enumerable.Range(0, 3000).Select(i => $"b{i}").ToList();
+
+        var rows = TextDiff.Compare(Lines(before), Lines(after));
+
+        Assert.Equal((Lines(before), Lines(after)), Rebuild(rows));
+    }
+
     [Fact]
     public void Compare_identical_text_marks_every_row_unchanged()
     {
@@ -163,17 +223,17 @@ public class TextDiffTests
     }
 
     [Fact]
-    public void Compare_above_the_alignment_limit_does_not_realign_after_an_insertion()
+    public void Compare_above_the_alignment_limit_still_realigns_after_an_insertion()
     {
         var left = Enumerable.Range(0, 1300).Select(i => $"line {i}").ToList();
         var right = new[] { "inserted" }.Concat(left).ToList();
 
         var rows = TextDiff.Compare(string.Join("\n", left), string.Join("\n", right));
 
-        // Positional pairing: every line now sits against its neighbour, so none are unchanged.
+        // The shared tail is set aside, so the insertion is one added row and the rest match.
         Assert.Equal(1301, rows.Count);
-        Assert.DoesNotContain(rows, r => r.Kind == DiffKind.Unchanged);
-        Assert.Equal(DiffKind.Added, rows[^1].Kind);
+        Assert.Equal(DiffKind.Added, rows[0].Kind);
+        Assert.All(rows.Skip(1), r => Assert.Equal(DiffKind.Unchanged, r.Kind));
     }
 
     [Fact]

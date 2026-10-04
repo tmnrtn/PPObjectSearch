@@ -66,18 +66,27 @@ public sealed class DefinitionChange
         _ => "Modified"
     };
 
-    private string? _previousText;
-    private string? _currentText;
-    private IReadOnlyList<DiffRow>? _diff;
+    private readonly Lazy<string> _previousText;
+    private readonly Lazy<string> _currentText;
+    private readonly Lazy<IReadOnlyList<DiffRow>> _diff;
+
+    public DefinitionChange()
+    {
+        // Thread-safe: the diff panes bind asynchronously, so the work is done on a background
+        // thread - and both panes ask at once, which must not do it twice.
+        _previousText = new Lazy<string>(() => TextDiff.Prettify(PreviousValue));
+        _currentText = new Lazy<string>(() => TextDiff.Prettify(CurrentValue));
+        _diff = new Lazy<IReadOnlyList<DiffRow>>(() => TextDiff.Compare(PreviousText, CurrentText));
+    }
 
     /// <summary>The before value, indented where it is JSON or XML so it can actually be read.</summary>
-    public string PreviousText => _previousText ??= TextDiff.Prettify(PreviousValue);
+    public string PreviousText => _previousText.Value;
 
-    public string CurrentText => _currentText ??= TextDiff.Prettify(CurrentValue);
+    public string CurrentText => _currentText.Value;
 
     /// <summary>Built on demand - a component's whole form definition is not worth diffing until
-    /// someone selects that row.</summary>
-    public IReadOnlyList<DiffRow> Diff => _diff ??= TextDiff.Compare(PreviousText, CurrentText);
+    /// someone selects that row - and off the UI thread, since a large one takes a moment.</summary>
+    public IReadOnlyList<DiffRow> Diff => _diff.Value;
 }
 
 /// <summary>
