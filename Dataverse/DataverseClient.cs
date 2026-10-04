@@ -283,15 +283,22 @@ public sealed partial class DataverseClient : IDisposable
 
             if (!doc.RootElement.TryGetProperty("value", out var value)) return null;
 
+            // Hosts are compared exactly: a substring match would let "hr.crm.dynamics.com" pick
+            // up "contosohr.crm.dynamics.com", and the id it returned would then be used to read
+            // the environment's type for the write guard.
+            var host = new Uri(EnvironmentUrl).Host;
+
             foreach (var instance in value.EnumerateArray())
             {
-                var apiUrl = JsonHelper.GetString(instance, "ApiUrl") ?? JsonHelper.GetString(instance, "Url");
-                if (apiUrl is null) continue;
-
-                if (apiUrl.TrimEnd('/').Equals(EnvironmentUrl, StringComparison.OrdinalIgnoreCase) ||
-                    apiUrl.Contains(new Uri(EnvironmentUrl).Host, StringComparison.OrdinalIgnoreCase))
+                foreach (var name in new[] { "ApiUrl", "Url" })
                 {
-                    return JsonHelper.GetString(instance, "EnvironmentId");
+                    var url = JsonHelper.GetString(instance, name);
+
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
+                        parsed.Host.Equals(host, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return JsonHelper.GetString(instance, "EnvironmentId");
+                    }
                 }
             }
         }

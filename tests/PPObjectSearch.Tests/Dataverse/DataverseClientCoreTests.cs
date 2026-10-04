@@ -321,6 +321,18 @@ public class DataverseClientCoreTests
     }
 
     [Fact]
+    public async Task Environment_id_from_discovery_ignores_a_host_that_only_contains_this_one()
+    {
+        // "xcontoso.crm11.dynamics.com" contains "contoso.crm11.dynamics.com" but is another environment.
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "globaldisco.crm.dynamics.com/api/discovery/v2.0/Instances",
+            "{\"value\":[{\"ApiUrl\":\"https://xcontoso.crm11.dynamics.com\",\"EnvironmentId\":\"wrong\"}," +
+            "{\"Url\":\"https://CONTOSO.crm11.dynamics.com\",\"EnvironmentId\":\"env-7\"}]}");
+        using var client = Fakes.Dataverse(handler);
+
+        Assert.Equal("env-7", await client.GetEnvironmentIdFromDiscoveryAsync());
+    }
+
+    [Fact]
     public async Task Environment_id_from_discovery_is_null_on_failure()
     {
         var handler = new FakeHttpHandler().OnStatus(HttpMethod.Get, "globaldisco", HttpStatusCode.Unauthorized);

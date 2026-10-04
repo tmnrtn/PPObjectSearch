@@ -116,6 +116,35 @@ public class EnvironmentTypeProbeTests
     }
 
     [Fact]
+    public async Task An_id_naming_an_environment_at_another_host_does_not_lend_its_type()
+    {
+        // The id is stale or wrong: it names a sandbox at a different URL. The production
+        // environment being written to must not be read as that sandbox.
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, UserList, List(null,
+                Environment(EnvId, "Sandbox", "https://contosohr.crm11.dynamics.com/")))
+            .OnJson(HttpMethod.Get, AdminList, List(null));
+
+        var result = await Probe(handler);
+
+        Assert.Equal(EnvironmentSku.Unknown, result.Sku);
+        Assert.True(result.IsProtected);
+    }
+
+    [Fact]
+    public async Task The_host_decides_when_the_id_disagrees()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, UserList, List(null,
+                Environment(EnvId, "Sandbox", "https://contosohr.crm11.dynamics.com/"),
+                Environment("env-real", "Production", "https://contoso.crm11.dynamics.com/")));
+
+        var result = await Probe(handler);
+
+        Assert.Equal(EnvironmentSku.Production, result.Sku);
+    }
+
+    [Fact]
     public async Task Different_host_does_not_match()
     {
         var handler = new FakeHttpHandler()

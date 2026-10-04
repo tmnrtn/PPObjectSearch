@@ -174,34 +174,45 @@ public static class EnvironmentTypeProbe
             $"{string.Join("; ", outcomes)}), so its type could not be read.");
     }
 
-    private static bool Matches(JsonElement environment, string? host, string? environmentId)
+    /// <summary>
+    /// The URL is what the user connected to, so it decides. The environment id is only a
+    /// fallback for when either side carries no URL to compare: an id that names an environment
+    /// at a different host (a stale or mistyped settings entry, or a bad discovery answer) must not
+    /// lend that environment's type - a sandbox's - to the one actually being written to.
+    /// </summary>
+    internal static bool Matches(JsonElement environment, string? host, string? environmentId)
     {
-        // The environment id is exact where it is known; "name" is the id, not a label.
-        if (!string.IsNullOrWhiteSpace(environmentId) &&
-            string.Equals(JsonHelper.GetString(environment, "name"), environmentId, StringComparison.OrdinalIgnoreCase))
+        var hosts = InstanceHosts(environment);
+
+        if (host is not null && hosts.Count > 0)
         {
-            return true;
+            return hosts.Contains(host, StringComparer.OrdinalIgnoreCase);
         }
 
-        if (host is null || environment.ValueKind != JsonValueKind.Object) return false;
-        if (!environment.TryGetProperty("properties", out var properties)) return false;
-        if (properties.ValueKind != JsonValueKind.Object) return false;
-        if (!properties.TryGetProperty("linkedEnvironmentMetadata", out var linked)) return false;
-        if (linked.ValueKind != JsonValueKind.Object) return false;
+        // "name" is the environment id, not a label.
+        return !string.IsNullOrWhiteSpace(environmentId) &&
+               string.Equals(JsonHelper.GetString(environment, "name"), environmentId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<string> InstanceHosts(JsonElement environment)
+    {
+        var hosts = new List<string>();
+
+        if (environment.ValueKind != JsonValueKind.Object) return hosts;
+        if (!environment.TryGetProperty("properties", out var properties)) return hosts;
+        if (properties.ValueKind != JsonValueKind.Object) return hosts;
+        if (!properties.TryGetProperty("linkedEnvironmentMetadata", out var linked)) return hosts;
+        if (linked.ValueKind != JsonValueKind.Object) return hosts;
 
         foreach (var name in new[] { "instanceApiUrl", "instanceUrl" })
         {
-            var url = JsonHelper.GetString(linked, name);
-            if (string.IsNullOrWhiteSpace(url)) continue;
-
-            if (Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
-                string.Equals(parsed.Host, host, StringComparison.OrdinalIgnoreCase))
+            if (Uri.TryCreate(JsonHelper.GetString(linked, name), UriKind.Absolute, out var parsed))
             {
-                return true;
+                hosts.Add(parsed.Host);
             }
         }
 
-        return false;
+        return hosts;
     }
 
     /// <summary>
