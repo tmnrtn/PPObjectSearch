@@ -132,6 +132,59 @@ public class ReferenceDataComparerTests
     }
 
     [Fact]
+    public void A_row_whose_key_changed_is_one_update_not_a_create_and_a_delete()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var source = Row(G(7)).With("new_code", "A1").With("new_name", "Alpha").Build();
+        var target = Row(G(7)).With("new_code", "A0").With("new_name", "Alpha").Build();
+
+        var result = ReferenceDataComparer.Compare(plan, new[] { source }, new[] { target });
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(RecordCompareStatus.Different, row.Status);
+        Assert.True(row.IsKeyChanged);
+        Assert.Equal("A1", row.Key);
+        Assert.Equal("A0", row.TargetKey);
+        Assert.Equal("Key changed", row.StatusLabel);
+        Assert.Same(source, row.Source);
+        Assert.Same(target, row.Target);
+
+        var key = Assert.Single(row.Differences);
+        Assert.Equal("new_code", key.Column.LogicalName);
+        Assert.Equal("A1", key.SourceValue);
+        Assert.Equal("A0", key.TargetValue);
+
+        var item = Assert.Single(ReferenceDataWriter.Plan(result.Rows, new ReconcileOptions(true, true, true)));
+        Assert.Equal(ReconcileAction.Update, item.Action);
+    }
+
+    [Fact]
+    public void A_key_change_carries_value_differences_too()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var source = Row(G(7)).With("new_code", "A1").With("new_name", "New").Build();
+        var target = Row(G(7)).With("new_code", "A0").With("new_name", "Old").Build();
+
+        var row = Assert.Single(ReferenceDataComparer.Compare(plan, new[] { source }, new[] { target }).Rows);
+
+        Assert.Equal(new[] { "new_name", "new_code" }, row.Differences.Select(d => d.Column.LogicalName));
+    }
+
+    [Fact]
+    public void Different_ids_on_each_side_stay_a_create_and_a_delete()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+
+        var result = ReferenceDataComparer.Compare(plan,
+            new[] { Row(G(1)).With("new_code", "A1").Build() },
+            new[] { Row(G(2)).With("new_code", "A0").Build() });
+
+        Assert.Equal(
+            new[] { RecordCompareStatus.OnlyInSource, RecordCompareStatus.OnlyInTarget },
+            result.Rows.Select(r => r.Status));
+    }
+
+    [Fact]
     public void Compare_reports_matching_rows_as_same()
     {
         var row = CompareOne(Col("new_name"), "Alpha", "Alpha");

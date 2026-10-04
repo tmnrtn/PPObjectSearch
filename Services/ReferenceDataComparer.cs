@@ -67,6 +67,15 @@ public sealed class RecordComparison
 
     public bool IsWriteBlocked => WriteBlockedReason is not null;
 
+    /// <summary>
+    /// The target's key, when the same row (by primary id) carries a different key on each side.
+    /// Such a row is one record whose key was edited, not a new row plus an old one: it is
+    /// reconciled as an update, never as a create and a delete of the same id.
+    /// </summary>
+    public string? TargetKey { get; init; }
+
+    public bool IsKeyChanged => TargetKey is not null;
+
     public string EntityLabel => Plan.EntityLabel;
     public string EntityLogicalName => Plan.Entity.LogicalName;
     public string KeyLabel => Plan.KeyLabel;
@@ -78,12 +87,15 @@ public sealed class RecordComparison
     {
         RecordCompareStatus.OnlyInSource => "Only in source",
         RecordCompareStatus.OnlyInTarget => "Only in target",
+        RecordCompareStatus.Different when IsKeyChanged => "Key changed",
         RecordCompareStatus.Different => "Values differ",
         _ => "Match"
     };
 
     public string DifferenceSummary => Status switch
     {
+        RecordCompareStatus.Different when IsKeyChanged =>
+            $"Key was {TargetKey} in target: " + string.Join(", ", Differences.Select(d => d.Column.LogicalName)),
         RecordCompareStatus.Different => string.Join(", ", Differences.Select(d => d.Column.LogicalName)),
         RecordCompareStatus.OnlyInSource => "Missing from target",
         RecordCompareStatus.OnlyInTarget => "Missing from source",
@@ -217,6 +229,8 @@ public static class ReferenceDataComparer
             });
         }
 
+        PairKeyChanges(plan, rows, Blocked);
+
         rows.Sort((a, b) =>
         {
             var byStatus = a.Status.CompareTo(b.Status);
@@ -235,6 +249,76 @@ public static class ReferenceDataComparer
             TargetTruncated = targetTruncated,
             Warnings = warnings
         };
+    }
+
+    /// <summary>
+    /// A row present on both sides under the same primary id but a different key shows up as
+    /// "only in source" under its new key and "only in target" under its old one. Planned like that,
+    /// it would become a create and a delete of one id: the create fails on the duplicate id and the
+    /// delete then removes the row, or the delete goes first and the row comes back without its
+    /// children, owner and every uncompared column. So the two halves are joined into one update
+    /// that writes the key columns as well as any value that differs.
+    /// </summary>
+    private static void PairKeyChanges(
+        EntityComparePlan plan,
+        List<RecordComparison> rows,
+        Func<string, RecordCompareStatus, string?> blocked)
+    {
+        var onlyInTarget = rows
+            .Where(r => r.Status == RecordCompareStatus.OnlyInTarget && r.Target is not null)
+            .GroupBy(r => r.Target!.Id)
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.Single());
+
+        if (onlyInTarget.Count == 0) return;
+
+        var joined = new HashSet<RecordComparison>();
+
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (row.Status != RecordCompareStatus.OnlyInSource || row.Source is not { } source) continue;
+            if (!onlyInTarget.Remove(source.Id, out var other) || other.Target is not { } target) continue;
+
+            var differences = CompareColumns(plan, source, target).Where(c => c.IsDifferent).ToList();
+
+            foreach (var key in plan.KeyColumns)
+            {
+                if (key.IsPrimaryId || differences.Any(d => d.Column.SelectName.Equals(key.SelectName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                var sourceValue = Comparable(source, key, plan.MatchLookupsByName);
+                var targetValue = Comparable(target, key, plan.MatchLookupsByName);
+                if (string.Equals(sourceValue, targetValue, StringComparison.Ordinal)) continue;
+
+                differences.Add(new ColumnComparison
+                {
+                    Column = key,
+                    SourceValue = source.Display(key.SelectName),
+                    TargetValue = target.Display(key.SelectName),
+                    IsDifferent = true
+                });
+            }
+
+            rows[i] = new RecordComparison
+            {
+                Plan = plan,
+                Key = row.Key,
+                TargetKey = other.Key,
+                Status = RecordCompareStatus.Different,
+                Source = source,
+                Target = target,
+                Differences = differences,
+                WriteBlockedReason = blocked(row.Key, RecordCompareStatus.Different) ??
+                                     blocked(other.Key, RecordCompareStatus.Different)
+            };
+
+            joined.Add(other);
+        }
+
+        rows.RemoveAll(joined.Contains);
     }
 
     /// <summary>

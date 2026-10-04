@@ -319,7 +319,11 @@ public sealed class ReconcileViewModel : ObservableObject
 
         // Only the actions switched on; the faded rows are there to look at, never to write.
         var options = new ReconcileOptions(Create, Update, Delete);
-        var toWrite = Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)).ToList();
+        // Deletes go last: nothing created or updated in this run can then depend on a row that
+        // has just been removed, and a run stopped part-way has destroyed as little as possible.
+        var toWrite = Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action))
+                          .OrderBy(r => r.Action == ReconcileAction.Delete)
+                          .ToList();
 
         try
         {
