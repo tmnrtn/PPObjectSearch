@@ -178,14 +178,20 @@ public sealed class PowerAutomateClient : IDisposable
     /// Each iteration of a step inside a loop. Asked of the step itself: a loop's own entry lists
     /// none, its steps list one per pass.
     /// </summary>
-    public async Task<IReadOnlyList<FlowRepetition>> GetRepetitionsAsync(FlowRunDetail run, string actionName, CancellationToken ct = default)
+    public async Task<FlowRepetitions> GetRepetitionsAsync(FlowRunDetail run, string actionName, CancellationToken ct = default)
     {
-        var repetitions = new List<FlowRepetition>();
+        var repetitions = new FlowRepetitions();
         var pages = 0;
 
         for (string? url = $"{run.RunUrl}/actions/{Uri.EscapeDataString(actionName)}/repetitions?{ApiVersion}"; url is not null; pages++)
         {
-            if (pages >= MaxPages) break;
+            // Unlike the run's own steps this is not an error: the iterations read so far are
+            // still worth showing, as long as they are not presented as all of them.
+            if (pages >= MaxPages)
+            {
+                repetitions.IsTruncated = true;
+                break;
+            }
 
             using var page = await SendAsync(url, ct).ConfigureAwait(false);
 

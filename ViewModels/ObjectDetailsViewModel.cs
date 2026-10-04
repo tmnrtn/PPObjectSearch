@@ -954,6 +954,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         // A row count can be many requests; nobody is left to read the answer.
         _countCts?.Cancel();
+        FlowDiagram?.Detach();
     }
 
     private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

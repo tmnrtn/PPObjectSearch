@@ -227,4 +227,25 @@ public class PowerAutomateClientTests
     [InlineData(7_800_000, "2h 10m")]
     public void Durations_read_naturally(int milliseconds, string expected) =>
         Assert.Equal(expected, FlowRunFormat.Duration(TimeSpan.FromMilliseconds(milliseconds)));
+
+    [Fact]
+    public async Task Iterations_past_the_page_limit_are_marked_as_partial()
+    {
+        // Every page points at another, as a loop over a very large array would.
+        var page = Json(new
+        {
+            value = new[] { new { properties = new { status = "Succeeded" } } },
+            nextLink = "https://api.flow.microsoft.com/repetitions?page=next"
+        });
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/repetitions", page)
+            .OnJson(HttpMethod.Get, MakerRun + "/actions", Json(new { value = Array.Empty<object>() }))
+            .OnJson(HttpMethod.Get, MakerRun, Json(RunBody()));
+        var client = Client(handler);
+
+        var repetitions = await client.GetRepetitionsAsync(await client.GetRunAsync(Env, Flow, RunName), "Step");
+
+        Assert.True(repetitions.IsTruncated);
+        Assert.Equal(50, repetitions.Count);
+    }
 }

@@ -426,7 +426,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
     private PowerAutomateClient? _runClient;
     private FlowRunDetail? _run;
-    private readonly Dictionary<string, Task<IReadOnlyList<FlowRepetition>>> _repetitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<FlowRepetitions>> _repetitions = new(StringComparer.Ordinal);
 
     public RelayCommand JumpToFailureCommand { get; }
     public RelayCommand ClearRunCommand { get; }
@@ -554,9 +554,31 @@ public sealed class FlowDiagramViewModel : ObservableObject
         private set => SetProperty(ref _isRunFailed, value);
     }
 
-    /// <summary>Failed steps, top to bottom - the order the diagram draws them.</summary>
-    private IEnumerable<FlowCardViewModel> FailedCards =>
-        _cards.Where(c => c.RunOutcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
+    /// <summary>
+    /// The steps that failed in their own right, top to bottom - the order the diagram draws them.
+    /// A scope, condition or loop fails whenever something inside it does, with the generic
+    /// "An action failed"; counting or selecting it would point at the wrapper (the "Try" scope of
+    /// every try/catch flow) instead of the step that broke. So a failed container only counts
+    /// when nothing inside it failed.
+    /// </summary>
+    private IEnumerable<FlowCardViewModel> FailedCards
+    {
+        get
+        {
+            var failed = _cards.Where(IsFailed).ToList();
+            var holdsFailure = new HashSet<FlowCardViewModel>();
+
+            foreach (var card in failed)
+            {
+                for (var parent = card.Parent; parent is not null; parent = parent.Parent) holdsFailure.Add(parent);
+            }
+
+            return failed.Where(c => !holdsFailure.Contains(c));
+        }
+    }
+
+    private static bool IsFailed(FlowCardViewModel card) =>
+        card.RunOutcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut;
 
     /// <summary>
     /// Colours the diagram by one run: each step's outcome and duration, skipped and unreached
@@ -565,6 +587,8 @@ public sealed class FlowDiagramViewModel : ObservableObject
     public void ShowRun(FlowRunDetail run, PowerAutomateClient client)
     {
         SetRunNotice(null);
+        _runCts?.Cancel();
+        _runCts = new CancellationTokenSource();
         _run = run;
         _runClient = client;
         _repetitions.Clear();
@@ -608,6 +632,8 @@ public sealed class FlowDiagramViewModel : ObservableObject
     /// <summary>Back to the design alone.</summary>
     public void ClearRun()
     {
+        _runCts?.Cancel();
+        _runCts = null;
         _run = null;
         _runClient = null;
         _repetitions.Clear();
@@ -659,20 +685,45 @@ public sealed class FlowDiagramViewModel : ObservableObject
         foreach (var loop in _cards.Where(c => c.Kind is FlowNodeKind.ForEach or FlowNodeKind.Until &&
                                                c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun)))
         {
-            var witness = _cards.FirstOrDefault(c =>
-                !c.IsContainer && NearestLoop(c) == loop &&
-                c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun));
+            // Every step that runs once per pass of this loop - including a nested loop or scope,
+            // which list their passes the same way. A plain step is the cheapest to ask.
+            var inside = _cards.Where(c =>
+                    !ReferenceEquals(c, loop) && NearestLoop(c) == loop &&
+                    c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun))
+                .OrderBy(c => c.IsContainer)
+                .ToList();
 
-            if (witness is null) continue;
+            if (inside.Count == 0) continue;
 
             try
             {
-                var repetitions = await RepetitionsAsync(witness.Node.Name);
+                var repetitions = await RepetitionsAsync(inside[0].Node.Name);
                 if (!ReferenceEquals(run, _run)) return;
 
-                var failed = repetitions.Count(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
-                loop.IterationLabel = (repetitions.Count == 1 ? "1 iteration" : $"{repetitions.Count:N0} iterations") +
-                                      (failed > 0 ? $" · {failed:N0} failed" : string.Empty);
+                // Which passes failed is a question for the steps that failed, not the one asked
+                // for the count: a Compose that never fails would report a clean loop beside a
+                // failing HTTP step. Each failing step's failed passes are gathered, once each.
+                var failedPasses = repetitions
+                    .Where(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut)
+                    .Select(r => r.Label)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                foreach (var step in inside.Skip(1).Where(c => !c.IsContainer && IsFailed(c)))
+                {
+                    var passes = await RepetitionsAsync(step.Node.Name);
+                    if (!ReferenceEquals(run, _run)) return;
+
+                    foreach (var pass in passes.Where(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut))
+                    {
+                        failedPasses.Add(pass.Label);
+                    }
+                }
+
+                var failed = failedPasses.Count > 0 ? $" · {failedPasses.Count:N0} failed"
+                    : IsFailed(loop) ? " · failed"
+                    : string.Empty;
+
+                loop.IterationLabel = CountLabel(repetitions) + failed;
             }
             catch (Exception ex)
             {
@@ -692,17 +743,51 @@ public sealed class FlowDiagramViewModel : ObservableObject
         return null;
     }
 
-    private Task<IReadOnlyList<FlowRepetition>> RepetitionsAsync(string actionName)
+    private Task<FlowRepetitions> RepetitionsAsync(string actionName)
     {
-        if (_run is null || _runClient is null) return Task.FromResult<IReadOnlyList<FlowRepetition>>(Array.Empty<FlowRepetition>());
+        if (_run is null || _runClient is null) return Task.FromResult(new FlowRepetitions());
 
         if (!_repetitions.TryGetValue(actionName, out var task))
         {
-            task = _runClient.GetRepetitionsAsync(_run, actionName);
+            task = FetchRepetitionsAsync(_run, _runClient, actionName, _runCts?.Token ?? default);
             _repetitions[actionName] = task;
         }
 
         return task;
+    }
+
+    /// <summary>
+    /// A failed read is not kept: one throttled or dropped request would otherwise answer "could
+    /// not read iterations" for that step for as long as the run stayed on show.
+    /// </summary>
+    private async Task<FlowRepetitions> FetchRepetitionsAsync(
+        FlowRunDetail run, PowerAutomateClient client, string actionName, CancellationToken ct)
+    {
+        try
+        {
+            return await client.GetRepetitionsAsync(run, actionName, ct);
+        }
+        catch
+        {
+            if (ReferenceEquals(run, _run)) _repetitions.Remove(actionName);
+            throw;
+        }
+    }
+
+    /// <summary>Iterations and content reads for the run on show; cancelled when it goes.</summary>
+    private CancellationTokenSource? _runCts;
+
+    /// <summary>Stops everything still being read for the run - the window is closing.</summary>
+    public void Detach()
+    {
+        _runCts?.Cancel();
+        _runCts = null;
+    }
+
+    private static string CountLabel(FlowRepetitions repetitions)
+    {
+        var count = repetitions.Count == 1 ? "1 iteration" : $"{repetitions.Count:N0} iterations";
+        return repetitions.IsTruncated ? $"{repetitions.Count:N0}+ iterations" : count;
     }
 
     // ---------------------------------------------------------------- the selected step in the run
@@ -787,6 +872,13 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
     private int _selectionVersion;
 
+    /// <summary>
+    /// Bumped by every request for inputs or outputs and by anything that clears the pane - a new
+    /// step, a new iteration, Definition - so only the latest request may fill it. The selection
+    /// version alone missed a change of iteration and a quick Inputs-then-Outputs.
+    /// </summary>
+    private int _contentVersion;
+
     /// <summary>On a new selection in a run: its iterations, if it is inside a loop.</summary>
     private void RefreshSelectedRun()
     {
@@ -824,6 +916,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
             IterationStatus = repetitions.Count == 0
                 ? "No iterations recorded."
                 : $"{repetitions.Count:N0} iteration(s)" + (failed > 0 ? $", {failed:N0} failed" : string.Empty) +
+                  (repetitions.IsTruncated ? $" - only the first {repetitions.Count:N0} could be read" : string.Empty) +
                   " - pick one to see its inputs and outputs.";
             OnPropertyChanged(nameof(HasSelectedIterations));
         }
@@ -838,7 +931,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         var link = inputs ? InputsLink : OutputsLink;
         if (link is null || _runClient is null) return;
 
-        var version = _selectionVersion;
+        var version = ++_contentVersion;
         var what = inputs ? "Inputs" : "Outputs";
         var of = SelectedIteration is { } iteration ? $" of iteration {iteration.Label}" : string.Empty;
 
@@ -848,15 +941,19 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
         try
         {
-            var content = await _runClient.GetContentAsync(link);
-            if (version != _selectionVersion) return;
+            var content = await _runClient.GetContentAsync(link, _runCts?.Token ?? default);
+            if (version != _contentVersion) return;
 
             _content = content;
             _contentTitle = what + of;
         }
+        catch (OperationCanceledException)
+        {
+            // The run went or the window closed; nothing is waiting for this any more.
+        }
         catch (Exception ex)
         {
-            if (version == _selectionVersion)
+            if (version == _contentVersion)
             {
                 ContentError = $"Could not read the {what.ToLowerInvariant()} - {ex.Message}";
                 if (_content is null) _contentKind = FlowCodePane.Definition;
@@ -864,13 +961,18 @@ public sealed class FlowDiagramViewModel : ObservableObject
         }
         finally
         {
-            IsContentLoading = false;
-            RaiseContent();
+            if (version == _contentVersion)
+            {
+                IsContentLoading = false;
+                RaiseContent();
+            }
         }
     }
 
     private void ClearContent()
     {
+        _contentVersion++;
+        IsContentLoading = false;
         _content = null;
         _contentKind = FlowCodePane.Definition;
         _contentTitle = "Definition";

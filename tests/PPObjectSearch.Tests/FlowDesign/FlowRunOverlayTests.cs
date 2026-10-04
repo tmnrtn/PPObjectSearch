@@ -135,8 +135,10 @@ public class FlowRunOverlayTests
         d.ShowRun(Run(), Client().Client);
         await Settle();
 
-        // Check fails first in drawing order; Yes step inside it fails too.
-        Assert.Same(Card(d, "Check"), d.Selected);
+        // Check fails only because Yes step inside it did: the step that broke is selected, and
+        // the condition holding it is opened to show it.
+        Assert.Same(Card(d, "Yes step"), d.Selected);
+        Assert.True(Card(d, "Check").IsExpanded);
         Assert.True(d.JumpToFailureCommand.CanExecute(null));
     }
 
@@ -149,7 +151,7 @@ public class FlowRunOverlayTests
 
         Assert.Equal("Run …6789CU01 · Failed", d.RunHeading);
         Assert.Contains("took 12 s", d.RunDetail);
-        Assert.Contains("2 steps failed", d.RunDetail);
+        Assert.Contains("1 step failed", d.RunDetail);
         Assert.Equal("ActionFailed: An action failed.", d.RunError);
         Assert.True(d.IsRunFailed);
         Assert.True(d.HasRunBanner);
@@ -163,6 +165,103 @@ public class FlowRunOverlayTests
         await Settle();
 
         Assert.Equal("4 iterations · 1 failed", Card(d, "Loop").IterationLabel);
+    }
+
+    private const string TwoStepLoop = """
+        { "properties": { "definition": {
+          "triggers": { "manual": { "type": "Request", "kind": "Button" } },
+          "actions": {
+            "Loop": { "type": "Foreach", "foreach": "@x", "actions": {
+              "Shape": { "type": "Compose" },
+              "Call": { "type": "Http", "runAfter": { "Shape": ["Succeeded"] } } } }
+          } } } }
+        """;
+
+    private static string Repetitions(string scope, params string[] statuses) => JsonSerializer.Serialize(new
+    {
+        value = statuses.Select((status, i) => new
+        {
+            properties = new { status, repetitionIndexes = new[] { new { scopeName = scope, itemIndex = i } } }
+        })
+    });
+
+    [Fact]
+    public async Task A_loop_counts_the_failures_of_every_step_in_it_not_just_the_first()
+    {
+        // Shape never fails and is asked for the count; Call fails on the third pass.
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/actions/Shape/repetitions", Repetitions("Loop", "Succeeded", "Succeeded", "Succeeded", "Succeeded"))
+            .OnJson(HttpMethod.Get, "/actions/Call/repetitions", Repetitions("Loop", "Succeeded", "Succeeded", "Failed", "Succeeded"));
+        var run = new FlowRunDetail(
+            "run-two-steps", "Failed", FlowStepOutcome.Failed, null, null,
+            Result("manual", FlowStepOutcome.Succeeded, 0),
+            new Dictionary<string, FlowActionResult>
+            {
+                ["Loop"] = Result("Loop", FlowStepOutcome.Failed),
+                ["Shape"] = Result("Shape", FlowStepOutcome.Succeeded),
+                ["Call"] = Result("Call", FlowStepOutcome.Failed, error: "Bad gateway")
+            },
+            null, null, "https://api/run", ViaAdminScope: false);
+
+        var d = new FlowDiagramViewModel(FlowDesignParser.Parse(TwoStepLoop), "Two steps");
+        d.ShowRun(run, new PowerAutomateClient(TestAuth.Tokens(), handler));
+        await Settle();
+
+        Assert.Equal("4 iterations · 1 failed", Card(d, "Loop").IterationLabel);
+    }
+
+    [Fact]
+    public async Task Iterations_that_could_not_be_read_are_asked_for_again()
+    {
+        var attempts = 0;
+        var reps = JsonSerializer.Serialize(new { value = new[] { new { properties = new { status = "Succeeded" } } } });
+        var handler = new FakeHttpHandler()
+            .On(HttpMethod.Get, "/actions/Inner/repetitions", _ => ++attempts == 1
+                ? FakeHttpHandler.Json(FakeHttpHandler.ErrorJson("throttled"), System.Net.HttpStatusCode.BadRequest)
+                : FakeHttpHandler.Json(reps));
+
+        var d = Diagram();
+        d.ShowRun(Run(), new PowerAutomateClient(TestAuth.Tokens(), handler));
+        await Settle();
+
+        d.Selected = Card(d, "Get rows");
+        d.Selected = Card(d, "Inner");
+        await Settle();
+
+        Assert.Single(d.SelectedIterations);
+    }
+
+    [Fact]
+    public async Task Inputs_that_arrive_after_another_iteration_is_picked_are_dropped()
+    {
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        var reps = JsonSerializer.Serialize(new
+        {
+            value = Enumerable.Range(0, 2).Select(i => new
+            {
+                properties = new { status = "Succeeded", inputsLink = new { uri = $"https://x/in/Inner/{i}" } }
+            })
+        });
+        var handler = new FakeHttpHandler()
+            .OnAsync(HttpMethod.Get, "https://x/in/Inner/0", _ => slow.Task)
+            .OnJson(HttpMethod.Get, "/actions/Inner/repetitions", reps);
+
+        var d = Diagram();
+        d.ShowRun(Run(), new PowerAutomateClient(TestAuth.Tokens(), handler));
+        d.Selected = Card(d, "Inner");
+        await Settle();
+
+        d.SelectedIteration = d.SelectedIterations[0];
+        d.IsInputsShown = true;
+
+        d.SelectedIteration = d.SelectedIterations[1];
+        slow.SetResult(FakeHttpHandler.Json("""{"late":true}"""));
+        await Settle();
+
+        Assert.False(d.HasContent);
+        Assert.Equal("Definition", d.DetailCodeTitle);
+        Assert.True(d.IsDefinitionShown);
+        Assert.False(d.IsContentLoading);
     }
 
     [Fact]

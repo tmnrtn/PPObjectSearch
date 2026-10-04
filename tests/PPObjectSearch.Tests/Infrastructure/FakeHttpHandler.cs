@@ -20,11 +20,18 @@ public sealed record RecordedRequest(HttpMethod Method, Uri Uri, string? Body, s
 /// </summary>
 public sealed class FakeHttpHandler : HttpMessageHandler
 {
-    private readonly List<(HttpMethod? Method, string UrlContains, Func<RecordedRequest, HttpResponseMessage> Respond)> _routes = new();
+    private readonly List<(HttpMethod? Method, string UrlContains, Func<RecordedRequest, Task<HttpResponseMessage>> Respond)> _routes = new();
 
     public List<RecordedRequest> Requests { get; } = new();
 
     public FakeHttpHandler On(HttpMethod? method, string urlContains, Func<RecordedRequest, HttpResponseMessage> respond)
+    {
+        _routes.Add((method, urlContains, r => Task.FromResult(respond(r))));
+        return this;
+    }
+
+    /// <summary>A route that answers when the test says so - for requests that must overlap.</summary>
+    public FakeHttpHandler OnAsync(HttpMethod? method, string urlContains, Func<RecordedRequest, Task<HttpResponseMessage>> respond)
     {
         _routes.Add((method, urlContains, respond));
         return this;
@@ -61,7 +68,7 @@ public sealed class FakeHttpHandler : HttpMessageHandler
             if (method is not null && method != request.Method) continue;
             if (!recorded.Url.Contains(contains, StringComparison.OrdinalIgnoreCase)) continue;
 
-            var response = respond(recorded);
+            var response = await respond(recorded);
             response.RequestMessage ??= request;
             return response;
         }

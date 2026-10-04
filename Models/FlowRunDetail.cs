@@ -44,6 +44,16 @@ public static class FlowRunFormat
 }
 
 /// <summary>One iteration of a step inside a loop.</summary>
+/// <summary>
+/// A step's iterations, as many as were read. A loop over a large array can have more than the
+/// paging limit allows; then <see cref="IsTruncated"/> says the list (and any count of it) is a
+/// lower bound, not the whole.
+/// </summary>
+public sealed class FlowRepetitions : List<FlowRepetition>
+{
+    public bool IsTruncated { get; set; }
+}
+
 public sealed record FlowRepetition(
     string Label,
     string Status,
