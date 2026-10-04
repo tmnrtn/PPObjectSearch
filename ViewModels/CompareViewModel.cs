@@ -62,7 +62,7 @@ public sealed class CompareRow
 /// Objects are matched on object id first, since solution deployment preserves ids, and fall back
 /// to type plus name for anything created independently in each environment.
 /// </summary>
-public sealed class CompareViewModel : ObservableObject
+public sealed class CompareViewModel : ObservableObject, IDisposable
 {
     private readonly List<CompareRow> _all = new();
 
@@ -304,6 +304,17 @@ public sealed class CompareViewModel : ObservableObject
     }
 
     private readonly System.Windows.Threading.DispatcherTimer _searchDebounce;
+
+    /// <summary>
+    /// A running DispatcherTimer is held by the dispatcher, and through its handler holds this view
+    /// model - every compare row and both environments' item lists. Stopping it when the window
+    /// closes is what lets all of that be collected.
+    /// </summary>
+    public void Dispose()
+    {
+        _agoTimer.Stop();
+        _searchDebounce.Stop();
+    }
 
     public string LeftHeader => Left is null ? "Left" : Left.Title;
     public string RightHeader => Right is null ? "Right" : Right.Title;
