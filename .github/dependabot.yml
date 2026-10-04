@@ -1,0 +1,16 @@
+# Proposes updates to pinned dependencies as pull requests, so each one is reviewed (and run
+# through CI) rather than arriving unannounced.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      test-packages:
+        patterns: ["Microsoft.NET.Test.Sdk", "xunit*", "coverlet*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

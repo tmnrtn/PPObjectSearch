@@ -90,7 +90,7 @@ Produces `bin\Debug\net10.0-windows\PPObjectSearch.exe`. To publish a single sel
 that runs without .NET installed:
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json -o publish
 ```
 
 ## Tests
@@ -116,7 +116,10 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The exe is attached to the GitHub release, with notes generated from the commits. Running the
+The exe is attached to the GitHub release with a `.sha256` checksum and a build provenance
+attestation (`gh attestation verify PPObjectSearch.exe --repo tmnrtn/PPObjectSearch`), with notes
+generated from the commits. Package versions are pinned and recorded in `packages.lock.json`;
+CI restores in locked mode, and Dependabot proposes updates as pull requests. Running the
 workflow manually from the Actions tab instead just uploads the exe as a build artifact.
 
 ## Usage

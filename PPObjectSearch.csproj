@@ -13,11 +13,13 @@
     <Version>1.12.2</Version>
     <Product>Power Platform Object Search</Product>
     <Description>Keyword search over the objects in a Power Platform solution.</Description>
+    <!-- Releases publish for win-x64; naming it here puts its runtime packages in the lock file. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.*" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.90.1" />
   </ItemGroup>
 
   <ItemGroup>

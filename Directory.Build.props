@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Restores are pinned: packages.lock.json records the exact version of every package, direct
+    and transitive, and CI restores in locked mode - so the exe a release ships is built from the
+    very packages its tests ran against, and a new upstream version arrives only as a reviewed
+    change to the lock file (Dependabot proposes them).
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
