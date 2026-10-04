@@ -25,6 +25,7 @@ public sealed class MakerPortalLinkBuilder
     private readonly string _environmentUrl;
     private readonly Dictionary<string, string> _overrides;
     private readonly IReadOnlyDictionary<string, TableMetadata> _tables;
+    private readonly Core.Cloud _cloud;
 
     /// <summary>Routes that differ from the standard solution-object shape.</summary>
     private static readonly Dictionary<int, string> DefaultTemplates = new()
@@ -62,6 +63,7 @@ public sealed class MakerPortalLinkBuilder
     {
         _environmentId = string.IsNullOrWhiteSpace(environmentId) ? null : environmentId.Trim();
         _environmentUrl = environmentUrl.TrimEnd('/');
+        _cloud = Core.Clouds.ForEnvironment(environmentUrl) ?? Core.Clouds.Public;
         _tables = tables ?? new Dictionary<string, TableMetadata>();
         _overrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -80,24 +82,24 @@ public sealed class MakerPortalLinkBuilder
     /// One cloud flow run in Power Automate's run detail page. The flow id is the one Power
     /// Automate knows the flow by, which the run itself records.
     /// </summary>
-    public static string? BuildFlowRunUrl(string? environmentId, string? flowId, string? runName)
+    public static string? BuildFlowRunUrl(string? environmentId, string? flowId, string? runName, Core.Cloud? cloud = null)
     {
         if (string.IsNullOrWhiteSpace(environmentId) || string.IsNullOrWhiteSpace(flowId) || string.IsNullOrWhiteSpace(runName))
         {
             return null;
         }
 
-        return "https://make.powerautomate.com/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
+        return (cloud ?? Core.Clouds.Public).FlowPortal + "/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
                "/flows/" + Uri.EscapeDataString(flowId.Trim()) +
                "/runs/" + Uri.EscapeDataString(runName.Trim());
     }
 
     /// <summary>A cloud flow's details page in Power Automate.</summary>
-    public static string? BuildFlowUrl(string? environmentId, string? flowId)
+    public static string? BuildFlowUrl(string? environmentId, string? flowId, Core.Cloud? cloud = null)
     {
         if (string.IsNullOrWhiteSpace(environmentId) || string.IsNullOrWhiteSpace(flowId)) return null;
 
-        return "https://make.powerautomate.com/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
+        return (cloud ?? Core.Clouds.Public).FlowPortal + "/environments/" + Uri.EscapeDataString(environmentId.Trim()) +
                "/flows/" + Uri.EscapeDataString(flowId.Trim()) + "/details";
     }
 
@@ -119,6 +121,9 @@ public sealed class MakerPortalLinkBuilder
         // missing a value it needs would otherwise produce a dead link.
         if (!CanSatisfy(template, item, entitySet, primaryEntityId)) template = TypeListTemplate;
         if (!CanSatisfy(template, item, entitySet, primaryEntityId)) template = SolutionTemplate;
+
+        // The templates are written for the public maker portal; other clouds have their own.
+        if (template.StartsWith(MakerRoot, StringComparison.OrdinalIgnoreCase)) template = _cloud.MakerPortal + template[MakerRoot.Length..];
 
         return template
             .Replace("{envId}", Uri.EscapeDataString(_environmentId))

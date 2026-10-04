@@ -32,15 +32,19 @@ public sealed class AuthenticationService
         _clientId = string.IsNullOrWhiteSpace(clientId) ? DefaultClientId : clientId.Trim();
     }
 
-    private IPublicClientApplication GetApp(string? tenantId)
+    private IPublicClientApplication GetApp(string? tenantId, string? authority = null)
     {
         var tenant = string.IsNullOrWhiteSpace(tenantId) ? "organizations" : tenantId.Trim();
 
-        return _apps.GetOrAdd(tenant, t =>
+        // The sign-in host follows the environment's cloud: login.microsoftonline.us for the US
+        // government clouds, login.chinacloudapi.cn for China.
+        var host = (authority ?? Core.Clouds.Public.Authority).TrimEnd('/');
+
+        return _apps.GetOrAdd($"{host}/{tenant}", key =>
         {
             var app = PublicClientApplicationBuilder
                 .Create(_clientId)
-                .WithAuthority($"https://login.microsoftonline.com/{t}", validateAuthority: false)
+                .WithAuthority(key, validateAuthority: false)
                 // Loopback redirect: MSAL runs a temporary listener and uses the system browser,
                 // so existing SSO / MFA sessions are reused.
                 .WithRedirectUri("http://localhost")
@@ -63,9 +67,10 @@ public sealed class AuthenticationService
         string? preferredAccountId,
         bool forceAccountPicker = false,
         CancellationToken ct = default,
-        Func<Uri, Task>? openBrowser = null)
+        Func<Uri, Task>? openBrowser = null,
+        string? authority = null)
     {
-        var app = GetApp(tenantId);
+        var app = GetApp(tenantId, authority);
         var scopes = new[] { $"{resource.TrimEnd('/')}/.default" };
         var accounts = await app.GetAccountsAsync().ConfigureAwait(false);
 
@@ -138,11 +143,12 @@ public sealed class AuthenticationService
         string resource,
         string? tenantId,
         string? preferredAccountId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? authority = null)
     {
         try
         {
-            var app = GetApp(tenantId);
+            var app = GetApp(tenantId, authority);
             var accounts = await app.GetAccountsAsync().ConfigureAwait(false);
 
             var account = accounts.FirstOrDefault(a =>
@@ -237,6 +243,12 @@ public sealed class EnvironmentAuthContext
 
     public string? TenantId { get; private set; }
     public string? AccountId { get; private set; }
+
+    /// <summary>The cloud the environment is in, and so where sign-in and every other service live.</summary>
+    public Core.Cloud Cloud { get; private set; } = Core.Clouds.Public;
+
+    /// <summary>Sets the cloud outright - for a service principal, which has no sign-in challenge to read.</summary>
+    public void UseCloud(Core.Cloud cloud) => Cloud = cloud;
     public string? AccountName { get; private set; }
 
     /// <summary>Set once by the caller before the first token request, to force the account chooser.</summary>
@@ -247,8 +259,16 @@ public sealed class EnvironmentAuthContext
 
     public async Task EnsureTenantAsync(string environmentUrl, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(TenantId)) return;
-        TenantId = await TenantDiscovery.GetTenantIdAsync(environmentUrl, ct).ConfigureAwait(false);
+        // The host says which cloud first; a host none of the clouds claims - a custom domain -
+        // is settled by the authority Dataverse's own challenge names.
+        var byHost = Core.Clouds.ForEnvironment(environmentUrl);
+        if (byHost is not null) Cloud = byHost;
+
+        if (!string.IsNullOrWhiteSpace(TenantId) && byHost is not null) return;
+
+        var (tenant, authorityHost) = await TenantDiscovery.DiscoverAsync(environmentUrl, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(TenantId)) TenantId = tenant;
+        if (byHost is null && Core.Clouds.ForAuthorityHost(authorityHost) is { } byAuthority) Cloud = byAuthority;
     }
 
     /// <summary>A token for another resource without ever prompting - null when none is to be had.</summary>
@@ -256,7 +276,7 @@ public sealed class EnvironmentAuthContext
     {
         if (_tokenSource is not null) return await _tokenSource(resource, ct).ConfigureAwait(false);
 
-        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct).ConfigureAwait(false);
+        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct, Cloud.Authority).ConfigureAwait(false);
         return token?.AccessToken;
     }
 
@@ -271,7 +291,7 @@ public sealed class EnvironmentAuthContext
         var force = ForceAccountPicker;
         ForceAccountPicker = false;
 
-        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct, OpenBrowser).ConfigureAwait(false);
+        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct, OpenBrowser, Cloud.Authority).ConfigureAwait(false);
 
         AccountId = string.IsNullOrEmpty(token.AccountId) ? AccountId : token.AccountId;
         AccountName = token.AccountName;

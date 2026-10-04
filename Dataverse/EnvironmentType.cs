@@ -52,15 +52,17 @@ public sealed record EnvironmentTypeInfo(EnvironmentSku Sku, string? DisplayName
 /// </summary>
 public static class EnvironmentTypeProbe
 {
-    private const string BapResource = "https://api.bap.microsoft.com";
+    /// <summary>The Power Platform API of the environment's cloud.</summary>
+    private static string Bap(Auth.EnvironmentAuthContext auth, string environmentUrl) =>
+        (Core.Clouds.ForEnvironment(environmentUrl) ?? auth.Cloud).BapApi;
 
     /// <summary>The environments the signed-in user can see. The admin-scoped list needs Power
     /// Platform administrator rights, so the per-user one is tried first.</summary>
-    private static readonly string[] Endpoints =
-    {
-        BapResource + "/providers/Microsoft.BusinessAppPlatform/environments?api-version=2020-10-01",
-        BapResource + "/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments?api-version=2020-10-01"
-    };
+    private static string[] Endpoints(string bap) =>
+    [
+        bap + "/providers/Microsoft.BusinessAppPlatform/environments?api-version=2020-10-01",
+        bap + "/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments?api-version=2020-10-01"
+    ];
 
     public static async Task<EnvironmentTypeInfo> ProbeAsync(
         Auth.EnvironmentAuthContext auth,
@@ -73,7 +75,7 @@ public static class EnvironmentTypeProbe
 
         try
         {
-            token = await auth.TryGetTokenSilentAsync(BapResource, ct).ConfigureAwait(false);
+            token = await auth.TryGetTokenSilentAsync(Bap(auth, environmentUrl), ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
         catch
@@ -100,7 +102,7 @@ public static class EnvironmentTypeProbe
         // What each endpoint said, so an Unknown can explain itself rather than just say "not found".
         var outcomes = new List<string>();
 
-        foreach (var endpoint in Endpoints)
+        foreach (var endpoint in Endpoints(Bap(auth, environmentUrl)))
         {
             var scope = endpoint.Contains("/scopes/admin/", StringComparison.Ordinal) ? "admin list" : "user list";
             var listed = 0;

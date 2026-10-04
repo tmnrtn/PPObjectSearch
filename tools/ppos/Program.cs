@@ -19,6 +19,7 @@ async Task<DataverseClient> Connect(string url, CancellationToken ct)
 {
     var auth = servicePrincipal ?? new EnvironmentAuthContext(interactive);
     if (servicePrincipal is null) await auth.EnsureTenantAsync(url, ct);
+    else if (PPObjectSearch.Core.Clouds.ForEnvironment(url) is { } cloud) auth.UseCloud(cloud);
     return new DataverseClient(auth, url);
 }
 

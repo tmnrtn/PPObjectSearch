@@ -97,7 +97,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
     /// <summary>The flow in Power Automate. Null for anything but a cloud flow, or where the environment id is unknown.</summary>
     public string? FlowUrl => IsCloudFlow
-        ? MakerPortalLinkBuilder.BuildFlowUrl(_environmentId, Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString())
+        ? MakerPortalLinkBuilder.BuildFlowUrl(_environmentId, Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString(), _client.Cloud)
         : null;
 
     public bool HasFlowUrl => FlowUrl is not null;
@@ -1032,7 +1032,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                     run.PortalUrl = MakerPortalLinkBuilder.BuildFlowRunUrl(
                         _environmentId,
                         run.FlowId ?? Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString(),
-                        run.Name);
+                        run.Name,
+                        _client.Cloud);
                 }
 
                 Runs.Add(run);
@@ -1088,7 +1089,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             Runs.Clear();
             foreach (var run in merged.Runs)
             {
-                run.PortalUrl = MakerPortalLinkBuilder.BuildFlowRunUrl(_environmentId, run.FlowId ?? flowId, run.Name);
+                run.PortalUrl = MakerPortalLinkBuilder.BuildFlowRunUrl(_environmentId, run.FlowId ?? flowId, run.Name, _client.Cloud);
                 Runs.Add(run);
             }
 

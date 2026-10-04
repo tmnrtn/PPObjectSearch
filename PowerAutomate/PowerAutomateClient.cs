@@ -30,8 +30,9 @@ public sealed class PowerAutomateException : Exception
 /// </summary>
 public sealed class PowerAutomateClient : IDisposable
 {
-    private const string Resource = "https://service.flow.microsoft.com/";
-    private const string BaseUrl = "https://api.flow.microsoft.com/providers/Microsoft.ProcessSimple/";
+    // Power Automate lives at a different host in each sovereign cloud.
+    private string Resource => _auth.Cloud.FlowResource;
+    private string BaseUrl => _auth.Cloud.FlowApi + "/providers/Microsoft.ProcessSimple/";
     private const string ApiVersion = "api-version=2016-11-01";
 
     /// <summary>Pages of 100 actions; a flow larger than this is not one to read whole.</summary>

@@ -593,6 +593,17 @@ registration is needed**. If your tenant blocks it, register your own public cli
 `http://localhost` redirect URI and the Dynamics CRM `user_impersonation` delegated permission,
 then set `ClientId` in settings (below).
 
+### Government and China clouds
+
+Environments in the US government and China clouds work like any other. The cloud is told by the
+environment's host - `crm9.dynamics.com` (GCC), `crm.microsoftdynamics.us` (GCC High),
+`crm.appsplatform.us` (DoD), `crm.dynamics.cn` (China) - and sign-in, Graph, Power Automate, the
+Power Platform API (which the production guard asks for the environment type), global discovery
+and the maker portal links all go to that cloud's own endpoints. An environment on a custom domain
+takes its cloud from the sign-in authority Dataverse names when challenged, accepted only if it is
+one of the known clouds' authorities. For `ppos` with a service principal in one of these clouds,
+also set `PPOS_CLOUD_ENVIRONMENT` to an environment URL in it.
+
 ## Settings
 
 `%LOCALAPPDATA%\PPObjectSearch\settings.json` — written automatically, all fields optional.

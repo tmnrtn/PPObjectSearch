@@ -17,6 +17,12 @@ public static class ServicePrincipal
     public const string CertificateVariable = "PPOS_CLIENT_CERTIFICATE";
     public const string CertificatePasswordVariable = "PPOS_CLIENT_CERTIFICATE_PASSWORD";
 
+    /// <summary>
+    /// The cloud to sign in to, by an environment URL in it - set for the US government and China
+    /// clouds; the public cloud otherwise.
+    /// </summary>
+    public const string CloudVariable = "PPOS_CLOUD_ENVIRONMENT";
+
     /// <summary>Null when no client id is set - the caller signs in interactively instead.</summary>
     public static EnvironmentAuthContext? FromEnvironment(Func<string, string?> variable)
     {
@@ -29,8 +35,10 @@ public static class ServicePrincipal
             throw new InvalidOperationException($"{ClientIdVariable} is set but {TenantVariable} is not - a service principal signs in to one tenant.");
         }
 
+        var cloud = Core.Clouds.ForEnvironment(variable(CloudVariable)) ?? Core.Clouds.Public;
+
         var builder = ConfidentialClientApplicationBuilder.Create(clientId)
-            .WithAuthority(AzureCloudInstance.AzurePublic, tenant);
+            .WithAuthority($"{cloud.Authority}/{tenant}", validateAuthority: false);
 
         if (variable(SecretVariable) is { Length: > 0 } secret)
         {
@@ -48,10 +56,12 @@ public static class ServicePrincipal
 
         var app = builder.Build();
 
-        return EnvironmentAuthContext.FromTokenSource(async (resource, ct) =>
+        var context = EnvironmentAuthContext.FromTokenSource(async (resource, ct) =>
         {
             var result = await app.AcquireTokenForClient([$"{resource.TrimEnd('/')}/.default"]).ExecuteAsync(ct).ConfigureAwait(false);
             return result.AccessToken;
         });
+        context.UseCloud(cloud);
+        return context;
     }
 }

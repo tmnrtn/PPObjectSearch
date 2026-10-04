@@ -28,8 +28,9 @@ public sealed class GraphException : Exception
 /// </summary>
 public sealed class GraphClient : IDisposable
 {
-    private const string Resource = "https://graph.microsoft.com";
-    private const string BaseUrl = "https://graph.microsoft.com/v1.0/";
+    // Graph lives at a different host in each sovereign cloud.
+    private string Resource => _auth.Cloud.Graph;
+    private string BaseUrl => _auth.Cloud.Graph + "/v1.0/";
     private const string UserSelect = "id,displayName,userPrincipalName,mail,accountEnabled,userType";
 
     /// <summary>A group big enough to hit this is not one to reconcile by eye.</summary>

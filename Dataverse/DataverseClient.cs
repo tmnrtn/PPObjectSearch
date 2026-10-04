@@ -56,6 +56,9 @@ public sealed partial class DataverseClient : IDisposable
     private readonly HttpClient _http;
     private readonly EnvironmentAuthContext _auth;
 
+    /// <summary>The cloud the environment is in - by its host, or as sign-in found it for a custom domain.</summary>
+    public Core.Cloud Cloud => Core.Clouds.ForEnvironment(EnvironmentUrl) ?? _auth.Cloud;
+
     public DataverseClient(EnvironmentAuthContext auth, string environmentUrl)
         : this(auth, environmentUrl, handler: null)
     {
@@ -303,7 +306,7 @@ public sealed partial class DataverseClient : IDisposable
     /// </summary>
     public async Task<string?> GetEnvironmentIdFromDiscoveryAsync(CancellationToken ct = default)
     {
-        const string discoveryResource = "https://globaldisco.crm.dynamics.com";
+        var discoveryResource = Cloud.GlobalDiscovery;
 
         try
         {
