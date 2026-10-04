@@ -750,7 +750,10 @@ public sealed class FlowDiagramViewModel : ObservableObject
         if (!_repetitions.TryGetValue(actionName, out var task))
         {
             task = FetchRepetitionsAsync(_run, _runClient, actionName, _runCts?.Token ?? default);
-            _repetitions[actionName] = task;
+
+            // A read can fail before it ever yields, in which case its own clean-up has already
+            // run - so a task that is already faulted is not kept either.
+            if (!task.IsFaulted && !task.IsCanceled) _repetitions[actionName] = task;
         }
 
         return task;
