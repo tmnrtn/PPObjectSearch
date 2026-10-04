@@ -333,6 +333,16 @@ public class DataverseClientCoreTests
     }
 
     [Fact]
+    public async Task Environment_id_discovery_never_asks_for_a_sign_in()
+    {
+        var handler = new FakeHttpHandler();
+        using var client = new DataverseClient(TestAuth.TokensFor(Fakes.EnvironmentUrl), Fakes.EnvironmentUrl, handler);
+
+        Assert.Null(await client.GetEnvironmentIdFromDiscoveryAsync());
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task Environment_id_from_discovery_is_null_on_failure()
     {
         var handler = new FakeHttpHandler().OnStatus(HttpMethod.Get, "globaldisco", HttpStatusCode.Unauthorized);

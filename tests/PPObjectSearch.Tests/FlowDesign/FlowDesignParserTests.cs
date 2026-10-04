@@ -451,4 +451,20 @@ public class FlowDesignParserTests
     [Fact]
     public void Malformed_json_is_refused() =>
         Assert.ThrowsAny<JsonException>(() => FlowDesignParser.Parse("{ not json"));
+
+    [Fact]
+    public void A_deeply_nested_flow_still_parses()
+    {
+        // Twenty scopes, one inside another, holding a step with a deep inline body: well past
+        // the 64 levels JsonDocument allows by default.
+        var body = "{\"a\":" + string.Concat(Enumerable.Repeat("{\"b\":", 20)) + "1" + new string('}', 21);
+        var inner = $"{{ \"Deep\": {{ \"type\": \"Compose\", \"inputs\": {body} }} }}";
+        for (var i = 0; i < 20; i++) inner = $"{{ \"Scope_{i}\": {{ \"type\": \"Scope\", \"actions\": {inner} }} }}";
+
+        var json = $"{{ \"properties\": {{ \"definition\": {{ \"triggers\": {{}}, \"actions\": {inner} }} }} }}";
+
+        var design = FlowDesignParser.Parse(json);
+
+        Assert.Equal(21, design.ActionCount);
+    }
 }

@@ -19,7 +19,10 @@ public static partial class FlowDesignParser
 {
     public static FlowDesign Parse(string clientData)
     {
-        using var doc = JsonDocument.Parse(clientData);
+        // A flow nests two to four levels per scope, loop or switch case, under five for the
+        // definition itself, plus whatever inline JSON its steps carry. The default limit of 64 turns
+        // away legitimately nested flows that the Definition tab shows happily; the parse stays bounded.
+        using var doc = JsonDocument.Parse(clientData, new JsonDocumentOptions { MaxDepth = 256 });
         var root = doc.RootElement;
 
         var definition =

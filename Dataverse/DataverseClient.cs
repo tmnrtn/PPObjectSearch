@@ -307,7 +307,9 @@ public sealed partial class DataverseClient : IDisposable
 
         try
         {
-            var token = await _auth.GetTokenAsync(discoveryResource, ct).ConfigureAwait(false);
+            // A side question, like the environment type: never worth a sign-in window of its own.
+            var token = await _auth.TryGetTokenSilentAsync(discoveryResource, ct).ConfigureAwait(false);
+            if (token is null) return null;
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Get, discoveryResource + "/api/discovery/v2.0/Instances");
