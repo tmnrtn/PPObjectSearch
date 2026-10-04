@@ -1,0 +1,56 @@
+<Window x:Class="PPObjectSearch.Views.CommandPaletteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        Title="Command palette"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" AllowsTransparency="True" Background="Transparent"
+        Width="640" SizeToContent="Height" WindowStartupLocation="Manual"
+        FocusManager.FocusedElement="{Binding ElementName=QueryBox}">
+
+    <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}" BorderThickness="1" CornerRadius="8"
+            Margin="12" Padding="0,0,0,6">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.25" />
+        </Border.Effect>
+        <StackPanel>
+            <TextBox x:Name="QueryBox" Height="40" Margin="10,10,10,6" FontSize="14"
+                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Type a command, an environment or an object…"
+                     AutomationProperties.Name="Command palette search"
+                     Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" />
+            <ListBox x:Name="ResultList" ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}" MaxHeight="420"
+                     BorderThickness="0" Background="Transparent" Margin="4,0" KeyboardNavigation.TabNavigation="None"
+                     AutomationProperties.Name="Matching commands"
+                     MouseDoubleClick="Result_DoubleClick">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="6,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                    <Run Text="{Binding Group, Mode=OneWay}" /><Run
+                                         Text="{Binding Detail, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter=' · '}" />
+                                </TextBlock>
+                            </StackPanel>
+                            <Border Grid.Column="1" Padding="6,1" CornerRadius="3" BorderThickness="1" VerticalAlignment="Center"
+                                    BorderBrush="{DynamicResource Border2}" Margin="8,0,0,0"
+                                    Visibility="{Binding Shortcut, Converter={StaticResource EmptyToCollapsed}}">
+                                <TextBlock Text="{Binding Shortcut}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Margin="14,4,14,0" FontSize="11" Foreground="{DynamicResource Faint}"
+                       Text="↑ ↓ to choose · Enter to run · Esc to close" />
+        </StackPanel>
+    </Border>
+</Window>

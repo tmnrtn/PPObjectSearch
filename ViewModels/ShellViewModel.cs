@@ -26,6 +26,7 @@ public sealed class ShellViewModel : ObservableObject
         CompareCommand = new RelayCommand(_ => OpenCompare());
         CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
         ReadinessCommand = new RelayCommand(_ => OpenReadiness());
+        CommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
         MoveTabRightCommand = new RelayCommand(_ => MoveSelectedTab(+1));
@@ -110,6 +111,17 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
     public RelayCommand ReadinessCommand { get; }
+
+    /// <summary>Ctrl+K: every command, environment and object, by typing.</summary>
+    public RelayCommand CommandPaletteCommand { get; }
+
+    private void OpenCommandPalette()
+    {
+        var palette = new Views.CommandPaletteWindow { DataContext = new CommandPaletteViewModel(this) };
+        palette.PlaceOver(Application.Current.MainWindow);
+        palette.Show();
+        palette.Activate();
+    }
     public RelayCommand SetThemeCommand { get; }
     public RelayCommand OpenLogFolderCommand { get; }
 

@@ -20,6 +20,7 @@
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CompareCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl+Shift" Command="{Binding CompareDataCommand}" />
         <KeyBinding Key="R" Modifiers="Ctrl+Shift" Command="{Binding ReadinessCommand}" />
+        <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding CommandPaletteCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl+Shift" Command="{Binding CloseAllDetailsCommand}" />
     </Window.InputBindings>
 

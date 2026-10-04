@@ -143,6 +143,12 @@ workflow manually from the Actions tab instead just uploads the exe as a build a
    **Object type** to narrow the list.
 4. Click an object's name to open it in the maker portal.
 
+**Ctrl+K** opens the command palette: type a few letters of any command - every sidebar, toolbar
+and admin action, scoped to the current environment - a connected environment to switch to, a
+recent object or saved search, or (from two letters) any object in the list to open its details.
+Letters match in order, word starts first, so `cmpd` finds *Compare data*. Each command shows its
+shortcut. ↑/↓ choose, Enter runs, Esc closes.
+
 ## How objects are read
 
 The object list comes from the `msdyn_solutioncomponentsummary` virtual table — the same source
