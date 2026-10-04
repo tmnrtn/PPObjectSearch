@@ -258,12 +258,20 @@ public sealed partial class DataverseClient
         var formatted = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var lookupTargets = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var navigationProperties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        string? etag = null;
 
         foreach (var property in row.EnumerateObject())
         {
             var at = property.Name.IndexOf('@', StringComparison.Ordinal);
 
-            // "@odata.etag" and friends describe the response, not the row.
+            // The row's version, kept so a later write can insist the row has not changed since.
+            if (property.Name == "@odata.etag" && property.Value.ValueKind == JsonValueKind.String)
+            {
+                etag = property.Value.GetString();
+                continue;
+            }
+
+            // Other "@odata" annotations describe the response, not the row.
             if (at == 0) continue;
 
             if (at > 0)
@@ -298,6 +306,7 @@ public sealed partial class DataverseClient
             Formatted = formatted,
             LookupTargets = lookupTargets,
             NavigationProperties = navigationProperties,
+            ETag = etag,
             PrimaryName = entity.PrimaryNameAttribute is { Length: > 0 } name &&
                           values.TryGetValue(name, out var label)
                 ? label

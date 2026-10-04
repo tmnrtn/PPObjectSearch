@@ -42,12 +42,17 @@ public sealed partial class DataverseClient
         await SendAsync(request, $"create {entitySetName}({id})", ct).ConfigureAwait(false);
     }
 
-    /// <summary>Writes the given columns over an existing row. Columns not named are left alone.</summary>
+    /// <summary>
+    /// Writes the given columns over an existing row. Columns not named are left alone. With an
+    /// <paramref name="etag"/>, the write only happens if the row is still the version that was
+    /// read - an edit made since the comparison is not overwritten.
+    /// </summary>
     public async Task UpdateRecordAsync(
         string entitySetName,
         Guid id,
         IReadOnlyDictionary<string, object?> values,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? etag = null)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Patch, EnvironmentUrl + ApiPath + $"{entitySetName}({id})")
@@ -55,17 +60,20 @@ public sealed partial class DataverseClient
             Content = JsonContent(values)
         };
 
-        // Without this a PATCH at a missing id would create the row - an update that silently
-        // becomes an insert is not an update.
-        request.Headers.IfMatch.Add(EntityTagHeaderValue.Any);
+        // Without an If-Match a PATCH at a missing id would create the row - an update that
+        // silently becomes an insert is not an update. Either form refuses a missing row.
+        request.Headers.IfMatch.Add(IfMatch(etag));
 
         await SendAsync(request, $"update {entitySetName}({id})", ct).ConfigureAwait(false);
     }
 
-    public async Task DeleteRecordAsync(string entitySetName, Guid id, CancellationToken ct = default)
+    /// <summary>Deletes a row - with an <paramref name="etag"/>, only if it is still the version read.</summary>
+    public async Task DeleteRecordAsync(string entitySetName, Guid id, CancellationToken ct = default, string? etag = null)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Delete, EnvironmentUrl + ApiPath + $"{entitySetName}({id})");
+
+        if (etag is not null) request.Headers.IfMatch.Add(IfMatch(etag));
 
         await SendAsync(request, $"delete {entitySetName}({id})", ct).ConfigureAwait(false);
     }
@@ -169,6 +177,18 @@ public sealed partial class DataverseClient
         }
     }
 
+    private static EntityTagHeaderValue IfMatch(string? etag)
+    {
+        if (string.IsNullOrWhiteSpace(etag)) return EntityTagHeaderValue.Any;
+
+        // Dataverse sends weak tags (W/"123"); the header wants the quoted tag and the flag apart.
+        var weak = etag.StartsWith("W/", StringComparison.Ordinal);
+        var tag = weak ? etag[2..] : etag;
+        if (!tag.StartsWith('"')) tag = $"\"{tag}\"";
+
+        return new EntityTagHeaderValue(tag, weak);
+    }
+
     private static StringContent JsonContent(IReadOnlyDictionary<string, object?> values)
     {
         var json = JsonSerializer.Serialize(values);
@@ -192,9 +212,18 @@ public sealed partial class DataverseClient
 
         // If-Match on a row that is not there comes back as a precondition failure rather than
         // anything that names the row, so it is spelled out.
-        var detail = response.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound
-            ? $"{ExtractError(body)} (the row may have been changed or removed since the comparison ran)"
-            : ExtractError(body);
+        // A create answers 412 for a key that is already taken, and says so; an update or delete
+        // answers 412 when its If-Match no longer holds, which needs spelling out.
+        var detail = (response.StatusCode, request.Method.Method) switch
+        {
+            (HttpStatusCode.PreconditionFailed, "POST") => ExtractError(body),
+            (HttpStatusCode.PreconditionFailed, _) =>
+                $"{ExtractError(body)} (the row has been changed or removed in the target since the comparison " +
+                "ran - compare again before writing it)",
+            (HttpStatusCode.NotFound, _) =>
+                $"{ExtractError(body)} (the row may have been removed since the comparison ran)",
+            _ => ExtractError(body)
+        };
 
         throw new DataverseException($"Could not {what}: {detail}", response.StatusCode);
     }

@@ -217,6 +217,9 @@ separate acknowledgement naming how many rows will go — Dataverse deletes cann
   last, children first.
 - **Read-only columns are left out**, not failed on. Calculated and rollup columns read like any
   other but Dataverse refuses them on write, so they are skipped and named in the result.
+- **A row changed since the comparison is not overwritten.** Updates and deletes carry the
+  version of the target row that was compared (`If-Match`), so a row someone edited or removed in
+  the meantime fails with a note to compare again instead of losing their change.
 - Rows are written one at a time and each reports its own result, so a failure part-way through
   leaves the successful rows written and says exactly which ones did not go. Stopping a run does
   not roll anything back.

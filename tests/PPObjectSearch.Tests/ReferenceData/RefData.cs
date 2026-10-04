@@ -85,8 +85,15 @@ internal sealed class RecordBuilder
     private readonly Dictionary<string, string?> _targets = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _navigation = new(StringComparer.OrdinalIgnoreCase);
     private string? _name;
+    private string? _etag;
 
     public RecordBuilder(Guid id) => _id = id;
+
+    public RecordBuilder Versioned(string etag)
+    {
+        _etag = etag;
+        return this;
+    }
 
     public RecordBuilder With(string selectName, string? raw, string? formatted = null)
     {
@@ -124,6 +131,7 @@ internal sealed class RecordBuilder
         Formatted = _formatted,
         LookupTargets = _targets,
         NavigationProperties = _navigation,
-        PrimaryName = _name
+        PrimaryName = _name,
+        ETag = _etag
     };
 }

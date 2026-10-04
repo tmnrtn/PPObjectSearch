@@ -850,6 +850,54 @@ public class ReferenceDataWriterTests
     }
 
     [Fact]
+    public async Task Update_and_delete_only_apply_to_the_version_that_was_compared()
+    {
+        var handler = new FakeHttpHandler()
+            .OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent)
+            .OnStatus(HttpMethod.Delete, "new_things(", HttpStatusCode.NoContent);
+        var writer = Writer(handler);
+
+        var source = Row(G(1)).With("new_code", "A").With("new_name", "New").Build();
+        var target = Row(G(2)).With("new_code", "A").With("new_name", "Old").Versioned("W/\"1001\"").Build();
+        var gone = Row(G(3)).With("new_code", "B").Versioned("W/\"2002\"").Build();
+
+        Assert.True((await writer.ApplyAsync(Compared(new[] { Name }, source, target))).Succeeded);
+        Assert.True((await writer.ApplyAsync(Compared(new[] { Name }, null, gone))).Succeeded);
+
+        Assert.Equal("W/\"1001\"", handler.Requests[0].Header("If-Match"));
+        Assert.Equal("W/\"2002\"", handler.Requests[1].Header("If-Match"));
+    }
+
+    [Fact]
+    public async Task A_row_changed_since_the_comparison_is_reported_rather_than_overwritten()
+    {
+        var handler = new FakeHttpHandler().OnError(HttpMethod.Patch, "new_things(", HttpStatusCode.PreconditionFailed, "etag mismatch");
+        var source = Row(G(1)).With("new_code", "A").With("new_name", "New").Build();
+        var target = Row(G(2)).With("new_code", "A").With("new_name", "Old").Versioned("W/\"1001\"").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Name }, source, target));
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("etag mismatch", outcome.Message);
+        Assert.Contains("changed or removed in the target since the comparison ran - compare again", outcome.Message);
+    }
+
+    [Fact]
+    public async Task Records_carry_their_etag_from_the_read()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "new_things?",
+            "{\"value\":[{\"@odata.etag\":\"W/\\\"77\\\"\",\"new_thingid\":\"" + G(1) + "\",\"new_name\":\"A\"}]}");
+        using var client = Fakes.Dataverse(handler);
+
+        var rows = await client.GetRecordsAsync(Entity(), new[] { "new_name" }, null, 10);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("W/\"77\"", row.ETag);
+        Assert.False(row.Values.ContainsKey("@odata.etag"));
+        Assert.Contains("$orderby=new_thingid", handler.Requests[0].Url);
+    }
+
+    [Fact]
     public async Task Apply_update_clears_a_lookup_emptied_in_the_source()
     {
         var handler = new FakeHttpHandler().OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
@@ -1000,7 +1048,7 @@ public class ReferenceDataWriterTests
         var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Name }, source, target));
 
         Assert.False(outcome.Succeeded);
-        Assert.Contains("may have been changed or removed since the comparison ran", outcome.Message);
+        Assert.Contains("changed or removed in the target since the comparison ran", outcome.Message);
     }
 
     [Fact]

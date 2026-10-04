@@ -126,7 +126,7 @@ public sealed class ReferenceDataWriter
                 {
                     if (item.Row.Target is not { } target) return Fail(item, "no target row to delete.");
 
-                    await _target.DeleteRecordAsync(entitySet, target.Id, ct).ConfigureAwait(false);
+                    await _target.DeleteRecordAsync(entitySet, target.Id, ct, target.ETag).ConfigureAwait(false);
                     return new ReconcileOutcome(item, true, "Deleted.");
                 }
 
@@ -172,7 +172,7 @@ public sealed class ReferenceDataWriter
                         return Fail(item, "nothing could be written - " + string.Join("; ", reasons) + ".");
                     }
 
-                    await _target.UpdateRecordAsync(entitySet, target.Id, body, ct).ConfigureAwait(false);
+                    await _target.UpdateRecordAsync(entitySet, target.Id, body, ct, target.ETag).ConfigureAwait(false);
                     Remember(plan.Entity, source.PrimaryName, target.Id);
                     return new ReconcileOutcome(item, true,
                         $"Updated {body.Count} column(s).{Note(skipped)}" +

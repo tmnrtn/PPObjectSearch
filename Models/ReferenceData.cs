@@ -94,6 +94,9 @@ public sealed class DataRecord
     /// <summary>The primary name column's value, for labelling the row.</summary>
     public string? PrimaryName { get; init; }
 
+    /// <summary>The row's version as read (its @odata.etag), so a write can be made conditional on it.</summary>
+    public string? ETag { get; init; }
+
     /// <summary>
     /// Per lookup column, the table it actually points at. A customer or owner lookup can point at
     /// more than one table, and only the row itself says which - so writing one anywhere else
