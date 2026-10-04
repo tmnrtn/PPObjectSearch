@@ -35,6 +35,22 @@ public sealed class SolutionHistoryViewModel : ObservableObject
 
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
         ExportCommand = new RelayCommand(_ => Export(), _ => EntriesView.Count > 0);
+        ImportLogCommand = new RelayCommand(_ => OpenImportLog(), _ => SelectedEntry is not null);
+    }
+
+    /// <summary>The selected operation's import log - every component's result, error and timing.</summary>
+    public RelayCommand ImportLogCommand { get; }
+
+    private void OpenImportLog()
+    {
+        if (SelectedEntry is not { } entry) return;
+
+        new Views.ImportLogWindow
+        {
+            DataContext = new ImportLogViewModel(Session, _client, entry),
+            Owner = System.Windows.Application.Current.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
+                    ?? System.Windows.Application.Current.MainWindow
+        }.Show();
     }
 
     public EnvironmentSessionViewModel Session { get; }
@@ -51,7 +67,10 @@ public sealed class SolutionHistoryViewModel : ObservableObject
     public SolutionHistoryEntry? SelectedEntry
     {
         get => _selectedEntry;
-        set => SetProperty(ref _selectedEntry, value);
+        set
+        {
+            if (SetProperty(ref _selectedEntry, value)) ImportLogCommand.RaiseCanExecuteChanged();
+        }
     }
 
     private SolutionHistoryFilter _filter;

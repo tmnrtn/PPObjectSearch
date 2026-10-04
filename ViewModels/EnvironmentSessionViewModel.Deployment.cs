@@ -12,6 +12,9 @@ public sealed partial class EnvironmentSessionViewModel
 {
     private const int EnvironmentVariableDefinitionType = 380;
 
+    /// <summary>The loaded list's row for a component, where it is in the list.</summary>
+    public SolutionComponentItem? FindLoaded(Guid objectId) => _allItems.FirstOrDefault(i => i.ObjectId == objectId);
+
     /// <summary>Opens a component's details from another window, such as the readiness check.</summary>
     public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
         ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));

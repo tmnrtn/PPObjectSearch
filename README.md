@@ -74,7 +74,12 @@ straight into the maker portal.
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
     one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
 - **Solution history** (in the sidebar, under the selected environment) — every import, upgrade,
-  uninstall and export in an environment, with the error for any that failed.
+  uninstall and export in an environment, with the error for any that failed. **Import log…** on
+  a row opens that import's log (`importjob.data`) as a grid: each component's type, result
+  (success, warning, failure), error and timing - filtered to failures and warnings when there are
+  any. Double-click a component in the loaded list to open it; **Copy failures as Markdown** and
+  **Save raw XML…** are on the toolbar. An import still running shows its progress, refreshed every
+  five seconds, until its log is ready.
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
