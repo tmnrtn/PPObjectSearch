@@ -13,14 +13,24 @@ public static class CsvExporter
         "State", "Customizable", "Owner", "Created", "Modified", "Object id", "Maker portal link"
     };
 
-    public static void Write(string path, IEnumerable<SolutionComponentItem> items)
+    public static void Write(string path, IEnumerable<SolutionComponentItem> items) =>
+        Write(path, items.Select(i => (i, (IReadOnlyList<string?>)Array.Empty<string?>())), Array.Empty<string>());
+
+    /// <summary>
+    /// Writes items with columns of their own ahead of the item's - the environment and solution
+    /// each row came from, when rows from several are exported together.
+    /// </summary>
+    public static void Write(
+        string path,
+        IEnumerable<(SolutionComponentItem Item, IReadOnlyList<string?> Leading)> rows,
+        IReadOnlyList<string> leadingHeaders)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", Headers.Select(Escape)));
+        builder.AppendLine(Line(leadingHeaders.Concat(Headers)));
 
-        foreach (var item in items)
+        foreach (var (item, leading) in rows)
         {
-            builder.AppendLine(string.Join(",", new[]
+            builder.AppendLine(string.Join(",", leading.Concat(new[]
             {
                 item.Name,
                 item.DisplayName,
@@ -35,7 +45,7 @@ public static class CsvExporter
                 Format(item.ModifiedOn),
                 item.ObjectId == Guid.Empty ? null : item.ObjectId.ToString(),
                 item.MakerUrl
-            }.Select(Escape)));
+            }).Select(Escape)));
         }
 
         // UTF-8 with BOM so Excel opens non-ASCII names correctly.

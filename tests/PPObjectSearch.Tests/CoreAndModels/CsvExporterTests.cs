@@ -126,6 +126,26 @@ public sealed class CsvExporterTests : IDisposable
     }
 
     [Fact]
+    public void Write_puts_leading_columns_ahead_of_each_item()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+        try
+        {
+            CsvExporter.Write(path,
+                new[] { (Item(name: "n"), (IReadOnlyList<string?>)new[] { "Dev", "https://dev.crm.dynamics.com", "Default" }) },
+                new[] { "Environment", "Environment URL", "Solution" });
+
+            var lines = File.ReadAllLines(path);
+            Assert.StartsWith("Environment,Environment URL,Solution,Name,", lines[0]);
+            Assert.StartsWith("Dev,https://dev.crm.dynamics.com,Default,n,", lines[1]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Line_escapes_every_field_the_same_way_for_every_export()
     {
         Assert.Equal("Status,'=cmd|' /C calc'!A0,\"two\nlines\",,\"a,b\"",

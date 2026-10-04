@@ -265,7 +265,14 @@ public sealed class GlobalSearchViewModel : ObservableObject
 
         try
         {
-            CsvExporter.Write(dialog.FileName, RowsView.Cast<GlobalSearchRow>().Select(r => r.Item));
+            // The same object in three environments is three rows that only these columns tell apart.
+            var rows = RowsView.Cast<GlobalSearchRow>().ToList();
+            CsvExporter.Write(
+                dialog.FileName,
+                rows.Select(r => (r.Item, (IReadOnlyList<string?>)new[] { r.Environment, r.Source.EnvironmentUrl, r.Solution })),
+                new[] { "Environment", "Environment URL", "Solution" });
+
+            Summary = $"Exported {rows.Count:N0} row(s) to {dialog.FileName}.";
         }
         catch (Exception ex)
         {
