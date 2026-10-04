@@ -201,8 +201,11 @@ public sealed partial class DataverseClient
             select.Insert(0, entity.PrimaryIdAttribute);
         }
 
+        // Ordered by id so that, when the cap cuts a table short, both environments stop at the
+        // same place in the same order rather than wherever the server's paging happened to go.
         var url = EnvironmentUrl + ApiPath + entity.EntitySetName +
-                  "?$select=" + string.Join(",", select.Distinct(StringComparer.OrdinalIgnoreCase));
+                  "?$select=" + string.Join(",", select.Distinct(StringComparer.OrdinalIgnoreCase)) +
+                  "&$orderby=" + entity.PrimaryIdAttribute;
 
         if (!string.IsNullOrWhiteSpace(filter))
         {

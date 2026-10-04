@@ -174,7 +174,9 @@ Some details worth knowing:
 - **Anything that makes the result partial is said out loud** in the warnings strip: a table
   missing from one side, a non-unique key, a column that exists on one side only, or a table that
   hit the row cap. A truncated table reports every unread row as missing, so the cap matters —
-  raise it or add a filter.
+  raise it or add a filter. Rows are read in id order, so both environments stop at the same
+  place, and reconciling will not create or delete a row whose absence could just mean it was
+  not read, nor write a row whose key is not unique.
 
 Configurations are saved by name into `settings.json` (below) and picked from the dropdown, so a
 data set worth checking regularly is set up once. An amber dot on **Save** means there are unsaved

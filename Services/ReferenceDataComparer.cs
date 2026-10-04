@@ -58,6 +58,15 @@ public sealed class RecordComparison
     public DataRecord? Target { get; init; }
     public required IReadOnlyList<ColumnComparison> Differences { get; init; }
 
+    /// <summary>
+    /// Why this row must not be written, when the comparison cannot vouch for it: a side was read
+    /// only up to the row cap, so "missing" may just mean "not read", or the key was not unique,
+    /// so the row was paired with whichever duplicate happened to win.
+    /// </summary>
+    public string? WriteBlockedReason { get; init; }
+
+    public bool IsWriteBlocked => WriteBlockedReason is not null;
+
     public string EntityLabel => Plan.EntityLabel;
     public string EntityLogicalName => Plan.Entity.LogicalName;
     public string KeyLabel => Plan.KeyLabel;
@@ -103,6 +112,9 @@ public sealed class EntityCompareResult
     public required int SourceRowCount { get; init; }
     public required int TargetRowCount { get; init; }
 
+    public bool SourceTruncated { get; init; }
+    public bool TargetTruncated { get; init; }
+
     /// <summary>Row caps hit and duplicate keys found - things that make the result partial.</summary>
     public required IReadOnlyList<string> Warnings { get; init; }
 }
@@ -121,15 +133,39 @@ public static class ReferenceDataComparer
     /// instead of colliding with each other.</summary>
     private const string NoKeyMarker = "(no key)";
 
+    /// <param name="sourceTruncated">The source read stopped at the row cap, so a row missing from
+    /// it may only be unread.</param>
+    /// <param name="targetTruncated">The same for the target.</param>
     public static EntityCompareResult Compare(
         EntityComparePlan plan,
         IReadOnlyList<DataRecord> source,
-        IReadOnlyList<DataRecord> target)
+        IReadOnlyList<DataRecord> target,
+        bool sourceTruncated = false,
+        bool targetTruncated = false)
     {
         var warnings = new List<string>();
+        var duplicated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var sourceByKey = Index(plan, source, "source", warnings);
-        var targetByKey = Index(plan, target, "target", warnings);
+        var sourceByKey = Index(plan, source, "source", warnings, duplicated);
+        var targetByKey = Index(plan, target, "target", warnings, duplicated);
+
+        string? Blocked(string key, RecordCompareStatus status)
+        {
+            if (duplicated.Contains(key))
+            {
+                return $"Not written: the key {plan.KeyLabel} is not unique, so this row was paired with " +
+                       "one of several and could be the wrong one.";
+            }
+
+            return status switch
+            {
+                RecordCompareStatus.OnlyInTarget when sourceTruncated =>
+                    "Not written: the source was only read up to the row cap, so this row may exist there unread.",
+                RecordCompareStatus.OnlyInSource when targetTruncated =>
+                    "Not written: the target was only read up to the row cap, so this row may already exist there.",
+                _ => null
+            };
+        }
 
         var rows = new List<RecordComparison>(Math.Max(sourceByKey.Count, targetByKey.Count));
 
@@ -143,7 +179,8 @@ public static class ReferenceDataComparer
                     Key = key,
                     Status = RecordCompareStatus.OnlyInSource,
                     Source = sourceRecord,
-                    Differences = Array.Empty<ColumnComparison>()
+                    Differences = Array.Empty<ColumnComparison>(),
+                    WriteBlockedReason = Blocked(key, RecordCompareStatus.OnlyInSource)
                 });
 
                 continue;
@@ -153,14 +190,17 @@ public static class ReferenceDataComparer
                 .Where(c => c.IsDifferent)
                 .ToList();
 
+            var status = differences.Count == 0 ? RecordCompareStatus.Same : RecordCompareStatus.Different;
+
             rows.Add(new RecordComparison
             {
                 Plan = plan,
                 Key = key,
-                Status = differences.Count == 0 ? RecordCompareStatus.Same : RecordCompareStatus.Different,
+                Status = status,
                 Source = sourceRecord,
                 Target = targetRecord,
-                Differences = differences
+                Differences = differences,
+                WriteBlockedReason = Blocked(key, status)
             });
         }
 
@@ -172,7 +212,8 @@ public static class ReferenceDataComparer
                 Key = key,
                 Status = RecordCompareStatus.OnlyInTarget,
                 Target = targetRecord,
-                Differences = Array.Empty<ColumnComparison>()
+                Differences = Array.Empty<ColumnComparison>(),
+                WriteBlockedReason = Blocked(key, RecordCompareStatus.OnlyInTarget)
             });
         }
 
@@ -190,6 +231,8 @@ public static class ReferenceDataComparer
             Rows = rows,
             SourceRowCount = source.Count,
             TargetRowCount = target.Count,
+            SourceTruncated = sourceTruncated,
+            TargetTruncated = targetTruncated,
             Warnings = warnings
         };
     }
@@ -234,7 +277,8 @@ public static class ReferenceDataComparer
         EntityComparePlan plan,
         IReadOnlyList<DataRecord> records,
         string side,
-        List<string> warnings)
+        List<string> warnings,
+        HashSet<string> duplicated)
     {
         var map = new Dictionary<string, DataRecord>(records.Count, StringComparer.OrdinalIgnoreCase);
         var duplicates = 0;
@@ -245,7 +289,11 @@ public static class ReferenceDataComparer
 
             // A duplicate key means the chosen key is not unique in that environment, which is
             // worth saying out loud rather than quietly comparing against whichever row won.
-            if (!map.TryAdd(key, record)) duplicates++;
+            if (!map.TryAdd(key, record))
+            {
+                duplicates++;
+                duplicated.Add(key);
+            }
         }
 
         if (duplicates > 0)

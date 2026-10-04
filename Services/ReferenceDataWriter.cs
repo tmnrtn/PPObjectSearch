@@ -30,6 +30,10 @@ public sealed class ReconcilePlanItem
 
     public string Table => Row.EntityLogicalName;
     public string Key => Row.Key;
+
+    /// <summary>Set when the comparison cannot vouch for this row; such an item is never written.</summary>
+    public string? BlockedReason => Row.WriteBlockedReason;
+    public bool IsBlocked => BlockedReason is not null;
     public string? Name => Row.Name;
 
     public string ActionLabel => Action switch
@@ -108,6 +112,9 @@ public sealed class ReferenceDataWriter
 
     public async Task<ReconcileOutcome> ApplyAsync(ReconcilePlanItem item, CancellationToken ct = default)
     {
+        // The window never offers a blocked row, but the guarantee belongs here, beside the write.
+        if (item.BlockedReason is { } blocked) return Fail(item, blocked);
+
         try
         {
             var plan = item.Row.Plan;

@@ -536,7 +536,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     private sealed record FetchedEntity(
         EntityComparePlan Plan,
         IReadOnlyList<DataRecord> Source,
-        IReadOnlyList<DataRecord> Target);
+        IReadOnlyList<DataRecord> Target,
+        bool SourceTruncated,
+        bool TargetTruncated);
 
     private async Task CompareAsync()
     {
@@ -601,14 +603,19 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 var source = await sourceRows;
                 var target = await targetRows;
 
-                _fetched.Add(new FetchedEntity(plan.Plan, source, target));
-
                 // A table that came back exactly at the cap was almost certainly truncated, and a
-                // truncated side reports every unread row as missing from it.
-                if (source.Count >= MaxRowsPerEntity || target.Count >= MaxRowsPerEntity)
+                // truncated side reports every unread row as missing from it - so those rows are
+                // marked, and reconciling will not create or delete on the strength of them.
+                var sourceTruncated = source.Count >= MaxRowsPerEntity;
+                var targetTruncated = target.Count >= MaxRowsPerEntity;
+
+                _fetched.Add(new FetchedEntity(plan.Plan, source, target, sourceTruncated, targetTruncated));
+
+                if (sourceTruncated || targetTruncated)
                 {
                     _fetchWarnings.Add($"{entity.LogicalName}: hit the {MaxRowsPerEntity:N0} row cap, so the result " +
-                                       "is partial. Raise the cap or add a filter.");
+                                       "is partial and rows missing from the capped side will not be created or " +
+                                       "deleted. Raise the cap or add a filter.");
                 }
             }
 
@@ -646,7 +653,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             fetched.Plan.MatchLookupsByName = MatchLookupsByName;
 
-            var result = ReferenceDataComparer.Compare(fetched.Plan, fetched.Source, fetched.Target);
+            var result = ReferenceDataComparer.Compare(
+                fetched.Plan, fetched.Source, fetched.Target, fetched.SourceTruncated, fetched.TargetTruncated);
 
             foreach (var warning in result.Warnings) Warnings.Add(warning);
             _all.AddRange(result.Rows);

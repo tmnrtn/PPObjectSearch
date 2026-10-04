@@ -56,6 +56,22 @@ public class ReferenceDataWriterTests
         return Assert.Single(ReferenceDataWriter.Plan(result.Rows, options ?? new ReconcileOptions(true, true, true)));
     }
 
+    [Fact]
+    public async Task Apply_refuses_a_row_the_comparison_cannot_vouch_for()
+    {
+        var handler = new FakeHttpHandler();
+        var plan = Plan(new[] { Code }, new[] { Name });
+        var result = ReferenceDataComparer.Compare(
+            plan, Array.Empty<DataRecord>(), new[] { Row(G(2)).With("new_code", "A").Build() }, sourceTruncated: true);
+        var item = Assert.Single(ReferenceDataWriter.Plan(result.Rows, new ReconcileOptions(true, true, true)));
+
+        var outcome = await Writer(handler).ApplyAsync(item);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("row cap", outcome.Message);
+        Assert.Empty(handler.Requests);
+    }
+
     // ---- ReconcileOptions / Plan --------------------------------------------------------------
 
     [Theory]

@@ -19,6 +19,9 @@ public sealed class ReconcileRow : ObservableObject
     public bool IsDelete => Item.Action == ReconcileAction.Delete;
     public ReconcileAction Action => Item.Action;
 
+    /// <summary>A row the comparison cannot vouch for: listed, never included, never written.</summary>
+    public bool IsBlocked => Item.IsBlocked;
+
     private bool _isIncluded = true;
     /// <summary>Whether this row's action is switched on. Rows whose action is off stay listed,
     /// faded, so turning an action on shows exactly what it adds - but they are never written.</summary>
@@ -42,7 +45,10 @@ public sealed class ReconcileRow : ObservableObject
     }
 
     /// <summary>What the Result column shows: the outcome once run, "Skipped" for an action left off.</summary>
-    public string ResultLabel => Succeeded is null && !IsIncluded ? "Skipped" : Result;
+    public string ResultLabel =>
+        Succeeded is null && IsBlocked ? Item.BlockedReason!
+        : Succeeded is null && !IsIncluded ? "Skipped"
+        : Result;
 
     private bool? _succeeded;
     public bool? Succeeded
@@ -274,7 +280,7 @@ public sealed class ReconcileViewModel : ObservableObject
     private void Rebuild()
     {
         var options = new ReconcileOptions(Create, Update, Delete);
-        foreach (var row in Rows) row.IsIncluded = options.Allows(row.Action);
+        foreach (var row in Rows) row.IsIncluded = options.Allows(row.Action) && !row.IsBlocked;
 
         var included = Rows.Where(r => r.IsIncluded).ToList();
         var creates = included.Count(r => r.Action == ReconcileAction.Create);
@@ -282,11 +288,13 @@ public sealed class ReconcileViewModel : ObservableObject
         var deletes = included.Count(r => r.Action == ReconcileAction.Delete);
 
         var skipped = _selected.Count - Rows.Count;
+        var blocked = Rows.Count(r => r.IsBlocked);
         var writes = included.Count == 1 ? "1 write" : $"{included.Count:N0} writes";
 
         Summary = $"{writes}: {creates:N0} create · {updates:N0} update · {deletes:N0} delete. " +
                   "Only compared columns are written; rows are written one at a time." +
-                  (skipped > 0 ? $" {skipped:N0} of the selected rows need nothing." : string.Empty);
+                  (skipped > 0 ? $" {skipped:N0} of the selected rows need nothing." : string.Empty) +
+                  (blocked > 0 ? $" {blocked:N0} row(s) cannot be written safely - see Result." : string.Empty);
 
         OnPropertyChanged(nameof(DeleteCount));
         OnPropertyChanged(nameof(HasDeletes));
@@ -311,7 +319,7 @@ public sealed class ReconcileViewModel : ObservableObject
 
         // Only the actions switched on; the faded rows are there to look at, never to write.
         var options = new ReconcileOptions(Create, Update, Delete);
-        var toWrite = Rows.Where(r => r.IsIncluded && options.Allows(r.Action)).ToList();
+        var toWrite = Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)).ToList();
 
         try
         {

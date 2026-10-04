@@ -72,6 +72,66 @@ public class ReferenceDataComparerTests
     }
 
     [Fact]
+    public void A_row_missing_from_a_truncated_source_is_not_offered_for_deletion()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var target = Row(G(2)).With("new_code", "B").Build();
+
+        var result = ReferenceDataComparer.Compare(plan, Array.Empty<DataRecord>(), new[] { target }, sourceTruncated: true);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(RecordCompareStatus.OnlyInTarget, row.Status);
+        Assert.True(row.IsWriteBlocked);
+        Assert.Contains("row cap", row.WriteBlockedReason);
+        Assert.True(result.SourceTruncated);
+    }
+
+    [Fact]
+    public void A_row_missing_from_a_truncated_target_is_not_offered_for_creation()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var source = Row(G(1)).With("new_code", "A").Build();
+
+        var result = ReferenceDataComparer.Compare(plan, new[] { source }, Array.Empty<DataRecord>(), targetTruncated: true);
+
+        Assert.True(Assert.Single(result.Rows).IsWriteBlocked);
+    }
+
+    [Fact]
+    public void Truncating_one_side_does_not_block_the_other_direction_or_matched_rows()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var source = new[]
+        {
+            Row(G(1)).With("new_code", "A").Named("x").Build(),
+            Row(G(3)).With("new_code", "C").Named("old").Build()
+        };
+        var target = new[] { Row(G(3)).With("new_code", "C").Named("new").Build() };
+
+        var result = ReferenceDataComparer.Compare(plan, source, target, sourceTruncated: true);
+
+        Assert.All(result.Rows, r => Assert.False(r.IsWriteBlocked));
+    }
+
+    [Fact]
+    public void Rows_whose_key_is_not_unique_are_never_written()
+    {
+        var plan = KeyedPlan(Col("new_name"));
+        var source = new[] { Row(G(1)).With("new_code", "A").With("new_name", "one").Build() };
+        var target = new[]
+        {
+            Row(G(2)).With("new_code", "A").With("new_name", "two").Build(),
+            Row(G(3)).With("new_code", "A").With("new_name", "three").Build()
+        };
+
+        var result = ReferenceDataComparer.Compare(plan, source, target);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(RecordCompareStatus.Different, row.Status);
+        Assert.Contains("not unique", row.WriteBlockedReason);
+    }
+
+    [Fact]
     public void Compare_reports_matching_rows_as_same()
     {
         var row = CompareOne(Col("new_name"), "Alpha", "Alpha");
