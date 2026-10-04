@@ -331,6 +331,21 @@ test result.
   count, email settings (which email it converts, unsolicited email, delivery, approval), its
   mailbox's approval and test result, and its members.
 
+### Security lookup
+
+**Security lookup** (sidebar, under the admin views) answers the questions the role editor does
+not. Read-only, and each view exports to CSV:
+
+- **Who can…** - pick a privilege (Create, Read, Write, Delete, Append, Append to, Assign, Share)
+  and a table: every role that grants it and how far, then every user and team holding those
+  roles, once each, with the widest depth and every path ("Sales Manager via team EMEA in Sales").
+- **Effective access** - a user's privileges across every role they hold, directly and through
+  their teams: the widest depth per table and action, with the roles that grant it on hover.
+- **Secured column** - the field security profiles that grant read, create or update on a column,
+  and the users and teams holding each.
+- **Compare roles** - two roles side by side, or the same role in two connected environments
+  ("dev has Organization delete, prod has Business unit"), listing only what differs.
+
 ## Admin tools
 
 **Entra team sync…** and **Queue membership sync…**, marked *WRITES* in the sidebar under the

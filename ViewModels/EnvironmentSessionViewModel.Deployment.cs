@@ -16,6 +16,25 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
         ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));
 
+    // ---------------------------------------------------------------- security lookup
+
+    private RelayCommand? _securityLookupCommand;
+    public RelayCommand SecurityLookupCommand => _securityLookupCommand ??= new RelayCommand(_ => OpenSecurityLookup());
+
+    private void OpenSecurityLookup()
+    {
+        if (_client is null || !IsConnected) return;
+
+        // The other connected tabs, for comparing a role across environments.
+        var sessions = (Application.Current.MainWindow?.DataContext as ShellViewModel)?.Sessions.AsEnumerable() ?? [this];
+
+        new Views.SecurityLookupWindow
+        {
+            DataContext = new SecurityLookupViewModel(this, sessions),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
     // ---------------------------------------------------------------- content search
 
     /// <summary>Definitions read for content search, kept for as long as the tab.</summary>

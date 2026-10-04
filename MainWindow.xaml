@@ -236,6 +236,10 @@
                                 <TextBlock Text="Queues" VerticalAlignment="Center" />
                             </Button>
                         </UniformGrid>
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SecurityLookupCommand}"
+                                ToolTip="Who can delete rows of a table? What can this user actually do? Who sees a secured column? How do two roles differ?">
+                            <TextBlock Text="Security lookup" VerticalAlignment="Center" />
+                        </Button>
 
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding EntraTeamSyncCommand}"
                                 ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind. Previews and asks before writing.">
