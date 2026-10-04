@@ -169,7 +169,7 @@ public sealed class GraphClient : IDisposable
                     $"The group has more than {MaxMembers:N0} members, which is more than this tool will read.");
             }
 
-            url = Str(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+            url = Core.Links.SameHostNext(Str(doc.RootElement, "@odata.nextLink"), url, m => new GraphException(m)) ?? string.Empty;
         }
     }
 

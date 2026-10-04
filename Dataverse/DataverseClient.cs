@@ -117,6 +117,15 @@ public sealed partial class DataverseClient : IDisposable
     /// </param>
     private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct, string? annotations = null, bool maxPageSize = true)
     {
+        // Every URL here is built from this environment's address, or is a nextLink it returned.
+        // One that points anywhere else is not sent this environment's token.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var target) ||
+            !string.Equals(target.Host, new Uri(EnvironmentUrl).Host, StringComparison.OrdinalIgnoreCase) ||
+            target.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new DataverseException($"Refused to send this environment's credentials to {url}.");
+        }
+
         // Skip the doomed GET entirely when the URL is already over the limit.
         if (url.Length > MaxGetUrlLength)
         {

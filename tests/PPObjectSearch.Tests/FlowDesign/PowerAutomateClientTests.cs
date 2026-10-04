@@ -248,4 +248,37 @@ public class PowerAutomateClientTests
         Assert.True(repetitions.IsTruncated);
         Assert.Equal(50, repetitions.Count);
     }
+
+    [Fact]
+    public async Task Content_too_large_to_show_is_refused_rather_than_loaded()
+    {
+        var huge = new string('x', PowerAutomateClient.MaxContentBytes + 10);
+        var handler = new FakeHttpHandler().On(HttpMethod.Get, "logic.azure.com/out/",
+            _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(huge) });
+
+        var ex = await Assert.ThrowsAsync<PowerAutomateException>(
+            () => Client(handler).GetContentAsync("https://prod-01.logic.azure.com/out/A?sig=abc"));
+
+        Assert.Contains("too large to show here", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_next_page_on_another_host_is_not_followed_with_the_token()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/repetitions", Json(new
+            {
+                value = new[] { new { properties = new { status = "Succeeded" } } },
+                nextLink = "https://evil.example.com/steal"
+            }))
+            .OnJson(HttpMethod.Get, MakerRun + "/actions", Json(new { value = Array.Empty<object>() }))
+            .OnJson(HttpMethod.Get, MakerRun, Json(RunBody()));
+        var client = Client(handler);
+
+        var ex = await Assert.ThrowsAsync<PowerAutomateException>(
+            async () => await client.GetRepetitionsAsync(await client.GetRunAsync(Env, Flow, RunName), "Step"));
+
+        Assert.Contains("evil.example.com", ex.Message);
+        Assert.DoesNotContain(handler.Requests, r => r.Uri.Host == "evil.example.com");
+    }
 }

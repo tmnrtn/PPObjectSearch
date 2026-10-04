@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -93,7 +94,7 @@ public sealed class PowerAutomateClient : IDisposable
                     }
                 }
 
-                url = JsonHelper.GetString(page.RootElement, "nextLink");
+                url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
             }
 
             return new FlowRunDetail(
@@ -209,7 +210,7 @@ public sealed class PowerAutomateClient : IDisposable
                 }
             }
 
-            url = JsonHelper.GetString(page.RootElement, "nextLink");
+            url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
         }
 
         return repetitions;
@@ -222,8 +223,7 @@ public sealed class PowerAutomateClient : IDisposable
     public async Task<string> GetContentAsync(string link, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, link);
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -234,8 +234,38 @@ public sealed class PowerAutomateClient : IDisposable
                 response.StatusCode);
         }
 
-        return TextDiff.Prettify(body);
+        // A step's outputs can be a whole file or a huge array. Shown in a code pane they would
+        // freeze the window, or run it out of memory, long before anyone could read them.
+        if (response.Content.Headers.ContentLength is > MaxContentBytes)
+        {
+            throw TooLarge(response.Content.Headers.ContentLength.Value);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+
+        while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+        {
+            buffer.Write(chunk, 0, read);
+            if (buffer.Length > MaxContentBytes) throw TooLarge(null);
+        }
+
+        var body = System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+
+        // Indenting a large document is slow to do and to draw; past this it is shown as it came.
+        return body.Length > MaxPrettifyChars ? body : TextDiff.Prettify(body);
     }
+
+    /// <summary>Inputs or outputs larger than this are not loaded into the window.</summary>
+    internal const int MaxContentBytes = 5 * 1024 * 1024;
+
+    private const int MaxPrettifyChars = 1024 * 1024;
+
+    private static PowerAutomateException TooLarge(long? bytes) => new(
+        $"This content is {(bytes is { } b ? $"{b / 1024.0 / 1024.0:0.#} MB" : "more than " + MaxContentBytes / 1024 / 1024 + " MB")}" +
+        " - too large to show here. Open the run in Power Automate to see it.");
 
     // ---------------------------------------------------------------- reading
 
