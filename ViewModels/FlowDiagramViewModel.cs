@@ -117,6 +117,9 @@ public sealed class FlowCardViewModel : FlowStepViewModel
 
     public string Title => Node.DisplayName;
     public string Summary => Node.Summary;
+
+    /// <summary>What a screen reader says for the card: the step, what it does, and in a run how it went.</summary>
+    public string AccessibleName => InRun ? $"{Title}, {Summary}, {RunBadge}" : $"{Title}, {Summary}";
     /// <summary>A short particular - for a child flow call, the child flow's name once it is known.</summary>
     public string? Detail => ChildFlowName ?? Node.Detail;
     public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
@@ -294,6 +297,7 @@ public sealed class FlowCardViewModel : FlowStepViewModel
         OnPropertyChanged(nameof(RunLabel));
         OnPropertyChanged(nameof(DurationLabel));
         OnPropertyChanged(nameof(RunBadge));
+        OnPropertyChanged(nameof(AccessibleName));
     }
 
     internal static string FormatDuration(TimeSpan d) => FlowRunFormat.Duration(d);

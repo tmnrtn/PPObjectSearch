@@ -136,40 +136,48 @@
 
                 <Border x:Name="Frame" CornerRadius="8" HorizontalAlignment="Center">
                     <StackPanel>
-                        <Border x:Name="Card" Width="300" HorizontalAlignment="Center" Cursor="Hand"
-                                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
-                                BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True"
-                                ToolTip="{Binding Summary}">
-                            <Border.InputBindings>
-                                <MouseBinding Gesture="LeftClick" CommandParameter="{Binding}"
-                                              Command="{Binding DataContext.SelectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                            </Border.InputBindings>
+                        <!-- A button with no chrome of its own around the card: Tab reaches each step,
+                             Enter or Space selects it, and a screen reader hears its name. -->
+                        <Button x:Name="CardButton" HorizontalAlignment="Center" Cursor="Hand" FocusVisualStyle="{x:Null}"
+                                Height="Auto" Padding="0" Background="Transparent" BorderThickness="0"
+                                CommandParameter="{Binding}"
+                                Command="{Binding DataContext.SelectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                AutomationProperties.Name="{Binding AccessibleName}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Button.Template>
+                            <Border x:Name="Card" Width="300" HorizontalAlignment="Center"
+                                    Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                    BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True"
+                                    ToolTip="{Binding Summary}">
 
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="4" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="4" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                                <Border x:Name="Bar" CornerRadius="5,0,0,5" Background="{DynamicResource Faint}" />
+                                    <Border x:Name="Bar" CornerRadius="5,0,0,5" Background="{DynamicResource Faint}" />
 
-                                <StackPanel Grid.Column="1" Margin="10,8,8,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="1" Margin="10,8,8,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
 
-                                        <TextBlock x:Name="Icon" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="13"
-                                                   Foreground="{DynamicResource Faint}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                        <Button x:Name="Toggle" Grid.Column="2" Style="{StaticResource GhostButton}"
-                                                Width="22" Height="22" Padding="0" Margin="6,-2,-2,-2" Visibility="Collapsed"
-                                                Command="{Binding ToggleCommand}" ToolTip="Show or hide the steps inside">
-                                            <TextBlock x:Name="Chevron" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="10"
-                                                       Foreground="{DynamicResource Muted}" />
+                                            <TextBlock x:Name="Icon" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="13"
+                                                       Foreground="{DynamicResource Faint}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Button x:Name="Toggle" Grid.Column="2" Style="{StaticResource GhostButton}"
+                                                    Width="22" Height="22" Padding="0" Margin="6,-2,-2,-2" Visibility="Collapsed"
+                                                    Command="{Binding ToggleCommand}" ToolTip="Show or hide the steps inside">
+                                                <TextBlock x:Name="Chevron" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="10"
+                                                           Foreground="{DynamicResource Muted}" />
                                         </Button>
                                     </Grid>
 
@@ -203,6 +211,7 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
+                        </Button>
 
                         <ItemsControl x:Name="Branches" ItemsSource="{Binding Branches}" ItemTemplate="{StaticResource Branch}"
                                       ItemsPanel="{StaticResource Row}" HorizontalAlignment="Center" Margin="0,12,0,0"
@@ -315,6 +324,10 @@
                     <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}" />
                     <Setter TargetName="Card" Property="BorderThickness" Value="2" />
                 </DataTrigger>
+                <Trigger SourceName="CardButton" Property="IsKeyboardFocused" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                    <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
