@@ -929,7 +929,8 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     {
         var viewModel = new MembershipApplyViewModel(request);
         var window = new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() };
-        var changed = window.ShowDialog() == true;
+        window.ShowDialog();
+        var changed = viewModel.AnyWritesAttempted;
 
         if (!changed)
         {

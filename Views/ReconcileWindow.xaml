@@ -262,7 +262,7 @@
                                 Command="{Binding CancelRunCommand}"
                                 Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
 
-                        <Button Content="Close" Height="30" Click="Close_Click" />
+                        <Button Content="Close" Height="30" Click="Close_Click" IsEnabled="{Binding IsNotRunning}" />
 
                         <Button Height="30" Margin="8,0,0,0" Content="{Binding ApplyLabel}"
                                 Command="{Binding ApplyCommand}"

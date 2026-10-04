@@ -816,7 +816,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             Source?.EnvironmentSku ?? EnvironmentSku.Unknown);
 
         var window = new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() };
-        var wrote = window.ShowDialog() == true;
+        // Read from the view model rather than the dialog result: closing with the title bar's X
+        // after a run reports no result, yet the rows on screen are just as out of date.
+        window.ShowDialog();
+        var wrote = viewModel.AnyWritesSucceeded;
 
         Status = permission.Allowed
             ? viewModel.Status

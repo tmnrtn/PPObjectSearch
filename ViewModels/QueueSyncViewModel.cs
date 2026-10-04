@@ -381,7 +381,8 @@ public sealed class QueueSyncViewModel : ObservableObject
         });
 
         var window = new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() };
-        var changed = window.ShowDialog() == true;
+        window.ShowDialog();
+        var changed = viewModel.AnyWritesAttempted;
 
         if (!changed)
         {
