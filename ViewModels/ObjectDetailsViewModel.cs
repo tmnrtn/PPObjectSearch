@@ -340,6 +340,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             {
                 var flow = await _client.GetCloudFlowAsync(Item.ObjectId);
                 var definition = flow.Definition;
+                _flowClientData = definition;
                 IsFlowOn = flow.IsOn;
                 await LoadFlowDiagramAsync(definition);
                 SourceLanguage = CodeLanguage.Json;
@@ -417,6 +418,123 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             EnvironmentVariableStatus = "Could not read the environment variable - " + ex.Message;
             problems.Add("environment variable: " + ex.Message);
         }
+    }
+
+    // ---------------------------------------------------------------- connection references
+
+    private string? _flowClientData;
+
+    /// <summary>A cloud flow lists the references it uses; a connection reference shows itself.</summary>
+    public bool HasConnections => Kind is ObjectKind.CloudFlow or ObjectKind.ConnectionReference;
+
+    public ObservableCollection<ConnectionReferenceRow> ConnectionRows { get; } = new();
+
+    public string ConnectionsTabCount => ConnectionRows.Count.ToString("N0");
+
+    private string _connectionsStatus = string.Empty;
+    public string ConnectionsStatus
+    {
+        get => _connectionsStatus;
+        private set => SetProperty(ref _connectionsStatus, value);
+    }
+
+    private bool _hasBrokenConnection;
+    /// <summary>A reference with no connection, or one in error - the usual reason a flow will not turn on.</summary>
+    public bool HasBrokenConnection
+    {
+        get => _hasBrokenConnection;
+        private set => SetProperty(ref _hasBrokenConnection, value);
+    }
+
+    private async Task LoadConnectionsAsync(List<string> problems)
+    {
+        ConnectionRows.Clear();
+        HasBrokenConnection = false;
+
+        try
+        {
+            IReadOnlyList<ConnectionReferenceInfo> references;
+
+            if (Kind == ObjectKind.ConnectionReference)
+            {
+                references = await _client.GetConnectionReferencesAsync(new[] { Item.ObjectId });
+            }
+            else
+            {
+                // The definition was read for the Definition tab; a flow opened elsewhere reads it now.
+                _flowClientData ??= (await _client.GetCloudFlowAsync(Item.ObjectId)).Definition;
+                var names = DataverseClient.ConnectionReferenceNames(_flowClientData);
+
+                if (names.Count == 0)
+                {
+                    ConnectionsStatus = "This flow uses no connection references - its connections, if any, are embedded in it.";
+                    OnPropertyChanged(nameof(ConnectionsTabCount));
+                    return;
+                }
+
+                references = await _client.GetConnectionReferencesByNameAsync(names);
+                var missing = names.Where(n => !references.Any(r => string.Equals(r.LogicalName, n, StringComparison.OrdinalIgnoreCase))).ToList();
+                if (missing.Count > 0)
+                {
+                    problems.Add("connection references not found in this environment: " + string.Join(", ", missing));
+                }
+            }
+
+            // Their status is Power Automate's to tell; without it a bound reference reads as bound.
+            IReadOnlyList<ConnectionInfo>? connections = null;
+            string? connectionProblem = null;
+
+            if (references.Any(r => r.HasConnection))
+            {
+                if (string.IsNullOrWhiteSpace(_environmentId))
+                {
+                    connectionProblem = "the environment id is not known, so connection status was not read";
+                }
+                else
+                {
+                    try
+                    {
+                        _powerAutomate ??= _client.CreatePowerAutomateClient();
+                        connections = await _powerAutomate.GetConnectionsAsync(_environmentId);
+                    }
+                    catch (Exception ex)
+                    {
+                        connectionProblem = "connection status could not be read - " + ex.Message;
+                    }
+                }
+            }
+
+            foreach (var reference in references.OrderBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase))
+            {
+                ConnectionRows.Add(new ConnectionReferenceRow
+                {
+                    Reference = reference,
+                    Connection = connections?.FirstOrDefault(c =>
+                        string.Equals(c.Name, reference.ConnectionId, StringComparison.OrdinalIgnoreCase)),
+                    ConnectionsKnown = connections is not null
+                });
+            }
+
+            HasBrokenConnection = ConnectionRows.Any(r => r.IsBroken);
+            var broken = ConnectionRows.Count(r => r.IsBroken);
+
+            ConnectionsStatus =
+                (broken == 0
+                    ? $"{ConnectionRows.Count:N0} connection reference(s)."
+                    : $"{broken:N0} of {ConnectionRows.Count:N0} connection reference(s) have no working connection" +
+                      (IsCloudFlow ? IsFlowOn == false
+                          ? " - which is why this flow is off, or will not stay on. Bind them in the solution, then turn it on."
+                          : " - the flow fails when it reaches a step that uses them."
+                        : ".")) +
+                (connectionProblem is null ? string.Empty : $" ({connectionProblem}.)");
+        }
+        catch (Exception ex)
+        {
+            ConnectionsStatus = "Could not read the connection references - " + ex.Message;
+            problems.Add("connections: " + ex.Message);
+        }
+
+        OnPropertyChanged(nameof(ConnectionsTabCount));
     }
 
     // ---------------------------------------------------------------- quick actions
@@ -1208,6 +1326,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
             if (HasSource) await LoadSourceAsync(problems);
             if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
+            if (HasConnections) await LoadConnectionsAsync(problems);
 
             if (_detached) return;
             try

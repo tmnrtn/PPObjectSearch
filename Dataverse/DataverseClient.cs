@@ -646,6 +646,7 @@ public sealed partial class DataverseClient : IDisposable
             {
                 var parallel = await GetComponentsInParallelAsync(solutionId, progress, ct).ConfigureAwait(false);
                 await ApplyProcessCategoriesAsync(parallel, ct).ConfigureAwait(false);
+                await ApplyConnectionReferenceStatesAsync(parallel, ct).ConfigureAwait(false);
                 return parallel;
             }
             catch (OperationCanceledException)
@@ -668,6 +669,7 @@ public sealed partial class DataverseClient : IDisposable
             ct).ConfigureAwait(false);
 
         await ApplyProcessCategoriesAsync(items, ct).ConfigureAwait(false);
+        await ApplyConnectionReferenceStatesAsync(items, ct).ConfigureAwait(false);
         return items;
     }
 

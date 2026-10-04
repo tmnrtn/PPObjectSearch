@@ -389,6 +389,37 @@
                     </TabItem>
 
                     <!-- A plug-in's trace log: its trace text and any exception, per execution. -->
+                    <!-- Connection references: a flow's, or the one being looked at, with each connection's health. -->
+                    <TabItem Header="Connections" Tag="{x:Static models:DetailsTab.Connections}" core:Ui.Count="{Binding ConnectionsTabCount}"
+                             Visibility="{Binding HasConnections, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Style="{StaticResource Banner}" Margin="12,10,12,2"
+                                    Visibility="{Binding HasBrokenConnection, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding ConnectionsStatus}" TextWrapping="Wrap" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Amber}" />
+                            </Border>
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                <TextBlock Text="{Binding ConnectionsStatus}" Foreground="{DynamicResource Muted}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding ConnectionsStatus}" />
+                            </Border>
+                            <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding ConnectionRows}"
+                                      SelectionMode="Single" IsReadOnly="True"
+                                      AutomationProperties.Name="Connection references">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Connection reference" Width="1.2*" Binding="{Binding Label}"
+                                                        HeaderStyle="{StaticResource PaneFirstHeader}" />
+                                    <DataGridTextColumn Header="Logical name" Width="*" Binding="{Binding LogicalName}" />
+                                    <DataGridTextColumn Header="Connector" Width="*" Binding="{Binding Connector}" />
+                                    <DataGridTextColumn Header="Connection" Width="*" Binding="{Binding ConnectionName}" />
+                                    <DataGridTextColumn Header="Status" Width="1.3*" Binding="{Binding HealthLabel}" />
+                                    <DataGridTextColumn Header="Owner" Width="*" Binding="{Binding Owner}" />
+                                    <DataGridTextColumn Header="Connection id" Width="*" Binding="{Binding ConnectionId}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+
                     <TabItem Header="Trace log" Tag="{x:Static models:DetailsTab.TraceLog}" core:Ui.Count="{Binding TraceTabCount}"
                              Visibility="{Binding HasTraceLog, Converter={StaticResource BoolToVis}}">
                         <Grid>

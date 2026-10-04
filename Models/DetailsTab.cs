@@ -10,6 +10,7 @@ public enum DetailsTab
     Source,
     TraceLog,
     Value,
+    Connections,
     Components,
     Layers,
     Dependencies
@@ -24,7 +25,8 @@ public enum ObjectKind
     Plugin,
     WebResource,
     EnvironmentVariable,
-    Table
+    Table,
+    ConnectionReference
 }
 
 /// <summary>
@@ -55,6 +57,9 @@ public static class DetailsTabs
         380 or 381 => ObjectKind.EnvironmentVariable,
         ProcessType when IsCategory(item, 5, "Modern Flow", "Cloud Flow") => ObjectKind.CloudFlow,
         ProcessType when IsCategory(item, 0, "Workflow", "Workflow (classic)") => ObjectKind.ClassicWorkflow,
+        // A connection reference's type code is assigned per environment, so its table name is what to go by.
+        _ when string.Equals(item.ComponentLogicalName, "connectionreference", StringComparison.OrdinalIgnoreCase) =>
+            ObjectKind.ConnectionReference,
         _ => ObjectKind.Other
     };
 
@@ -70,6 +75,7 @@ public static class DetailsTabs
         ObjectKind.WebResource => DetailsTab.Source,
         ObjectKind.EnvironmentVariable => DetailsTab.Value,
         ObjectKind.Table => DetailsTab.Components,
+        ObjectKind.ConnectionReference => DetailsTab.Connections,
         _ => DetailsTab.Layers
     };
 
@@ -78,12 +84,13 @@ public static class DetailsTabs
     {
         IEnumerable<DetailsTab> own = kind switch
         {
-            ObjectKind.CloudFlow => [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source],
+            ObjectKind.CloudFlow => [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source, DetailsTab.Connections],
             ObjectKind.ClassicWorkflow => [DetailsTab.Runs],
             ObjectKind.Plugin => [DetailsTab.TraceLog],
             ObjectKind.WebResource => [DetailsTab.Source],
             ObjectKind.EnvironmentVariable => [DetailsTab.Value],
             ObjectKind.Table => [DetailsTab.Components],
+            ObjectKind.ConnectionReference => [DetailsTab.Connections],
             _ => []
         };
 
@@ -107,6 +114,7 @@ public static class DetailsTabs
         ObjectKind.Plugin => [new("Trace log", DetailsTab.TraceLog), new("Layers", DetailsTab.Layers)],
         ObjectKind.WebResource => [new("Source", DetailsTab.Source), new("Layers", DetailsTab.Layers)],
         ObjectKind.EnvironmentVariable => [new("Value", DetailsTab.Value)],
+        ObjectKind.ConnectionReference => [new("Connection", DetailsTab.Connections), new("Used by", DetailsTab.Dependencies)],
         ObjectKind.Table =>
         [
             new("Columns", DetailsTab.Components, TableChildKind.Column),

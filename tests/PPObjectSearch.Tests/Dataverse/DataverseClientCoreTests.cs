@@ -444,6 +444,24 @@ public class DataverseClientCoreTests
     }
 
     [Fact]
+    public async Task Connection_references_are_marked_by_whether_they_have_a_connection()
+    {
+        Guid bound = Guid.NewGuid(), unbound = Guid.NewGuid();
+        var handler = SerialComponents(Page(
+                ComponentRow(10132, "Connection Reference", "new_a", bound, "\"msdyn_componentlogicalname\":\"connectionreference\"") + "," +
+                ComponentRow(10132, "Connection Reference", "new_b", unbound, "\"msdyn_componentlogicalname\":\"connectionreference\"")))
+            .OnJson(HttpMethod.Get, "connectionreferences?", Page(
+                $"{{\"connectionreferenceid\":\"{bound}\",\"connectionreferencelogicalname\":\"new_a\",\"connectionid\":\"c1\"}}," +
+                $"{{\"connectionreferenceid\":\"{unbound}\",\"connectionreferencelogicalname\":\"new_b\",\"connectionid\":null}}"));
+        using var client = Fakes.Dataverse(handler);
+
+        var items = await client.GetSolutionComponentsAsync(Guid.NewGuid());
+
+        Assert.Equal("Has connection", items.Single(i => i.ObjectId == bound).SubType);
+        Assert.Equal("No connection", items.Single(i => i.ObjectId == unbound).SubType);
+    }
+
+    [Fact]
     public async Task Components_read_every_field_of_the_summary_row()
     {
         var solutionId = Guid.NewGuid();

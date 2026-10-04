@@ -50,7 +50,7 @@ public class DetailsTabsTests
     public void A_cloud_flow_lists_its_own_tabs_before_the_generic_ones()
     {
         Assert.Equal(
-            [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source, DetailsTab.Layers, DetailsTab.Dependencies],
+            [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source, DetailsTab.Connections, DetailsTab.Layers, DetailsTab.Dependencies],
             DetailsTabs.TabsFor(ObjectKind.CloudFlow));
     }
 
@@ -61,6 +61,7 @@ public class DetailsTabsTests
     [InlineData(ObjectKind.WebResource, DetailsTab.Source)]
     [InlineData(ObjectKind.EnvironmentVariable, DetailsTab.Value)]
     [InlineData(ObjectKind.Table, DetailsTab.Components)]
+    [InlineData(ObjectKind.ConnectionReference, DetailsTab.Connections)]
     [InlineData(ObjectKind.Other, DetailsTab.Layers)]
     public void Each_kind_opens_on_its_own_first_tab(ObjectKind kind, DetailsTab expected)
     {
@@ -73,6 +74,19 @@ public class DetailsTabsTests
     {
         Assert.Equal(DetailsTab.Components, DetailsTabs.Resolve(ObjectKind.Table, DetailsTab.Design));
         Assert.Equal(DetailsTab.Dependencies, DetailsTabs.Resolve(ObjectKind.Table, DetailsTab.Dependencies));
+    }
+
+    [Fact]
+    public void A_connection_reference_is_known_by_its_table_not_its_type_code()
+    {
+        var item = new SolutionComponentItem
+        {
+            Name = "new_outlook", ComponentType = 10132, ComponentTypeName = "Connection Reference",
+            ComponentLogicalName = "connectionreference", ObjectId = Guid.NewGuid()
+        };
+
+        Assert.Equal(ObjectKind.ConnectionReference, DetailsTabs.KindOf(item));
+        Assert.Equal(["Connection", "Used by"], DetailsTabs.ShortcutsFor(item).Select(s => s.Label));
     }
 
     // ---------------------------------------------------------------- shortcuts

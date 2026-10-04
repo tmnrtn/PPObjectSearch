@@ -301,6 +301,61 @@ public sealed class PowerAutomateClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// The connections in an environment that the signed-in user can see - their own and those
+    /// shared with them - with each one's status. A connection reference bound to anything else
+    /// will not be in the list.
+    /// </summary>
+    public async Task<IReadOnlyList<ConnectionInfo>> GetConnectionsAsync(string environmentId, CancellationToken ct = default)
+    {
+        var connections = new List<ConnectionInfo>();
+        var url = $"{BaseUrl}environments/{Uri.EscapeDataString(environmentId)}/connections?{ApiVersion}";
+
+        for (var page = 0; url is not null && page < MaxPages; page++)
+        {
+            using var doc = await SendAsync(url, ct).ConfigureAwait(false);
+
+            if (doc.RootElement.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var row in value.EnumerateArray())
+                {
+                    if (JsonHelper.GetString(row, "name") is not { Length: > 0 } name) continue;
+
+                    var properties = row.TryGetProperty("properties", out var p) ? p : default;
+                    JsonElement status = default;
+                    if (properties.ValueKind == JsonValueKind.Object &&
+                        properties.TryGetProperty("statuses", out var statuses) &&
+                        statuses.ValueKind == JsonValueKind.Array && statuses.GetArrayLength() > 0)
+                    {
+                        status = statuses[0];
+                    }
+
+                    var error = status.ValueKind == JsonValueKind.Object && status.TryGetProperty("error", out var e) ? e : default;
+                    var createdBy = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("createdBy", out var c)
+                        ? c
+                        : default;
+
+                    connections.Add(new ConnectionInfo
+                    {
+                        Name = name,
+                        DisplayName = JsonHelper.GetString(properties, "displayName"),
+                        ConnectorId = JsonHelper.GetString(properties, "apiId"),
+                        Status = JsonHelper.GetString(status, "status"),
+                        StatusMessage = JsonHelper.GetString(error, "message"),
+                        Owner = JsonHelper.GetString(createdBy, "userPrincipalName")
+                                ?? JsonHelper.GetString(createdBy, "email")
+                                ?? JsonHelper.GetString(createdBy, "displayName")
+                    });
+                }
+            }
+
+            url = Links.SameHostNext(JsonHelper.GetString(doc.RootElement, "nextLink"), url,
+                message => new PowerAutomateException(message));
+        }
+
+        return connections;
+    }
+
     private async Task<JsonDocument> SendAsync(string url, CancellationToken ct)
     {
         string token;

@@ -390,6 +390,23 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Connection references and deployment settings
+
+- **Connections tab.** A cloud flow's details list the connection references its definition uses;
+  a connection reference's details show itself. Each row gives the connector, the bound
+  connection, its owner and its status from Power Automate - *Connected*, *Error* with the reason,
+  *No connection*, or bound to a connection not shared with you. A flow with a broken reference
+  says so, since that is the usual reason a deployed flow will not turn on. *Used by* (the
+  Dependencies tab) lists the flows and apps that use a reference.
+- **Unbound references in the grid.** Connection references get a sub type of *Has connection* or
+  *No connection*, so choosing the Connection Reference type and then *No connection* lists the
+  ones still to bind.
+- **Deployment settings** (toolbar) writes the file `pac solution import --settings-file` takes
+  for the selected solution: each environment variable's schema name and value, and each
+  connection reference's logical name, connection id and connector. It can be filled from this
+  environment's current values - open the target environment's tab to take its values - or
+  written as a blank template. The status line says how many blanks are left to fill in.
+
 ## Quick actions
 
 The most common fixes after a deployment, without leaving for the maker portal:

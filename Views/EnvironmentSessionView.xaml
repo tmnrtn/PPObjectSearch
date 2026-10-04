@@ -278,6 +278,9 @@
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
+                <Button Content="Deployment settings" Margin="6,0,0,0"
+                        Command="{Binding ExportDeploymentSettingsCommand}"
+                        ToolTip="Writes the settings file pac solution import --settings-file takes for this solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />
                 <Button AutomationProperties.Name="Show or hide the detail pane" Content="&#xE8A0;" Margin="6,0,0,0"
                         Command="{Binding ToggleDetailPaneCommand}"
                         ToolTip="Show or hide the detail pane">
