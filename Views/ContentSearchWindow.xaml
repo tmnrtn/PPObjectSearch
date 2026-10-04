@@ -1,0 +1,75 @@
+<Window x:Class="PPObjectSearch.Views.ContentSearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Height="640" Width="1100"
+        WindowStartupLocation="CenterOwner"
+        FocusManager.FocusedElement="{Binding ElementName=TermBox}">
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="16,14,16,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="TermBox" Height="32"
+                         core:Ui.Icon="&#xE721;" core:Ui.Placeholder="A column, table, variable, connector or any text - e.g. contoso_status"
+                         AutomationProperties.Name="Text to find inside definitions"
+                         Text="{Binding Term, UpdateSourceTrigger=PropertyChanged}">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+                <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="Search" Height="32" Padding="16,0"
+                        Margin="8,0,0,0" Command="{Binding SearchCommand}"
+                        ToolTip="Reads the definitions of every flow, script, form, view, plug-in step, classic workflow and sitemap in the list - once; later searches reuse them" />
+                <Button Grid.Column="2" Content="Stop" Height="32" Margin="8,0,0,0" Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Hits}" SelectedItem="{Binding SelectedHit}" IsReadOnly="True"
+                      AutomationProperties.Name="Places the text appears"
+                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                <DataGrid.InputBindings>
+                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenHitCommand}" />
+                    <KeyBinding Key="Enter" Command="{Binding OpenHitCommand}" />
+                </DataGrid.InputBindings>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Component" Width="240" Binding="{Binding Component}"
+                                        HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
+                    <DataGridTextColumn Header="Type" Width="150" Binding="{Binding ComponentType}" ElementStyle="{StaticResource CellMuted}" />
+                    <DataGridTextColumn Header="Where" Width="150" Binding="{Binding Where}" ElementStyle="{StaticResource CellMuted}" />
+                    <DataGridTemplateColumn Header="Text" Width="*" SortMemberPath="Snippet">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource Cell}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Snippet}">
+                                    <Run Text="{Binding Before, Mode=OneWay}" /><Run
+                                         Text="{Binding Match, Mode=OneWay}" FontWeight="Bold"
+                                         Background="{DynamicResource AmberSoft}" Foreground="{DynamicResource Text}" /><Run
+                                         Text="{Binding After, Mode=OneWay}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="2" Style="{StaticResource StatusBar}">
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip="{Binding Status}" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

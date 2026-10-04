@@ -6,6 +6,7 @@
 
     <UserControl.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="U" Modifiers="Ctrl+Shift" Command="{Binding ContentSearchCommand}" />
     </UserControl.InputBindings>
 
     <UserControl.Resources>
@@ -278,6 +279,9 @@
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
+                <Button Content="Search inside" Margin="6,0,0,0"
+                        Command="{Binding ContentSearchCommand}"
+                        ToolTip="Where is this used? Finds text inside the definitions of the listed flows, scripts, forms, views, plug-in steps, classic workflows and sitemaps (Ctrl+Shift+U)" />
                 <Button Content="Deployment settings" Margin="6,0,0,0"
                         Command="{Binding ExportDeploymentSettingsCommand}"
                         ToolTip="Writes the settings file pac solution import --settings-file takes for this solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />

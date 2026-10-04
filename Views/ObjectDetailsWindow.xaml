@@ -633,6 +633,11 @@
                                                Visibility="{Binding IsSecret, Converter={StaticResource BoolToVis}}" />
                                 </Grid>
 
+                                <Button Style="{StaticResource RowButton}" Content="Find usages" HorizontalAlignment="Left" Margin="130,4,0,0"
+                                        Command="{Binding FindUsagesCommand}" CommandParameter="{Binding EnvironmentVariable.SchemaName}"
+                                        ToolTip="Search the definitions of the flows, scripts and other components in the loaded list for this variable's schema name"
+                                        Visibility="{Binding EnvironmentVariable, Converter={StaticResource EmptyToCollapsed}}" />
+
                                 <!-- Setting the value here: checked against the type, guarded, confirmed and logged. -->
                                 <Grid Margin="0,12,0,0" Visibility="{Binding CanEditEnvironmentValue, Converter={StaticResource BoolToVis}}">
                                     <Grid.ColumnDefinitions>
@@ -739,6 +744,10 @@
                                     <Border DockPanel.Dock="Top" Height="44" Padding="12,0" BorderBrush="{DynamicResource Border}"
                                             BorderThickness="0,0,0,1">
                                         <DockPanel VerticalAlignment="Center">
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Find usages" Margin="8,0,0,0"
+                                                    Command="{Binding FindUsagesCommand}" CommandParameter="{Binding SelectedChild.Name}"
+                                                    ToolTip="Search the definitions of the flows, scripts, forms, views and plug-in steps in the loaded list for this name"
+                                                    Visibility="{Binding SelectedChild, Converter={StaticResource EmptyToCollapsed}}" />
                                             <TextBlock DockPanel.Dock="Right" Text="Click a row to copy its value" FontSize="11"
                                                        Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center">
                                                 <TextBlock.Style>

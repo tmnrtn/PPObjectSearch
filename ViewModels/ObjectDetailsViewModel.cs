@@ -420,6 +420,13 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
+    // ---------------------------------------------------------------- find usages
+
+    private RelayCommand? _findUsagesCommand;
+    /// <summary>Searches the session's loaded definitions for a name - a column, a variable's schema name.</summary>
+    public RelayCommand FindUsagesCommand => _findUsagesCommand ??= new RelayCommand(
+        p => Session?.OpenContentSearch(p as string), p => HasSession && p is string { Length: > 0 });
+
     // ---------------------------------------------------------------- connection references
 
     private string? _flowClientData;

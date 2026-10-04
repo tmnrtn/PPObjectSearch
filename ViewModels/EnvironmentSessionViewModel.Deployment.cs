@@ -13,7 +13,34 @@ public sealed partial class EnvironmentSessionViewModel
     private const int EnvironmentVariableDefinitionType = 380;
 
     /// <summary>Opens a component's details from another window, such as the readiness check.</summary>
-    public void OpenDetails(SolutionComponentItem item) => ShowDetails(item);
+    public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
+        ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));
+
+    // ---------------------------------------------------------------- content search
+
+    /// <summary>Definitions read for content search, kept for as long as the tab.</summary>
+    private readonly DefinitionBodyCache _definitionBodies = new();
+
+    private RelayCommand? _contentSearchCommand;
+    public RelayCommand ContentSearchCommand => _contentSearchCommand ??= new RelayCommand(_ => OpenContentSearch());
+
+    /// <summary>"Where is this used?" over the loaded list, optionally with the term filled in.</summary>
+    public void OpenContentSearch(string? term = null)
+    {
+        if (_client is null || !IsConnected)
+        {
+            Status = "Connect first.";
+            return;
+        }
+
+        var viewModel = new ContentSearchViewModel(this, _client, _definitionBodies, _allItems.ToList(),
+            SelectedSolution?.DisplayLabel, term);
+
+        var window = new Views.ContentSearchWindow { DataContext = viewModel, Owner = Application.Current.MainWindow };
+        window.Show();
+
+        if (!string.IsNullOrWhiteSpace(term)) _ = viewModel.SearchCommand.ExecuteAsync(null);
+    }
 
     private AsyncRelayCommand? _exportDeploymentSettingsCommand;
     public AsyncRelayCommand ExportDeploymentSettingsCommand => _exportDeploymentSettingsCommand ??= new AsyncRelayCommand(

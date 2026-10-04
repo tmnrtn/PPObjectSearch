@@ -390,6 +390,24 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Where is this used? (search inside definitions)
+
+The search box matches metadata - names, types, owners. **Search inside** (`Ctrl+Shift+U`, on the
+toolbar) answers a different question: *what refers to column `contoso_status`, variable
+`contoso_ApiUrl` or connector `shared_sql`?* It searches the bodies of the components in the
+loaded list:
+
+- cloud flow definitions (`clientdata`) and classic workflow / business rule XAML;
+- text web resources (scripts, HTML, CSS, XML, SVG, RESX), decoded;
+- form XML, view FetchXML and layout XML, sitemap XML;
+- plug-in step filtering attributes and unsecure configuration.
+
+Each hit shows the component, which body and line, and the line around the match with the match
+highlighted; double-click to open the component (flows and scripts open on their source). Bodies
+are read once per tab, a chunk of rows per request, and read again only for components modified
+since - so a second search is instant. **Find usages** on a table's column (Table components tab)
+and on an environment variable (Value tab) runs the same search for that name.
+
 ## Readiness check
 
 **Readiness check** (`Ctrl+Shift+R`, in the sidebar) asks whether a solution will import cleanly
