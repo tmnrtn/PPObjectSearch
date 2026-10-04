@@ -363,6 +363,7 @@ public sealed class QueueSyncViewModel : ObservableObject
             SourceName = team.Name,
             EnvironmentName = Session.Title,
             EnvironmentHost = Session.EnvironmentHost,
+            Account = Session.AccountName,
             Permission = permission,
             Changes = changes,
             ApplyEach = (change, ct) => change.Kind == MembershipChangeKind.Add

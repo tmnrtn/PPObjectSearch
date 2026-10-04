@@ -128,6 +128,12 @@ public sealed class MembershipApplyRequest
 
     public required string EnvironmentName { get; init; }
     public required string EnvironmentHost { get; init; }
+
+    /// <summary>Who is signed in, for the run log.</summary>
+    public string? Account { get; init; }
+
+    /// <summary>Where the run log goes; the default folder unless a test says otherwise.</summary>
+    public string? WriteLogFolder { get; init; }
     public required WritePermission Permission { get; init; }
 
     public required IReadOnlyList<MembershipChange> Changes { get; init; }
@@ -171,6 +177,7 @@ public sealed class MembershipApplyRequest
 public sealed class MembershipApplyViewModel : ObservableObject
 {
     private readonly MembershipApplyRequest _request;
+    private WriteLog? _log;
     private CancellationTokenSource? _cts;
 
     public MembershipApplyViewModel(MembershipApplyRequest request)
@@ -189,6 +196,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
 
         ApplyCommand = new AsyncRelayCommand(_ => ApplyAsync(), _ => CanApply);
         CancelRunCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsRunning);
+        ExportPlanCommand = new RelayCommand(_ => ExportPlan());
+        OpenRunLogCommand = new RelayCommand(_ => OpenRunLog());
 
         RaiseEditState();
         Rebuild();
@@ -198,6 +207,14 @@ public sealed class MembershipApplyViewModel : ObservableObject
 
     public AsyncRelayCommand ApplyCommand { get; }
     public RelayCommand CancelRunCommand { get; }
+
+    /// <summary>The planned changes as CSV, for review before Apply.</summary>
+    public RelayCommand ExportPlanCommand { get; }
+
+    public RelayCommand OpenRunLogCommand { get; }
+
+    /// <summary>Where this window's changes are recorded; null until something has been attempted.</summary>
+    public string? RunLogPath => _log?.Path;
 
     public string Title => $"{_request.Operation} — {_request.TargetName}";
     public string Operation => _request.Operation;
@@ -389,6 +406,9 @@ public sealed class MembershipApplyViewModel : ObservableObject
         var ct = _cts.Token;
         IsRunning = true;
 
+        _log ??= WriteLog.Start("membership", _request.WriteLogFolder);
+        OnPropertyChanged(nameof(RunLogPath));
+
         try
         {
             if (_request.ApplyAll is { } applyAll)
@@ -412,6 +432,86 @@ public sealed class MembershipApplyViewModel : ObservableObject
         {
             IsRunning = false;
             HasRun = true;
+            if (_log?.Problem is { } problem) Status += " " + problem;
+        }
+    }
+
+    private void Record(string action, MembershipChangeRow? row, bool succeeded, string message)
+    {
+        _log?.Append(new WriteLogEntry
+        {
+            Run = _log.Run,
+            Tool = "membership",
+            Environment = EnvironmentHost,
+            Account = _request.Account,
+            Table = $"{TargetKind}: {TargetName}",
+            Id = row?.Change.SystemUserId,
+            Action = action,
+            Key = row?.Upn,
+            Name = row?.Name,
+            Succeeded = succeeded,
+            Message = message
+        });
+    }
+
+    private void ExportPlan()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "CSV file (*.csv)|*.csv",
+            FileName = $"membership-plan-{TargetName}.csv".Replace(' ', '-')
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var lines = PlanLines();
+            CsvExporter.WriteLines(dialog.FileName, lines);
+            Status = $"Plan exported - {lines.Count - 1:N0} line(s) to {dialog.FileName}.";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Status = "Could not export the plan - " + ex.Message;
+        }
+    }
+
+    /// <summary>One line per user: what would change, why, and whether it is ticked.</summary>
+    internal IReadOnlyList<string> PlanLines()
+    {
+        var lines = new List<string>
+        {
+            CsvExporter.Line("Operation", "Environment", TargetKind, SourceKind, "Change", "Included", "User", "UPN",
+                "User id", "Reason", "Result")
+        };
+
+        foreach (var row in Rows)
+        {
+            lines.Add(CsvExporter.Line(Operation, EnvironmentHost, TargetName, SourceName,
+                row.IsRemove ? "Remove" : AddVerb, row.IsIncluded ? "Yes" : "No", row.Name, row.Upn,
+                row.Change.SystemUserId.ToString(), row.Reason, row.ResultLabel));
+        }
+
+        return lines;
+    }
+
+    private void OpenRunLog()
+    {
+        var folder = _request.WriteLogFolder ?? WriteLog.DefaultFolder;
+
+        try
+        {
+            System.IO.Directory.CreateDirectory(folder);
+
+            var start = _log is not null && System.IO.File.Exists(_log.Path)
+                ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_log.Path}\"")
+                : new System.Diagnostics.ProcessStartInfo { FileName = folder, UseShellExecute = true };
+
+            System.Diagnostics.Process.Start(start)?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not open the run log folder ({folder}) - {ex.Message}";
         }
     }
 
@@ -444,6 +544,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
                 row.Result = ex.Message;
                 failed++;
             }
+
+            Record(row.IsRemove ? "Remove" : "Add", row, row.Succeeded == true, row.Result);
         }
 
         var outcome = failed == 0
@@ -457,11 +559,13 @@ public sealed class MembershipApplyViewModel : ObservableObject
             {
                 await afterAll(ct);
                 outcome += $" Then {_request.AfterAllLabel} succeeded.";
+                Record(_request.AfterAllLabel, null, true, "Succeeded.");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 outcome += $" Then {_request.AfterAllLabel} failed - {ex.Message}";
+                Record(_request.AfterAllLabel, null, false, ex.Message);
             }
         }
 
@@ -474,7 +578,18 @@ public sealed class MembershipApplyViewModel : ObservableObject
 
         Status = $"Asking Dataverse to sync {TargetName}...";
         AnyWritesAttempted = true;
-        await applyAll(ct);
+
+        try
+        {
+            await applyAll(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Record("Sync", null, false, ex.Message);
+            throw;
+        }
+
+        Record("Sync", null, true, $"Requested; {before.Count:N0} member(s) before.");
 
         Status = "Sync requested. Reading the team's membership again...";
         var after = await _request.ReadMemberIds(ct);
@@ -496,6 +611,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
                 row.Result = row.IsRemove ? "Still a member" : "Not added";
                 pending++;
             }
+
+            Record(row.IsRemove ? "Remove (by sync)" : "Add (by sync)", row, happened, row.Result);
         }
 
         var added = after.Count(id => !before.Contains(id));

@@ -75,6 +75,10 @@ public sealed class ReconcileViewModel : ObservableObject
     private readonly DataverseClient _targetClient;
     private readonly IReadOnlyDictionary<string, EntitySummary> _targetEntities;
     private readonly IReadOnlyList<RecordComparison> _selected;
+    private readonly string? _account;
+    private readonly string? _writeLogFolder;
+    private readonly List<UndoStep> _undo = new();
+    private WriteLog? _log;
     private CancellationTokenSource? _cts;
 
     public ReconcileViewModel(
@@ -84,9 +88,13 @@ public sealed class ReconcileViewModel : ObservableObject
         DataverseClient targetClient,
         IReadOnlyDictionary<string, EntitySummary> targetEntities,
         WritePermission permission,
-        EnvironmentSku sourceSku = EnvironmentSku.Unknown)
+        EnvironmentSku sourceSku = EnvironmentSku.Unknown,
+        string? account = null,
+        string? writeLogFolder = null)
     {
         _selected = selected;
+        _account = account;
+        _writeLogFolder = writeLogFolder;
         _targetClient = targetClient;
         _targetEntities = targetEntities;
 
@@ -98,8 +106,11 @@ public sealed class ReconcileViewModel : ObservableObject
         ApplyCommand = new AsyncRelayCommand(_ => ApplyAsync(), _ => CanApply);
         RetryFailedCommand = new AsyncRelayCommand(
             _ => RunAsync(Rows.Where(r => r.HasFailed).ToList()),
-            _ => Permission.Allowed && HasRun && !IsRunning && HasFailures);
+            _ => Permission.Allowed && HasRun && !IsRunning && HasFailures && !_hasUndone);
         CancelRunCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsRunning);
+        UndoCommand = new AsyncRelayCommand(_ => UndoAsync(), _ => CanUndo);
+        ExportPlanCommand = new RelayCommand(_ => ExportPlan());
+        OpenRunLogCommand = new RelayCommand(_ => OpenRunLog());
 
         // Every action the selection could take, planned once; the toggles only include or exclude.
         foreach (var item in ReferenceDataWriter.Plan(_selected, new ReconcileOptions(true, true, true)))
@@ -142,6 +153,28 @@ public sealed class ReconcileViewModel : ObservableObject
 
     public bool HasFailures => Rows.Any(r => r.HasFailed);
     public RelayCommand CancelRunCommand { get; }
+
+    /// <summary>Reverses everything this window wrote, newest first, from the copies kept before each write.</summary>
+    public AsyncRelayCommand UndoCommand { get; }
+
+    /// <summary>The plan as a CSV, for review or a change ticket before anything is applied.</summary>
+    public RelayCommand ExportPlanCommand { get; }
+
+    public RelayCommand OpenRunLogCommand { get; }
+
+    /// <summary>Asks before undoing. Replaced in tests.</summary>
+    internal Func<string, bool> Confirm { get; set; } = message =>
+        System.Windows.MessageBox.Show(message, "Undo run", System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes;
+
+    /// <summary>Where this window's writes are recorded; null until something has been written.</summary>
+    public string? RunLogPath => _log?.Path;
+
+    private bool _hasUndone;
+
+    public bool CanUndo => Permission.Allowed && HasRun && !IsRunning && !_hasUndone && _undo.Count > 0;
+
+    public int UndoCount => _undo.Count;
 
     public string Title => $"Reconcile — {SourceName} → {TargetName}";
 
@@ -222,7 +255,8 @@ public sealed class ReconcileViewModel : ObservableObject
     }
 
     public string DeleteAcknowledgement =>
-        $"Yes, permanently delete {DeleteCount:N0} row(s) from {TargetName}. This cannot be undone.";
+        $"Yes, delete {DeleteCount:N0} row(s) from {TargetName}. A copy of each is kept so Undo can put it back, " +
+        "but rows Dataverse removes with them through cascading relationships are not kept.";
 
     private bool _isRunning;
     public bool IsRunning
@@ -235,6 +269,7 @@ public sealed class ReconcileViewModel : ObservableObject
             ApplyCommand.RaiseCanExecuteChanged();
             CancelRunCommand.RaiseCanExecuteChanged();
             RetryFailedCommand.RaiseCanExecuteChanged();
+            UndoCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(IsNotRunning));
             OnPropertyChanged(nameof(CanEditActions));
         }
@@ -332,7 +367,10 @@ public sealed class ReconcileViewModel : ObservableObject
 
         IsRunning = true;
 
-        var writer = new ReferenceDataWriter(_targetClient, _targetEntities);
+        // Every write is kept: the row as it was, what was sent, and how to take it back.
+        var writer = new ReferenceDataWriter(_targetClient, _targetEntities) { SaveSnapshots = true };
+        _log ??= WriteLog.Start("reconcile", _writeLogFolder);
+        OnPropertyChanged(nameof(RunLogPath));
         var succeeded = 0;
         var failed = 0;
         var done = 0;
@@ -353,6 +391,7 @@ public sealed class ReconcileViewModel : ObservableObject
                 // Stop takes effect between rows: a write cancelled half-way leaves no telling
                 // whether it landed, so the one in flight is always allowed to finish.
                 var outcome = await writer.ApplyAsync(row.Item, CancellationToken.None);
+                Record(outcome);
 
                 row.Succeeded = outcome.Succeeded;
                 row.Result = outcome.Message;
@@ -384,6 +423,156 @@ public sealed class ReconcileViewModel : ObservableObject
             HasRun = true;
             OnPropertyChanged(nameof(HasFailures));
             RetryFailedCommand.RaiseCanExecuteChanged();
+            RaiseUndoState();
+
+            if (_log?.Problem is { } problem) Status += " " + problem;
+        }
+    }
+
+    private void Record(ReconcileOutcome outcome)
+    {
+        var item = outcome.Item;
+        if (outcome.Undo is { } undo) _undo.Add(undo);
+
+        _log?.Append(new WriteLogEntry
+        {
+            Run = _log.Run,
+            Tool = "reconcile",
+            Environment = _targetClient.EnvironmentUrl,
+            Account = _account,
+            Table = item.Table,
+            Id = outcome.Id,
+            Action = item.Action.ToString(),
+            Key = item.Key,
+            Name = item.Name,
+            Columns = item.Action == ReconcileAction.Update
+                ? item.Row.Differences.Select(d => d.Column.LogicalName).ToList()
+                : item.Row.Plan.ValueColumns.Select(c => c.LogicalName).ToList(),
+            Before = outcome.Before,
+            After = WriteUndo.ToJson(outcome.Written),
+            Succeeded = outcome.Succeeded,
+            Message = outcome.Message,
+            Undo = outcome.Undo
+        });
+    }
+
+    private void RaiseUndoState()
+    {
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(UndoCount));
+        UndoCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task UndoAsync()
+    {
+        if (!CanUndo) return;
+
+        if (!Confirm(
+                $"Undo {_undo.Count:N0} write(s) in {TargetName}?\n\n" +
+                "Deleted rows are re-created with their original ids, updated columns are set back to what they " +
+                "held, and created rows are deleted. Anyone else's edits to those columns since the run are " +
+                "overwritten."))
+        {
+            return;
+        }
+
+        IsRunning = true;
+        var undone = 0;
+        var failed = new List<string>();
+
+        try
+        {
+            // Newest first, so a child created after its parent goes before the parent does, and a
+            // parent deleted after its children is back before they are.
+            var steps = Enumerable.Reverse(_undo).ToList();
+
+            foreach (var step in steps)
+            {
+                undone++;
+                Status = $"Undoing ({undone}/{steps.Count}) - {step.Label}...";
+
+                string? error = null;
+                try
+                {
+                    await WriteUndo.ApplyAsync(_targetClient, step, CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    error = ex.Message;
+                    failed.Add($"{step.Label}: {ex.Message}");
+                }
+
+                _log?.Append(new WriteLogEntry
+                {
+                    Run = _log.Run,
+                    Tool = "reconcile",
+                    Environment = _targetClient.EnvironmentUrl,
+                    Account = _account,
+                    Table = step.EntitySet,
+                    Id = step.Id,
+                    Action = "Undo" + step.Method,
+                    After = step.Body,
+                    Succeeded = error is null,
+                    Message = error ?? "Undone."
+                });
+            }
+
+            _hasUndone = true;
+            AnyWritesSucceeded = true;
+
+            Status = failed.Count == 0
+                ? $"Undone - {steps.Count:N0} write(s) reversed in {TargetName}."
+                : $"Undo finished with problems - {failed.Count:N0} of {steps.Count:N0} could not be reversed: " +
+                  string.Join("; ", failed.Take(3)) + (failed.Count > 3 ? " ..." : string.Empty);
+        }
+        finally
+        {
+            IsRunning = false;
+            RaiseUndoState();
+        }
+    }
+
+    private void ExportPlan()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "CSV file (*.csv)|*.csv",
+            FileName = $"reconcile-plan-{SourceName}-{TargetName}.csv".Replace(' ', '-')
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var lines = ReconcilePlanExport.Lines(
+                Rows.Select(r => (r.Item, r.IsIncluded, r.ResultLabel)), SourceName, TargetName);
+            CsvExporter.WriteLines(dialog.FileName, lines);
+            Status = $"Plan exported - {lines.Count - 1:N0} line(s) to {dialog.FileName}.";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            Status = "Could not export the plan - " + ex.Message;
+        }
+    }
+
+    private void OpenRunLog()
+    {
+        var folder = _writeLogFolder ?? WriteLog.DefaultFolder;
+
+        try
+        {
+            System.IO.Directory.CreateDirectory(folder);
+
+            // Straight to this window's file where there is one; otherwise the folder of past runs.
+            var start = _log is not null && System.IO.File.Exists(_log.Path)
+                ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_log.Path}\"")
+                : new System.Diagnostics.ProcessStartInfo { FileName = folder, UseShellExecute = true };
+
+            System.Diagnostics.Process.Start(start)?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not open the run log folder ({folder}) - {ex.Message}";
         }
     }
 }

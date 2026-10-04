@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
 
@@ -53,7 +54,21 @@ public sealed class ReconcilePlanItem
     };
 }
 
-public sealed record ReconcileOutcome(ReconcilePlanItem Item, bool Succeeded, string Message);
+public sealed record ReconcileOutcome(ReconcilePlanItem Item, bool Succeeded, string Message)
+{
+    /// <summary>The target row written, where one was.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>What was sent to the target.</summary>
+    public IReadOnlyDictionary<string, object?>? Written { get; init; }
+
+    /// <summary>The target row just before an update or delete, when snapshots are on.</summary>
+    public JsonObject? Before { get; init; }
+
+    /// <summary>The write that would reverse this one. Set on a row that was changed even where a
+    /// later step for it failed, since the change is still there to undo.</summary>
+    public UndoStep? Undo { get; init; }
+}
 
 /// <summary>
 /// Applies a reconciliation to the target environment, one row at a time.
@@ -75,6 +90,15 @@ public sealed class ReferenceDataWriter
     /// <summary>Resolved lookups, keyed by table and label. Reference data repeats its references
     /// heavily, so this saves a query per row rather than per run.</summary>
     private readonly Dictionary<(string Table, string Label), Guid?> _resolved = new();
+
+    /// <summary>The target's columns per table, for putting a deleted row back.</summary>
+    private readonly Dictionary<string, IReadOnlyList<EntityColumn>> _targetColumns = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Read the whole target row before updating or deleting it, so the write can be logged in
+    /// full and undone. A row that cannot be read first is not written.
+    /// </summary>
+    public bool SaveSnapshots { get; init; }
 
     public ReferenceDataWriter(DataverseClient target, IReadOnlyDictionary<string, EntitySummary> targetEntities)
     {
@@ -132,8 +156,21 @@ public sealed class ReferenceDataWriter
                 {
                     if (item.Row.Target is not { } target) return Fail(item, "no target row to delete.");
 
+                    JsonObject? before = null;
+                    UndoStep? undo = null;
+
+                    if (SaveSnapshots)
+                    {
+                        before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
+                        if (before is null) return Fail(item, "the row is no longer in the target.");
+
+                        var columns = await TargetColumnsAsync(plan.Entity.LogicalName, ct).ConfigureAwait(false);
+                        undo = WriteUndo.ForDelete(
+                            entitySet, target.Id, TargetPrimaryId(plan.Entity), before, columns, EntitySetOf);
+                    }
+
                     await _target.DeleteRecordAsync(entitySet, target.Id, ct, target.ETag).ConfigureAwait(false);
-                    return new ReconcileOutcome(item, true, "Deleted.");
+                    return new ReconcileOutcome(item, true, "Deleted.") { Id = target.Id, Before = before, Undo = undo };
                 }
 
                 case ReconcileAction.Create:
@@ -156,6 +193,8 @@ public sealed class ReferenceDataWriter
                     await _target.CreateRecordAsync(entitySet, source.Id, body, ct).ConfigureAwait(false);
                     Remember(plan.Entity, source.PrimaryName, source.Id);
 
+                    var undoCreate = WriteUndo.ForCreate(entitySet, source.Id);
+
                     if (state is not null)
                     {
                         try
@@ -165,13 +204,15 @@ public sealed class ReferenceDataWriter
                         catch (DataverseException ex)
                         {
                             return Fail(item, $"Created with id {source.Id}, but its status could not be set to match " +
-                                              $"the source: {ex.Message}");
+                                              $"the source: {ex.Message}") with { Id = source.Id, Written = body, Undo = undoCreate };
                         }
                     }
 
+                    if (state is not null) foreach (var (k, v) in state) body[k] = v;
+
                     return new ReconcileOutcome(item, true,
                         $"Created with id {source.Id}{(state is null ? string.Empty : ", then set to the source's status")}." +
-                        Note(skipped));
+                        Note(skipped)) { Id = source.Id, Written = body, Undo = undoCreate };
                 }
 
                 default:
@@ -202,11 +243,24 @@ public sealed class ReferenceDataWriter
                         return Fail(item, "nothing could be written - " + string.Join("; ", reasons) + ".");
                     }
 
+                    JsonObject? before = null;
+                    UndoStep? undo = null;
+
+                    if (SaveSnapshots)
+                    {
+                        before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
+                        if (before is null) return Fail(item, "the row is no longer in the target.");
+                        undo = WriteUndo.ForUpdate(entitySet, target.Id, body, before, EntitySetOf);
+                    }
+
                     await _target.UpdateRecordAsync(entitySet, target.Id, body, ct, target.ETag).ConfigureAwait(false);
                     Remember(plan.Entity, source.PrimaryName, target.Id);
                     return new ReconcileOutcome(item, true,
                         $"Updated {body.Count} column(s).{Note(skipped)}" +
-                        (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty));
+                        (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty))
+                    {
+                        Id = target.Id, Written = body, Before = before, Undo = undo
+                    };
                 }
             }
         }
@@ -216,6 +270,36 @@ public sealed class ReferenceDataWriter
             return Fail(item, ex.Message);
         }
     }
+
+    private async Task<JsonObject?> SnapshotAsync(string entitySet, Guid id, CancellationToken ct)
+    {
+        try
+        {
+            return await _target.GetRecordSnapshotAsync(entitySet, id, ct).ConfigureAwait(false);
+        }
+        catch (DataverseException ex)
+        {
+            // No copy, no write: the point of the snapshot is that the write can be taken back.
+            throw new DataverseException("Could not keep a copy of the row before writing it: " + ex.Message, ex.StatusCode);
+        }
+    }
+
+    private async Task<IReadOnlyList<EntityColumn>> TargetColumnsAsync(string logicalName, CancellationToken ct)
+    {
+        if (_targetColumns.TryGetValue(logicalName, out var known)) return known;
+
+        var columns = await _target.GetEntityColumnsAsync(logicalName, ct).ConfigureAwait(false);
+        _targetColumns[logicalName] = columns;
+        return columns;
+    }
+
+    private string TargetPrimaryId(EntitySummary sourceEntity) =>
+        _targetEntities.TryGetValue(sourceEntity.LogicalName, out var target)
+            ? target.PrimaryIdAttribute
+            : sourceEntity.PrimaryIdAttribute;
+
+    private string? EntitySetOf(string logicalName) =>
+        _targetEntities.TryGetValue(logicalName, out var entity) ? entity.EntitySetName : null;
 
     private static string? MoneyWithoutCurrency(EntityComparePlan plan)
     {

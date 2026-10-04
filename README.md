@@ -241,6 +241,23 @@ separate acknowledgement naming how many rows will go — Dataverse deletes cann
 After a run the comparison is re-read automatically, so the grid shows what is now true rather
 than what was true before the writes.
 
+### Run log, plan export and undo
+
+- **Every write is recorded** in a run log: one JSON line per write under
+  `%LOCALAPPDATA%\PPObjectSearch\writes\`, one file per run, with the time, the signed-in account,
+  the environment, the table, row id and action, the columns, what was sent, the outcome, and
+  how to reverse it. **Open run log** shows the file. The membership windows record each add and
+  remove the same way.
+- **The target row is copied before every update or delete.** The copy goes in the run log; a
+  row that cannot be read first is not written.
+- **Undo run** reverses what the window wrote, newest first: deleted rows are re-created with
+  their original id from every column the target accepts on a create (and set back to inactive
+  where they were), updated columns are set back to what they held, and created rows are
+  deleted. Rows Dataverse removed through cascading relationships are not restored, and edits
+  made to the same columns since the run are overwritten.
+- **Export plan…** saves the planned changes as CSV - one line per changed column - so they can be
+  reviewed or attached to a change ticket before anything is applied.
+
 ### The production guard
 
 **Writing to a production environment is refused unless that environment is named in

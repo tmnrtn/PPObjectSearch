@@ -177,6 +177,31 @@ public sealed partial class DataverseClient
         }
     }
 
+    /// <summary>
+    /// The whole row as it stands, kept before an update or delete so the write can be undone. Each
+    /// lookup carries the table it points at and the navigation property that binds it, which is
+    /// what writing it back needs. Null when the row is not there.
+    /// </summary>
+    public async Task<System.Text.Json.Nodes.JsonObject?> GetRecordSnapshotAsync(
+        string entitySetName, Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + $"{entitySetName}({id})", ct,
+                annotations: "Microsoft.Dynamics.CRM.lookuplogicalname,Microsoft.Dynamics.CRM.associatednavigationproperty",
+                maxPageSize: false).ConfigureAwait(false);
+
+            var row = System.Text.Json.Nodes.JsonNode.Parse(doc.RootElement.GetRawText())?.AsObject();
+            row?.Remove("@odata.context");
+            return row;
+        }
+        catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     private static EntityTagHeaderValue IfMatch(string? etag)
     {
         if (string.IsNullOrWhiteSpace(etag)) return EntityTagHeaderValue.Any;

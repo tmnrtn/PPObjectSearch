@@ -6,6 +6,9 @@ namespace PPObjectSearch.Tests.Admin;
 
 public class MembershipApplyViewModelTests
 {
+    private static readonly string LogFolder =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ppobjectsearch-tests", Guid.NewGuid().ToString("N"));
+
     private static readonly WritePermission Allowed =
         WriteGuard.Evaluate(new AppSettings(), "https://dev.crm11.dynamics.com", new EnvironmentTypeInfo(EnvironmentSku.Sandbox, null, null));
 
@@ -35,6 +38,7 @@ public class MembershipApplyViewModelTests
             SourceName = "T",
             EnvironmentName = "Env",
             EnvironmentHost = "env.crm11.dynamics.com",
+            WriteLogFolder = LogFolder,
             Permission = permission,
             Changes = changes ?? Changes(),
             ApplyEach = applyEach,
@@ -55,6 +59,7 @@ public class MembershipApplyViewModelTests
             SourceName = "Group",
             EnvironmentName = "Env",
             EnvironmentHost = "env.crm11.dynamics.com",
+            WriteLogFolder = LogFolder,
             Permission = permission,
             Changes = changes ?? Changes(),
             ApplyAll = applyAll,
@@ -323,6 +328,7 @@ public class MembershipApplyViewModelTests
             SourceName = "G",
             EnvironmentName = "Env",
             EnvironmentHost = "env.crm11.dynamics.com",
+            WriteLogFolder = LogFolder,
             Permission = Allowed,
             Changes = [new(MembershipChangeKind.Add, A, "A", null, "r")],
             AddVerb = "Pull in",
@@ -349,6 +355,7 @@ public class MembershipApplyViewModelTests
             SourceName = "G",
             EnvironmentName = "Env",
             EnvironmentHost = "env.crm11.dynamics.com",
+            WriteLogFolder = LogFolder,
             Permission = Allowed,
             Changes = [new(MembershipChangeKind.Add, A, "A", null, "r"), new(MembershipChangeKind.Add, B, "B", null, "r")],
             ApplyEach = applyEach,
@@ -460,5 +467,28 @@ public class MembershipApplyViewModelTests
         Assert.Equal("Failed - sync refused", vm.Status);
         Assert.True(vm.AnyWritesAttempted);
         Assert.False(vm.ApplyCommand.CanExecute(null));
+    }
+
+    // ---------------------------------------------------------------- audit
+
+    [Fact]
+    public async Task Each_change_made_is_logged_and_the_plan_can_be_exported_first()
+    {
+        var vm = PerRow(Allowed, (change, _) => change.SystemUserId == B
+            ? Task.FromException(new InvalidOperationException("denied"))
+            : Task.CompletedTask);
+        vm.RemoveAcknowledged = true;
+
+        var plan = vm.PlanLines();
+        Assert.Equal(4, plan.Count);
+        Assert.Contains(plan, l => l.Contains(",Remove,No,Remove C,"));
+
+        await RunAsync(vm);
+
+        var entries = WriteLog.Read(vm.RunLogPath!);
+        Assert.Equal(2, entries.Count);
+        Assert.Contains(entries, e => e.Action == "Add" && e.Id == A && e.Succeeded);
+        Assert.Contains(entries, e => e.Action == "Remove" && e.Id == B && !e.Succeeded && e.Message == "denied");
+        Assert.All(entries, e => Assert.Equal("membership", e.Tool));
     }
 }

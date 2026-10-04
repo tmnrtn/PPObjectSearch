@@ -40,7 +40,24 @@ public class ReconcileViewModelTests
             sourceTruncated: sourceTruncated).Rows;
     }
 
+    /// <summary>The target row as read just before a write: B before its update, C before its delete.</summary>
+    private static string Snapshot(RecordedRequest request) =>
+        request.Url.Contains(G(3).ToString())
+            ? $$"""{"@odata.etag":"W/\"9\"","{{PrimaryId}}":"{{G(3)}}","new_code":"C","new_name":"gone","createdon":"2026-01-01T00:00:00Z"}"""
+            : $$"""{"@odata.etag":"W/\"8\"","{{PrimaryId}}":"{{G(2)}}","new_code":"B","new_name":"old"}""";
+
+    private const string TargetColumns = """
+        {"value":[
+          {"LogicalName":"new_thingid","AttributeTypeName":{"Value":"UniqueidentifierType"},"IsPrimaryId":true,"IsValidForCreate":true},
+          {"LogicalName":"new_code","AttributeTypeName":{"Value":"StringType"},"IsValidForCreate":true},
+          {"LogicalName":"new_name","AttributeTypeName":{"Value":"StringType"},"IsValidForCreate":true},
+          {"LogicalName":"createdon","AttributeTypeName":{"Value":"DateTimeType"},"IsValidForCreate":false}
+        ]}
+        """;
+
     private static FakeHttpHandler Accepting() => new FakeHttpHandler()
+        .On(HttpMethod.Get, "new_things(", r => FakeHttpHandler.Json(Snapshot(r)))
+        .OnJson(HttpMethod.Get, "/Attributes?", TargetColumns)
         .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent)
         .OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent)
         .OnStatus(HttpMethod.Delete, "new_things(", HttpStatusCode.NoContent);
@@ -48,7 +65,13 @@ public class ReconcileViewModelTests
     private static ReconcileViewModel Window(FakeHttpHandler handler, WritePermission? permission = null, bool sourceTruncated = false) =>
         new(Rows(sourceTruncated), "Dev", "Test", Fakes.Dataverse(handler),
             new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase) { [Table] = Entity() },
-            permission ?? Allowed);
+            permission ?? Allowed, writeLogFolder: LogFolder)
+        {
+            Confirm = _ => true
+        };
+
+    private static readonly string LogFolder =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ppobjectsearch-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
     public void Delete_is_off_until_switched_on_and_then_needs_its_own_acknowledgement()
@@ -162,6 +185,7 @@ public class ReconcileViewModelTests
     {
         var patches = 0;
         var handler = new FakeHttpHandler()
+            .On(HttpMethod.Get, "new_things(", r => FakeHttpHandler.Json(Snapshot(r)))
             .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent)
             .On(HttpMethod.Patch, "new_things(", _ => ++patches == 1
                 ? FakeHttpHandler.Json(FakeHttpHandler.ErrorJson("throttled"), HttpStatusCode.TooManyRequests)
@@ -178,5 +202,92 @@ public class ReconcileViewModelTests
         Assert.False(vm.HasFailures);
         Assert.Equal(1, handler.Requests.Count(r => r.Method == HttpMethod.Post));
         Assert.Equal(2, handler.Requests.Count(r => r.Method == HttpMethod.Patch));
+    }
+
+    [Fact]
+    public async Task Every_write_is_logged_with_the_row_as_it_was()
+    {
+        var vm = Window(Accepting());
+        vm.Delete = true;
+        vm.DeleteAcknowledged = true;
+
+        await vm.ApplyCommand.ExecuteAsync(null);
+
+        var entries = WriteLog.Read(vm.RunLogPath!);
+        Assert.Equal(3, entries.Count);
+        Assert.All(entries, e => Assert.True(e.Succeeded));
+
+        var update = entries.Single(e => e.Action == "Update");
+        Assert.Equal("old", update.Before!["new_name"]!.GetValue<string>());
+        Assert.Equal("changed", update.After!["new_name"]!.GetValue<string>());
+        Assert.Equal(new[] { "new_name" }, update.Columns);
+
+        var delete = entries.Single(e => e.Action == "Delete");
+        Assert.Equal(G(3), delete.Id);
+        Assert.Equal("gone", delete.Before!["new_name"]!.GetValue<string>());
+        Assert.Equal(UndoMethod.Create, delete.Undo!.Method);
+    }
+
+    [Fact]
+    public async Task Undo_reverses_each_write_newest_first()
+    {
+        var handler = Accepting();
+        var vm = Window(handler);
+        vm.Delete = true;
+        vm.DeleteAcknowledged = true;
+
+        await vm.ApplyCommand.ExecuteAsync(null);
+        Assert.True(vm.CanUndo);
+        Assert.Equal(3, vm.UndoCount);
+
+        var before = handler.Requests.Count;
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        var undo = handler.Requests.Skip(before).ToList();
+        Assert.Equal(3, undo.Count);
+
+        // The delete ran last, so it is put back first: same id, every column the target accepts on a create.
+        Assert.Equal(HttpMethod.Post, undo[0].Method);
+        Assert.Contains($"\"{PrimaryId}\":\"{G(3)}\"", undo[0].Body);
+        Assert.Contains("\"new_name\":\"gone\"", undo[0].Body);
+        Assert.DoesNotContain("createdon", undo[0].Body);
+
+        Assert.Equal(HttpMethod.Patch, undo[1].Method);
+        Assert.Contains(G(2).ToString(), undo[1].Url);
+        Assert.Equal("{\"new_name\":\"old\"}", undo[1].Body);
+
+        Assert.Equal(HttpMethod.Delete, undo[2].Method);
+        Assert.Contains(G(1).ToString(), undo[2].Url);
+
+        Assert.StartsWith("Undone - 3 write(s)", vm.Status);
+        Assert.False(vm.CanUndo);
+        Assert.Contains(WriteLog.Read(vm.RunLogPath!), e => e.Action == "UndoCreate" && e.Succeeded);
+    }
+
+    [Fact]
+    public async Task A_row_that_cannot_be_copied_first_is_not_written()
+    {
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "new_things(", HttpStatusCode.Forbidden, "no read")
+            .OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
+        var vm = Window(handler);
+        vm.Create = false;
+
+        await vm.ApplyCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(handler.Requests, r => r.Method == HttpMethod.Patch);
+        Assert.Contains("copy of the row", vm.Rows.Single(r => r.Action == ReconcileAction.Update).Result);
+    }
+
+    [Fact]
+    public void The_plan_exports_one_line_per_changed_column()
+    {
+        var vm = Window(Accepting());
+
+        var lines = ReconcilePlanExport.Lines(vm.Rows.Select(r => (r.Item, r.IsIncluded, r.ResultLabel)), "Dev", "Test");
+
+        Assert.Equal(4, lines.Count);
+        Assert.Contains(lines, l => l.StartsWith("new_thing,Update,Yes,B,") && l.Contains(",new_name,changed,old,"));
+        Assert.Contains(lines, l => l.StartsWith("new_thing,Delete,No,C,"));
     }
 }

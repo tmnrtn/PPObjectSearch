@@ -813,7 +813,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
         var viewModel = new ReconcileViewModel(
             actionable, SourceHeader, TargetHeader, targetClient, targetEntities, permission,
-            Source?.EnvironmentSku ?? EnvironmentSku.Unknown);
+            Source?.EnvironmentSku ?? EnvironmentSku.Unknown, Target?.AccountName);
 
         var window = new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() };
         // Read from the view model rather than the dialog result: closing with the title bar's X
