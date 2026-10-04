@@ -204,6 +204,64 @@
                           IsEnabled="{Binding IsConnected}"
                           ToolTip="Whether the object has an unmanaged customization on top of its managed layer. Unknown until 'Check layers' has been run." />
 
+                <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,0" IsChecked="{Binding FavouritesOnly}"
+                              IsEnabled="{Binding IsConnected}" ToolTip="Only the objects you have starred"
+                              AutomationProperties.Name="Favourites only">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE734;" Margin="0,0,5,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Favourites" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <Button Content="Saved" Margin="0,0,6,0" core:Ui.OpensMenu="True" IsEnabled="{Binding IsConnected}"
+                        ToolTip="Searches saved in this environment - their words and filters">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Save this search..." Command="{Binding SaveSearchCommand}" />
+                            <Separator Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}" />
+                            <MenuItem Header="Saved searches" IsEnabled="False"
+                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}" />
+                            <MenuItem Header="Open" ItemsSource="{Binding SavedSearches}"
+                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Header" Value="{Binding Name}" />
+                                        <Setter Property="Command" Value="{Binding DataContext.ApplySavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <MenuItem Header="Delete" ItemsSource="{Binding SavedSearches}"
+                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Header" Value="{Binding Name}" />
+                                        <Setter Property="Command" Value="{Binding DataContext.DeleteSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <Button Content="Recent" Margin="0,0,6,0" core:Ui.OpensMenu="True"
+                        IsEnabled="{Binding HasRecentObjects}"
+                        ToolTip="Objects whose details you opened lately in this environment">
+                    <Button.ContextMenu>
+                        <ContextMenu ItemsSource="{Binding RecentObjects}">
+                            <ContextMenu.ItemContainerStyle>
+                                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                    <Setter Property="Header" Value="{Binding Label}" />
+                                    <Setter Property="InputGestureText" Value="{Binding TypeName}" />
+                                    <Setter Property="Command" Value="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Setter Property="CommandParameter" Value="{Binding}" />
+                                </Style>
+                            </ContextMenu.ItemContainerStyle>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
                 <Button Style="{StaticResource LinkButton}" Content="Clear" Command="{Binding ClearFiltersCommand}"
                         Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVis}}" />
             </WrapPanel>
@@ -271,6 +329,7 @@
                         <MenuItem Header="Details..." Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
+                        <MenuItem Header="{Binding FavouriteHeader}" Command="{Binding ToggleFavouriteCommand}" />
                         <Separator />
                         <MenuItem Header="{Binding CopyNameHeader}" Command="{Binding CopyNameCommand}" />
                         <MenuItem Header="{Binding CopyLinkHeader}" Command="{Binding CopyLinkCommand}" />
@@ -290,6 +349,16 @@
                 </DataGrid.ContextMenu>
 
                 <DataGrid.Columns>
+                    <!-- A star for a favourite; sorting by it brings them together. -->
+                    <DataGridTemplateColumn Width="26" SortMemberPath="IsFavourite" CanUserResize="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE735;" FontSize="11" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource Amber}" ToolTip="Favourite"
+                                           Visibility="{Binding IsFavourite, Converter={StaticResource BoolToVis}}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Name" Width="*" MinWidth="220" SortMemberPath="PrimaryLabel"
                                             HeaderStyle="{StaticResource FirstHeader}">
                         <DataGridTemplateColumn.CellTemplate>

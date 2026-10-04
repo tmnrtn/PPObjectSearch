@@ -30,6 +30,10 @@ straight into the maker portal.
   name, display name, schema name, object type, related table, owner and object id.
 - **Filters** — type, sub type, managed state and layer, each listing what is present with a count.
   A filter in use is highlighted, and **Clear** resets them all.
+- **Favourites, saved searches and recent objects** — star objects (right-click, or the star
+  column) and show only them with **Favourites**; **Saved** keeps a search's words and filters under
+  a name; **Recent** reopens the details of objects you looked at lately. All per environment, in
+  `%LOCALAPPDATA%\PPObjectSearch\library.json`.
 - **Name as a maker portal link** — click to open the object in <https://make.powerapps.com>.
 - **Detail pane** — the selected object's related table, owner, id and layer state, with buttons to
   open it, see its solutions and dependencies, or copy its name, link or id. **Open in details**

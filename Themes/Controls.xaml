@@ -370,6 +370,33 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
+    <!-- An on/off filter that sits among the filter boxes: a secondary button, accented while on. -->
+    <Style TargetType="ToggleButton" x:Key="FilterToggle">
+        <Setter Property="Template" Value="{StaticResource ButtonTemplate}" />
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Hover}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Secondary (default) button. -->
     <Style TargetType="Button">
         <Setter Property="Template" Value="{StaticResource ButtonTemplate}" />

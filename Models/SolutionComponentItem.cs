@@ -78,6 +78,15 @@ public sealed class SolutionComponentItem : ObservableObject
         }
     }
 
+    private bool _isFavourite;
+    /// <summary>Starred by the user in this environment. Kept in the user library, not the cache.</summary>
+    [JsonIgnore]
+    public bool IsFavourite
+    {
+        get => _isFavourite;
+        set => SetProperty(ref _isFavourite, value);
+    }
+
     [JsonIgnore]
     public string UnmanagedLayerLabel => HasUnmanagedLayer switch
     {
