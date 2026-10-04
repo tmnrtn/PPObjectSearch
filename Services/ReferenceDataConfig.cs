@@ -41,6 +41,14 @@ public sealed class ReferenceEntityConfig
     /// </summary>
     public List<string>? ExcludedColumns { get; set; }
 
+    /// <summary>
+    /// The columns chosen for comparison when the configuration was saved. With this recorded, a
+    /// column added to the table later is in neither list - it is new, and left out until someone
+    /// chooses it, rather than being compared and written because nobody excluded it. Null for a
+    /// configuration saved before this was recorded, which keeps the old behaviour.
+    /// </summary>
+    public List<string>? ComparedColumns { get; set; }
+
     public bool IsEnabled { get; set; } = true;
 
     public ReferenceEntityConfig Clone() => new()
@@ -52,6 +60,7 @@ public sealed class ReferenceEntityConfig
         KeyColumns = KeyColumns is null ? null : new List<string>(KeyColumns),
         Filter = Filter,
         ExcludedColumns = ExcludedColumns is null ? null : new List<string>(ExcludedColumns),
+        ComparedColumns = ComparedColumns is null ? null : new List<string>(ComparedColumns),
         IsEnabled = IsEnabled
     };
 }

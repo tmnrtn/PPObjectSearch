@@ -163,7 +163,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
             }
 
             BuildKeyOptions(keys);
-            ApplyExclusions(_config.ExcludedColumns);
+            ApplyExclusions(_config.ExcludedColumns, _config.ComparedColumns);
             SelectSavedKey(keys);
 
             Status = keys.Count == 0
@@ -227,6 +227,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         _config.KeySource = key.Source;
         _config.Filter = string.IsNullOrWhiteSpace(Filter) ? null : Filter.Trim();
         _config.ExcludedColumns = Columns.Where(c => !c.IsCompared).Select(c => c.LogicalName).ToList();
+        _config.ComparedColumns = Columns.Where(c => c.IsCompared).Select(c => c.LogicalName).ToList();
 
         return true;
     }
@@ -308,12 +309,20 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         foreach (var column in Columns) column.IsKey = set.Contains(column.LogicalName);
     }
 
-    private void ApplyExclusions(IReadOnlyList<string>? excluded)
+    private void ApplyExclusions(IReadOnlyList<string>? excluded, IReadOnlyList<string>? compared = null)
     {
         var set = (excluded ?? SystemColumns.DefaultExclusions(Columns.Select(c => c.Column)))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var column in Columns) column.IsCompared = !set.Contains(column.LogicalName);
+        // A column in neither saved list arrived after the configuration was saved: it starts
+        // unticked, as the comparison treats it, until someone chooses it.
+        var chosen = compared?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var column in Columns)
+        {
+            column.IsCompared = !set.Contains(column.LogicalName) &&
+                                (chosen is null || chosen.Contains(column.LogicalName));
+        }
     }
 
     private void SetAllCompared(bool value)

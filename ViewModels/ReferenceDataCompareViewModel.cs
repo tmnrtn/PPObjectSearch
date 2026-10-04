@@ -887,6 +887,26 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         RaiseCommandStates();
     }
 
+    /// <summary>
+    /// A table whose columns were never chosen by hand still has a set it is compared on - the one
+    /// its last comparison used. Saving records it, so a column the table gains afterwards is
+    /// recognised as new rather than compared because it was never excluded.
+    /// </summary>
+    private ReferenceEntityConfig WithComparedColumns(ReferenceEntityConfig config)
+    {
+        if (config.ComparedColumns is not null) return config;
+
+        var plan = _fetched.LastOrDefault(f => string.Equals(
+            f.Plan.Entity.LogicalName, config.LogicalName, StringComparison.OrdinalIgnoreCase))?.Plan;
+
+        if (plan is not null)
+        {
+            config.ComparedColumns = plan.ValueColumns.Select(c => c.LogicalName).ToList();
+        }
+
+        return config;
+    }
+
     /// <summary>A configuration that has never been saved is asked for its name first.</summary>
     private void SaveConfiguration()
     {
@@ -905,7 +925,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         var saved = new ReferenceDataConfig
         {
             Name = name,
-            Entities = Entities.Select(e => e.Config.Clone()).ToList(),
+            Entities = Entities.Select(e => WithComparedColumns(e.Config.Clone())).ToList(),
             MatchLookupsByName = MatchLookupsByName,
             MaxRowsPerEntity = MaxRowsPerEntity
         };

@@ -78,6 +78,34 @@ public class ReferenceDataPlannerTests
     }
 
     [Fact]
+    public async Task A_column_added_after_the_configuration_was_saved_is_not_compared()
+    {
+        var columns = StandardSource.Append(Attr("new_secreturl", "StringType")).ToArray();
+        var env = Standard(columns, columns);
+
+        var result = await env.Planner().BuildAsync(Config(c =>
+        {
+            c.ExcludedColumns = new List<string> { "new_thingid", "createdon", "modifiedby" };
+            c.ComparedColumns = new List<string> { "new_name", "new_code", "new_amount" };
+        }), true);
+
+        Assert.DoesNotContain(result.Plan!.ValueColumns, c => c.LogicalName == "new_secreturl");
+        Assert.Contains(result.Warnings, w => w.Contains("added since this configuration was saved") && w.Contains("new_secreturl"));
+    }
+
+    [Fact]
+    public async Task A_configuration_without_a_recorded_choice_compares_everything_not_excluded()
+    {
+        var columns = StandardSource.Append(Attr("new_secreturl", "StringType")).ToArray();
+        var env = Standard(columns, columns);
+
+        var result = await env.Planner().BuildAsync(Config(c =>
+            c.ExcludedColumns = new List<string> { "new_thingid", "createdon", "modifiedby" }), true);
+
+        Assert.Contains(result.Plan!.ValueColumns, c => c.LogicalName == "new_secreturl");
+    }
+
+    [Fact]
     public async Task Money_brings_its_currency_into_the_comparison_even_when_excluded()
     {
         var columns = StandardSource.Append(Attr("transactioncurrencyid", "LookupType")).ToArray();

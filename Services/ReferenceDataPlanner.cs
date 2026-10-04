@@ -81,6 +81,9 @@ public sealed class ReferenceDataPlanner
         var keyResult = ResolveKeyColumns(config, entity, shared);
         if (keyResult.Failure is not null) return new PlanResult(null, warnings, keyResult.Failure);
 
+        bool IsKeyColumn(EntityColumn column) =>
+            keyResult.Columns.Any(k => k.LogicalName.Equals(column.LogicalName, StringComparison.OrdinalIgnoreCase));
+
         var excluded = config.ExcludedColumns is null
             ? SystemColumns.DefaultExclusions(shared)
             : config.ExcludedColumns;
@@ -88,6 +91,25 @@ public sealed class ReferenceDataPlanner
         var excludedSet = excluded.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var valueColumns = shared.Where(c => !excludedSet.Contains(c.LogicalName)).ToList();
+
+        // Columns the table has gained since the configuration was saved. Nobody chose them, so
+        // they are neither compared nor written - an environment-specific URL or secret added
+        // later must not start flowing between environments on its own.
+        if (config.ComparedColumns is { } chosen)
+        {
+            var chosenSet = chosen.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var added = valueColumns
+                .Where(c => !chosenSet.Contains(c.LogicalName) && !IsKeyColumn(c))
+                .ToList();
+
+            if (added.Count > 0)
+            {
+                valueColumns.RemoveAll(added.Contains);
+                warnings.Add($"{logicalName}: {added.Count} column(s) added since this configuration was saved are " +
+                             $"not compared until chosen in Settings ({string.Join(", ", added.Take(6).Select(c => c.LogicalName))}" +
+                             $"{(added.Count > 6 ? ", ..." : string.Empty)}).");
+            }
+        }
 
         // An amount means nothing without its currency: compared alone, 100 EUR matches 100 USD, and
         // written alone it lands in whatever currency the target defaults to. So wherever money is

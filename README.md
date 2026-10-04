@@ -443,6 +443,10 @@ fixed and the app restarted.
           // list) to take the defaults: the primary id and the created/modified/owner columns.
           "ExcludedColumns": ["contoso_categoryid", "createdon", "modifiedon"],
 
+          // The columns chosen for comparison, recorded on save. A column the table gains later is
+          // in neither list, so it is reported as new and left out until it is chosen in Settings.
+          "ComparedColumns": ["contoso_code", "contoso_name", "contoso_sortorder"],
+
           "IsEnabled": true
         }
       ]
