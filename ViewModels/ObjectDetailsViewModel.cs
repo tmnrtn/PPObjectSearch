@@ -50,7 +50,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         OpenLinkCommand = new RelayCommand(_ => OpenUrl(item.MakerUrl), _ => item.MakerUrl is not null);
         OpenInPowerAutomateCommand = new RelayCommand(_ => OpenUrl(FlowUrl), _ => FlowUrl is not null);
-        RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
+        RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
         ViewLayerChangesCommand = new RelayCommand(
             p => ShowLayerChanges(p as ComponentLayer ?? SelectedLayer),
             p => (p as ComponentLayer ?? SelectedLayer) is not null);
@@ -949,7 +949,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     /// <summary>Stops following the tab, so a closed window is not kept alive by the tab it came from.</summary>
     public void Detach()
     {
+        _detached = true;
         if (Session is not null) Session.PropertyChanged -= OnSessionChanged;
+
+        // A row count can be many requests; nobody is left to read the answer.
+        _countCts?.Cancel();
     }
 
     private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -963,9 +967,15 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         get => _isBusy;
         private set
         {
-            if (SetProperty(ref _isBusy, value)) OnPropertyChanged(nameof(StatusText));
+            if (!SetProperty(ref _isBusy, value)) return;
+
+            OnPropertyChanged(nameof(StatusText));
+            RefreshCommand?.RaiseCanExecuteChanged();
         }
     }
+
+    /// <summary>Set when the window closes, so work still in flight stops at its next step.</summary>
+    private bool _detached;
 
     private string _status = string.Empty;
     public string Status
@@ -979,6 +989,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        // The first load is started directly rather than through RefreshCommand, so the command's
+        // own guard does not cover it: a second load running alongside would clear the lists and
+        // then both would fill them, listing every solution, dependency and layer twice.
+        if (IsBusy || _detached) return;
+
         IsBusy = true;
         Status = "Loading...";
 
@@ -1009,13 +1024,16 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
 
             // The stored count is one quick request, so it shows before the child components load.
+            if (_detached) return;
             if (IsTable) await LoadRowCountSnapshotAsync();
             if (IsTable) await LoadChildComponentsAsync(problems);
+            if (_detached) return;
             if (HasRunHistory) await LoadRunsAsync(problems);
             if (HasTraceLog) await LoadTraceLogAsync(problems);
             if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
             if (HasSource) await LoadSourceAsync(problems);
 
+            if (_detached) return;
             try
             {
                 var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType);

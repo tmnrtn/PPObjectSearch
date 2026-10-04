@@ -44,7 +44,7 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
         _leftItem = leftItem;
         _rightItem = rightItem;
 
-        RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
+        RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
     }
 
     public string ComponentLabel { get; }
@@ -74,7 +74,10 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        private set
+        {
+            if (SetProperty(ref _isBusy, value)) RefreshCommand?.RaiseCanExecuteChanged();
+        }
     }
 
     private string _status = string.Empty;
@@ -86,6 +89,9 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
 
     public async Task LoadAsync()
     {
+        // Started directly as well as from Refresh; two loads at once would both fill the lists.
+        if (IsBusy) return;
+
         IsBusy = true;
         Status = "Loading both environments...";
 
