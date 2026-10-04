@@ -136,7 +136,7 @@ public sealed class ReferenceDataWriter
 
                     var skipped = new List<string>();
 
-                    var body = await BuildBodyAsync(source, plan.ValueColumns, true, plan.MatchLookupsByName, skipped, ct)
+                    var body = await BuildBodyAsync(source, null, plan.ValueColumns, true, plan.MatchLookupsByName, skipped, ct)
                         .ConfigureAwait(false);
 
                     // The source id travels with the row so the two environments converge on one
@@ -157,7 +157,7 @@ public sealed class ReferenceDataWriter
                     if (columns.Count == 0) return new ReconcileOutcome(item, true, "Nothing to change.");
 
                     var skipped = new List<string>();
-                    var body = await BuildBodyAsync(source, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
+                    var body = await BuildBodyAsync(source, target, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
 
                     // Rows matched on another key can still carry different primary ids. An update
                     // cannot change a row's id, so that difference is reported rather than written.
@@ -208,6 +208,7 @@ public sealed class ReferenceDataWriter
 
     private async Task<Dictionary<string, object?>> BuildBodyAsync(
         DataRecord source,
+        DataRecord? target,
         IReadOnlyList<EntityColumn> columns,
         bool isCreate,
         bool matchLookupsByName,
@@ -234,7 +235,7 @@ public sealed class ReferenceDataWriter
 
             if (column.IsLookup)
             {
-                await AddLookupAsync(body, source, column, raw, isCreate, matchLookupsByName, ct).ConfigureAwait(false);
+                await AddLookupAsync(body, source, target, column, raw, isCreate, matchLookupsByName, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -247,13 +248,16 @@ public sealed class ReferenceDataWriter
     private async Task AddLookupAsync(
         Dictionary<string, object?> body,
         DataRecord source,
+        DataRecord? target,
         EntityColumn column,
         string? raw,
         bool isCreate,
         bool matchLookupsByName,
         CancellationToken ct)
     {
-        var navigation = source.NavigationProperties.TryGetValue(column.SelectName, out var nav) ? nav : null;
+        // Dataverse only annotates a lookup that has a value, so a source that is empty here says
+        // nothing about how to bind it. The target row, which does have a value to clear, does.
+        var navigation = NavigationOf(source, column) ?? NavigationOf(target, column);
 
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -329,6 +333,12 @@ public sealed class ReferenceDataWriter
 
         body[$"{navigation}@odata.bind"] = $"/{related.EntitySetName}({id})";
     }
+
+    private static string? NavigationOf(DataRecord? record, EntityColumn column) =>
+        record is not null && record.NavigationProperties.TryGetValue(column.SelectName, out var nav) &&
+        !string.IsNullOrWhiteSpace(nav)
+            ? nav
+            : null;
 
     private async Task<Guid?> ResolveAsync(EntitySummary related, string label, CancellationToken ct)
     {

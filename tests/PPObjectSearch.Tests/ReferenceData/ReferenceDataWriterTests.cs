@@ -865,11 +865,26 @@ public class ReferenceDataWriterTests
     }
 
     [Fact]
+    public async Task Apply_update_clears_a_lookup_using_the_target_rows_navigation_property()
+    {
+        // Dataverse does not annotate an empty lookup, so the source carries no navigation property.
+        var handler = new FakeHttpHandler().OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
+        var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", null, null, targetTable: null, navigation: null).Build();
+        var target = Row(G(2)).With("new_code", "A").WithLookup("new_parentid", G(20), "Parent").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent }, source, target));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        var body = BodyOf(Assert.Single(handler.Requests));
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("new_ParentId@odata.bind").ValueKind);
+    }
+
+    [Fact]
     public async Task Apply_update_cannot_clear_a_lookup_without_its_navigation_property()
     {
         var handler = new FakeHttpHandler();
         var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", null, null, targetTable: null, navigation: null).Build();
-        var target = Row(G(2)).With("new_code", "A").WithLookup("new_parentid", G(20), "Parent").Build();
+        var target = Row(G(2)).With("new_code", "A").WithLookup("new_parentid", G(20), "Parent", navigation: null).Build();
 
         var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent }, source, target));
 
