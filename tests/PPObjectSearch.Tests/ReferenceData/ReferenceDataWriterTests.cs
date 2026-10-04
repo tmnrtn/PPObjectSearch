@@ -850,6 +850,63 @@ public class ReferenceDataWriterTests
             outcome.Message);
     }
 
+    private static readonly EntityColumn State = Col("statecode", "StateType", validForCreate: false);
+    private static readonly EntityColumn Status = Col("statuscode", "StatusType");
+
+    [Fact]
+    public async Task An_inactive_row_is_created_then_given_its_state_and_status()
+    {
+        var handler = new FakeHttpHandler()
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent)
+            .OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
+        var source = Row(G(1)).With("new_code", "A").With("new_name", "Old").With("statecode", "1").With("statuscode", "2").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Name, State, Status }, source, null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Contains("then set to the source's status", outcome.Message);
+        Assert.DoesNotContain("statecode", outcome.Message);
+
+        Assert.Equal(new[] { "new_name", PrimaryId }, PropertyNames(BodyOf(handler.Requests[0])));
+
+        var patch = handler.Requests[1];
+        Assert.Equal(HttpMethod.Patch, patch.Method);
+        Assert.Equal($"{Fakes.ApiRoot}new_things({G(1)})", patch.Url);
+        var state = BodyOf(patch);
+        Assert.Equal(1, state.GetProperty("statecode").GetInt64());
+        Assert.Equal(2, state.GetProperty("statuscode").GetInt64());
+    }
+
+    [Fact]
+    public async Task An_active_row_is_created_in_one_request()
+    {
+        var handler = new FakeHttpHandler().OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+        var source = Row(G(1)).With("new_code", "A").With("statecode", "0").With("statuscode", "1").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { State, Status }, source, null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        var post = Assert.Single(handler.Requests);
+        Assert.Equal(1, BodyOf(post).GetProperty("statuscode").GetInt64());
+    }
+
+    [Fact]
+    public async Task A_change_of_state_is_written_with_its_status()
+    {
+        var handler = new FakeHttpHandler().OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
+        var stateful = Col("statecode", "StateType");
+
+        // Deactivated in the source; the status code happens to be 1 on both sides, so only the
+        // state differs - but the status still has to travel with it.
+        var source = Row(G(1)).With("new_code", "A").With("statecode", "1").With("statuscode", "1").Build();
+        var target = Row(G(2)).With("new_code", "A").With("statecode", "0").With("statuscode", "1").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { stateful, Status }, source, target));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Equal(new[] { "statecode", "statuscode" }, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
+    }
+
     [Fact]
     public async Task Money_is_never_written_without_its_currency()
     {

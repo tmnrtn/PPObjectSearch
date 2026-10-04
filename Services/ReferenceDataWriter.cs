@@ -149,9 +149,29 @@ public sealed class ReferenceDataWriter
                     // id instead of drifting into two rows only an alternate key can tie together.
                     body[plan.Entity.PrimaryIdAttribute] = source.Id.ToString();
 
+                    // A row is always created in its default state. An inactive source row's status
+                    // would be refused against that state, so state and status are set afterwards.
+                    var state = DeferredState(plan, source, body, skipped);
+
                     await _target.CreateRecordAsync(entitySet, source.Id, body, ct).ConfigureAwait(false);
                     Remember(plan.Entity, source.PrimaryName, source.Id);
-                    return new ReconcileOutcome(item, true, $"Created with id {source.Id}.{Note(skipped)}");
+
+                    if (state is not null)
+                    {
+                        try
+                        {
+                            await _target.UpdateRecordAsync(entitySet, source.Id, state, ct).ConfigureAwait(false);
+                        }
+                        catch (DataverseException ex)
+                        {
+                            return Fail(item, $"Created with id {source.Id}, but its status could not be set to match " +
+                                              $"the source: {ex.Message}");
+                        }
+                    }
+
+                    return new ReconcileOutcome(item, true,
+                        $"Created with id {source.Id}{(state is null ? string.Empty : ", then set to the source's status")}." +
+                        Note(skipped));
                 }
 
                 default:
@@ -164,6 +184,10 @@ public sealed class ReferenceDataWriter
 
                     var skipped = new List<string>();
                     var body = await BuildBodyAsync(source, target, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
+
+                    // A change of state needs its status alongside, or Dataverse pairs the new state
+                    // with a status that belongs to the old one and refuses it.
+                    PairStateWithStatus(plan, source, body);
 
                     // Rows matched on another key can still carry different primary ids. An update
                     // cannot change a row's id, so that difference is reported rather than written.
@@ -210,6 +234,57 @@ public sealed class ReferenceDataWriter
         $"the primary id ({primaryIdAttribute}) differs, and an update cannot change a row's id";
 
     /// <summary>Read-only columns are left out rather than failing the row, but never silently.</summary>
+    private static EntityColumn? Column(EntityComparePlan plan, string typeName) =>
+        plan.ValueColumns.FirstOrDefault(c => c.TypeName == typeName);
+
+    /// <summary>
+    /// Takes state and status out of a create when the source row is not in the default state (0),
+    /// and returns them to be written once the row exists. Null when the create can carry them.
+    /// </summary>
+    private static Dictionary<string, object?>? DeferredState(
+        EntityComparePlan plan, DataRecord source, Dictionary<string, object?> body, List<string> skipped)
+    {
+        var stateColumn = Column(plan, "StateType");
+        var statusColumn = Column(plan, "StatusType");
+        if (stateColumn is null && statusColumn is null) return null;
+
+        var state = stateColumn is null ? null : ToWriteValue(source.Raw(stateColumn.SelectName), stateColumn);
+        var status = statusColumn is null ? null : ToWriteValue(source.Raw(statusColumn.SelectName), statusColumn);
+
+        // A row known to be in the default state is created as it is. Where the state is not being
+        // compared, the status is set afterwards, since nothing says it belongs to the default state.
+        var needsDeferring = state is not null ? state is not 0L : status is not null;
+        if (!needsDeferring) return null;
+
+        var deferred = new Dictionary<string, object?>();
+
+        if (stateColumn is not null && state is not null)
+        {
+            deferred[stateColumn.LogicalName] = state;
+            body.Remove(stateColumn.LogicalName);
+            skipped.Remove(stateColumn.LogicalName);
+        }
+
+        if (statusColumn is not null && status is not null)
+        {
+            deferred[statusColumn.LogicalName] = status;
+            body.Remove(statusColumn.LogicalName);
+        }
+
+        return deferred;
+    }
+
+    private static void PairStateWithStatus(EntityComparePlan plan, DataRecord source, Dictionary<string, object?> body)
+    {
+        if (Column(plan, "StateType") is not { } stateColumn || !body.ContainsKey(stateColumn.LogicalName)) return;
+        if (Column(plan, "StatusType") is not { } statusColumn || body.ContainsKey(statusColumn.LogicalName)) return;
+
+        if (ToWriteValue(source.Raw(statusColumn.SelectName), statusColumn) is { } status)
+        {
+            body[statusColumn.LogicalName] = status;
+        }
+    }
+
     private static string Note(IReadOnlyList<string> skipped) =>
         skipped.Count == 0
             ? string.Empty
