@@ -36,7 +36,9 @@ straight into the maker portal.
   goes straight to a tab of the details window - Design, Run history or Definition for a flow;
   Columns, Relationships, Forms or Views for a table. A cloud flow shows its last run, and how
   many of its last 20 failed; an environment variable shows its current value. Right-click a row
-  for the same copy actions; the pane can be hidden from the toolbar.
+  for the same copy actions; the pane can be hidden from the toolbar. Select several rows
+  (Shift/Ctrl+click) and the menu copies all their names, links or ids - one per line - or copies
+  them as a table for Excel, opens details for each, checks their layers or exports just them.
 - **Object details** (*Details…*, or double-click a row) — solutions, layers and dependencies for
   any object, with the type's own tabs first. Each window names the environment it came from. Open
   as many as you like: each opens a step down and right from the last, and **Close all details**

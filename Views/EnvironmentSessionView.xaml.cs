@@ -25,8 +25,27 @@ public partial class EnvironmentSessionView : UserControl
         // Null for the header row or the empty space below the rows - leave the selection alone.
         if (ItemsControl.ContainerFromElement(grid, (DependencyObject)e.OriginalSource) is not DataGridRow row) return;
 
-        // Assigning SelectedItem replaces an extended selection, so the menu acts on one known row.
-        if (!ReferenceEquals(grid.SelectedItem, row.Item)) grid.SelectedItem = row.Item;
+        // A row already in the selection keeps it, so the menu can act on all of them; any other
+        // row becomes the only one selected, so the menu acts on the row under the cursor.
+        if (!row.IsSelected) grid.SelectedItem = row.Item;
+    }
+
+    private void OnGridSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not EnvironmentSessionViewModel session || sender is not DataGrid grid) return;
+
+        var selected = grid.SelectedItems.OfType<PPObjectSearch.Models.SolutionComponentItem>().ToList();
+
+        // In grid order, so a copied list reads as the grid does. A single row needs no ordering,
+        // which spares walking a large solution's rows on every click.
+        if (selected.Count <= 1)
+        {
+            session.SetSelection(selected);
+            return;
+        }
+
+        var set = selected.ToHashSet();
+        session.SetSelection(grid.Items.OfType<PPObjectSearch.Models.SolutionComponentItem>().Where(set.Contains));
     }
 
     /// <summary>

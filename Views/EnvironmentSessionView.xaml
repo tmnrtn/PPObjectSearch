@@ -255,6 +255,7 @@
                       ItemsSource="{Binding ItemsView}"
                       SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
                       PreviewMouseRightButtonDown="OnGridRightButtonDown"
+                      SelectionChanged="OnGridSelectionChanged"
                       MouseDoubleClick="OnGridDoubleClick"
                       IsReadOnly="True"
                       SelectionMode="Extended"
@@ -271,9 +272,20 @@
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
                         <Separator />
-                        <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}" />
-                        <MenuItem Header="Copy maker portal link" Command="{Binding CopyLinkCommand}" />
-                        <MenuItem Header="Copy object id" Command="{Binding CopyIdCommand}" />
+                        <MenuItem Header="{Binding CopyNameHeader}" Command="{Binding CopyNameCommand}" />
+                        <MenuItem Header="{Binding CopyLinkHeader}" Command="{Binding CopyLinkCommand}" />
+                        <MenuItem Header="{Binding CopyIdHeader}" Command="{Binding CopyIdCommand}" />
+                        <MenuItem Header="Copy as table" Command="{Binding CopyAsTableCommand}"
+                                  ToolTip="Tab-separated with a header row - pastes into Excel as a table" />
+                        <Separator Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="{Binding SelectionHeader}" IsEnabled="False"
+                                  Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="Open details for each" Command="{Binding OpenSelectionDetailsCommand}"
+                                  Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="Check layers for selection" Command="{Binding CheckSelectionLayersCommand}"
+                                  Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="Export selection to CSV..." Command="{Binding ExportSelectionCommand}"
+                                  Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
                     </ContextMenu>
                 </DataGrid.ContextMenu>
 
