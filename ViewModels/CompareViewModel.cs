@@ -9,53 +9,6 @@ using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
-public enum CompareStatus
-{
-    OnlyInLeft,
-    OnlyInRight,
-    Same
-}
-
-/// <summary>The segmented filter above the grid.</summary>
-public enum CompareStatusFilter
-{
-    All,
-    OnlyLeft,
-    OnlyRight,
-    Both
-}
-
-public sealed class CompareRow
-{
-    public required string Name { get; init; }
-    public required string ComponentTypeName { get; init; }
-    public string? SubType { get; init; }
-    public required CompareStatus Status { get; init; }
-    public DateTimeOffset? LeftModified { get; init; }
-    public DateTimeOffset? RightModified { get; init; }
-
-    /// <summary>Whichever side's row can supply a maker portal link.</summary>
-    public SolutionComponentItem? Link { get; init; }
-
-    /// <summary>
-    /// Both sides are kept, not just the one that supplies the link, because comparing the
-    /// definition needs to ask each environment about its own object - matched-by-name rows
-    /// carry a different id on each side.
-    /// </summary>
-    public SolutionComponentItem? Left { get; init; }
-    public SolutionComponentItem? Right { get; init; }
-
-    /// <summary>Only a component present on both sides has two definitions to compare.</summary>
-    public bool ExistsOnBothSides => Left is not null && Right is not null;
-
-    public string StatusLabel => Status switch
-    {
-        CompareStatus.OnlyInLeft => "Only in left",
-        CompareStatus.OnlyInRight => "Only in right",
-        _ => "In both"
-    };
-}
-
 /// <summary>
 /// Diffs the objects loaded in two tabs - what is missing from one side. Works from the loaded lists, so it costs no requests.
 ///
@@ -335,45 +288,8 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
         var left = Left.AllItems;
         var right = Right.AllItems;
 
-        var rightById = new Dictionary<Guid, SolutionComponentItem>();
-        var rightByName = new Dictionary<(int, string), SolutionComponentItem>();
-
-        foreach (var item in right)
-        {
-            if (item.ObjectId != Guid.Empty) rightById[item.ObjectId] = item;
-            rightByName[(item.ComponentType, item.PrimaryLabel.ToLowerInvariant())] = item;
-        }
-
-        var matchedRight = new HashSet<SolutionComponentItem>();
-
-        foreach (var item in left)
-        {
-            var match = FindMatch(item, rightById, rightByName);
-
-            if (match is null)
-            {
-                _all.Add(Row(item, null, CompareStatus.OnlyInLeft));
-                continue;
-            }
-
-            matchedRight.Add(match);
-
-            _all.Add(Row(item, match, CompareStatus.Same));
-        }
-
-        foreach (var item in right.Where(i => !matchedRight.Contains(i)))
-        {
-            _all.Add(Row(null, item, CompareStatus.OnlyInRight));
-        }
-
-        _all.Sort((a, b) =>
-        {
-            var byStatus = a.Status.CompareTo(b.Status);
-            if (byStatus != 0) return byStatus;
-
-            var byType = string.Compare(a.ComponentTypeName, b.ComponentTypeName, StringComparison.CurrentCultureIgnoreCase);
-            return byType != 0 ? byType : string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
-        });
+        // Matched on id, then type and name; sorted by status, type and name.
+        _all.AddRange(ComponentDiff.Diff(left, right));
 
         TypeFilters.Clear();
         TypeFilters.Add(new TypeFilterOption { Name = " all", Count = _all.Count, IsAll = true, AllLabel = "All types" });
@@ -395,36 +311,6 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ComparedRight));
         RefreshView();
         ExportCommand.RaiseCanExecuteChanged();
-    }
-
-    private static SolutionComponentItem? FindMatch(
-        SolutionComponentItem item,
-        Dictionary<Guid, SolutionComponentItem> byId,
-        Dictionary<(int, string), SolutionComponentItem> byName)
-    {
-        if (item.ObjectId != Guid.Empty && byId.TryGetValue(item.ObjectId, out var byIdMatch)) return byIdMatch;
-
-        return byName.TryGetValue((item.ComponentType, item.PrimaryLabel.ToLowerInvariant()), out var byNameMatch)
-            ? byNameMatch
-            : null;
-    }
-
-    private static CompareRow Row(SolutionComponentItem? left, SolutionComponentItem? right, CompareStatus status)
-    {
-        var source = left ?? right!;
-
-        return new CompareRow
-        {
-            Name = source.PrimaryLabel,
-            ComponentTypeName = source.ComponentTypeName,
-            SubType = source.SubType,
-            Status = status,
-            LeftModified = left?.ModifiedOn,
-            RightModified = right?.ModifiedOn,
-            Link = source,
-            Left = left,
-            Right = right
-        };
     }
 
     private void RefreshView()

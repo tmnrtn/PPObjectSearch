@@ -66,13 +66,29 @@ jobs:
             -p:Version=$version `
             -o publish
 
+          # The command line, for pipelines: a console exe, published the same way.
+          dotnet publish tools/ppos/ppos.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none `
+            -p:Version=$version `
+            -o publish-cli
+          Copy-Item publish-cli/ppos.exe publish/ppos.exe
+
       # A checksum published beside the exe, so a download can be checked against the release.
       - name: Checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash publish/PPObjectSearch.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  PPObjectSearch.exe" | Out-File -FilePath publish/PPObjectSearch.exe.sha256 -Encoding ascii -NoNewline
-          Write-Host "SHA-256: $hash"
+          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe') {
+            $hash = (Get-FileHash "publish/$exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $exe" | Out-File -FilePath "publish/$exe.sha256" -Encoding ascii -NoNewline
+            Write-Host "$exe SHA-256: $hash"
+          }
 
       # Code signing (Authenticode) would go here, e.g. with Azure Trusted Signing, once a signing
       # account is set up for the project - it needs credentials this workflow does not have.
@@ -84,6 +100,8 @@ jobs:
           path: |
             publish/PPObjectSearch.exe
             publish/PPObjectSearch.exe.sha256
+            publish/ppos.exe
+            publish/ppos.exe.sha256
           if-no-files-found: error
 
   release:
@@ -107,7 +125,9 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: publish/PPObjectSearch.exe
+          subject-path: |
+            publish/PPObjectSearch.exe
+            publish/ppos.exe
 
       # The GitHub CLI on the runner rather than a third-party action: this step can write to the
       # repository, so nothing outside GitHub's own tooling runs with that permission.
@@ -117,6 +137,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release create "$TAG" publish/PPObjectSearch.exe publish/PPObjectSearch.exe.sha256 \
+            publish/ppos.exe publish/ppos.exe.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
             --generate-notes \

@@ -119,6 +119,31 @@ too: every resource a view uses must be defined, and the light and dark themes m
 same keys. CI reports line and branch coverage on each run's summary page. The release
 workflow runs them before publishing.
 
+## Command line (ppos)
+
+`ppos.exe`, released beside the app, runs the read-only checks a pipeline wants before promoting a
+release. Nothing it does writes to an environment - reconciling is only ever offered in the window.
+
+```text
+ppos diff --solution <name> --left <url> --right <url> [--format md|csv|json] [--out <file>]
+ppos compare-data --config <name> --source <url> --target <url> [--out <file.csv>]
+ppos readiness --solution <name> --source <url> --target <url> [--out <file.md>] [--fail-on blocker|warning]
+```
+
+- **diff** - the solution's components missing from either environment (matched by id, then type
+  and name).
+- **compare-data** - a saved reference-data comparison from `settings.json`, differences as CSV.
+- **readiness** - the [readiness check](#readiness-check) as Markdown.
+
+Exit codes: `0` nothing found, `1` differences or blockers found, `2` usage error, `3` the run
+failed - so a pipeline step fails exactly when there is something to look at. Progress and the
+summary go to standard error; the report goes to standard output or `--out`.
+
+To run unattended, sign in as an app registration: set `PPOS_TENANT_ID`, `PPOS_CLIENT_ID` and
+`PPOS_CLIENT_SECRET` - or `PPOS_CLIENT_CERTIFICATE` (a `.pfx` path) with
+`PPOS_CLIENT_CERTIFICATE_PASSWORD`. The app user needs read access in each environment. Without
+them, `ppos` uses the account signed in to the app, opening a browser if it must.
+
 ## Releases
 
 `.github/workflows/release.yml` builds that same single-file exe on `windows-latest`. Push a tag

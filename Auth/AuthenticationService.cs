@@ -228,6 +228,13 @@ public sealed class EnvironmentAuthContext
         _tokenSource = tokenSource;
     }
 
+    /// <summary>
+    /// Tokens from somewhere other than an interactive sign-in - a service principal, for the
+    /// command line. Keyed by resource; null means none is to be had.
+    /// </summary>
+    public static EnvironmentAuthContext FromTokenSource(Func<string, CancellationToken, Task<string?>> tokenSource) =>
+        new(tokenSource);
+
     public string? TenantId { get; private set; }
     public string? AccountId { get; private set; }
     public string? AccountName { get; private set; }
