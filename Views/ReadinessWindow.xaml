@@ -1,0 +1,105 @@
+<Window x:Class="PPObjectSearch.Views.ReadinessWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:services="clr-namespace:PPObjectSearch.Services"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        Title="Readiness check"
+        Style="{StaticResource AppWindow}"
+        Height="720" Width="1180"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- What to check: a solution, where it comes from, where it is going. -->
+            <WrapPanel Grid.Row="0" Margin="16,14,16,12">
+                <ComboBox Style="{StaticResource EnvPicker}" Width="240" Margin="0,0,8,6"
+                          core:Ui.InlineLabel="From"
+                          AutomationProperties.Name="Source environment"
+                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Source}" />
+
+                <ComboBox Width="280" Height="32" Margin="0,0,8,6" Padding="7,0"
+                          core:Ui.InlineLabel="Solution" core:Ui.Placeholder="Choose a solution"
+                          AutomationProperties.Name="Solution"
+                          ItemsSource="{Binding Solutions}" SelectedItem="{Binding Solution}"
+                          DisplayMemberPath="DisplayLabel" />
+
+                <ComboBox Style="{StaticResource EnvPicker}" Width="240" Margin="0,0,8,6"
+                          core:Ui.InlineLabel="To"
+                          AutomationProperties.Name="Target environment"
+                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Target}" />
+
+                <Button Style="{StaticResource PrimaryButton}" Content="Check" Height="32" Padding="16,0" Margin="0,0,8,6"
+                        Command="{Binding RunCommand}"
+                        ToolTip="Reads both environments - nothing is written" />
+                <Button Content="Stop" Height="32" Margin="0,0,8,6" Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
+                <Button Content="Export Markdown…" Height="32" Margin="0,0,0,6" Command="{Binding ExportCommand}"
+                        ToolTip="The report as Markdown, for a pull request or a change ticket" />
+            </WrapPanel>
+
+            <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="16,0,16,10"
+                    Visibility="{Binding HasNotChecked, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding NotChecked}" TextWrapping="Wrap" Foreground="{DynamicResource Amber}" />
+            </Border>
+
+            <DataGrid Grid.Row="2"
+                      ItemsSource="{Binding Findings}"
+                      SelectedItem="{Binding SelectedFinding}"
+                      IsReadOnly="True"
+                      AutomationProperties.Name="Readiness findings"
+                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                <DataGrid.InputBindings>
+                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenFindingCommand}" />
+                    <KeyBinding Key="Enter" Command="{Binding OpenFindingCommand}" />
+                </DataGrid.InputBindings>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="Severity" Width="104" SortMemberPath="Severity"
+                                            HeaderStyle="{StaticResource FirstHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl Margin="16,0,8,0" Content="{Binding SeverityLabel}">
+                                    <ContentControl.Style>
+                                        <Style TargetType="ContentControl" BasedOn="{StaticResource StatusPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Blocker}">
+                                                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Warning}">
+                                                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ContentControl.Style>
+                                </ContentControl>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Area" Width="150" Binding="{Binding Area}" ElementStyle="{StaticResource CellMuted}" />
+                    <DataGridTextColumn Header="Component" Width="260" Binding="{Binding Component}" ElementStyle="{StaticResource Cell}" />
+                    <DataGridTextColumn Header="Finding" Width="*" Binding="{Binding Message}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <Setter Property="ToolTip" Value="{Binding Message}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip="{Binding Status}" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

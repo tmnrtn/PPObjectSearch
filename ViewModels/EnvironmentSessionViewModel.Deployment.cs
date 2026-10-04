@@ -12,6 +12,9 @@ public sealed partial class EnvironmentSessionViewModel
 {
     private const int EnvironmentVariableDefinitionType = 380;
 
+    /// <summary>Opens a component's details from another window, such as the readiness check.</summary>
+    public void OpenDetails(SolutionComponentItem item) => ShowDetails(item);
+
     private AsyncRelayCommand? _exportDeploymentSettingsCommand;
     public AsyncRelayCommand ExportDeploymentSettingsCommand => _exportDeploymentSettingsCommand ??= new AsyncRelayCommand(
         _ => ExportDeploymentSettingsAsync());

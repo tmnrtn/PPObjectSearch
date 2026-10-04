@@ -390,6 +390,29 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Readiness check
+
+**Readiness check** (`Ctrl+Shift+R`, in the sidebar) asks whether a solution will import cleanly
+into another environment and work once it is there. Pick the environment it comes from, the
+solution, and the environment it is going to. Both are only read. It reports:
+
+- **Version** - the target already has a newer version (refused), the same one, or has the
+  solution unmanaged.
+- **Missing dependencies** - components the solution needs without containing them
+  (`RetrieveMissingDependencies` in the source) that the target does not have either.
+- **Environment variables** - no value in the target and no default to fall back on, or a target
+  value identical to the source's (a dev URL that followed the solution to production).
+- **Connection references** - new to the target, bound to nothing there, or bound to a connection
+  in error.
+- **Flows** - off in the source, or owned in the target by a disabled user.
+- **Plug-in assemblies** - older in the target (updated by the import) or newer (taken back).
+- **Unmanaged layers** on the solution's components in the target, which would hide the import's
+  changes (up to 400 components).
+
+Each finding is a *Blocker*, *Warning* or *Info*; double-click one to open the component's
+details. An area that could not be checked is listed as such rather than passing silently.
+**Export Markdown…** saves the report for a pull request or change ticket.
+
 ## Connection references and deployment settings
 
 - **Connections tab.** A cloud flow's details list the connection references its definition uses;

@@ -25,6 +25,7 @@ public sealed class ShellViewModel : ObservableObject
         GlobalSearchCommand = new RelayCommand(_ => OpenGlobalSearch());
         CompareCommand = new RelayCommand(_ => OpenCompare());
         CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
+        ReadinessCommand = new RelayCommand(_ => OpenReadiness());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
         MoveTabRightCommand = new RelayCommand(_ => MoveSelectedTab(+1));
@@ -108,6 +109,7 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand GlobalSearchCommand { get; }
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
+    public RelayCommand ReadinessCommand { get; }
     public RelayCommand SetThemeCommand { get; }
     public RelayCommand OpenLogFolderCommand { get; }
 
@@ -179,6 +181,17 @@ public sealed class ShellViewModel : ObservableObject
     /// is in memory already, and which tables to read is a saved configuration rather than a
     /// property of the tabs.
     /// </summary>
+    private void OpenReadiness()
+    {
+        if (!RequireConnectedTabs(2, "Connect the environment the solution comes from and the one it is going to.")) return;
+
+        new Views.ReadinessWindow
+        {
+            DataContext = new ReadinessViewModel(Sessions),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
     private void OpenDataCompare()
     {
         if (!RequireConnectedTabs(2, "Connect at least two environments to compare their data.")) return;

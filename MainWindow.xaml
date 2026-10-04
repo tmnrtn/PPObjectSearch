@@ -19,6 +19,7 @@
         <KeyBinding Key="F" Modifiers="Ctrl+Shift" Command="{Binding GlobalSearchCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CompareCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl+Shift" Command="{Binding CompareDataCommand}" />
+        <KeyBinding Key="R" Modifiers="Ctrl+Shift" Command="{Binding ReadinessCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl+Shift" Command="{Binding CloseAllDetailsCommand}" />
     </Window.InputBindings>
 
@@ -274,6 +275,13 @@
                         <Grid>
                             <TextBlock Text="Compare data" VerticalAlignment="Center" />
                             <TextBlock Text="Ctrl+Shift+D" Style="{StaticResource Shortcut}" />
+                        </Grid>
+                    </Button>
+                    <Button Style="{StaticResource SidebarAction}" Command="{Binding ReadinessCommand}"
+                            ToolTip="Will a solution import cleanly into another environment, and work there? (Ctrl+Shift+R)">
+                        <Grid>
+                            <TextBlock Text="Readiness check" VerticalAlignment="Center" />
+                            <TextBlock Text="Ctrl+Shift+R" Style="{StaticResource Shortcut}" />
                         </Grid>
                     </Button>
 
