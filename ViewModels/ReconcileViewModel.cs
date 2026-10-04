@@ -283,7 +283,7 @@ public sealed class ReconcileViewModel : ObservableObject
         }
     }
 
-    private bool CanApply =>
+    internal bool CanApply =>
         Permission.Allowed && !IsRunning && !HasRun && IncludedCount > 0 &&
         (!HasDeletes || DeleteAcknowledged);
 
@@ -315,6 +315,9 @@ public sealed class ReconcileViewModel : ObservableObject
 
     private async Task ApplyAsync()
     {
+        // The button already waits for these; the run checks them again rather than trusting it.
+        if (!CanApply) return;
+
         // Only the actions switched on; the faded rows are there to look at, never to write.
         var options = new ReconcileOptions(Create, Update, Delete);
         await RunAsync(Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)).ToList());

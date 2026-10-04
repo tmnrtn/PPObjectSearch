@@ -22,35 +22,27 @@ public static partial class TenantDiscovery
     [GeneratedRegex("authorization_uri\\s*=\\s*\"?(?<uri>[^\",\\s]+)", RegexOptions.IgnoreCase)]
     private static partial Regex AuthorizationUriRegex();
 
-    public static async Task<string?> GetTenantIdAsync(string environmentUrl, CancellationToken ct = default)
+    public static Task<string?> GetTenantIdAsync(string environmentUrl, CancellationToken ct = default) =>
+        GetTenantIdAsync(environmentUrl, Http, ct);
+
+    /// <summary>For tests: the challenge comes from <paramref name="http"/> rather than the network.</summary>
+    internal static async Task<string?> GetTenantIdAsync(string environmentUrl, HttpMessageInvoker http, CancellationToken ct)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, environmentUrl.TrimEnd('/') + "/api/data/v9.2/WhoAmI");
             request.Headers.ConnectionClose = true;
-            using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
 
             if (response.StatusCode != HttpStatusCode.Unauthorized) return null;
 
-            foreach (var header in response.Headers.WwwAuthenticate)
+            // Read raw: Dataverse writes the challenge's URLs unquoted, which the typed
+            // WwwAuthenticate collection treats as malformed and leaves out entirely.
+            if (response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out var challenges))
             {
-                var raw = header.Parameter;
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-
-                var match = AuthorizationUriRegex().Match(raw);
-                if (!match.Success) continue;
-
-                if (!Uri.TryCreate(match.Groups["uri"].Value, UriKind.Absolute, out var authorizationUri)) continue;
-
-                var tenant = authorizationUri.Segments
-                    .Select(s => s.Trim('/'))
-                    .FirstOrDefault(s => s.Length > 0);
-
-                if (!string.IsNullOrWhiteSpace(tenant) &&
-                    !tenant.Equals("common", StringComparison.OrdinalIgnoreCase) &&
-                    !tenant.Equals("organizations", StringComparison.OrdinalIgnoreCase))
+                foreach (var challenge in challenges)
                 {
-                    return tenant;
+                    if (TenantFromChallenge(challenge) is { } tenant) return tenant;
                 }
             }
         }
@@ -65,5 +57,27 @@ public static partial class TenantDiscovery
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The tenant named in a Bearer challenge's authorization_uri - or null for none, a malformed
+    /// one, or one of the multi-tenant names, which say nothing about where the environment is.
+    /// </summary>
+    internal static string? TenantFromChallenge(string? parameter)
+    {
+        if (string.IsNullOrWhiteSpace(parameter)) return null;
+
+        var match = AuthorizationUriRegex().Match(parameter);
+        if (!match.Success || !Uri.TryCreate(match.Groups["uri"].Value, UriKind.Absolute, out var authorizationUri)) return null;
+
+        var tenant = authorizationUri.Segments
+            .Select(s => s.Trim('/'))
+            .FirstOrDefault(s => s.Length > 0);
+
+        return string.IsNullOrWhiteSpace(tenant) ||
+               tenant.Equals("common", StringComparison.OrdinalIgnoreCase) ||
+               tenant.Equals("organizations", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : tenant;
     }
 }
