@@ -350,7 +350,9 @@ public sealed class ReconcileViewModel : ObservableObject
                 done++;
                 Status = $"({done}/{toWrite.Count}) {row.ActionLabel.ToLowerInvariant()} {row.Table} {row.Key}...";
 
-                var outcome = await writer.ApplyAsync(row.Item, ct);
+                // Stop takes effect between rows: a write cancelled half-way leaves no telling
+                // whether it landed, so the one in flight is always allowed to finish.
+                var outcome = await writer.ApplyAsync(row.Item, CancellationToken.None);
 
                 row.Succeeded = outcome.Succeeded;
                 row.Result = outcome.Message;

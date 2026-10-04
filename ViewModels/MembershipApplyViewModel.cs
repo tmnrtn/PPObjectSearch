@@ -430,7 +430,9 @@ public sealed class MembershipApplyViewModel : ObservableObject
 
             try
             {
-                await applyEach(row.Change, ct);
+                // Stop takes effect between users; the change in flight is allowed to finish, so
+                // its row says what actually happened.
+                await applyEach(row.Change, CancellationToken.None);
                 row.Succeeded = true;
                 row.Result = row.IsRemove ? "Removed" : _request.AddedResult;
                 succeeded++;
