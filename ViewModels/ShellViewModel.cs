@@ -47,6 +47,9 @@ public sealed class ShellViewModel : ObservableObject
 
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; } = new();
 
+    /// <summary>Why settings.json could not be read at startup, if it could not.</summary>
+    public string? SettingsProblem => _settings.LoadProblem;
+
     public RelayCommand AddTabCommand { get; }
     public RelayCommand CloseTabCommand { get; }
     public RelayCommand MoveTabLeftCommand { get; }

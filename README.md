@@ -350,6 +350,10 @@ then set `ClientId` in settings (below).
 ## Settings
 
 `%LOCALAPPDATA%\PPObjectSearch\settings.json` — written automatically, all fields optional.
+Comments and trailing commas are allowed. The file is saved through a temporary file, with the
+previous version kept as `settings.json.bak`. If it cannot be read, the app says so at startup,
+copies it to `settings.json.bad-<time>`, runs on defaults and does not save over it until it is
+fixed and the app restarted.
 
 ```jsonc
 {

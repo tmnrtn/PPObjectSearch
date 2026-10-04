@@ -15,6 +15,19 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _shell;
+        Loaded += (_, _) => WarnAboutSettings();
+    }
+
+    /// <summary>
+    /// Said once, at startup: the app carries on with defaults, and nothing typed into it from
+    /// now on will be saved until the file is fixed.
+    /// </summary>
+    private void WarnAboutSettings()
+    {
+        if (_shell.SettingsProblem is { } problem)
+        {
+            MessageBox.Show(this, problem, "Settings not loaded", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

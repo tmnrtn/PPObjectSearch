@@ -33,8 +33,22 @@ public sealed class AppSettings
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+
+        // The file is documented as editable by hand, with comments in the example.
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
     };
+
+    /// <summary>Files already copied aside this session, so a second read does not copy again.</summary>
+    private static readonly Dictionary<string, string> BackedUp = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Why the settings file could not be read, when it could not. Settings loaded that way are
+    /// defaults standing in for the user's file, so they are never saved over it.
+    /// </summary>
+    [JsonIgnore]
+    public string? LoadProblem { get; private set; }
 
     /// <summary>Tabs to restore at startup, in order.</summary>
     public List<TabState>? Tabs { get; set; }
@@ -126,48 +140,95 @@ public sealed class AppSettings
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri.Host : null;
     }
 
-    public static AppSettings Load()
+    public static AppSettings Load() => Load(FilePath);
+
+    internal static AppSettings Load(string path)
     {
+        if (!File.Exists(path)) return new AppSettings();
+
         try
         {
-            if (File.Exists(FilePath))
+            var json = File.ReadAllText(path);
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+
+            settings.EnvironmentIds = Rekey(settings.EnvironmentIds);
+            if (settings.BrowserProfiles is not null)
             {
-                var json = File.ReadAllText(FilePath);
-                var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-                if (settings is not null)
-                {
-                    settings.EnvironmentIds = Rekey(settings.EnvironmentIds);
-                    if (settings.BrowserProfiles is not null)
-                    {
-                        settings.BrowserProfiles = new Dictionary<string, BrowserProfileSetting>(
-                            settings.BrowserProfiles, StringComparer.OrdinalIgnoreCase);
-                    }
-                    settings.MakerLinkTemplates = Rekey(settings.MakerLinkTemplates);
-                    return settings;
-                }
+                settings.BrowserProfiles = new Dictionary<string, BrowserProfileSetting>(
+                    settings.BrowserProfiles, StringComparer.OrdinalIgnoreCase);
+            }
+            settings.MakerLinkTemplates = Rekey(settings.MakerLinkTemplates);
+            return settings;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Startup goes ahead on defaults, but the file is the user's saved comparisons and
+            // allowlist: it is copied aside and never overwritten with the defaults.
+            var copy = BackUp(path);
+            var where = copy is null ? string.Empty : $" A copy of it was saved as {Path.GetFileName(copy)}.";
+
+            return new AppSettings
+            {
+                LoadProblem =
+                    $"Your settings file ({path}) could not be read: {ex.Message}{where} " +
+                    "The app is running on default settings and will not save over the file. " +
+                    "Fix or remove it, then restart."
+            };
+        }
+    }
+
+    private static string? BackUp(string path)
+    {
+        lock (BackedUp)
+        {
+            if (BackedUp.TryGetValue(path, out var existing)) return existing;
+
+            try
+            {
+                var copy = $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}";
+                File.Copy(path, copy, overwrite: true);
+                return BackedUp[path] = copy;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
             }
         }
-        catch
-        {
-            // Fall through to defaults rather than failing startup on a bad settings file.
-        }
-
-        return new AppSettings();
     }
 
     private static Dictionary<string, string>? Rekey(Dictionary<string, string>? source) =>
         source is null ? null : new Dictionary<string, string>(source, StringComparer.OrdinalIgnoreCase);
 
-    public void Save()
+    public void Save() => Save(FilePath);
+
+    /// <summary>
+    /// Writes through a temporary file and swaps it in, so a crash mid-write leaves the previous
+    /// file (and a .bak of it) rather than a truncated one that would read as no settings at all.
+    /// </summary>
+    internal void Save(string path)
     {
+        // Defaults standing in for a file that could not be read must not replace it.
+        if (LoadProblem is not null) return;
+
         try
         {
-            Directory.CreateDirectory(AppPaths.DataDirectory);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOptions));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonOptions));
+
+            if (File.Exists(path))
+            {
+                File.Replace(temp, path, path + ".bak", ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(temp, path);
+            }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // ignored - settings are a convenience
+            // Settings are a convenience; failing to save one is not worth interrupting work.
         }
     }
 }
