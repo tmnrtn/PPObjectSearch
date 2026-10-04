@@ -1155,4 +1155,35 @@ public class ReferenceDataWriterTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Writer(handler).ApplyAsync(item, cts.Token));
     }
+
+    [Fact]
+    public async Task Columns_left_out_of_a_run_are_neither_created_nor_updated()
+    {
+        var handler = new FakeHttpHandler()
+            .OnStatus(HttpMethod.Post, EntitySet, HttpStatusCode.NoContent)
+            .OnStatus(HttpMethod.Patch, EntitySet, HttpStatusCode.NoContent);
+        var writer = new ReferenceDataWriter(Fakes.Dataverse(handler), TargetEntities())
+        {
+            ExcludedColumns = new HashSet<string> { ReferenceDataWriter.ColumnKey(Table, "new_count") }
+        };
+
+        var create = Compared(new[] { Name, Count },
+            Row(G(1)).With("new_code", "A").With("new_name", "a").With("new_count", "1").Build(), null);
+        var update = Compared(new[] { Name, Count },
+            Row(G(2)).With("new_code", "B").With("new_name", "new").With("new_count", "2").Build(),
+            Row(G(2)).With("new_code", "B").With("new_name", "old").With("new_count", "3").Build());
+        var onlyExcluded = Compared(new[] { Name, Count },
+            Row(G(3)).With("new_code", "C").With("new_name", "same").With("new_count", "4").Build(),
+            Row(G(3)).With("new_code", "C").With("new_name", "same").With("new_count", "5").Build());
+
+        Assert.True((await writer.ApplyAsync(create)).Succeeded);
+        Assert.True((await writer.ApplyAsync(update)).Succeeded);
+        var skipped = await writer.ApplyAsync(onlyExcluded);
+
+        Assert.Equal(new[] { "new_name", PrimaryId }, PropertyNames(BodyOf(handler.Requests[0])));
+        Assert.Equal(new[] { "new_name" }, PropertyNames(BodyOf(handler.Requests[1])));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.True(skipped.Succeeded);
+        Assert.Contains("left out of this run", skipped.Message);
+    }
 }

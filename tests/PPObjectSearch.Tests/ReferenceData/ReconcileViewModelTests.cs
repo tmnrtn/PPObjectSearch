@@ -55,7 +55,8 @@ public class ReconcileViewModelTests
         ]}
         """;
 
-    private static FakeHttpHandler Accepting() => new FakeHttpHandler()
+    private static FakeHttpHandler Accepting(string relationships = """{"value":[]}""") => new FakeHttpHandler()
+        .OnJson(HttpMethod.Get, "/OneToManyRelationships", relationships)
         .On(HttpMethod.Get, "new_things(", r => FakeHttpHandler.Json(Snapshot(r)))
         .OnJson(HttpMethod.Get, "/Attributes?", TargetColumns)
         .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent)
@@ -74,7 +75,7 @@ public class ReconcileViewModelTests
         System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ppobjectsearch-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Delete_is_off_until_switched_on_and_then_needs_its_own_acknowledgement()
+    public async Task Delete_is_off_until_switched_on_and_then_needs_its_own_acknowledgement()
     {
         var vm = Window(Accepting());
 
@@ -83,6 +84,7 @@ public class ReconcileViewModelTests
         Assert.True(vm.ApplyCommand.CanExecute(null));
 
         vm.Delete = true;
+        await (vm.ImpactCheck ?? Task.CompletedTask);
 
         Assert.True(vm.HasDeletes);
         Assert.False(vm.ApplyCommand.CanExecute(null));
@@ -103,10 +105,11 @@ public class ReconcileViewModelTests
         var handler = Accepting();
         var vm = Window(handler);
         vm.Delete = true;
+        await (vm.ImpactCheck ?? Task.CompletedTask);
 
         await vm.ApplyCommand.ExecuteAsync(null);
 
-        Assert.Empty(handler.Requests);
+        Assert.All(handler.Requests, r => Assert.Equal(HttpMethod.Get, r.Method));
         Assert.False(vm.HasRun);
     }
 
@@ -145,6 +148,7 @@ public class ReconcileViewModelTests
         var handler = Accepting();
         var vm = Window(handler, sourceTruncated: true);
         vm.Delete = true;
+        await (vm.ImpactCheck ?? Task.CompletedTask);
 
         // The only delete rests on a source read cut short at the cap, so there is nothing to acknowledge.
         var delete = vm.Rows.Single(r => r.Action == ReconcileAction.Delete);
@@ -209,6 +213,7 @@ public class ReconcileViewModelTests
     {
         var vm = Window(Accepting());
         vm.Delete = true;
+        await (vm.ImpactCheck ?? Task.CompletedTask);
         vm.DeleteAcknowledged = true;
 
         await vm.ApplyCommand.ExecuteAsync(null);
@@ -234,6 +239,7 @@ public class ReconcileViewModelTests
         var handler = Accepting();
         var vm = Window(handler);
         vm.Delete = true;
+        await (vm.ImpactCheck ?? Task.CompletedTask);
         vm.DeleteAcknowledged = true;
 
         await vm.ApplyCommand.ExecuteAsync(null);
@@ -289,5 +295,57 @@ public class ReconcileViewModelTests
         Assert.Equal(4, lines.Count);
         Assert.Contains(lines, l => l.StartsWith("new_thing,Update,Yes,B,") && l.Contains(",new_name,changed,old,"));
         Assert.Contains(lines, l => l.StartsWith("new_thing,Delete,No,C,"));
+    }
+
+    [Fact]
+    public async Task A_column_left_out_of_the_run_is_not_written_and_an_update_with_nothing_left_is_skipped()
+    {
+        var handler = Accepting();
+        var vm = Window(handler);
+
+        var name = Assert.Single(vm.Columns);
+        Assert.Equal("new_name", name.Column.LogicalName);
+
+        name.IsIncluded = false;
+
+        var update = vm.Rows.Single(r => r.Action == ReconcileAction.Update);
+        Assert.Equal("Skipped", update.ResultLabel);
+        Assert.Equal("Apply 1 change", vm.ApplyLabel);
+        Assert.Contains("1 of 1 left out", vm.ColumnsSummary);
+
+        await vm.ApplyCommand.ExecuteAsync(null);
+
+        var sent = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.DoesNotContain("new_name", sent.Body);
+    }
+
+    [Fact]
+    public async Task What_else_a_delete_reaches_is_counted_before_it_can_be_acknowledged()
+    {
+        const string relationships = """
+            {"value":[
+              {"ReferencingEntity":"new_child","ReferencingAttribute":"new_thingid","CascadeConfiguration":{"Delete":"Cascade"}},
+              {"ReferencingEntity":"new_note","ReferencingAttribute":"new_thingid","CascadeConfiguration":{"Delete":"NoCascade"}}
+            ]}
+            """;
+        var handler = Accepting(relationships)
+            .OnJson(HttpMethod.Get, "new_children?", """{"@odata.count":7,"value":[]}""");
+        var vm = new ReconcileViewModel(Rows(), "Dev", "Test", Fakes.Dataverse(handler),
+            new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Table] = Entity(),
+                ["new_child"] = Entity("new_child", "new_children", "new_childid")
+            },
+            Allowed, writeLogFolder: LogFolder);
+
+        vm.Delete = true;
+        Assert.True(vm.IsCheckingImpact || vm.HasDeleteImpact);
+        await vm.ImpactCheck!;
+
+        Assert.False(vm.IsCheckingImpact);
+        Assert.Equal("Dataverse will also delete 7 new_child (via new_thingid).", vm.DeleteImpactText);
+        var count = Assert.Single(handler.Requests, r => r.Url.Contains("new_children?"));
+        Assert.Contains($"_new_thingid_value eq {G(3)}", Uri.UnescapeDataString(count.Url));
     }
 }

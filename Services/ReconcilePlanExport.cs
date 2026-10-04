@@ -9,7 +9,8 @@ public static class ReconcilePlanExport
     public static IReadOnlyList<string> Lines(
         IEnumerable<(ReconcilePlanItem Item, bool Included, string Result)> rows,
         string sourceName,
-        string targetName)
+        string targetName,
+        IReadOnlySet<string>? excludedColumns = null)
     {
         var lines = new List<string>
         {
@@ -22,8 +23,13 @@ public static class ReconcilePlanExport
         {
             var row = item.Row;
 
+            // A column left out of this run is listed, but marked as not written.
             string Line(string? column, string? source, string? target) => CsvExporter.Line(
-                item.Table, item.Action.ToString(), included ? "Yes" : "No", item.Key, item.Name, column,
+                item.Table, item.Action.ToString(),
+                included && (column is null || excludedColumns?.Contains(ReferenceDataWriter.ColumnKey(item.Table, column)) != true)
+                    ? "Yes"
+                    : "No",
+                item.Key, item.Name, column,
                 source, target, row.SourceId, row.TargetId, result);
 
             if (item.Action == ReconcileAction.Update && row.Differences.Count > 0)

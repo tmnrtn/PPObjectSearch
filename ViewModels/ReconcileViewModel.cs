@@ -65,6 +65,23 @@ public sealed class ReconcileRow : ObservableObject
     public bool HasFailed => Succeeded == false;
 }
 
+/// <summary>A column the run would write, which can be left out of this run only.</summary>
+public sealed class ReconcileColumnOption : ObservableObject
+{
+    public required string Table { get; init; }
+    public required EntityColumn Column { get; init; }
+
+    public string Key => ReferenceDataWriter.ColumnKey(Table, Column.LogicalName);
+    public string Label => $"{Table} · {Column.Label}";
+
+    private bool _isIncluded = true;
+    public bool IsIncluded
+    {
+        get => _isIncluded;
+        set => SetProperty(ref _isIncluded, value);
+    }
+}
+
 /// <summary>
 /// The confirmation and the run, in one window. Nothing is written until Apply is pressed, and
 /// Apply is unavailable until the write guard has cleared the target environment - and, where the
@@ -80,6 +97,7 @@ public sealed class ReconcileViewModel : ObservableObject
     private readonly List<UndoStep> _undo = new();
     private WriteLog? _log;
     private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _impactCts;
 
     public ReconcileViewModel(
         IReadOnlyList<RecordComparison> selected,
@@ -118,6 +136,28 @@ public sealed class ReconcileViewModel : ObservableObject
             Rows.Add(new ReconcileRow { Item = item });
         }
 
+        // Every column a create or update here would write, so one can be left out of this run
+        // without touching the saved configuration. Keys stay: without them the row would not match.
+        foreach (var option in Rows
+                     .Where(r => !r.IsBlocked && r.Action != ReconcileAction.Delete)
+                     .SelectMany(r => (r.Action == ReconcileAction.Update
+                             ? r.Item.Row.Differences.Select(d => d.Column)
+                             : r.Item.Row.Plan.ValueColumns)
+                         .Where(c => !c.IsPrimaryId && !r.Item.Row.Plan.KeyColumns.Contains(c))
+                         .Select(c => (r.Table, Column: c)))
+                     .DistinctBy(x => ReferenceDataWriter.ColumnKey(x.Table, x.Column.LogicalName),
+                         StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(x => x.Table, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(x => x.Column.LogicalName, StringComparer.OrdinalIgnoreCase))
+        {
+            var column = new ReconcileColumnOption { Table = option.Table, Column = option.Column };
+            column.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ReconcileColumnOption.IsIncluded)) Rebuild();
+            };
+            Columns.Add(column);
+        }
+
         AvailableCreates = Rows.Count(r => r.Action == ReconcileAction.Create);
         AvailableUpdates = Rows.Count(r => r.Action == ReconcileAction.Update);
         AvailableDeletes = Rows.Count(r => r.Action == ReconcileAction.Delete);
@@ -144,6 +184,25 @@ public sealed class ReconcileViewModel : ObservableObject
     public bool CanEditActions => !IsRunning && !HasRun && Permission.Allowed;
 
     public ObservableCollection<ReconcileRow> Rows { get; } = new();
+
+    /// <summary>The columns this run would write, each of which can be left out of it.</summary>
+    public ObservableCollection<ReconcileColumnOption> Columns { get; } = new();
+
+    public bool HasColumns => Columns.Count > 0;
+
+    private IReadOnlySet<string> ExcludedColumns =>
+        Columns.Where(c => !c.IsIncluded).Select(c => c.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    public string ColumnsSummary
+    {
+        get
+        {
+            var left = Columns.Count(c => !c.IsIncluded);
+            return left == 0
+                ? $"Columns: all {Columns.Count:N0} written"
+                : $"Columns: {left:N0} of {Columns.Count:N0} left out of this run";
+        }
+    }
 
     public AsyncRelayCommand ApplyCommand { get; }
 
@@ -217,6 +276,8 @@ public sealed class ReconcileViewModel : ObservableObject
 
             if (!value) DeleteAcknowledged = false;
             Rebuild();
+
+            ImpactCheck = value ? CheckDeleteImpactAsync() : CancelImpactCheck();
         }
     }
 
@@ -230,6 +291,84 @@ public sealed class ReconcileViewModel : ObservableObject
 
             ApplyCommand.RaiseCanExecuteChanged();
             RaiseApplyState();
+        }
+    }
+
+    /// <summary>The count of what the deletes reach beyond themselves; awaited by tests.</summary>
+    internal Task? ImpactCheck { get; private set; }
+
+    private bool _isCheckingImpact;
+    /// <summary>While the effect of the deletes is being counted, they cannot be acknowledged.</summary>
+    public bool IsCheckingImpact
+    {
+        get => _isCheckingImpact;
+        private set
+        {
+            if (!SetProperty(ref _isCheckingImpact, value)) return;
+            OnPropertyChanged(nameof(CanAcknowledgeDelete));
+            ApplyCommand.RaiseCanExecuteChanged();
+            RaiseApplyState();
+        }
+    }
+
+    public bool CanAcknowledgeDelete => IsNotRunning && !IsCheckingImpact;
+
+    private string _deleteImpact = string.Empty;
+    /// <summary>What else Dataverse would delete, block on, or unlink.</summary>
+    public string DeleteImpactText
+    {
+        get => _deleteImpact;
+        private set
+        {
+            if (!SetProperty(ref _deleteImpact, value)) return;
+            OnPropertyChanged(nameof(HasDeleteImpact));
+        }
+    }
+
+    public bool HasDeleteImpact => !string.IsNullOrEmpty(DeleteImpactText);
+
+    private Task CancelImpactCheck()
+    {
+        _impactCts?.Cancel();
+        DeleteImpactText = string.Empty;
+        IsCheckingImpact = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task CheckDeleteImpactAsync()
+    {
+        _impactCts?.Cancel();
+        var cts = _impactCts = new CancellationTokenSource();
+
+        var deletes = Rows
+            .Where(r => r.IsDelete && r.IsIncluded && r.Item.Row.Target is not null)
+            .Select(r => (r.Table, r.Item.Row.Target!.Id))
+            .ToList();
+
+        if (deletes.Count == 0) return;
+
+        IsCheckingImpact = true;
+        DeleteImpactText = "Checking what else these deletes would reach...";
+
+        try
+        {
+            var lines = await DeleteImpact.CheckAsync(_targetClient, _targetEntities, deletes, cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            DeleteImpactText = DeleteImpact.Describe(lines);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (cts.IsCancellationRequested) return;
+            DeleteImpactText = "Could not check what else these deletes would reach - " + ex.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(_impactCts, cts)) IsCheckingImpact = false;
         }
     }
 
@@ -271,6 +410,7 @@ public sealed class ReconcileViewModel : ObservableObject
             RetryFailedCommand.RaiseCanExecuteChanged();
             UndoCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(IsNotRunning));
+            OnPropertyChanged(nameof(CanAcknowledgeDelete));
             OnPropertyChanged(nameof(CanEditActions));
         }
     }
@@ -320,12 +460,24 @@ public sealed class ReconcileViewModel : ObservableObject
 
     internal bool CanApply =>
         Permission.Allowed && !IsRunning && !HasRun && IncludedCount > 0 &&
-        (!HasDeletes || DeleteAcknowledged);
+        (!HasDeletes || (DeleteAcknowledged && !IsCheckingImpact));
 
     private void Rebuild()
     {
         var options = new ReconcileOptions(Create, Update, Delete);
-        foreach (var row in Rows) row.IsIncluded = options.Allows(row.Action) && !row.IsBlocked;
+        var excluded = ExcludedColumns;
+
+        foreach (var row in Rows)
+        {
+            // An update whose every differing column is left out has nothing to write.
+            var nothingLeft = row.Action == ReconcileAction.Update && excluded.Count > 0 &&
+                              row.Item.Row.Differences.All(d =>
+                                  excluded.Contains(ReferenceDataWriter.ColumnKey(row.Table, d.Column.LogicalName)));
+
+            row.IsIncluded = options.Allows(row.Action) && !row.IsBlocked && !nothingLeft;
+        }
+
+        OnPropertyChanged(nameof(ColumnsSummary));
 
         var included = Rows.Where(r => r.IsIncluded).ToList();
         var creates = included.Count(r => r.Action == ReconcileAction.Create);
@@ -368,7 +520,11 @@ public sealed class ReconcileViewModel : ObservableObject
         IsRunning = true;
 
         // Every write is kept: the row as it was, what was sent, and how to take it back.
-        var writer = new ReferenceDataWriter(_targetClient, _targetEntities) { SaveSnapshots = true };
+        var writer = new ReferenceDataWriter(_targetClient, _targetEntities)
+        {
+            SaveSnapshots = true,
+            ExcludedColumns = ExcludedColumns
+        };
         _log ??= WriteLog.Start("reconcile", _writeLogFolder);
         OnPropertyChanged(nameof(RunLogPath));
         var succeeded = 0;
@@ -445,9 +601,12 @@ public sealed class ReconcileViewModel : ObservableObject
             Action = item.Action.ToString(),
             Key = item.Key,
             Name = item.Name,
-            Columns = item.Action == ReconcileAction.Update
-                ? item.Row.Differences.Select(d => d.Column.LogicalName).ToList()
-                : item.Row.Plan.ValueColumns.Select(c => c.LogicalName).ToList(),
+            Columns = (item.Action == ReconcileAction.Update
+                    ? item.Row.Differences.Select(d => d.Column)
+                    : item.Row.Plan.ValueColumns)
+                .Select(c => c.LogicalName)
+                .Where(c => !ExcludedColumns.Contains(ReferenceDataWriter.ColumnKey(item.Table, c)))
+                .ToList(),
             Before = outcome.Before,
             After = WriteUndo.ToJson(outcome.Written),
             Succeeded = outcome.Succeeded,
@@ -545,7 +704,7 @@ public sealed class ReconcileViewModel : ObservableObject
         try
         {
             var lines = ReconcilePlanExport.Lines(
-                Rows.Select(r => (r.Item, r.IsIncluded, r.ResultLabel)), SourceName, TargetName);
+                Rows.Select(r => (r.Item, r.IsIncluded, r.ResultLabel)), SourceName, TargetName, ExcludedColumns);
             CsvExporter.WriteLines(dialog.FileName, lines);
             Status = $"Plan exported - {lines.Count - 1:N0} line(s) to {dialog.FileName}.";
         }

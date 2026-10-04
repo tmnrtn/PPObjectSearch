@@ -100,6 +100,21 @@ public sealed class ReferenceDataWriter
     /// </summary>
     public bool SaveSnapshots { get; init; }
 
+    /// <summary>
+    /// Columns left out of this run only, as "table/column". They are neither created nor updated,
+    /// whatever the comparison says - the saved configuration is not touched.
+    /// </summary>
+    public IReadOnlySet<string> ExcludedColumns { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public static string ColumnKey(string table, string column) => $"{table}/{column}";
+
+    private bool IsExcluded(EntityComparePlan plan, EntityColumn column) =>
+        ExcludedColumns.Count > 0 && ExcludedColumns.Contains(ColumnKey(plan.Entity.LogicalName, column.LogicalName));
+
+    /// <summary>The compared value columns this run writes.</summary>
+    private IReadOnlyList<EntityColumn> ValueColumns(EntityComparePlan plan) =>
+        ExcludedColumns.Count == 0 ? plan.ValueColumns : plan.ValueColumns.Where(c => !IsExcluded(plan, c)).ToList();
+
     public ReferenceDataWriter(DataverseClient target, IReadOnlyDictionary<string, EntitySummary> targetEntities)
     {
         _target = target;
@@ -179,7 +194,7 @@ public sealed class ReferenceDataWriter
 
                     var skipped = new List<string>();
 
-                    var body = await BuildBodyAsync(source, null, plan.ValueColumns, true, plan.MatchLookupsByName, skipped, ct)
+                    var body = await BuildBodyAsync(source, null, ValueColumns(plan), true, plan.MatchLookupsByName, skipped, ct)
                         .ConfigureAwait(false);
 
                     // The source id travels with the row so the two environments converge on one
@@ -220,8 +235,13 @@ public sealed class ReferenceDataWriter
                     if (item.Row.Source is not { } source) return Fail(item, "no source row to copy from.");
                     if (item.Row.Target is not { } target) return Fail(item, "no target row to update.");
 
-                    var columns = item.Row.Differences.Select(d => d.Column).ToList();
-                    if (columns.Count == 0) return new ReconcileOutcome(item, true, "Nothing to change.");
+                    var columns = item.Row.Differences.Select(d => d.Column).Where(c => !IsExcluded(plan, c)).ToList();
+                    if (columns.Count == 0)
+                    {
+                        return new ReconcileOutcome(item, true, item.Row.Differences.Count == 0
+                            ? "Nothing to change."
+                            : "Nothing written - every differing column is left out of this run.");
+                    }
 
                     var skipped = new List<string>();
                     var body = await BuildBodyAsync(source, target, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
@@ -301,12 +321,13 @@ public sealed class ReferenceDataWriter
     private string? EntitySetOf(string logicalName) =>
         _targetEntities.TryGetValue(logicalName, out var entity) ? entity.EntitySetName : null;
 
-    private static string? MoneyWithoutCurrency(EntityComparePlan plan)
+    private string? MoneyWithoutCurrency(EntityComparePlan plan)
     {
-        var money = plan.ValueColumns.Where(c => c.IsMoney && (c.IsValidForCreate || c.IsValidForUpdate)).ToList();
+        var columns = ValueColumns(plan);
+        var money = columns.Where(c => c.IsMoney && (c.IsValidForCreate || c.IsValidForUpdate)).ToList();
         if (money.Count == 0) return null;
 
-        return plan.ValueColumns.Any(c => c.LogicalName.Equals(SystemColumns.Currency, StringComparison.OrdinalIgnoreCase))
+        return columns.Any(c => c.LogicalName.Equals(SystemColumns.Currency, StringComparison.OrdinalIgnoreCase))
             ? null
             : string.Join(", ", money.Select(c => c.LogicalName));
     }
@@ -318,14 +339,14 @@ public sealed class ReferenceDataWriter
         $"the primary id ({primaryIdAttribute}) differs, and an update cannot change a row's id";
 
     /// <summary>Read-only columns are left out rather than failing the row, but never silently.</summary>
-    private static EntityColumn? Column(EntityComparePlan plan, string typeName) =>
-        plan.ValueColumns.FirstOrDefault(c => c.TypeName == typeName);
+    private EntityColumn? Column(EntityComparePlan plan, string typeName) =>
+        ValueColumns(plan).FirstOrDefault(c => c.TypeName == typeName);
 
     /// <summary>
     /// Takes state and status out of a create when the source row is not in the default state (0),
     /// and returns them to be written once the row exists. Null when the create can carry them.
     /// </summary>
-    private static Dictionary<string, object?>? DeferredState(
+    private Dictionary<string, object?>? DeferredState(
         EntityComparePlan plan, DataRecord source, Dictionary<string, object?> body, List<string> skipped)
     {
         var stateColumn = Column(plan, "StateType");
@@ -358,7 +379,7 @@ public sealed class ReferenceDataWriter
         return deferred;
     }
 
-    private static void PairStateWithStatus(EntityComparePlan plan, DataRecord source, Dictionary<string, object?> body)
+    private void PairStateWithStatus(EntityComparePlan plan, DataRecord source, Dictionary<string, object?> body)
     {
         if (Column(plan, "StateType") is not { } stateColumn || !body.ContainsKey(stateColumn.LogicalName)) return;
         if (Column(plan, "StatusType") is not { } statusColumn || body.ContainsKey(statusColumn.LogicalName)) return;

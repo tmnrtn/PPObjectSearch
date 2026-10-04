@@ -159,12 +159,41 @@
                         </CheckBox>
                     </Grid>
 
+                    <Expander Margin="0,10,0,0" Header="{Binding ColumnsSummary}"
+                              IsEnabled="{Binding CanEditActions}"
+                              AutomationProperties.Name="Columns written by this run"
+                              Visibility="{Binding HasColumns, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="4,6,0,0">
+                            <TextBlock Style="{StaticResource CardText}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Text="Untick a column to leave it out of this run only. The saved configuration is not changed, and key columns are always written." />
+                            <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Columns}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsIncluded}"
+                                                      Margin="0,2,16,2" ToolTip="{Binding Column.TypeLabel}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Expander>
+
                     <Border Margin="0,10,0,0" Padding="12,9" Background="{DynamicResource RedSoft}" CornerRadius="4"
                             Visibility="{Binding HasDeletes, Converter={StaticResource BoolToVis}}">
-                        <CheckBox Style="{StaticResource DangerCheckBox}" IsChecked="{Binding DeleteAcknowledged}"
-                                  IsEnabled="{Binding IsNotRunning}" VerticalContentAlignment="Center">
-                            <TextBlock Text="{Binding DeleteAcknowledgement}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                        </CheckBox>
+                        <StackPanel>
+                            <TextBlock Text="{Binding DeleteImpactText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Visibility="{Binding HasDeleteImpact, Converter={StaticResource BoolToVis}}" />
+                            <CheckBox Style="{StaticResource DangerCheckBox}" IsChecked="{Binding DeleteAcknowledged}"
+                                      IsEnabled="{Binding CanAcknowledgeDelete}" VerticalContentAlignment="Center">
+                                <TextBlock Text="{Binding DeleteAcknowledgement}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            </CheckBox>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>

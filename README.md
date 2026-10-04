@@ -255,6 +255,15 @@ than what was true before the writes.
   where they were), updated columns are set back to what they held, and created rows are
   deleted. Rows Dataverse removed through cascading relationships are not restored, and edits
   made to the same columns since the run are overwritten.
+- **What else a delete reaches is counted first.** Switching Delete on reads the table's
+  relationships and counts the rows that point at the ones being deleted: those Dataverse would
+  delete with them (cascade), those that would make the delete fail (restrict), and those that
+  would lose their reference (remove link). The counts appear above the delete acknowledgement,
+  which cannot be ticked until they are in.
+- **Columns can be left out of one run.** The *Columns* list under the action cards names every
+  column the run would write; unticking one leaves it out of this run only, without changing the
+  saved configuration. An update with nothing left to write is skipped. Key columns are always
+  written.
 - **Export plan…** saves the planned changes as CSV - one line per changed column - so they can be
   reviewed or attached to a change ticket before anything is applied.
 
