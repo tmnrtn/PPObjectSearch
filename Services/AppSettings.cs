@@ -164,6 +164,7 @@ public sealed class AppSettings
         {
             // Startup goes ahead on defaults, but the file is the user's saved comparisons and
             // allowlist: it is copied aside and never overwritten with the defaults.
+            Log.Error($"Settings file {path} could not be read", ex);
             var copy = BackUp(path);
             var where = copy is null ? string.Empty : $" A copy of it was saved as {Path.GetFileName(copy)}.";
 
@@ -229,6 +230,7 @@ public sealed class AppSettings
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Settings are a convenience; failing to save one is not worth interrupting work.
+            Log.Warn($"Settings could not be saved to {path}", ex);
         }
     }
 }

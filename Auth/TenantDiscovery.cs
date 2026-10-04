@@ -58,8 +58,9 @@ public static partial class TenantDiscovery
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn($"Tenant discovery failed for {environmentUrl}", ex);
             // Discovery is best effort; the caller falls back to the "organizations" authority.
         }
 

@@ -57,8 +57,9 @@ public static class ComponentCache
 
             return cached;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warn("Component cache could not be read", ex);
             // A cache that cannot be read is simply a cache miss.
             return null;
         }
@@ -80,8 +81,9 @@ public static class ComponentCache
 
             File.WriteAllText(PathFor(environmentUrl, solutionId), JsonSerializer.Serialize(payload, JsonOptions));
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warn("Component cache could not be written", ex);
             // Caching is an optimisation - never fail a load because it could not be written.
         }
     }
@@ -92,8 +94,9 @@ public static class ComponentCache
         {
             if (Directory.Exists(CacheDirectory)) Directory.Delete(CacheDirectory, recursive: true);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warn("Component cache could not be cleared", ex);
             // ignored
         }
     }

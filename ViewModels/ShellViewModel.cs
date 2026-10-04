@@ -37,6 +37,7 @@ public sealed class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(CloseAllDetailsLabel));
             CloseAllDetailsCommand.RaiseCanExecuteChanged();
         };
+        OpenLogFolderCommand = new RelayCommand(_ => OpenLogFolder());
         SetThemeCommand = new RelayCommand(p =>
         {
             if (Enum.TryParse<AppTheme>(p as string, out var theme)) Theme = theme;
@@ -65,6 +66,25 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
     public RelayCommand SetThemeCommand { get; }
+    public RelayCommand OpenLogFolderCommand { get; }
+
+    private static void OpenLogFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Log.Folder);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Log.Folder,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The log folder could not be opened: {ex.Message}\n\n{Log.Folder}",
+                "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     /// <summary>Light, Dark or System; applied at once and remembered in settings.</summary>
     public AppTheme Theme

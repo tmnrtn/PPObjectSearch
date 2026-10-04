@@ -328,6 +328,9 @@
                                       Command="{Binding SetThemeCommand}" CommandParameter="Light" />
                             <MenuItem Header="Dark" IsChecked="{Binding IsDarkTheme, Mode=OneWay}"
                                       Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+                            <Separator />
+                            <MenuItem Header="Open log folder" Command="{Binding OpenLogFolderCommand}"
+                                      ToolTip="The app's log - attach today's file to a problem report" />
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

@@ -316,8 +316,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 {
                     diagram.SetChildFlowNames(await _client.GetWorkflowNamesAsync(diagram.ChildFlowIds));
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Services.Log.Warn("Child flow names could not be read", ex);
                     // The names are a nicety; without them the cards still show the ids.
                 }
             }
@@ -773,8 +774,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             setting = await _client.GetPluginTraceSettingAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("Plug-in trace setting could not be read", ex);
             // Reading the setting is a courtesy; the log itself is what matters.
         }
 
@@ -1037,6 +1039,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             Status = problems.Count == 0
                 ? summary + "."
                 : "Some details could not be read - " + string.Join("; ", problems);
+        }
+        catch (Exception ex)
+        {
+            // Started without anyone awaiting it, so this is the only place it can be reported.
+            Services.Log.Error($"Details for {Item.ObjectId} could not be loaded", ex);
+            Status = "The details could not be loaded - " + ex.Message;
         }
         finally
         {

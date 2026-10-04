@@ -117,6 +117,12 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
 
             Status = BuildStatus(leftLayers, rightLayers, leftJson, rightJson, problems);
         }
+        catch (Exception ex)
+        {
+            // Started without anyone awaiting it, so this is the only place it can be reported.
+            Services.Log.Error("Environment diff could not be loaded", ex);
+            Status = "The comparison could not be loaded - " + ex.Message;
+        }
         finally
         {
             IsBusy = false;

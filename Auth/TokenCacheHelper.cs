@@ -57,10 +57,13 @@ internal static class TokenCacheHelper
         catch (Exception ex) when (ex is CryptographicException or MsalClientException or System.Text.Json.JsonException)
         {
             // Genuinely unreadable - another user's DPAPI, or corrupt: start clean rather than block sign-in.
+            Services.Log.Warn("Token cache was unreadable and has been cleared", ex);
             TryDelete();
         }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("Token cache could not be read this time; it is left as it is", ex);
+
             // Busy, locked or otherwise unreadable this moment: the accounts are still in the file,
             // so nothing is deleted and nothing is written back over it. Never thrown on, either -
             // the lock taken above is only released in the after-access notification.

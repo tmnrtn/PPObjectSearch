@@ -271,8 +271,9 @@ public sealed partial class DataverseClient : IDisposable
                 JsonHelper.FindStringDeep(doc.RootElement, "EnvironmentId"));
         }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("RetrieveCurrentOrganization failed", ex);
             // Not available on every version - the caller falls back to the host name.
             return null;
         }
@@ -322,8 +323,9 @@ public sealed partial class DataverseClient : IDisposable
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("Environment id discovery failed", ex);
             // Discovery is optional - links are simply disabled when it fails.
         }
 
@@ -364,8 +366,9 @@ public sealed partial class DataverseClient : IDisposable
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("Table metadata for maker links could not be read", ex);
             // Best effort - links degrade to the solution page without it.
         }
 
@@ -704,8 +707,9 @@ public sealed partial class DataverseClient : IDisposable
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Warn("Process categories could not be read", ex);
             // Best effort - processes simply keep whatever sub type the summary supplied.
         }
     }

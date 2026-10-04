@@ -160,8 +160,9 @@ public sealed class AuthenticationService
             return Token(result, tenantId);
         }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (Exception ex)
         {
+            Services.Log.Info($"No silent token for {resource}: {ex.Message}");
             // No consent for this resource, or nothing cached - the caller treats that as unknown.
             return null;
         }

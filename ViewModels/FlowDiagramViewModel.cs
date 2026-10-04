@@ -674,8 +674,9 @@ public sealed class FlowDiagramViewModel : ObservableObject
                 loop.IterationLabel = (repetitions.Count == 1 ? "1 iteration" : $"{repetitions.Count:N0} iterations") +
                                       (failed > 0 ? $" · {failed:N0} failed" : string.Empty);
             }
-            catch
+            catch (Exception ex)
             {
+                Services.Log.Warn("Loop iterations could not be counted", ex);
                 // A count is a nicety; the diagram stands without it.
             }
         }

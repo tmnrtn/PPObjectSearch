@@ -482,8 +482,9 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             {
                 mailbox = await mailboxTask;
             }
-            catch
+            catch (Exception ex)
             {
+                Services.Log.Warn("User mailbox could not be read", ex);
                 // The mailbox is a nicety in this pane; the Mailboxes tab says what is wrong with it.
             }
 
@@ -1060,8 +1061,9 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
                 {
                     mailbox = await Client.GetMailboxAsync(mailboxId);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Services.Log.Warn("Queue mailbox could not be read", ex);
                     // Shown as unknown; the Mailboxes tab says what is wrong.
                 }
             }

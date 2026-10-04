@@ -353,6 +353,13 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Logs
+
+Problems the app recovers from, and any unexpected error, are written to
+`%LOCALAPPDATA%\PPObjectSearch\logs` - one file a day, kept for two weeks. **Open log folder** is
+in the menu behind the sun icon at the bottom of the sidebar; attach the day's file to a problem
+report. An unexpected error is also shown, with an offer to copy its details.
+
 ## Authentication
 
 By default the app uses Microsoft's pre-consented public client for Dataverse tooling
