@@ -212,7 +212,11 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
                 <Button Content="Check layers"
                         Command="{Binding CheckUnmanagedLayersCommand}"
-                        ToolTip="Queries Dataverse's solution layers for every object currently on screen that hasn't been checked yet - one request per object, so narrowing the filters first is faster." />
+                        ToolTip="Queries Dataverse's solution layers for every object currently on screen that hasn't been checked yet - one request per object, so narrowing the filters first is faster. Results are kept until the environment reconnects." />
+                <Button Content="Stop" Margin="6,0,0,0"
+                        Command="{Binding CancelLayerCheckCommand}"
+                        Visibility="{Binding IsCheckingLayers, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Stop checking layers" />
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
