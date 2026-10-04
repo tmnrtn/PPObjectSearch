@@ -45,6 +45,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         _environmentId = environmentId;
         Item = item;
         Kind = DetailsTabs.KindOf(item);
+        SwitchKind = Switchable.KindOf(item);
         _selectedTab = DetailsTabs.Resolve(Kind, openOn?.Tab ?? DetailsTab.Default);
         _preferredGroup = openOn?.Group;
 
@@ -387,7 +388,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public EnvironmentVariableInfo? EnvironmentVariable
     {
         get => _environmentVariable;
-        private set => SetProperty(ref _environmentVariable, value);
+        private set
+        {
+            if (SetProperty(ref _environmentVariable, value)) RaiseEnvironmentValueCommands();
+        }
     }
 
     private string _environmentVariableStatus = string.Empty;
@@ -402,6 +406,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             EnvironmentVariable = await _client.GetEnvironmentVariableAsync(Item.ObjectId, Item.ComponentType == 381);
+            EnvironmentValueInput = EnvironmentVariable.CurrentValue ?? string.Empty;
             EnvironmentVariableStatus = EnvironmentVariable.ValueRecordCount > 1
                 ? $"This definition has {EnvironmentVariable.ValueRecordCount} value records - there should be at most one. The first is shown."
                 : EnvironmentVariable.EffectiveSource;
@@ -412,6 +417,175 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             EnvironmentVariableStatus = "Could not read the environment variable - " + ex.Message;
             problems.Add("environment variable: " + ex.Message);
         }
+    }
+
+    // ---------------------------------------------------------------- quick actions
+
+    /// <summary>What kind of on/off switch this object has, if any.</summary>
+    public SwitchableKind? SwitchKind { get; }
+
+    /// <summary>Offered only from a session, whose write guard and account the change goes through.</summary>
+    public bool HasSwitch => SwitchKind is not null && HasSession;
+
+    private bool? _isSwitchedOn;
+    public bool? IsSwitchedOn
+    {
+        get => _isSwitchedOn;
+        private set
+        {
+            if (!SetProperty(ref _isSwitchedOn, value)) return;
+            OnPropertyChanged(nameof(SwitchStateLabel));
+            OnPropertyChanged(nameof(OtherSwitchStateLabel));
+            OnPropertyChanged(nameof(SwitchButtonLabel));
+            ToggleSwitchCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string? SwitchStateLabel => SwitchKind is { } kind && IsSwitchedOn is { } on
+        ? on ? Switchable.States(kind).On : Switchable.States(kind).Off
+        : null;
+
+    /// <summary>The state chip for anything but a cloud flow, which has its own.</summary>
+    public string? OtherSwitchStateLabel => IsCloudFlow ? null : SwitchStateLabel;
+
+    public string SwitchButtonLabel => SwitchKind is { } kind
+        ? IsSwitchedOn == true ? Switchable.Verbs(kind).Off : Switchable.Verbs(kind).On
+        : string.Empty;
+
+    private AsyncRelayCommand? _toggleSwitchCommand;
+    public AsyncRelayCommand ToggleSwitchCommand => _toggleSwitchCommand ??= new AsyncRelayCommand(
+        _ => ToggleSwitchAsync(), _ => HasSwitch && IsSwitchedOn is not null && !_isWriting);
+
+    private bool _isWriting;
+
+    private QuickActions? _quickActions;
+    private QuickActions Actions => _quickActions ??= new QuickActions(_client, Session?.AccountName);
+
+    private async Task LoadSwitchStateAsync(List<string> problems)
+    {
+        try
+        {
+            var states = await _client.GetSwitchStatesAsync(SwitchKind!.Value, new[] { Item.ObjectId });
+            IsSwitchedOn = states.TryGetValue(Item.ObjectId, out var on) ? on : null;
+            if (IsCloudFlow && IsSwitchedOn is { } flowOn) IsFlowOn = flowOn;
+        }
+        catch (Exception ex)
+        {
+            IsSwitchedOn = null;
+            problems.Add("state: " + ex.Message);
+        }
+    }
+
+    private async Task ToggleSwitchAsync()
+    {
+        if (Session is null || SwitchKind is not { } kind || IsSwitchedOn is not { } on) return;
+
+        var verb = SwitchButtonLabel;
+        if (!await WriteConfirmation.AskAsync(Session, verb, $"{verb} {Item.DisplayName ?? Item.Name}?")) return;
+
+        _isWriting = true;
+        ToggleSwitchCommand.RaiseCanExecuteChanged();
+        Status = $"{verb}...";
+
+        try
+        {
+            await Actions.SetStateAsync(Item, kind, !on);
+            IsSwitchedOn = !on;
+            if (IsCloudFlow) IsFlowOn = !on;
+            Status = $"{verb} - done. {SwitchStateLabel} now.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not {verb.ToLowerInvariant()} - {ex.Message}";
+        }
+        finally
+        {
+            _isWriting = false;
+            ToggleSwitchCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _environmentValueInput = string.Empty;
+    /// <summary>The value to set, edited in the Value tab.</summary>
+    public string EnvironmentValueInput
+    {
+        get => _environmentValueInput;
+        set
+        {
+            if (SetProperty(ref _environmentValueInput, value)) EnvironmentValueError = null;
+        }
+    }
+
+    private string? _environmentValueError;
+    public string? EnvironmentValueError
+    {
+        get => _environmentValueError;
+        private set => SetProperty(ref _environmentValueError, value);
+    }
+
+    /// <summary>Secrets are Key Vault references and are left to the maker portal.</summary>
+    public bool CanEditEnvironmentValue => HasSession && EnvironmentVariable is { IsSecret: false };
+
+    private AsyncRelayCommand? _setEnvironmentValueCommand;
+    public AsyncRelayCommand SetEnvironmentValueCommand => _setEnvironmentValueCommand ??= new AsyncRelayCommand(
+        _ => SetEnvironmentValueAsync(EnvironmentValueInput), _ => CanEditEnvironmentValue && !_isWriting);
+
+    private AsyncRelayCommand? _clearEnvironmentValueCommand;
+    public AsyncRelayCommand ClearEnvironmentValueCommand => _clearEnvironmentValueCommand ??= new AsyncRelayCommand(
+        _ => SetEnvironmentValueAsync(null),
+        _ => CanEditEnvironmentValue && EnvironmentVariable is { HasCurrentValue: true } && !_isWriting);
+
+    private async Task SetEnvironmentValueAsync(string? input)
+    {
+        if (Session is null || EnvironmentVariable is not { } variable) return;
+
+        string? value = null;
+        if (input is not null)
+        {
+            var (normalised, error) = EnvironmentVariableValues.Normalise(variable.Type, input);
+            if (error is not null)
+            {
+                EnvironmentValueError = error;
+                return;
+            }
+
+            value = normalised;
+        }
+
+        var action = value is null
+            ? $"Remove the current value of {variable.SchemaName}, so its default applies?"
+            : $"Set {variable.SchemaName} to:\n\n{Shorten(value)}";
+
+        if (!await WriteConfirmation.AskAsync(Session, "Environment variable", action)) return;
+
+        _isWriting = true;
+        RaiseEnvironmentValueCommands();
+
+        try
+        {
+            await Actions.SetEnvironmentValueAsync(variable, value);
+            var problems = new List<string>();
+            await LoadEnvironmentVariableAsync(problems);
+            Status = value is null ? "Value removed - the default now applies." : "Value set.";
+        }
+        catch (Exception ex)
+        {
+            Status = "Could not change the value - " + ex.Message;
+        }
+        finally
+        {
+            _isWriting = false;
+            RaiseEnvironmentValueCommands();
+        }
+
+        static string Shorten(string text) => text.Length <= 400 ? text : text[..400] + "...";
+    }
+
+    private void RaiseEnvironmentValueCommands()
+    {
+        OnPropertyChanged(nameof(CanEditEnvironmentValue));
+        SetEnvironmentValueCommand.RaiseCanExecuteChanged();
+        ClearEnvironmentValueCommand.RaiseCanExecuteChanged();
     }
 
     // ---------------------------------------------------------------- row count
@@ -1033,6 +1207,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (HasTraceLog) await LoadTraceLogAsync(problems);
             if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
             if (HasSource) await LoadSourceAsync(problems);
+            if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
 
             if (_detached) return;
             try

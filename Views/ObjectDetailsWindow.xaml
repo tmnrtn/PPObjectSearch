@@ -124,6 +124,10 @@
                             </ContentControl.Style>
                         </ContentControl>
 
+                        <!-- A process or plug-in step: activated/draft, enabled/disabled. -->
+                        <ContentControl Margin="0,0,4,0" Style="{StaticResource Chip}" Content="{Binding OtherSwitchStateLabel}"
+                                        Visibility="{Binding OtherSwitchStateLabel, Converter={StaticResource EmptyToCollapsed}}" />
+
                         <TextBlock Text="{Binding Item.ObjectId}" FontFamily="{StaticResource MonoFont}" FontSize="11"
                                    Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
                         <Button Style="{StaticResource LinkButton}" Content="Copy" Height="20" Padding="4,0" Margin="2,0,0,0"
@@ -132,6 +136,13 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <!-- Turn on/off, activate/deactivate, enable/disable - through the write guard, confirmed, logged. -->
+                    <Button Style="{StaticResource RowButton}" Content="{Binding SwitchButtonLabel}" Margin="0,0,16,0"
+                            VerticalAlignment="Center"
+                            Command="{Binding ToggleSwitchCommand}"
+                            ToolTip="Change it in this environment. The write guard applies, you are asked to confirm, and the change is recorded in the run log."
+                            Visibility="{Binding HasSwitch, Converter={StaticResource BoolToVis}}" />
+
                     <!-- Tables only: an exact row count, found by probing pages rather than reading every row. -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
                                 Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}">
@@ -589,6 +600,31 @@
                                     <TextBlock Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
                                                Text="A secret holds an Azure Key Vault reference, not the secret itself. The value is resolved by Key Vault at run time."
                                                Visibility="{Binding IsSecret, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+
+                                <!-- Setting the value here: checked against the type, guarded, confirmed and logged. -->
+                                <Grid Margin="0,12,0,0" Visibility="{Binding CanEditEnvironmentValue, Converter={StaticResource BoolToVis}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="New value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBox Style="{StaticResource CodeBox}" Text="{Binding EnvironmentValueInput, UpdateSourceTrigger=PropertyChanged}"
+                                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="220"
+                                                 AutomationProperties.Name="New value for this environment" />
+                                        <TextBlock Text="{Binding EnvironmentValueError}" Foreground="{DynamicResource Red}" TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"
+                                                   Visibility="{Binding EnvironmentValueError, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                            <Button Style="{StaticResource PrimaryButton}" Content="Set value" Height="30"
+                                                    Command="{Binding SetEnvironmentValueCommand}"
+                                                    ToolTip="Write this as the current value in this environment" />
+                                            <Button Content="Remove current value" Height="30" Margin="8,0,0,0"
+                                                    Command="{Binding ClearEnvironmentValueCommand}"
+                                                    ToolTip="Delete the value record, so the default value applies" />
+                                        </StackPanel>
+                                    </StackPanel>
                                 </Grid>
                             </StackPanel>
                         </ScrollViewer>

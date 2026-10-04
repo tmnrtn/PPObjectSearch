@@ -38,6 +38,7 @@ public sealed partial class DataverseClient
         var type = JsonHelper.GetInt(root, "type");
 
         string? current = null;
+        Guid? valueId = null;
         var valueCount = 0;
         if (root.TryGetProperty("environmentvariabledefinition_environmentvariablevalue", out var values) &&
             values.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -45,13 +46,20 @@ public sealed partial class DataverseClient
             foreach (var value in values.EnumerateArray())
             {
                 valueCount++;
-                current ??= JsonHelper.GetString(value, "value");
+                if (valueCount == 1)
+                {
+                    current = JsonHelper.GetString(value, "value");
+                    if (Guid.TryParse(JsonHelper.GetString(value, "environmentvariablevalueid"), out var id)) valueId = id;
+                }
             }
         }
 
         return new EnvironmentVariableInfo
         {
             SchemaName = JsonHelper.GetString(root, "schemaname") ?? string.Empty,
+            DefinitionId = definitionId,
+            ValueId = valueId,
+            Type = type,
             DisplayName = JsonHelper.GetString(root, "displayname"),
             Description = JsonHelper.GetString(root, "description"),
             TypeLabel = JsonHelper.GetString(root, "type@" + Annotations.Formatted) ?? type?.ToString() ?? "Unknown",

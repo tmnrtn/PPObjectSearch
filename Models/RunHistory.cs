@@ -109,6 +109,14 @@ public enum PluginTraceSetting
 public sealed class EnvironmentVariableInfo
 {
     public required string SchemaName { get; init; }
+
+    /// <summary>The definition row, and the value row where there is one - for setting the value.</summary>
+    public Guid DefinitionId { get; init; }
+    public Guid? ValueId { get; init; }
+
+    /// <summary>The type's option value (100000000 text ... 100000005 secret).</summary>
+    public int? Type { get; init; }
+
     public string? DisplayName { get; init; }
     public string? Description { get; init; }
     public required string TypeLabel { get; init; }

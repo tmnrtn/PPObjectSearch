@@ -336,6 +336,15 @@
                         <MenuItem Header="{Binding CopyIdHeader}" Command="{Binding CopyIdCommand}" />
                         <MenuItem Header="Copy as table" Command="{Binding CopyAsTableCommand}"
                                   ToolTip="Tab-separated with a header row - pastes into Excel as a table" />
+                        <Separator Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="{Binding SwitchOnHeader}" Command="{Binding SwitchOnCommand}"
+                                  ToolTip="Turn on flows, activate processes, enable plug-in steps - guarded, confirmed and logged"
+                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="{Binding SwitchOffHeader}" Command="{Binding SwitchOffCommand}"
+                                  ToolTip="Turn off flows, deactivate processes, disable plug-in steps - guarded, confirmed and logged"
+                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="Turn on every flow listed that is off" Command="{Binding TurnOnSolutionFlowsCommand}"
+                                  ToolTip="Checks every cloud flow in the loaded list and turns on the ones that are off" />
                         <Separator Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
                         <MenuItem Header="{Binding SelectionHeader}" IsEnabled="False"
                                   Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />

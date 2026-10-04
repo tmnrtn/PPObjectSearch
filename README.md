@@ -390,6 +390,23 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Quick actions
+
+The most common fixes after a deployment, without leaving for the maker portal:
+
+- **Turn on / Turn off** a cloud flow, **Activate / Deactivate** a classic workflow, business rule
+  or action, and **Enable / Disable** a plug-in step - from the details window, or from the grid's
+  right-click menu for every selected row at once.
+- **Turn on every flow listed that is off** (right-click menu) checks every cloud flow in the
+  loaded list and turns on the ones that are off.
+- **Set value / Remove current value** on an environment variable's *Value* tab. The value is
+  checked against the variable's type first: a number, yes/no, valid JSON, a non-empty data
+  source. Secrets (Key Vault references) are left to the maker portal.
+
+Each goes through the [production guard](#the-production-guard) and is confirmed in a prompt that
+names the environment and its type. Each is recorded in the run log under
+`%LOCALAPPDATA%\PPObjectSearch\writes\` with the state it replaced and the write that reverses it.
+
 ## Updates
 
 Once a day the app asks GitHub whether a newer release exists, and if so shows a link to it under
