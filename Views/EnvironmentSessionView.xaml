@@ -93,7 +93,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
+                    <Button AutomationProperties.Name="F5 - re-reads the environment, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
                             ToolTip="F5 - re-reads the environment, bypassing the cache." />
                 </StackPanel>
@@ -220,7 +220,7 @@
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
-                <Button Content="&#xE8A0;" Margin="6,0,0,0"
+                <Button AutomationProperties.Name="Show or hide the detail pane" Content="&#xE8A0;" Margin="6,0,0,0"
                         Command="{Binding ToggleDetailPaneCommand}"
                         ToolTip="Show or hide the detail pane">
                     <!-- On while the pane is open, like an active filter. -->

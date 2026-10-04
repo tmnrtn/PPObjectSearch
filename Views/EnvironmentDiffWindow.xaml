@@ -47,7 +47,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30"
+                <Button AutomationProperties.Name="Read both definitions again" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30"
                         VerticalAlignment="Top" Command="{Binding RefreshCommand}" ToolTip="Read both definitions again" />
             </Grid>
 

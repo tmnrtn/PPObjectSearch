@@ -424,7 +424,7 @@
                                 Command="{Binding JumpToFailureCommand}"
                                 Visibility="{Binding IsRunFailed, Converter={StaticResource BoolToVis}}"
                                 ToolTip="Select the first step that failed, opening whatever holds it" />
-                        <Button Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0" Margin="4,0,0,0"
+                        <Button AutomationProperties.Name="Show the flow's design without this run" Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0" Margin="4,0,0,0"
                                 FontFamily="{StaticResource IconFont}" FontSize="9" Content="&#xE8BB;"
                                 Foreground="{DynamicResource Muted}"
                                 Command="{Binding ClearRunCommand}" ToolTip="Show the flow's design without this run" />

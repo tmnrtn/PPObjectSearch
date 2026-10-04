@@ -283,9 +283,9 @@
                                 <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsDestructiveApply}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource Red}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Red}" />
-                                            <Setter Property="Foreground" Value="#FFFFFF" />
+                                            <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource DangerBg}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource DangerText}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>

@@ -158,7 +158,7 @@
                             <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="10,0">
                                 <DockPanel>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
-                                <Button Content="&#xE72B;" Width="26" Height="26" Command="{Binding BackCommand}"
+                                <Button AutomationProperties.Name="{Binding BackToolTip}" Content="&#xE72B;" Width="26" Height="26" Command="{Binding BackCommand}"
                                         ToolTip="{Binding BackToolTip}" ToolTipService.ShowOnDisabled="True">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
@@ -174,7 +174,7 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
-                                <Button Content="&#xE72A;" Width="26" Height="26" Margin="2,0,0,0" Command="{Binding ForwardCommand}"
+                                <Button AutomationProperties.Name="{Binding ForwardToolTip}" Content="&#xE72A;" Width="26" Height="26" Margin="2,0,0,0" Command="{Binding ForwardCommand}"
                                         ToolTip="{Binding ForwardToolTip}" ToolTipService.ShowOnDisabled="True">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
@@ -242,7 +242,7 @@
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title or object id"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
-                            <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                            <Button AutomationProperties.Name="Read the users again" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
                                     Command="{Binding RefreshCommand}" ToolTip="Read the users again" />
                         </Grid>
 
@@ -536,7 +536,7 @@
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Role or business unit"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
-                            <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                            <Button AutomationProperties.Name="Read the roles again" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
                                     Command="{Binding RefreshCommand}" ToolTip="Read the roles again" />
                         </Grid>
 
@@ -814,7 +814,7 @@
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, address, owner or profile"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
-                            <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                            <Button AutomationProperties.Name="Read the mailboxes again" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
                                     Command="{Binding RefreshCommand}" ToolTip="Read the mailboxes again" />
                         </Grid>
 
@@ -1037,7 +1037,7 @@
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Queue, address, owner or business unit"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
-                            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
+                            <Button AutomationProperties.Name="Read the queues again" Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Margin="8,0,0,0"
                                     Command="{Binding RefreshCommand}" ToolTip="Read the queues again" />
                         </Grid>
 

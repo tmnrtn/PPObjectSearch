@@ -66,7 +66,7 @@
             <Grid Grid.Row="0" Margin="8,8,0,6">
                 <TextBlock Text="Environments" FontSize="11" FontWeight="SemiBold"
                            Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
-                <Button HorizontalAlignment="Right" Style="{StaticResource GhostButton}"
+                <Button AutomationProperties.Name="Open another environment in a new tab (Ctrl+T)" HorizontalAlignment="Right" Style="{StaticResource GhostButton}"
                         Width="22" Height="22" Padding="0" FontFamily="{StaticResource IconFont}" FontSize="11"
                         Foreground="{DynamicResource Muted}" Content="&#xE710;"
                         ToolTip="Open another environment in a new tab (Ctrl+T)"
@@ -173,9 +173,10 @@
                                     <!-- The badge gives way to a close button while the row is hovered. -->
                                     <Grid Grid.Column="2" Margin="6,0,0,0" VerticalAlignment="Center">
                                         <ContentControl x:Name="Badge" Style="{StaticResource EnvTypeBadge}"
+                                                        AutomationProperties.Name="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}}"
                                                         Tag="{Binding EnvironmentSku}"
                                                         Content="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}, ConverterParameter=short}" />
-                                        <Button x:Name="CloseButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
+                                        <Button AutomationProperties.Name="Close tab (Ctrl+W)" x:Name="CloseButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
                                                 Width="22" Height="22" Padding="0" HorizontalAlignment="Right"
                                                 FontFamily="{StaticResource IconFont}" FontSize="9"
                                                 Foreground="{DynamicResource Muted}" Content="&#xE8BB;"
@@ -316,7 +317,7 @@
                     </Button.Style>
                 </Button>
 
-                <Button Grid.Row="1" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
+                <Button AutomationProperties.Name="Theme" Grid.Row="1" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
                         Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
                         Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
                         core:Ui.OpensMenu="True">

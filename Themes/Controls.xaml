@@ -579,11 +579,11 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button x:Name="MinButton" Style="{StaticResource CaptionButton}" Content="&#xE921;"
+                                    <Button AutomationProperties.Name="Minimise" x:Name="MinButton" Style="{StaticResource CaptionButton}" Content="&#xE921;"
                                             Command="{x:Static SystemCommands.MinimizeWindowCommand}" ToolTip="Minimise" />
-                                    <Button x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
+                                    <Button AutomationProperties.Name="Maximise" x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
                                             Command="{x:Static SystemCommands.MaximizeWindowCommand}" ToolTip="Maximise" />
-                                    <Button Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;"
+                                    <Button AutomationProperties.Name="Close" Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;"
                                             Command="{x:Static SystemCommands.CloseWindowCommand}" ToolTip="Close" />
                                 </StackPanel>
                             </Grid>
@@ -1097,6 +1097,11 @@
                             <Setter Property="Opacity" Value="0.5" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="Card" Property="Padding" Value="11,9" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -1150,6 +1155,10 @@
                             <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
                             <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
                         </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Ring" Property="StrokeThickness" Value="2" />
+                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
                         </Trigger>
@@ -1174,7 +1183,7 @@
 
     <ControlTemplate x:Key="SegmentTemplate" TargetType="ButtonBase">
         <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}"
-                SnapsToDevicePixels="True">
+                BorderBrush="Transparent" BorderThickness="1" SnapsToDevicePixels="True">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Ellipse x:Name="SegDot" Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center"
                          Fill="{TemplateBinding core:Ui.DotBrush}" />
@@ -1197,6 +1206,10 @@
                         <DropShadowEffect BlurRadius="2" ShadowDepth="1" Direction="270" Opacity="0.12" />
                     </Setter.Value>
                 </Setter>
+            </Trigger>
+            <!-- The focus visual is switched off for these, so focus is drawn here instead. -->
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" />
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>

@@ -50,7 +50,7 @@
                     <local:EnvironmentLine DataContext="{Binding Session}" />
                     <TextBlock Text="Queue membership sync" Style="{StaticResource WindowHeading}" />
                 </StackPanel>
-                <Button Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right" VerticalAlignment="Center"
+                <Button AutomationProperties.Name="Read the teams and queues again" Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right" VerticalAlignment="Center"
                         Width="30" Height="30" Command="{Binding RefreshCommand}" ToolTip="Read the teams and queues again" />
             </Grid>
 

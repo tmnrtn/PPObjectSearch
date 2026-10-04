@@ -20,6 +20,10 @@
 
     <!-- Status: fg / soft background -->
     <SolidColorBrush x:Key="Red" Color="#F08A80" />
+    <!-- A destructive button's fill and text. The dark theme's Red is light, so the button uses a
+         deeper red: white on it is about 5.4:1 (white on Red would be about 2.4:1). -->
+    <SolidColorBrush x:Key="DangerBg" Color="#C42B1C" />
+    <SolidColorBrush x:Key="DangerText" Color="#FFFFFF" />
     <SolidColorBrush x:Key="RedSoft" Color="#3A2320" />
     <SolidColorBrush x:Key="Blue" Color="#8FB0F5" />
     <SolidColorBrush x:Key="BlueSoft" Color="#1F2740" />

@@ -33,7 +33,7 @@
                           core:Ui.InlineLabel="Left"
                           ItemsSource="{Binding Sessions}" SelectedItem="{Binding Left}" />
 
-                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
+                <Button AutomationProperties.Name="Swap left and right" Grid.Column="1" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
                         Margin="6,0" FontFamily="{StaticResource IconFont}" FontSize="13"
                         Foreground="{DynamicResource Muted}" Content="&#xE8AB;"
                         ToolTip="Swap left and right" Command="{Binding SwapCommand}" />
