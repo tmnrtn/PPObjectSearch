@@ -79,7 +79,12 @@ public static class ComponentCache
                 Items = items.ToList()
             };
 
-            File.WriteAllText(PathFor(environmentUrl, solutionId), JsonSerializer.Serialize(payload, JsonOptions));
+            // Through a uniquely named temporary file: a crash cannot leave a torn cache, and two
+            // saves of the same solution in the background cannot write over each other mid-file.
+            var path = PathFor(environmentUrl, solutionId);
+            var temp = $"{path}.{Guid.NewGuid():N}.tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(payload, JsonOptions));
+            File.Move(temp, path, overwrite: true);
         }
         catch (Exception ex)
         {

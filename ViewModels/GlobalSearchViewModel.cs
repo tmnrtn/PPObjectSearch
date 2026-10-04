@@ -24,6 +24,10 @@ public sealed class GlobalSearchRow : ObservableObject
 
     public EnvironmentSku EnvironmentSku => Source.EnvironmentSku;
 
+    /// <summary>Whether the current search terms match, worked out once per search rather than
+    /// once per filter pass and once more per scope count.</summary>
+    internal bool IsMatch { get; set; } = true;
+
     private bool _isGroupEnd;
     /// <summary>The last row of a run with the same name, while the list is sorted by name - the
     /// grid draws a stronger line under it so each object's environments read as one group.</summary>
@@ -111,9 +115,11 @@ public sealed class GlobalSearchViewModel : ObservableObject
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
         RowsView.Filter = Filter;
 
-        // Name first, so one object's copies in each environment sit together.
-        RowsView.SortDescriptions.Add(new SortDescription("Item.PrimaryLabel", ListSortDirection.Ascending));
-        RowsView.SortDescriptions.Add(new SortDescription(nameof(GlobalSearchRow.SessionOrder), ListSortDirection.Ascending));
+        // Name first, so one object's copies in each environment sit together. A typed comparer
+        // rather than SortDescriptions, which look the property path up by reflection on every
+        // comparison - across every connected tab's objects, on every keystroke. Sorting by a
+        // column header replaces it with that column's sort as usual.
+        RowsView.CustomSort = ByName.Instance;
         ((System.Collections.Specialized.INotifyCollectionChanged)RowsView.SortDescriptions).CollectionChanged += (_, _) => MarkGroupEnds();
 
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
@@ -193,11 +199,23 @@ public sealed class GlobalSearchViewModel : ObservableObject
             .ToArray();
 
         // The pill counts ignore the scope itself, so each one says what picking it would show.
-        var matching = _all.Where(MatchesTerms).ToList();
-        Scopes[0].Count = matching.Count;
+        // One pass decides every row and counts every scope at once.
+        var perSession = new Dictionary<EnvironmentSessionViewModel, int>();
+        var matching = 0;
+
+        foreach (var row in _all)
+        {
+            row.IsMatch = MatchesTerms(row);
+            if (!row.IsMatch) continue;
+
+            matching++;
+            perSession[row.Source] = perSession.GetValueOrDefault(row.Source) + 1;
+        }
+
+        Scopes[0].Count = matching;
         foreach (var scope in Scopes.Where(s => !s.IsAll))
         {
-            scope.Count = matching.Count(r => ReferenceEquals(r.Source, scope.Session));
+            scope.Count = scope.Session is null ? 0 : perSession.GetValueOrDefault(scope.Session);
         }
 
         RowsView.Refresh();
@@ -216,8 +234,9 @@ public sealed class GlobalSearchViewModel : ObservableObject
     /// <summary>Only meaningful while the list is sorted by name; any other order clears it.</summary>
     private void MarkGroupEnds()
     {
-        var byName = RowsView.SortDescriptions.Count > 0 &&
-                     RowsView.SortDescriptions[0].PropertyName == "Item.PrimaryLabel";
+        var byName = RowsView.CustomSort is ByName ||
+                     (RowsView.SortDescriptions.Count > 0 &&
+                      RowsView.SortDescriptions[0].PropertyName == "Item.PrimaryLabel");
 
         GlobalSearchRow? previous = null;
         foreach (GlobalSearchRow row in RowsView)
@@ -237,7 +256,21 @@ public sealed class GlobalSearchViewModel : ObservableObject
     private bool Filter(object obj) =>
         obj is GlobalSearchRow row &&
         (SelectedScope.IsAll || ReferenceEquals(row.Source, SelectedScope.Session)) &&
-        MatchesTerms(row);
+        row.IsMatch;
+
+    /// <summary>Name, then the tab's place in the sidebar.</summary>
+    private sealed class ByName : System.Collections.IComparer
+    {
+        public static readonly ByName Instance = new();
+
+        public int Compare(object? x, object? y)
+        {
+            if (x is not GlobalSearchRow a || y is not GlobalSearchRow b) return 0;
+
+            var byName = string.Compare(a.Item.PrimaryLabel, b.Item.PrimaryLabel, StringComparison.CurrentCultureIgnoreCase);
+            return byName != 0 ? byName : a.SessionOrder.CompareTo(b.SessionOrder);
+        }
+    }
 
     private bool MatchesTerms(GlobalSearchRow row)
     {
