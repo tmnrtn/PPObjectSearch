@@ -16,6 +16,15 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
         ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));
 
+    // ---------------------------------------------------------------- recent changes
+
+    private RelayCommand? _recentChangesCommand;
+    public RelayCommand RecentChangesCommand => _recentChangesCommand ??= new RelayCommand(_ =>
+    {
+        if (_client is null || !IsConnected) return;
+        new Views.ChangesWindow { DataContext = new ChangesViewModel(this), Owner = Application.Current.MainWindow }.Show();
+    });
+
     // ---------------------------------------------------------------- security lookup
 
     private RelayCommand? _securityLookupCommand;

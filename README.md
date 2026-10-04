@@ -423,6 +423,16 @@ are read once per tab, a chunk of rows per request, and read again only for comp
 since - so a second search is instant. **Find usages** on a table's column (Table components tab)
 and on an environment variable (Value tab) runs the same search for that name.
 
+## Recent changes
+
+**Recent changes** (sidebar) answers "something broke yesterday - what changed?". It lists every
+component in the environment modified in the last 24 hours, 7 days or 30 days, newest first, with
+**who modified it** for flows and workflows, web resources, forms, views, plug-in steps and
+environment variables. Solution imports, upgrades and uninstalls from Solution history sit on the
+same timeline, with their result and any error. Filter by type, or to *unmanaged only* - the direct
+customisations that usually cause drift. Double-click a component to open it; export to CSV or
+Markdown for an incident write-up.
+
 ## Overview tab for apps, agents and more
 
 Components without a tab of their own now open on an **Overview**: their key properties, and the
