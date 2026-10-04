@@ -93,9 +93,11 @@ public sealed partial class DataverseClient
         }
 
         // Three would already be too many; the third is only fetched to say "several" honestly.
-        // The label is data, not syntax: the quote is doubled so it cannot end the literal, and
-        // the three characters that would otherwise end the query string are percent-encoded.
-        var literal = EscapeFilter(label.Replace("'", "''"));
+        // The label is data, not syntax: the quote is doubled so it cannot end the literal, and the
+        // whole literal is percent-encoded - including '%', which the server decodes after the
+        // quotes are checked, so "%27" would otherwise become a quote that ends the literal.
+        // It is not trimmed: a label with surrounding spaces has to match itself.
+        var literal = Escape(label);
 
         var url = EnvironmentUrl + ApiPath + entity.EntitySetName +
                   $"?$select={entity.PrimaryIdAttribute}&$top=3" +

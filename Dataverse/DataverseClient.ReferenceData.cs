@@ -235,10 +235,12 @@ public sealed partial class DataverseClient
 
     /// <summary>
     /// The filter is an OData expression the user wrote, so it is left as it stands apart from the
-    /// three characters that would end the query or change its meaning. Escaping it whole would
-    /// break navigation paths and function calls, which are the reason for writing one by hand.
+    /// characters that would end the query or change its meaning. Escaping it whole would break
+    /// navigation paths and function calls, which are the reason for writing one by hand. '%' goes
+    /// first, so a literal percent sign (contains(name,'50%')) reaches the server as itself.
     /// </summary>
-    private static string EscapeFilter(string filter) => filter.Trim()
+    internal static string EscapeFilter(string filter) => filter.Trim()
+        .Replace("%", "%25", StringComparison.Ordinal)
         .Replace("&", "%26", StringComparison.Ordinal)
         .Replace("#", "%23", StringComparison.Ordinal)
         .Replace("+", "%2B", StringComparison.Ordinal);

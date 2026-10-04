@@ -146,7 +146,7 @@ public sealed partial class DataverseClient
     /// <summary>An In() condition over literal values - quotes doubled, URL-significant characters encoded.</summary>
     private static string InFilter(string column, IEnumerable<string> values) =>
         $"Microsoft.Dynamics.CRM.In(PropertyName='{column}',PropertyValues=[" +
-        string.Join(",", values.Select(v => $"'{EscapeFilter(v.Replace("'", "''"))}'")) + "])";
+        string.Join(",", values.Select(v => $"'{Escape(v)}'")) + "])";
 
     // ---------------------------------------------------------------- writes
 

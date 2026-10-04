@@ -253,6 +253,9 @@ public sealed partial class DataverseClient
     private static long? GetLong(JsonElement row, string name) =>
         long.TryParse(JsonHelper.GetString(row, name), out var value) ? value : null;
 
-    /// <summary>OData string literals double their single quotes.</summary>
-    private static string Escape(string value) => Uri.EscapeDataString(value.Replace("'", "''"));
+    /// <summary>
+    /// A value for inside an OData string literal: single quotes doubled, then every character
+    /// that means something in a URL percent-encoded (including '%').
+    /// </summary>
+    internal static string Escape(string value) => Uri.EscapeDataString(value.Replace("'", "''"));
 }

@@ -438,6 +438,43 @@ public class ReferenceDataWriterTests
     }
 
     [Fact]
+    public async Task Apply_cannot_end_a_lookup_literal_with_an_encoded_quote()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(500)))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+
+        // Decoded once by the server, "%27" would be a quote that closes the literal and lets the
+        // rest of the label become filter syntax.
+        var label = "x%27 or startswith(new_name,%27A";
+        var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), label).Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent }, source, null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        var sent = handler.Requests[0].Uri.OriginalString;
+        Assert.Contains("x%2527", sent);
+        Assert.DoesNotContain("x%27", sent);
+        Assert.EndsWith($"$filter=new_name eq '{label}'", handler.Requests[0].Url);
+    }
+
+    [Fact]
+    public async Task Apply_keeps_spaces_and_percent_signs_in_a_lookup_name()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(500)))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+
+        var source = Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), " 50% off ").Build();
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent }, source, null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.EndsWith("$filter=new_name eq ' 50% off '", handler.Requests[0].Url);
+        Assert.Contains("50%25", handler.Requests[0].Uri.OriginalString);
+    }
+
+    [Fact]
     public async Task Apply_abandons_a_row_whose_lookup_matches_nothing()
     {
         var handler = new FakeHttpHandler()
