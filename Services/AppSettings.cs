@@ -95,6 +95,12 @@ public sealed class AppSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AppTheme Theme { get; set; } = AppTheme.System;
 
+    /// <summary>Whether to look, once a day, for a newer release on GitHub. Nothing is downloaded.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>When the last update check ran, so it runs at most once a day.</summary>
+    public DateTimeOffset? LastUpdateCheck { get; set; }
+
     /// <summary>Whether the main window's object detail pane is showing.</summary>
     public bool IsDetailPaneOpen { get; set; } = true;
 

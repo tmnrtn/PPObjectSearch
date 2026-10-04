@@ -44,6 +44,49 @@ public sealed class ShellViewModel : ObservableObject
         });
 
         RestoreTabs();
+        _ = CheckForUpdateAsync();
+    }
+
+    private Services.AvailableUpdate? _update;
+    /// <summary>A newer release, when the daily check found one.</summary>
+    public Services.AvailableUpdate? Update
+    {
+        get => _update;
+        private set
+        {
+            if (!SetProperty(ref _update, value)) return;
+            OnPropertyChanged(nameof(HasUpdate));
+            OnPropertyChanged(nameof(UpdateLabel));
+        }
+    }
+
+    public bool HasUpdate => Update is not null;
+    public string UpdateLabel => Update is null ? string.Empty : $"Version {Update.Version} is available";
+
+    public RelayCommand OpenUpdateCommand => _openUpdateCommand ??= new RelayCommand(_ =>
+    {
+        if (Update is { } update) LinkLauncher.Open(update.Url, null);
+    });
+    private RelayCommand? _openUpdateCommand;
+
+    /// <summary>
+    /// Once a day at most, in the background: is there a newer release? Off with CheckForUpdates
+    /// set to false in settings.json, for machines that should not reach out to GitHub.
+    /// </summary>
+    private async Task CheckForUpdateAsync()
+    {
+        if (!_settings.CheckForUpdates) return;
+        if (_settings.LastUpdateCheck is { } last && DateTimeOffset.Now - last < UpdateCheck.Interval) return;
+
+        using var http = new System.Net.Http.HttpClient(Core.RetryHandler.Shared, disposeHandler: false)
+        {
+            Timeout = TimeSpan.FromSeconds(20)
+        };
+
+        Update = await UpdateCheck.CheckAsync(Core.AppVersion.Version, http);
+
+        _settings.LastUpdateCheck = DateTimeOffset.Now;
+        _settings.Save();
     }
 
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; } = new();

@@ -364,6 +364,12 @@ added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
 read again.
 
+## Updates
+
+Once a day the app asks GitHub whether a newer release exists, and if so shows a link to it under
+the version in the sidebar. It never downloads or installs anything. Set `"CheckForUpdates": false`
+in `settings.json` to turn the check off.
+
 ## Logs
 
 Problems the app recovers from, and any unexpected error, are written to

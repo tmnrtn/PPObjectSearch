@@ -298,8 +298,14 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Text="{x:Static core:AppVersion.Label}" ToolTip="{x:Static core:AppVersion.Description}"
-                           FontSize="11" Foreground="{DynamicResource Faint}" Margin="8,0,0,6" />
+                <StackPanel Grid.Row="0" Margin="8,0,0,6">
+                    <TextBlock Text="{x:Static core:AppVersion.Label}" ToolTip="{x:Static core:AppVersion.Description}"
+                               FontSize="11" Foreground="{DynamicResource Faint}" />
+                    <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" FontSize="11" Margin="0,2,0,0"
+                            Content="{Binding UpdateLabel}" Command="{Binding OpenUpdateCommand}"
+                            ToolTip="Open the release page on GitHub"
+                            Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
 
                 <Button Grid.Row="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
                         Margin="0,0,34,0" Content="Sign out all"
