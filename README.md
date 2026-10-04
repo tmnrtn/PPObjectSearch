@@ -423,6 +423,23 @@ are read once per tab, a chunk of rows per request, and read again only for comp
 since - so a second search is instant. **Find usages** on a table's column (Table components tab)
 and on an environment variable (Value tab) runs the same search for that name.
 
+## Overview tab for apps, agents and more
+
+Components without a tab of their own now open on an **Overview**: their key properties, and the
+parts they are made of.
+
+| Type | Overview |
+| --- | --- |
+| Canvas app | Owner, type, version, last published and commit message; the connectors and connection references it uses |
+| Model-driven app | Version, published date, navigation; its sitemap as area / group / item / what it opens; the components and security roles in the app |
+| Copilot Studio agent | Language, authentication, access, last published; its topics, knowledge sources and actions |
+| Custom API | Function or action, binding and bound table, plug-in type, run privilege; request parameters and response properties |
+| Security role | Its privilege matrix by table, and its other privileges |
+| Global choice | Its options with value, label, colour and description |
+| Business process flow | Its stages, with category and table |
+
+A part that cannot be read is named at the top of the tab rather than left empty.
+
 ## Dependency graph
 
 **Explore graph…** on a component's Dependencies tab opens its dependencies as a tree in both

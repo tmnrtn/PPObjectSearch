@@ -180,6 +180,45 @@
                 <!-- One selection: the caller's tab, else the type's own (SelectedTab). -->
                 <TabControl SelectedValuePath="Tag" SelectedValue="{Binding SelectedTab}">
                     <!-- A cloud flow drawn as the designer draws it. Read-only. -->
+                    <!-- Apps, agents, custom APIs, roles, choices, business process flows: key properties and their parts. -->
+                    <TabItem Header="Overview" Tag="{x:Static models:DetailsTab.Overview}"
+                             Visibility="{Binding HasOverview, Converter={StaticResource BoolToVis}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="18,14,18,18">
+                                <TextBlock Text="{Binding OverviewStatus}" TextWrapping="Wrap" Foreground="{DynamicResource Amber}" Margin="0,0,0,10"
+                                           Visibility="{Binding OverviewStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                                <ItemsControl ItemsSource="{Binding OverviewProperties}" MaxWidth="900" HorizontalAlignment="Left">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="180" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource DetailKey}" />
+                                                <TextBox Grid.Column="1" Text="{Binding Shown, Mode=OneWay}" IsReadOnly="True" BorderThickness="0"
+                                                         Background="Transparent" TextWrapping="Wrap" Padding="0,4"
+                                                         AutomationProperties.Name="{Binding Label}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <ItemsControl ItemsSource="{Binding OverviewSections}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,16,0,0">
+                                                <TextBlock Text="{Binding Heading}" Style="{StaticResource SectionHeading}" Margin="0,0,0,6" />
+                                                <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="True" IsReadOnly="True" MaxHeight="360"
+                                                          AutomationProperties.Name="{Binding Heading}"
+                                                          BorderBrush="{DynamicResource Border}" BorderThickness="1" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
                     <TabItem Header="Design" Tag="{x:Static models:DetailsTab.Design}" Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <TextBlock Text="{Binding DesignStatus}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"

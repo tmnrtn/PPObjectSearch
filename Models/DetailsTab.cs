@@ -5,6 +5,7 @@ public enum DetailsTab
 {
     /// <summary>The type's own first tab - see <see cref="DetailsTabs.DefaultFor"/>.</summary>
     Default,
+    Overview,
     Design,
     Runs,
     Source,
@@ -26,7 +27,14 @@ public enum ObjectKind
     WebResource,
     EnvironmentVariable,
     Table,
-    ConnectionReference
+    ConnectionReference,
+    CanvasApp,
+    ModelDrivenApp,
+    Agent,
+    CustomApi,
+    SecurityRole,
+    OptionSet,
+    BusinessProcessFlow
 }
 
 /// <summary>
@@ -60,7 +68,8 @@ public static class DetailsTabs
         // A connection reference's type code is assigned per environment, so its table name is what to go by.
         _ when string.Equals(item.ComponentLogicalName, "connectionreference", StringComparison.OrdinalIgnoreCase) =>
             ObjectKind.ConnectionReference,
-        _ => ObjectKind.Other
+        // Apps, agents, custom APIs, roles, choices and business process flows have an Overview.
+        _ => Dataverse.DataverseClient.OverviewKindOf(item)
     };
 
     private static bool IsCategory(SolutionComponentItem item, int category, params string[] labels) =>
@@ -76,8 +85,14 @@ public static class DetailsTabs
         ObjectKind.EnvironmentVariable => DetailsTab.Value,
         ObjectKind.Table => DetailsTab.Components,
         ObjectKind.ConnectionReference => DetailsTab.Connections,
+        _ when HasOverview(kind) => DetailsTab.Overview,
         _ => DetailsTab.Layers
     };
+
+    /// <summary>The kinds whose own tab is the Overview: a property list and the parts that make them up.</summary>
+    public static bool HasOverview(ObjectKind kind) => kind is ObjectKind.CanvasApp or ObjectKind.ModelDrivenApp
+        or ObjectKind.Agent or ObjectKind.CustomApi or ObjectKind.SecurityRole or ObjectKind.OptionSet
+        or ObjectKind.BusinessProcessFlow;
 
     /// <summary>The tabs the window shows for this kind, type-specific first.</summary>
     public static IReadOnlyList<DetailsTab> TabsFor(ObjectKind kind)
@@ -91,6 +106,7 @@ public static class DetailsTabs
             ObjectKind.EnvironmentVariable => [DetailsTab.Value],
             ObjectKind.Table => [DetailsTab.Components],
             ObjectKind.ConnectionReference => [DetailsTab.Connections],
+            _ when HasOverview(kind) => [DetailsTab.Overview],
             _ => []
         };
 
@@ -115,6 +131,7 @@ public static class DetailsTabs
         ObjectKind.WebResource => [new("Source", DetailsTab.Source), new("Layers", DetailsTab.Layers)],
         ObjectKind.EnvironmentVariable => [new("Value", DetailsTab.Value)],
         ObjectKind.ConnectionReference => [new("Connection", DetailsTab.Connections), new("Used by", DetailsTab.Dependencies)],
+        var kind when HasOverview(kind) => [new("Overview", DetailsTab.Overview), new("Dependencies", DetailsTab.Dependencies)],
         ObjectKind.Table =>
         [
             new("Columns", DetailsTab.Components, TableChildKind.Column),

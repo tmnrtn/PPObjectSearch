@@ -420,6 +420,65 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
+    // ---------------------------------------------------------------- overview
+
+    /// <summary>Apps, agents, custom APIs, roles, choices and business process flows.</summary>
+    public bool HasOverview => DetailsTabs.HasOverview(Kind);
+
+    public ObservableCollection<OverviewProperty> OverviewProperties { get; } = new();
+
+    /// <summary>Each part as a table whose columns differ by type, so it is handed to the grid as a DataView.</summary>
+    public ObservableCollection<OverviewSection> OverviewSections { get; } = new();
+
+    public sealed record OverviewSection(string Heading, System.Data.DataView Rows);
+
+    private string _overviewStatus = string.Empty;
+    public string OverviewStatus
+    {
+        get => _overviewStatus;
+        private set => SetProperty(ref _overviewStatus, value);
+    }
+
+    private async Task LoadOverviewAsync(List<string> problems)
+    {
+        OverviewProperties.Clear();
+        OverviewSections.Clear();
+
+        try
+        {
+            var overview = await _client.GetOverviewAsync(Item);
+
+            foreach (var property in overview.Properties) OverviewProperties.Add(property);
+
+            foreach (var table in overview.Tables)
+            {
+                var data = new System.Data.DataTable();
+                for (var i = 0; i < table.Columns.Count; i++)
+                {
+                    // Column names must be unique and non-empty; the header is what is shown.
+                    var name = string.IsNullOrWhiteSpace(table.Columns[i]) ? $"Column {i + 1}" : table.Columns[i];
+                    while (data.Columns.Contains(name)) name += " ";
+                    data.Columns.Add(name, typeof(string));
+                }
+
+                foreach (var row in table.Rows)
+                {
+                    data.Rows.Add(row.Take(table.Columns.Count).Select(v => (object?)v ?? DBNull.Value).ToArray());
+                }
+
+                OverviewSections.Add(new OverviewSection(table.Heading, data.DefaultView));
+            }
+
+            OverviewStatus = overview.Problems.Count == 0 ? string.Empty : "Some parts could not be read - " + string.Join("; ", overview.Problems);
+            problems.AddRange(overview.Problems.Select(p => "overview " + p));
+        }
+        catch (Exception ex)
+        {
+            OverviewStatus = "Could not read the overview - " + ex.Message;
+            problems.Add("overview: " + ex.Message);
+        }
+    }
+
     // ---------------------------------------------------------------- dependency graph
 
     private RelayCommand? _exploreDependenciesCommand;
@@ -1350,6 +1409,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (HasSource) await LoadSourceAsync(problems);
             if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
             if (HasConnections) await LoadConnectionsAsync(problems);
+            if (HasOverview) await LoadOverviewAsync(problems);
 
             if (_detached) return;
             try
