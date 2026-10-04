@@ -624,7 +624,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         IsRunFailed = run.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut;
         RaiseRunState();
 
-        _ = CountIterationsAsync();
+        Work.Track(CountIterationsAsync());
 
         if (FailedCards.Any()) JumpToFailure();
     }
@@ -777,6 +777,9 @@ public sealed class FlowDiagramViewModel : ObservableObject
         }
     }
 
+    /// <summary>What the diagram is reading in the background - counts, iterations, content.</summary>
+    internal BackgroundWork Work { get; } = new();
+
     /// <summary>Iterations and content reads for the run on show; cancelled when it goes.</summary>
     private CancellationTokenSource? _runCts;
 
@@ -900,7 +903,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
         if (Selected is { InRun: true, IsInsideLoop: true, Result: not null } card && !card.IsContainer)
         {
-            _ = LoadIterationsAsync(card, _selectionVersion);
+            Work.Track(LoadIterationsAsync(card, _selectionVersion));
         }
     }
 
@@ -1028,7 +1031,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         get => _contentKind == FlowCodePane.Inputs;
         set
         {
-            if (value && _contentKind != FlowCodePane.Inputs && CanShowInputs) _ = ShowContentAsync(inputs: true);
+            if (value && _contentKind != FlowCodePane.Inputs && CanShowInputs) Work.Track(ShowContentAsync(inputs: true));
         }
     }
 
@@ -1037,7 +1040,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         get => _contentKind == FlowCodePane.Outputs;
         set
         {
-            if (value && _contentKind != FlowCodePane.Outputs && CanShowOutputs) _ = ShowContentAsync(inputs: false);
+            if (value && _contentKind != FlowCodePane.Outputs && CanShowOutputs) Work.Track(ShowContentAsync(inputs: false));
         }
     }
 

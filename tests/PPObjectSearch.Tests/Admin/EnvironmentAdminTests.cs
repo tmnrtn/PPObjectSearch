@@ -59,10 +59,8 @@ public class EnvironmentAdminTests
                 new TabState { EnvironmentUrl = Fakes.EnvironmentUrl }),
             Fakes.Dataverse(handler), tab);
 
-    private static async Task Settle()
-    {
-        for (var i = 0; i < 20; i++) await Task.Delay(10);
-    }
+    /// <summary>Selections and links start loads nobody awaits; this waits for them.</summary>
+    private static Task Settle(EnvironmentAdminViewModel admin) => admin.Work.WhenIdleAsync();
 
     // ---------------------------------------------------------------- users
 
@@ -139,7 +137,7 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
 
         admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
-        await Settle();
+        await Settle(admin);
 
         var roles = admin.Users.RoleAssignments;
         Assert.Equal(["Basic User", "Customer Service Rep"], roles.Select(r => r.RoleName));
@@ -162,7 +160,7 @@ public class EnvironmentAdminTests
         var admin = Admin(handler);
 
         admin.Users.ShowRoleCommand.Execute(new RoleAssignment(RoleCopy, RoleRoot, "Basic User", "Contoso UK", null, null));
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(AdminTab.Roles, admin.SelectedTab);
         Assert.Equal(RoleRoot, admin.Roles.SelectedRole?.RoleId);
@@ -303,7 +301,7 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
 
         admin.Roles.SelectedRole = admin.Roles.Items[0];
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(2, admin.Roles.PrivilegesView.Count);
         admin.Roles.PrivilegeSearch = "cont";
@@ -382,7 +380,7 @@ public class EnvironmentAdminTests
         admin.Mailboxes.SelectedMailbox = admin.Mailboxes.Items[0];
 
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
 
         // Bob is disabled, which the default Enabled filter hides - so it is cleared.
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
@@ -438,7 +436,7 @@ public class EnvironmentAdminTests
         Assert.Equal(1, q.View.Count);
 
         q.SelectedQueue = q.Items[0];
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(["Alice Smith", "Bob Jones"], q.Members.Select(m => m.FullName));
         Assert.Equal("Rejected", q.Mailbox?.ApprovalLabel);
@@ -459,10 +457,10 @@ public class EnvironmentAdminTests
         Assert.All(handler.Requests, r => Assert.Contains("systemusers", r.Url));
 
         admin.SelectedTab = AdminTab.Queues;
-        await Settle();
+        await Settle(admin);
         admin.SelectedTab = AdminTab.Users;
         admin.SelectedTab = AdminTab.Queues;
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(1, handler.Requests.Count(r => r.Url.Contains("queues?")));
         Assert.Equal(1, handler.Requests.Count(r => r.Url.Contains("systemusers?")));
@@ -477,7 +475,7 @@ public class EnvironmentAdminTests
         foreach (var tab in Enum.GetValues<AdminTab>())
         {
             admin.SelectedTab = tab;
-            await Settle();
+            await Settle(admin);
         }
 
         Assert.NotEmpty(handler.Requests);
@@ -499,7 +497,7 @@ public class EnvironmentAdminTests
         Assert.False(admin.CanGoBack);
 
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
         Assert.True(admin.CanGoBack);
@@ -507,7 +505,7 @@ public class EnvironmentAdminTests
         Assert.Equal("Back (Alt+Left) — to Mailboxes: Bob Jones", admin.BackToolTip);
 
         admin.BackCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(AdminTab.Mailboxes, admin.SelectedTab);
         Assert.Equal(MailboxA, admin.Mailboxes.SelectedMailbox?.MailboxId);
@@ -515,7 +513,7 @@ public class EnvironmentAdminTests
         Assert.Equal("Forward (Alt+Right) — to Users: Bob Jones", admin.ForwardToolTip);
 
         admin.ForwardCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
         Assert.Equal(Bob, admin.Users.SelectedUser?.SystemUserId);
@@ -529,7 +527,7 @@ public class EnvironmentAdminTests
 
         admin.SelectedTab = AdminTab.Mailboxes;
         admin.SelectedTab = AdminTab.Queues;
-        await Settle();
+        await Settle(admin);
 
         Assert.False(admin.CanGoBack);
         Assert.False(admin.BackCommand.CanExecute(null));
@@ -542,13 +540,13 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
         admin.Mailboxes.SelectedMailbox = admin.Mailboxes.Items[0];
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
         admin.BackCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
         Assert.True(admin.CanGoForward);
 
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
-        await Settle();
+        await Settle(admin);
 
         Assert.False(admin.CanGoForward);
     }
@@ -597,7 +595,7 @@ public class EnvironmentAdminTests
         Assert.Equal("Showing 1 roles", admin.Roles.ShowingSummary);
 
         admin.Roles.SelectedRole = admin.Roles.Items[0];
-        await Settle();
+        await Settle(admin);
 
         Assert.Equal("Basic User grants on 2 table(s)", admin.Roles.ShowingSummary);
     }
@@ -660,7 +658,7 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
 
         admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
-        await Settle();
+        await Settle(admin);
 
         var profiles = admin.Users.FieldProfiles;
         Assert.Equal(["Salary readers", "Case notes"], profiles.Select(p => p.Name));
@@ -678,7 +676,7 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
 
         admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
-        await Settle();
+        await Settle(admin);
 
         Assert.Empty(admin.Users.FieldProfiles);
         Assert.Contains("Could not read field security profiles", admin.Users.FieldProfileStatus);
@@ -696,7 +694,7 @@ public class EnvironmentAdminTests
         await admin.LoadAsync();
 
         admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Bob);
-        await Settle();
+        await Settle(admin);
 
         Assert.Contains("no access to secured columns", admin.Users.FieldProfileStatus);
         Assert.Contains(handler.Requests, r => r.Url.Contains($"systemusers({Bob})/systemuserprofiles_association"));

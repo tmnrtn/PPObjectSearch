@@ -35,12 +35,31 @@ jobs:
         run: dotnet build PPObjectSearch.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test tests/PPObjectSearch.Tests -c Release --no-build --logger "trx;LogFileName=results.trx"
+        run: >
+          dotnet test tests/PPObjectSearch.Tests -c Release --no-build
+          --logger "trx;LogFileName=results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory tests/PPObjectSearch.Tests/TestResults
+
+      # Line and branch coverage per class, on the run's summary page.
+      - name: Coverage summary
+        if: always()
+        shell: pwsh
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.11
+          reportgenerator `
+            -reports:"tests/PPObjectSearch.Tests/TestResults/**/coverage.cobertura.xml" `
+            -targetdir:coverage `
+            -reporttypes:"MarkdownSummaryGithub;Cobertura" `
+            -assemblyfilters:"+PPObjectSearch"
+          Get-Content coverage/SummaryGithub.md | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results
-          path: tests/PPObjectSearch.Tests/TestResults/*.trx
+          path: |
+            tests/PPObjectSearch.Tests/TestResults/*.trx
+            coverage/
           if-no-files-found: ignore

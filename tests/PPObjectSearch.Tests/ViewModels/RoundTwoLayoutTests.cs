@@ -98,8 +98,8 @@ public class RoundTwoLayoutTests
         await details.LoadAsync();
         Assert.Equal(DetailsTab.Runs, details.SelectedTab);
 
-        details.ShowRunOnDiagramCommand.Execute(details.Runs[0]);
-        await Settle();
+        await details.ShowRunOnDiagramCommand.ExecuteAsync(details.Runs[0]);
+        await Settle(details.FlowDiagram!);
 
         Assert.Equal(DetailsTab.Design, details.SelectedTab);
         Assert.True(details.FlowDiagram!.HasRunNotice);
@@ -165,10 +165,7 @@ public class RoundTwoLayoutTests
         return (diagram, handler);
     }
 
-    private static async Task Settle()
-    {
-        for (var i = 0; i < 20; i++) await Task.Delay(10);
-    }
+    private static Task Settle(FlowDiagramViewModel d) => d.Work.WhenIdleAsync();
 
     [Fact]
     public void The_run_strip_leads_with_the_outcome_then_when_how_long_and_the_trigger()
@@ -206,7 +203,7 @@ public class RoundTwoLayoutTests
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("/in/"));
 
         d.IsInputsShown = true;
-        await Settle();
+        await Settle(d);
 
         Assert.True(d.IsInputsShown);
         Assert.False(d.IsDefinitionShown);

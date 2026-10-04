@@ -46,6 +46,9 @@ public sealed record AdminLocation(AdminTab Tab, Guid? Id, string? Label)
 /// </summary>
 public sealed class EnvironmentAdminViewModel : ObservableObject
 {
+    /// <summary>Loads started by selections and links, which nothing waits for - except tests.</summary>
+    internal BackgroundWork Work { get; } = new();
+
     public EnvironmentAdminViewModel(EnvironmentSessionViewModel session, DataverseClient client, AdminTab tab = AdminTab.Users)
     {
         Session = session;
@@ -125,7 +128,7 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
         get => _selectedTab;
         set
         {
-            if (SetProperty(ref _selectedTab, value)) _ = Pane(value).EnsureLoadedAsync();
+            if (SetProperty(ref _selectedTab, value)) Work.Track(Pane(value).EnsureLoadedAsync());
         }
     }
 
@@ -277,8 +280,8 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     {
         View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
         View.Filter = o => o is UserInfo u && Include(u);
-        ShowRoleCommand = new RelayCommand(p => _ = ShowRoleAsync(p as RoleAssignment), p => p is RoleAssignment);
-        ShowMailboxCommand = new RelayCommand(_ => _ = ShowMailboxAsync(), _ => SelectedUser?.DefaultMailboxId is not null);
+        ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
+        ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedUser?.DefaultMailboxId is not null);
     }
 
     public ObservableCollection<UserInfo> Items { get; } = new();
@@ -416,7 +419,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         {
             if (!SetProperty(ref _selectedUser, value)) return;
             ShowMailboxCommand.RaiseCanExecuteChanged();
-            _ = LoadDetailsAsync(value);
+            Owner.Work.Track(LoadDetailsAsync(value));
         }
     }
 
@@ -580,7 +583,7 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
                                      Matches(row.Table, PrivilegeSearch) &&
                                      (!GrantedOnly || row.Widest > PrivilegeDepth.None);
 
-        ShowHolderCommand = new RelayCommand(p => _ = ShowHolderAsync(p as RoleHolder), p => p is RoleHolder { IsTeam: false });
+        ShowHolderCommand = new RelayCommand(p => Owner.Work.Track(ShowHolderAsync(p as RoleHolder)), p => p is RoleHolder { IsTeam: false });
     }
 
     public ObservableCollection<SecurityRoleInfo> Items { get; } = new();
@@ -678,7 +681,7 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
         get => _selectedRole;
         set
         {
-            if (SetProperty(ref _selectedRole, value)) _ = LoadDetailsAsync(value);
+            if (SetProperty(ref _selectedRole, value)) Owner.Work.Track(LoadDetailsAsync(value));
         }
     }
 
@@ -790,7 +793,7 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
         View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
         View.Filter = o => o is MailboxInfo m && Include(m);
         ShowOwnerCommand = new RelayCommand(
-            _ => _ = ShowOwnerAsync(),
+            _ => Owner.Work.Track(ShowOwnerAsync()),
             _ => SelectedMailbox is { RegardingId: not null, OwnerKind: "User" or "Queue" });
     }
 
@@ -927,8 +930,8 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
     {
         View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
         View.Filter = o => o is QueueDetail q && Include(q);
-        ShowMailboxCommand = new RelayCommand(_ => _ = ShowMailboxAsync(), _ => SelectedQueue?.MailboxId is not null);
-        ShowMemberCommand = new RelayCommand(p => _ = ShowMemberAsync(p as MemberUser), p => p is MemberUser);
+        ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedQueue?.MailboxId is not null);
+        ShowMemberCommand = new RelayCommand(p => Owner.Work.Track(ShowMemberAsync(p as MemberUser)), p => p is MemberUser);
     }
 
     public ObservableCollection<QueueDetail> Items { get; } = new();
@@ -1021,7 +1024,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         {
             if (!SetProperty(ref _selectedQueue, value)) return;
             ShowMailboxCommand.RaiseCanExecuteChanged();
-            _ = LoadDetailsAsync(value);
+            Owner.Work.Track(LoadDetailsAsync(value));
         }
     }
 

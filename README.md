@@ -103,7 +103,9 @@ xUnit tests for everything that can run without a live tenant: diffing, comparis
 reconcile planning, maker portal links, the environment-type probe and the production guard,
 the membership planners and the confirmation window's gating, and the Dataverse and Graph
 clients' requests. The HTTP clients are exercised against an in-memory fake
-(`tests/PPObjectSearch.Tests/Infrastructure`), so no test touches the network. The release
+(`tests/PPObjectSearch.Tests/Infrastructure`), so no test touches the network. The XAML is checked
+too: every resource a view uses must be defined, and the light and dark themes must define the
+same keys. CI reports line and branch coverage on each run's summary page. The release
 workflow runs them before publishing.
 
 ## Releases

@@ -78,11 +78,8 @@ public class FlowRunOverlayTests
 
     private static FlowCardViewModel Card(FlowDiagramViewModel d, string title) => d.Cards.Single(c => c.Title == title);
 
-    private static async Task Settle()
-    {
-        // The overlay counts loops and reads iterations in the background.
-        for (var i = 0; i < 20; i++) await Task.Delay(10);
-    }
+    /// <summary>The overlay counts loops and reads iterations in the background; this waits for it.</summary>
+    private static Task Settle(FlowDiagramViewModel d) => d.Work.WhenIdleAsync();
 
     [Fact]
     public void Without_a_run_cards_show_no_outcome()
@@ -99,7 +96,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         Assert.True(d.IsRunMode);
         Assert.Equal(FlowStepOutcome.Succeeded, Card(d, "manual").RunOutcome);
@@ -113,7 +110,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         Assert.Equal(FlowStepOutcome.Skipped, Card(d, "Notify").RunOutcome);
         Assert.Equal("Skipped", Card(d, "Notify").RunBadge);
@@ -133,7 +130,7 @@ public class FlowRunOverlayTests
         d.CollapseAllCommand.Execute(null);
 
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         // Check fails only because Yes step inside it did: the step that broke is selected, and
         // the condition holding it is opened to show it.
@@ -147,7 +144,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         Assert.Equal("Run …6789CU01 · Failed", d.RunHeading);
         Assert.Contains("took 12 s", d.RunDetail);
@@ -162,7 +159,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         Assert.Equal("4 iterations · 1 failed", Card(d, "Loop").IterationLabel);
     }
@@ -205,7 +202,7 @@ public class FlowRunOverlayTests
 
         var d = new FlowDiagramViewModel(FlowDesignParser.Parse(TwoStepLoop), "Two steps");
         d.ShowRun(run, new PowerAutomateClient(TestAuth.Tokens(), handler));
-        await Settle();
+        await Settle(d);
 
         Assert.Equal("4 iterations · 1 failed", Card(d, "Loop").IterationLabel);
     }
@@ -222,11 +219,11 @@ public class FlowRunOverlayTests
 
         var d = Diagram();
         d.ShowRun(Run(), new PowerAutomateClient(TestAuth.Tokens(), handler));
-        await Settle();
+        await Settle(d);
 
         d.Selected = Card(d, "Get rows");
         d.Selected = Card(d, "Inner");
-        await Settle();
+        await Settle(d);
 
         Assert.Single(d.SelectedIterations);
     }
@@ -249,14 +246,14 @@ public class FlowRunOverlayTests
         var d = Diagram();
         d.ShowRun(Run(), new PowerAutomateClient(TestAuth.Tokens(), handler));
         d.Selected = Card(d, "Inner");
-        await Settle();
+        await Settle(d);
 
         d.SelectedIteration = d.SelectedIterations[0];
         d.IsInputsShown = true;
 
         d.SelectedIteration = d.SelectedIterations[1];
         slow.SetResult(FakeHttpHandler.Json("""{"late":true}"""));
-        await Settle();
+        await Settle(d);
 
         Assert.False(d.HasContent);
         Assert.Equal("Definition", d.DetailCodeTitle);
@@ -271,7 +268,7 @@ public class FlowRunOverlayTests
         d.ShowRun(Run(), Client().Client);
 
         d.Selected = Card(d, "Inner");
-        await Settle();
+        await Settle(d);
 
         Assert.Equal(4, d.SelectedIterations.Count);
         Assert.Contains("4 iteration(s), 1 failed", d.IterationStatus);
@@ -287,14 +284,14 @@ public class FlowRunOverlayTests
         var (client, handler) = Client();
         var d = Diagram();
         d.ShowRun(Run(), client);
-        await Settle();
+        await Settle(d);
         d.Selected = Card(d, "Get rows");
 
         Assert.Equal("Definition", d.DetailCodeTitle);
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("/in/Get_rows"));
 
         d.ShowInputsCommand.Execute(null);
-        await Settle();
+        await Settle(d);
 
         Assert.Equal("Inputs", d.DetailCodeTitle);
         Assert.Contains("\"value\": 1", d.DetailCode);
@@ -311,11 +308,11 @@ public class FlowRunOverlayTests
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
         d.Selected = Card(d, "Inner");
-        await Settle();
+        await Settle(d);
 
         d.SelectedIteration = d.SelectedIterations[1];
         d.ShowInputsCommand.Execute(null);
-        await Settle();
+        await Settle(d);
 
         Assert.Equal("Inputs of iteration #2", d.DetailCodeTitle);
     }
@@ -325,7 +322,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         d.Selected = Card(d, "Yes step");
 
@@ -340,7 +337,7 @@ public class FlowRunOverlayTests
         var cleared = false;
         d.RunCleared += (_, _) => cleared = true;
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         d.ClearRunCommand.Execute(null);
 
@@ -398,7 +395,7 @@ public class FlowRunOverlayTests
     {
         var d = Diagram();
         d.ShowRun(Run(), Client().Client);
-        await Settle();
+        await Settle(d);
 
         d.SearchText = "notify";
 
