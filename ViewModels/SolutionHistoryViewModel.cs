@@ -184,13 +184,6 @@ public sealed class SolutionHistoryViewModel : ObservableObject
 
         if (dialog.ShowDialog() != true) return;
 
-        static string Escape(string? value)
-        {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
-            if (value[0] is '=' or '+' or '-' or '@') value = "'" + value;
-            return value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0 ? '"' + value.Replace("\"", "\"\"") + '"' : value;
-        }
-
         try
         {
             var lines = new List<string>
@@ -198,14 +191,13 @@ public sealed class SolutionHistoryViewModel : ObservableObject
                 "Result,Solution,Version,Operation,Sub operation,Managed,Publisher,Started,Ended,Duration (s),Error code,Exception"
             };
 
-            lines.AddRange(EntriesView.Cast<SolutionHistoryEntry>().Select(e => string.Join(",", new[]
-            {
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
+            lines.AddRange(EntriesView.Cast<SolutionHistoryEntry>().Select(e => Services.CsvExporter.Line(
                 e.ResultLabel, e.SolutionName, e.Version, e.Operation, e.SubOperation, e.ManagedLabel, e.PublisherName,
-                e.StartTime?.ToString("yyyy-MM-dd HH:mm:ss"), e.EndTime?.ToString("yyyy-MM-dd HH:mm:ss"),
-                e.TotalSeconds?.ToString(), e.ErrorCode, e.ExceptionMessage
-            }.Select(Escape))));
+                e.StartTime?.ToString("yyyy-MM-dd HH:mm:ss", invariant), e.EndTime?.ToString("yyyy-MM-dd HH:mm:ss", invariant),
+                e.TotalSeconds?.ToString(invariant), e.ErrorCode, e.ExceptionMessage)));
 
-            System.IO.File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(true));
+            Services.CsvExporter.WriteLines(dialog.FileName, lines);
             Status = $"Exported {lines.Count - 1:N0} operation(s) to {dialog.FileName}.";
         }
         catch (Exception ex)

@@ -1164,11 +1164,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             var lines = new List<string>
             {
-                string.Join(",", new[]
-                {
+                CsvExporter.Line(
                     "Table", "Key column(s)", "Key", "Name", "Status", "Column",
-                    $"{SourceHeader} value", $"{TargetHeader} value", "Source id", "Target id"
-                }.Select(Escape))
+                    $"{SourceHeader} value", $"{TargetHeader} value", "Source id", "Target id")
             };
 
             foreach (var row in RowsView.Cast<RecordComparison>())
@@ -1182,7 +1180,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 foreach (var difference in row.Differences) lines.Add(Line(row, difference));
             }
 
-            System.IO.File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(true));
+            CsvExporter.WriteLines(dialog.FileName, lines);
             Status = $"Exported {lines.Count - 1:N0} line(s) to {dialog.FileName}.";
         }
         catch (Exception ex)
@@ -1191,24 +1189,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         }
     }
 
-    private static string Line(RecordComparison row, ColumnComparison? difference) => string.Join(",", new[]
-    {
+    private static string Line(RecordComparison row, ColumnComparison? difference) => CsvExporter.Line(
         row.EntityLogicalName, row.KeyLabel, row.Key, row.Name, row.StatusLabel,
         difference?.Column.LogicalName,
-        difference is null ? null : difference.SourceValue,
-        difference is null ? null : difference.TargetValue,
-        row.SourceId, row.TargetId
-    }.Select(Escape));
-
-    private static string Escape(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-
-        // Excel reads a leading =, +, - or @ as a formula.
-        if (value[0] is '=' or '+' or '-' or '@') value = "'" + value;
-
-        return value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r')
-            ? '"' + value.Replace("\"", "\"\"") + '"'
-            : value;
-    }
+        difference?.SourceValue,
+        difference?.TargetValue,
+        row.SourceId, row.TargetId);
 }

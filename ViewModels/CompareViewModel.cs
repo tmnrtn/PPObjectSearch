@@ -501,14 +501,12 @@ public sealed class CompareViewModel : ObservableObject
         {
             var lines = new List<string> { "Status,Name,Object type,Sub type,Left modified,Right modified" };
 
-            lines.AddRange(RowsView.Cast<CompareRow>().Select(r => string.Join(",", new[]
-            {
-                r.StatusLabel, r.Name, r.ComponentTypeName, r.SubType ?? string.Empty,
-                r.LeftModified?.ToString("yyyy-MM-dd HH:mm") ?? string.Empty,
-                r.RightModified?.ToString("yyyy-MM-dd HH:mm") ?? string.Empty
-            }.Select(v => v.Contains(',') || v.Contains('"') ? '"' + v.Replace("\"", "\"\"") + '"' : v))));
+            lines.AddRange(RowsView.Cast<CompareRow>().Select(r => CsvExporter.Line(
+                r.StatusLabel, r.Name, r.ComponentTypeName, r.SubType,
+                r.LeftModified?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+                r.RightModified?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture))));
 
-            System.IO.File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(true));
+            CsvExporter.WriteLines(dialog.FileName, lines);
         }
         catch (Exception ex)
         {

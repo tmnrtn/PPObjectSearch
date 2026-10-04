@@ -45,15 +45,38 @@ public static class CsvExporter
     private static string Format(DateTimeOffset? value) =>
         value?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? string.Empty;
 
-    private static string Escape(string? value)
+    /// <summary>
+    /// Writes lines already made with <see cref="Line"/>, as UTF-8 with a BOM so Excel opens
+    /// non-ASCII names correctly.
+    /// </summary>
+    public static void WriteLines(string path, IEnumerable<string> lines) =>
+        File.WriteAllLines(path, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+    /// <summary>One CSV line, every field escaped by <see cref="Escape"/>.</summary>
+    public static string Line(IEnumerable<string?> values) => string.Join(",", values.Select(Escape));
+
+    public static string Line(params string?[] values) => Line((IEnumerable<string?>)values);
+
+    /// <summary>
+    /// One field. Every export goes through here so they cannot drift apart again.
+    ///
+    /// Component names, row values and error text are written by other people, and a spreadsheet
+    /// reads a field that starts with = + - @ (or a tab or carriage return) as a formula - so
+    /// =HYPERLINK(...) in a display name would run when the file is opened. Such a field is
+    /// prefixed with a quote - leading spaces do not hide it. Fields holding a comma, quote or line
+    /// break are quoted, so a multi-line value stays in its own cell.
+    /// </summary>
+    public static string Escape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
 
-        // Excel treats a leading =, +, - or @ as a formula; prefix with a quote to neutralise it.
-        if (value[0] is '=' or '+' or '-' or '@') value = "'" + value;
+        var first = value.TrimStart(' ');
+        if (first.Length > 0 && first[0] is '=' or '+' or '-' or '@' or '\t' or '\r') value = "'" + value;
 
-        return value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r')
+        return value.IndexOfAny(QuoteTriggers) >= 0
             ? '"' + value.Replace("\"", "\"\"") + '"'
             : value;
     }
+
+    private static readonly char[] QuoteTriggers = { ',', '"', '\n', '\r' };
 }

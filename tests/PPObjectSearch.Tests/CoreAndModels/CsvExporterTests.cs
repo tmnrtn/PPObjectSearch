@@ -113,6 +113,8 @@ public sealed class CsvExporterTests : IDisposable
     [InlineData("-1", "'-1")]
     [InlineData("@cmd", "'@cmd")]
     [InlineData("-1,2", "\"'-1,2\"")]
+    [InlineData("\t=1+1", "'\t=1+1")]
+    [InlineData("  =1+1", "'  =1+1")]
     [InlineData("a=b", "a=b")]
     public void Write_neutralises_values_excel_would_read_as_formulas(string value, string expected)
     {
@@ -121,6 +123,13 @@ public sealed class CsvExporterTests : IDisposable
         var row = content.Substring(Header.Length + Environment.NewLine.Length);
         // Owner is the ninth column; the columns before it are "n,,,Table,,,Unmanaged,No,".
         Assert.StartsWith("n,,,Table,,,Unmanaged,No," + expected + ",", row);
+    }
+
+    [Fact]
+    public void Line_escapes_every_field_the_same_way_for_every_export()
+    {
+        Assert.Equal("Status,'=cmd|' /C calc'!A0,\"two\nlines\",,\"a,b\"",
+            CsvExporter.Line("Status", "=cmd|' /C calc'!A0", "two\nlines", null, "a,b"));
     }
 
     [Fact]
