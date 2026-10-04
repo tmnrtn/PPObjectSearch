@@ -47,7 +47,8 @@ public sealed class PowerAutomateClient : IDisposable
     internal PowerAutomateClient(EnvironmentAuthContext auth, HttpMessageHandler? handler)
     {
         _auth = auth;
-        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        // The shared pipeline retries throttled and transient failures; tests pass their own.
+        _http = handler is null ? new HttpClient(Core.RetryHandler.Shared, disposeHandler: false) : new HttpClient(handler);
         _http.Timeout = TimeSpan.FromMinutes(2);
     }
 

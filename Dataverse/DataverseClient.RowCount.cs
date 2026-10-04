@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text.Json;
 
 namespace PPObjectSearch.Dataverse;
@@ -95,9 +96,11 @@ public sealed partial class DataverseClient
 
             return long.TryParse(JsonHelper.GetString(value[0], "rowcount"), out var rows) ? rows : null;
         }
-        catch (DataverseException)
+        catch (DataverseException ex) when (ex.StatusCode is HttpStatusCode.BadRequest)
         {
-            // Over the aggregate limit (or aggregates not allowed on this table): the page search follows.
+            // Over the aggregate limit (or aggregates not allowed on this table): the page search
+            // follows. Anything else - throttling that outlasted the retries, a lost connection - is
+            // a failure to report, not a reason to start hundreds of page requests instead.
             return null;
         }
     }

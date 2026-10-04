@@ -14,7 +14,7 @@ namespace PPObjectSearch.Auth;
 /// </summary>
 public static partial class TenantDiscovery
 {
-    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    private static readonly HttpClient Http = new(new Core.RetryHandler(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }))
     {
         Timeout = TimeSpan.FromSeconds(30)
     };

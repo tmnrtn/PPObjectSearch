@@ -96,6 +96,9 @@ public sealed class ReconcileViewModel : ObservableObject
         Permission = permission;
 
         ApplyCommand = new AsyncRelayCommand(_ => ApplyAsync(), _ => CanApply);
+        RetryFailedCommand = new AsyncRelayCommand(
+            _ => RunAsync(Rows.Where(r => r.HasFailed).ToList()),
+            _ => Permission.Allowed && HasRun && !IsRunning && HasFailures);
         CancelRunCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsRunning);
 
         // Every action the selection could take, planned once; the toggles only include or exclude.
@@ -132,6 +135,12 @@ public sealed class ReconcileViewModel : ObservableObject
     public ObservableCollection<ReconcileRow> Rows { get; } = new();
 
     public AsyncRelayCommand ApplyCommand { get; }
+
+    /// <summary>Writes the rows that failed once more - after throttling or a dropped connection,
+    /// say. Each still carries the version it was compared at, so a row changed since is refused.</summary>
+    public AsyncRelayCommand RetryFailedCommand { get; }
+
+    public bool HasFailures => Rows.Any(r => r.HasFailed);
     public RelayCommand CancelRunCommand { get; }
 
     public string Title => $"Reconcile — {SourceName} → {TargetName}";
@@ -225,6 +234,7 @@ public sealed class ReconcileViewModel : ObservableObject
 
             ApplyCommand.RaiseCanExecuteChanged();
             CancelRunCommand.RaiseCanExecuteChanged();
+            RetryFailedCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(IsNotRunning));
             OnPropertyChanged(nameof(CanEditActions));
         }
@@ -305,7 +315,14 @@ public sealed class ReconcileViewModel : ObservableObject
 
     private async Task ApplyAsync()
     {
-        if (!Permission.Allowed) return;
+        // Only the actions switched on; the faded rows are there to look at, never to write.
+        var options = new ReconcileOptions(Create, Update, Delete);
+        await RunAsync(Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)).ToList());
+    }
+
+    private async Task RunAsync(IReadOnlyList<ReconcileRow> rows)
+    {
+        if (!Permission.Allowed || rows.Count == 0) return;
 
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
@@ -317,13 +334,9 @@ public sealed class ReconcileViewModel : ObservableObject
         var failed = 0;
         var done = 0;
 
-        // Only the actions switched on; the faded rows are there to look at, never to write.
-        var options = new ReconcileOptions(Create, Update, Delete);
         // Parents before the rows that refer to them, and deletes last - children first - so a
         // run stopped part-way has destroyed as little as possible.
-        var toWrite = ReferenceDataWriter.OrderForWriting(
-            Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)),
-            r => r.Item);
+        var toWrite = ReferenceDataWriter.OrderForWriting(rows, r => r.Item);
 
         try
         {
@@ -364,6 +377,8 @@ public sealed class ReconcileViewModel : ObservableObject
         {
             IsRunning = false;
             HasRun = true;
+            OnPropertyChanged(nameof(HasFailures));
+            RetryFailedCommand.RaiseCanExecuteChanged();
         }
     }
 }

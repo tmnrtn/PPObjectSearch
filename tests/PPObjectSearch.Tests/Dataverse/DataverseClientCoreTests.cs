@@ -716,21 +716,27 @@ public class DataverseClientCoreTests
     }
 
     [Fact]
-    public async Task Bulk_layers_record_null_for_a_failing_component_and_keep_the_rest()
+    public async Task Bulk_layers_leave_out_a_failing_component_and_keep_the_rest()
     {
         var good = Guid.NewGuid();
         var bad = Guid.NewGuid();
+        var unsupported = Guid.NewGuid();
         var handler = new FakeHttpHandler()
             .OnError(HttpMethod.Get, bad.ToString(), HttpStatusCode.InternalServerError, "boom")
+            .OnError(HttpMethod.Get, unsupported.ToString(), HttpStatusCode.BadRequest, "not supported")
             .OnJson(HttpMethod.Get, good.ToString(), Page("{\"msdyn_solutionname\":\"Active\",\"msdyn_order\":1}"));
         using var client = Fakes.Dataverse(handler);
         var reports = new List<int>();
 
-        var result = await client.GetComponentLayersBulkAsync(new[] { (good, 61), (bad, 61) }, new SyncProgress(reports));
+        var result = await client.GetComponentLayersBulkAsync(
+            new[] { (good, 61), (bad, 61), (unsupported, 61) }, new SyncProgress(reports));
 
         Assert.Single(result[good]!);
-        Assert.Null(result[bad]);
-        Assert.Equal(2, reports.Count);
+
+        // A failure is not "unsupported": it is left out so the caller can say it was not read.
+        Assert.False(result.ContainsKey(bad));
+        Assert.Null(result[unsupported]);
+        Assert.Equal(3, reports.Count);
     }
 
     // ---- JsonHelper ----

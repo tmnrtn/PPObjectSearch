@@ -262,6 +262,11 @@
                                 Command="{Binding CancelRunCommand}"
                                 Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
 
+                        <Button Content="Retry failed" Height="30" Margin="0,0,8,0"
+                                Command="{Binding RetryFailedCommand}"
+                                ToolTip="Write the rows that failed again - for example after throttling or a lost connection"
+                                Visibility="{Binding HasFailures, Converter={StaticResource BoolToVis}}" />
+
                         <Button Content="Close" Height="30" Click="Close_Click" IsEnabled="{Binding IsNotRunning}" />
 
                         <Button Height="30" Margin="8,0,0,0" Content="{Binding ApplyLabel}"

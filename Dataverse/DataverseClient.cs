@@ -57,7 +57,8 @@ public sealed partial class DataverseClient : IDisposable
     {
         _auth = auth;
         EnvironmentUrl = NormalizeEnvironmentUrl(environmentUrl);
-        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        // The shared pipeline retries throttled and transient failures; tests pass their own.
+        _http = handler is null ? new HttpClient(Core.RetryHandler.Shared, disposeHandler: false) : new HttpClient(handler);
         _http.Timeout = TimeSpan.FromMinutes(5);
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _http.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
@@ -149,6 +150,24 @@ public sealed partial class DataverseClient : IDisposable
     /// </summary>
     private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize = true)
     {
+        // The batch itself succeeds (200) even when the GET inside it was throttled, so the retry
+        // handler never sees the 429; a throttled inner request is retried here instead.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SendBatchedGetAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
+            }
+            catch (DataverseException ex) when (attempt < Core.RetryHandler.DefaultMaxAttempts &&
+                                                 ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
+            {
+                await Task.Delay(Core.RetryHandler.Backoff(attempt), ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<JsonDocument> SendBatchedGetAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize)
+    {
         var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
         var boundary = "batch_" + Guid.NewGuid().ToString("N");
 
@@ -186,8 +205,8 @@ public sealed partial class DataverseClient : IDisposable
 
         if (innerStatus.Success && !innerStatus.Groups["code"].Value.StartsWith('2'))
         {
-            throw new DataverseException(
-                $"{innerStatus.Groups["code"].Value}: {ExtractError(json ?? payload)}");
+            var code = int.Parse(innerStatus.Groups["code"].Value, System.Globalization.CultureInfo.InvariantCulture);
+            throw new DataverseException($"{code}: {ExtractError(json ?? payload)}", (HttpStatusCode)code);
         }
 
         if (json is null) throw new DataverseException("The $batch response contained no JSON payload.");
@@ -522,10 +541,15 @@ public sealed partial class DataverseClient : IDisposable
             {
                 throw;
             }
+            catch (DataverseException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
+            {
+                // Dataverse does not keep layers for this kind of component.
+                results[target.ObjectId] = null;
+            }
             catch
             {
-                // Best effort - one component's failure should not lose the results for the rest.
-                results[target.ObjectId] = null;
+                // Best effort - one component's failure should not lose the results for the rest. It
+                // is left out rather than marked unsupported, so the caller can say it was not read.
             }
             finally
             {
