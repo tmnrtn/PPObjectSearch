@@ -172,7 +172,8 @@ Some details worth knowing:
   would make the target's query fail outright, so it is left out and reported in the warnings.
 - **Values are normalised per column type** before comparing, so `1.0000` against `1.0`, or the
   same instant written with a different UTC offset, is not reported as a difference. Text is
-  compared exactly apart from surrounding whitespace, so a change of case *is* a difference.
+  compared and written exactly, whitespace included, so a change of case or a trailing
+  space *is* a difference.
 - **Anything that makes the result partial is said out loud** in the warnings strip: a table
   missing from one side, a non-unique key, a column that exists on one side only, or a table that
   hit the row cap. A truncated table reports every unread row as missing, so the cap matters —

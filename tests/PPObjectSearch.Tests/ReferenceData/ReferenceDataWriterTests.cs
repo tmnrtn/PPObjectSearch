@@ -171,7 +171,24 @@ public class ReferenceDataWriterTests
     {
         Assert.Null(ReferenceDataWriter.ToWriteValue(null, Col("c", type)));
         Assert.Null(ReferenceDataWriter.ToWriteValue("", Col("c", type)));
+    }
+
+    [Theory]
+    [InlineData("IntegerType")]
+    [InlineData("BooleanType")]
+    [InlineData("MoneyType")]
+    public void ToWriteValue_sends_a_blank_typed_value_as_null(string type)
+    {
         Assert.Null(ReferenceDataWriter.ToWriteValue("  ", Col("c", type)));
+    }
+
+    [Theory]
+    [InlineData("StringType", "  ")]
+    [InlineData("StringType", " Code ")]
+    [InlineData("MemoType", "\nfirst line\nlast line\n")]
+    public void ToWriteValue_writes_text_exactly_as_the_source_holds_it(string type, string raw)
+    {
+        Assert.Equal(raw, ReferenceDataWriter.ToWriteValue(raw, Col("c", type)));
     }
 
     [Theory]
@@ -225,13 +242,14 @@ public class ReferenceDataWriterTests
     }
 
     [Theory]
-    [InlineData("StringType", "  Alpha ", "Alpha")]
+    [InlineData("StringType", "  Alpha ", "  Alpha ")]
     [InlineData("MemoType", "notes", "notes")]
+    [InlineData("DateTimeType", " 2024-03-01T10:00:00Z ", "2024-03-01T10:00:00Z")]
     [InlineData("DateTimeType", "2024-03-01T10:00:00Z", "2024-03-01T10:00:00Z")]
     [InlineData("UniqueidentifierType", "6f9619ff-8b86-d011-b42d-00c04fc964ff", "6f9619ff-8b86-d011-b42d-00c04fc964ff")]
     [InlineData("MultiSelectPicklistType", "100000000,100000002", "100000000,100000002")]
     [InlineData("StringType", "42", "42")]
-    public void ToWriteValue_sends_other_types_as_trimmed_text(string type, string raw, string expected)
+    public void ToWriteValue_sends_other_types_as_text(string type, string raw, string expected)
     {
         var value = ReferenceDataWriter.ToWriteValue(raw, Col("c", type));
 
@@ -349,7 +367,7 @@ public class ReferenceDataWriterTests
             PropertyNames(body));
         Assert.Equal(G(1).ToString(), body.GetProperty(PrimaryId).GetString());
         Assert.Equal("A", body.GetProperty("new_code").GetString());
-        Assert.Equal("Alpha", body.GetProperty("new_name").GetString());
+        Assert.Equal(" Alpha ", body.GetProperty("new_name").GetString());
         Assert.Equal(JsonValueKind.Number, body.GetProperty("new_amount").ValueKind);
         Assert.Equal(12.5m, body.GetProperty("new_amount").GetDecimal());
         Assert.Equal(3, body.GetProperty("new_count").GetInt64());

@@ -562,9 +562,15 @@ public sealed class ReferenceDataWriter
     /// </summary>
     public static object? ToWriteValue(string? raw, EntityColumn column)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (string.IsNullOrEmpty(raw)) return null;
+
+        // Text is written exactly as the source holds it: trimming would change a code or strip a
+        // memo's leading and trailing lines without anyone asking. Only values parsed into a
+        // number, flag or date are trimmed first.
+        if (ReferenceDataComparer.IsText(column)) return raw;
 
         var value = raw.Trim();
+        if (value.Length == 0) return null;
 
         if (column.IsBoolean)
         {

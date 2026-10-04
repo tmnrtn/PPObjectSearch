@@ -395,7 +395,8 @@ public static class ReferenceDataComparer
             .Select(c => Comparable(record, c, plan.MatchLookupsByName))
             .ToList();
 
-        return parts.All(string.IsNullOrEmpty)
+        // A key of only whitespace identifies nothing, so it is as good as no key.
+        return parts.All(string.IsNullOrWhiteSpace)
             ? $"{NoKeyMarker} {record.Id}"
             : string.Join(" | ", parts);
     }
@@ -417,9 +418,12 @@ public static class ReferenceDataComparer
 
     private static string? Normalise(string? raw, EntityColumn column)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
+        // Empty and absent are the same value; anything else in a text column is compared exactly,
+        // surrounding whitespace included - "Code " and "Code" are different keys to an integration.
+        if (string.IsNullOrEmpty(raw)) return null;
 
         var value = raw.Trim();
+        if (value.Length == 0 && !IsText(column)) return null;
 
         if (column.IsNumeric && decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
         {
@@ -448,6 +452,10 @@ public static class ReferenceDataComparer
             return id.ToString("D");
         }
 
-        return value;
+        return IsText(column) ? raw : value;
     }
+
+    /// <summary>Columns whose value is free text, where whitespace is part of the value.</summary>
+    internal static bool IsText(EntityColumn column) =>
+        column.TypeName is "StringType" or "MemoType";
 }
