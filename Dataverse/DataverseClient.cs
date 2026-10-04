@@ -21,6 +21,15 @@ public sealed class DataverseException : Exception
     public HttpStatusCode? StatusCode { get; }
 }
 
+/// <summary>
+/// A solution's components as read. Past the row cap a read stops; then <see cref="IsTruncated"/>
+/// says so, so an object missing from the list is not taken to be missing from the solution.
+/// </summary>
+public sealed class ComponentList : List<SolutionComponentItem>
+{
+    public bool IsTruncated { get; set; }
+}
+
 /// <summary>Identity of the connected environment, from RetrieveCurrentOrganization.</summary>
 public sealed record OrganizationDetails(string? FriendlyName, string? UniqueName, string? EnvironmentId);
 
@@ -638,10 +647,10 @@ public sealed partial class DataverseClient : IDisposable
             }
         }
 
-        var items = new List<SolutionComponentItem>();
+        var items = new ComponentList();
         var total = 0;
 
-        await ReadAllPagesAsync(
+        items.IsTruncated = await ReadAllPagesAsync(
             BuildComponentsUrl(solutionId, null),
             items,
             added => progress?.Report(total += added),
@@ -651,11 +660,16 @@ public sealed partial class DataverseClient : IDisposable
         return items;
     }
 
+    /// <summary>Past this many processes in a solution, asking by id would take more requests than
+    /// reading the table's definitions once.</summary>
+    private const int ProcessCategoryChunkLimit = 1000;
+
     /// <summary>
     /// Fills in the sub type for processes from the workflow table's own category option set -
     /// the authoritative source for telling a cloud flow from a business rule, BPF or action.
     /// The component summary does not carry it.
     /// </summary>
+
     private async Task ApplyProcessCategoriesAsync(IReadOnlyList<SolutionComponentItem> items, CancellationToken ct)
     {
         var processes = items.Where(i => i.ComponentType == 29 && i.ObjectId != Guid.Empty).ToList();
@@ -665,32 +679,47 @@ public sealed partial class DataverseClient : IDisposable
         {
             var categories = new Dictionary<Guid, string>();
             var codes = new Dictionary<Guid, int>();
-            var url = EnvironmentUrl + ApiPath + "workflows?$select=workflowid,category";
 
-            while (url.Length > 0)
+            // Only the processes in this solution are asked about, fifty to a request. Reading the
+            // whole table instead pages through every activation and system flow in the
+            // environment - tens of thousands of rows in a large one - on every switch of solution.
+            // A solution holding very many processes falls back to one read of the definitions.
+            const string select = "workflows?$select=workflowid,category&$filter=";
+            var queries = processes.Count <= ProcessCategoryChunkLimit
+                ? processes.Select(p => p.ObjectId).Distinct().Chunk(50)
+                    .Select(chunk => select + InFilter("workflowid", chunk.Select(id => id.ToString())))
+                    .ToList()
+                : new List<string> { select + "type eq 1" };
+
+            foreach (var query in queries)
             {
-                using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
+                var url = EnvironmentUrl + ApiPath + query;
 
-                if (doc.RootElement.TryGetProperty("value", out var value))
+                while (url.Length > 0)
                 {
-                    foreach (var row in value.EnumerateArray())
+                    using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
+
+                    if (doc.RootElement.TryGetProperty("value", out var value))
                     {
-                        if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
-
-                        var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
-                        var category = JsonHelper.GetInt(row, "category");
-                        if (category is not null) codes[id] = category.Value;
-
-                        if (string.IsNullOrWhiteSpace(label))
+                        foreach (var row in value.EnumerateArray())
                         {
-                            label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
+                            if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
+
+                            var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
+                            var category = JsonHelper.GetInt(row, "category");
+                            if (category is not null) codes[id] = category.Value;
+
+                            if (string.IsNullOrWhiteSpace(label))
+                            {
+                                label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(label)) categories[id] = label!;
                         }
-
-                        if (!string.IsNullOrWhiteSpace(label)) categories[id] = label!;
                     }
-                }
 
-                url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+                    url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+                }
             }
 
             foreach (var process in processes)
@@ -761,7 +790,7 @@ public sealed partial class DataverseClient : IDisposable
         }
     }
 
-    private async Task<IReadOnlyList<SolutionComponentItem>> GetComponentsInParallelAsync(
+    private async Task<ComponentList> GetComponentsInParallelAsync(
         Guid solutionId,
         IProgress<int>? progress,
         CancellationToken ct)
@@ -777,12 +806,12 @@ public sealed partial class DataverseClient : IDisposable
             try
             {
                 var slice = new List<SolutionComponentItem>();
-                await ReadAllPagesAsync(
+                var truncated = await ReadAllPagesAsync(
                     BuildComponentsUrl(solutionId, range),
                     slice,
                     added => progress?.Report(Interlocked.Add(ref total, added)),
                     ct).ConfigureAwait(false);
-                return slice;
+                return (Rows: slice, Truncated: truncated);
             }
             finally
             {
@@ -791,17 +820,25 @@ public sealed partial class DataverseClient : IDisposable
         }).ToList();
 
         var slices = await Task.WhenAll(tasks).ConfigureAwait(false);
-        return slices.SelectMany(s => s).ToList();
+
+        // The cap is per slice while reading, so it is applied once more to the whole.
+        var all = new ComponentList();
+        all.AddRange(slices.SelectMany(s => s.Rows).Take(MaxRows));
+        all.IsTruncated = slices.Any(s => s.Truncated) || slices.Sum(s => s.Rows.Count) > MaxRows;
+        return all;
     }
 
-    private async Task ReadAllPagesAsync(
+    /// <returns>True when the row cap stopped the read with pages still to come.</returns>
+    private async Task<bool> ReadAllPagesAsync(
         string url,
         List<SolutionComponentItem> into,
         Action<int> onRowsAdded,
         CancellationToken ct)
     {
-        while (url.Length > 0 && into.Count < MaxRows)
+        while (url.Length > 0)
         {
+            if (into.Count >= MaxRows) return true;
+
             ct.ThrowIfCancellationRequested();
 
             using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
@@ -819,6 +856,8 @@ public sealed partial class DataverseClient : IDisposable
             onRowsAdded(added);
             url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
         }
+
+        return false;
     }
 
     private static SolutionComponentItem ReadComponent(JsonElement row)

@@ -597,6 +597,36 @@ public class DataverseClientCoreTests
     }
 
     [Fact]
+    public async Task Process_categories_are_asked_for_the_solutions_processes_only()
+    {
+        var flow = Guid.NewGuid();
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "$top=1", HttpStatusCode.BadRequest, "no ranges")
+            .OnJson(HttpMethod.Get, "msdyn_solutioncomponentsummaries", Page(ComponentRow(29, name: "flow", objectId: flow)))
+            .OnJson(HttpMethod.Get, "workflows?$select=workflowid,category", Page(""));
+        using var client = Fakes.Dataverse(handler);
+
+        await client.GetSolutionComponentsAsync(Guid.NewGuid());
+
+        var read = Assert.Single(handler.Requests, r => r.Url.Contains("workflows?"));
+        Assert.Contains($"In(PropertyName='workflowid',PropertyValues=['{flow}'])", read.Url);
+    }
+
+    [Fact]
+    public async Task A_solution_with_no_processes_reads_no_workflows()
+    {
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "$top=1", HttpStatusCode.BadRequest, "no ranges")
+            .OnJson(HttpMethod.Get, "msdyn_solutioncomponentsummaries", Page(ComponentRow(1, name: "table")));
+        using var client = Fakes.Dataverse(handler);
+
+        var items = await client.GetSolutionComponentsAsync(Guid.NewGuid());
+
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("workflows?"));
+        Assert.False(Assert.IsType<ComponentList>(items).IsTruncated);
+    }
+
+    [Fact]
     public async Task Process_category_failure_leaves_summary_sub_type()
     {
         var handler = new FakeHttpHandler()

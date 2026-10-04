@@ -93,48 +93,58 @@ public sealed partial class DataverseClient
             }
         }
 
-        var filter = string.Join(" or ", ids.Distinct().Take(40).Select(id => $"_workflowactivationid_value eq {id}"));
-        var url = EnvironmentUrl + ApiPath +
-                  "asyncoperations?$select=name,statuscode,startedon,completedon,createdon,message,friendlymessage,errorcode," +
-                  "_regardingobjectid_value" +
-                  $"&$filter={filter}&$orderby=createdon desc&$top={MaxRunHistory}";
-
-        using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
-
         var runs = new List<ProcessRun>();
-        if (!doc.RootElement.TryGetProperty("value", out var jobs)) return runs;
 
-        foreach (var row in jobs.EnumerateArray())
+        // Every activation is asked about, forty to a request so the filter stays a sensible
+        // length; the newest runs across all of them are kept. Keeping only the first forty
+        // activations would hide the runs of every later one.
+        foreach (var chunk in ids.Distinct().Chunk(40))
         {
-            var code = JsonHelper.GetInt(row, "statuscode");
-            var started = JsonHelper.GetDate(row, "startedon") ?? JsonHelper.GetDate(row, "createdon");
-            var completed = JsonHelper.GetDate(row, "completedon");
-            var friendly = JsonHelper.GetString(row, "friendlymessage");
-            var message = JsonHelper.GetString(row, "message");
+            var filter = string.Join(" or ", chunk.Select(id => $"_workflowactivationid_value eq {id}"));
+            var url = EnvironmentUrl + ApiPath +
+                      "asyncoperations?$select=name,statuscode,startedon,completedon,createdon,message,friendlymessage,errorcode," +
+                      "_regardingobjectid_value" +
+                      $"&$filter={filter}&$orderby=createdon desc&$top={MaxRunHistory}";
 
-            runs.Add(new ProcessRun
+            using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
+
+            if (!doc.RootElement.TryGetProperty("value", out var jobs)) continue;
+
+            foreach (var row in jobs.EnumerateArray())
             {
-                Name = JsonHelper.GetString(row, "name") ?? string.Empty,
-                Status = JsonHelper.GetString(row, "statuscode@" + Annotations.Formatted) ?? code?.ToString() ?? "Unknown",
-                Outcome = code switch
+                var code = JsonHelper.GetInt(row, "statuscode");
+                var started = JsonHelper.GetDate(row, "startedon") ?? JsonHelper.GetDate(row, "createdon");
+                var completed = JsonHelper.GetDate(row, "completedon");
+                var friendly = JsonHelper.GetString(row, "friendlymessage");
+                var message = JsonHelper.GetString(row, "message");
+
+                runs.Add(new ProcessRun
                 {
-                    30 => RunOutcome.Succeeded,
-                    31 => RunOutcome.Failed,
-                    32 => RunOutcome.Cancelled,
-                    0 or 10 or 20 or 21 or 22 => RunOutcome.Running,
-                    _ => RunOutcome.Other
-                },
-                StartTime = started,
-                EndTime = completed,
-                DurationMs = started is { } s && completed is { } c ? (long)(c - s).TotalMilliseconds : null,
-                TriggerType = "System job",
-                ErrorCode = JsonHelper.GetString(row, "errorcode"),
-                ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? message : friendly,
-                Regarding = JsonHelper.GetString(row, "_regardingobjectid_value@" + Annotations.Formatted)
-            });
+                    Name = JsonHelper.GetString(row, "name") ?? string.Empty,
+                    Status = JsonHelper.GetString(row, "statuscode@" + Annotations.Formatted) ?? code?.ToString() ?? "Unknown",
+                    Outcome = code switch
+                    {
+                        30 => RunOutcome.Succeeded,
+                        31 => RunOutcome.Failed,
+                        32 => RunOutcome.Cancelled,
+                        0 or 10 or 20 or 21 or 22 => RunOutcome.Running,
+                        _ => RunOutcome.Other
+                    },
+                    StartTime = started,
+                    EndTime = completed,
+                    DurationMs = started is { } s && completed is { } c ? (long)(c - s).TotalMilliseconds : null,
+                    TriggerType = "System job",
+                    ErrorCode = JsonHelper.GetString(row, "errorcode"),
+                    ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? message : friendly,
+                    Regarding = JsonHelper.GetString(row, "_regardingobjectid_value@" + Annotations.Formatted)
+                });
+            }
         }
 
-        return runs;
+        return runs
+            .OrderByDescending(r => r.StartTime)
+            .Take(MaxRunHistory)
+            .ToList();
     }
 
     /// <summary>Whether plug-ins write to the trace log at all: off, exceptions only, or everything.</summary>
