@@ -76,9 +76,7 @@ public sealed class AuthenticationService
                           preferredAccountId is not null &&
                           string.Equals(a.HomeAccountId?.Identifier, preferredAccountId, StringComparison.OrdinalIgnoreCase))
                       // No remembered account: reuse one already signed into this tenant.
-                      ?? accounts.FirstOrDefault(a =>
-                          tenantId is not null &&
-                          string.Equals(a.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+                      ?? accounts.FirstOrDefault(a => tenantId is not null && SignedInto(a, tenantId));
         }
 
         AuthenticationResult result;
@@ -108,12 +106,28 @@ public sealed class AuthenticationService
             result = await builder.ExecuteAsync(ct).ConfigureAwait(false);
         }
 
-        return new AccountToken(
-            result.AccessToken,
-            result.Account?.HomeAccountId?.Identifier ?? string.Empty,
-            result.Account?.Username ?? "(unknown account)",
-            result.Account?.HomeAccountId?.TenantId ?? tenantId);
+        return Token(result, tenantId);
     }
+
+    /// <summary>
+    /// The tenant that issued the token, not the account's home tenant: for a guest the two
+    /// differ, and every later token on the tab - Graph, the Power Platform API - has to come from
+    /// the tenant the environment is in.
+    /// </summary>
+    private static AccountToken Token(AuthenticationResult result, string? tenantId) => new(
+        result.AccessToken,
+        result.Account?.HomeAccountId?.Identifier ?? string.Empty,
+        result.Account?.Username ?? "(unknown account)",
+        string.IsNullOrWhiteSpace(result.TenantId) ? tenantId : result.TenantId);
+
+    /// <summary>
+    /// Whether an account has signed in to a tenant - its home tenant, or one it is a guest in.
+    /// Matching on the home tenant alone never found a guest account, so every new tab in a
+    /// tenant where the user is a guest prompted again.
+    /// </summary>
+    private static bool SignedInto(IAccount account, string tenantId) =>
+        string.Equals(account.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase) ||
+        (account.GetTenantProfiles()?.Any(p => string.Equals(p.TenantId, tenantId, StringComparison.OrdinalIgnoreCase)) ?? false);
 
     /// <summary>
     /// A token for another resource on an account already signed in, or null if getting one would
@@ -134,9 +148,7 @@ public sealed class AuthenticationService
             var account = accounts.FirstOrDefault(a =>
                               preferredAccountId is not null &&
                               string.Equals(a.HomeAccountId?.Identifier, preferredAccountId, StringComparison.OrdinalIgnoreCase))
-                          ?? accounts.FirstOrDefault(a =>
-                              tenantId is not null &&
-                              string.Equals(a.HomeAccountId?.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+                          ?? accounts.FirstOrDefault(a => tenantId is not null && SignedInto(a, tenantId));
 
             if (account is null) return null;
 
@@ -145,11 +157,7 @@ public sealed class AuthenticationService
                 .ExecuteAsync(ct)
                 .ConfigureAwait(false);
 
-            return new AccountToken(
-                result.AccessToken,
-                result.Account?.HomeAccountId?.Identifier ?? string.Empty,
-                result.Account?.Username ?? "(unknown account)",
-                result.Account?.HomeAccountId?.TenantId ?? tenantId);
+            return Token(result, tenantId);
         }
         catch (OperationCanceledException) { throw; }
         catch
@@ -259,7 +267,10 @@ public sealed class EnvironmentAuthContext
 
         AccountId = string.IsNullOrEmpty(token.AccountId) ? AccountId : token.AccountId;
         AccountName = token.AccountName;
-        TenantId ??= token.TenantId;
+
+        // A tenant is only adopted from a token asked of that tenant. Without one the request went
+        // to "organizations", which answers from the account's home tenant - for a guest, the wrong
+        // directory for every Graph and Power Platform request that would follow.
 
         return token.AccessToken;
     }
