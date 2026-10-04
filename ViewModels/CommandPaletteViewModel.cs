@@ -144,6 +144,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Entra team sync", Group = env, Detail = "writes", Command = session.EntraTeamSyncCommand },
             new() { Title = "Queue membership sync", Group = env, Detail = "writes", Command = session.QueueSyncCommand },
             new() { Title = "Deployment settings file", Group = env, Command = session.ExportDeploymentSettingsCommand },
+            new() { Title = "Document this solution", Group = env, Command = session.DocumentSolutionCommand },
             new() { Title = "Export CSV", Group = env, Command = session.ExportCsvCommand },
             new() { Title = "Check layers", Group = env, Command = session.CheckUnmanagedLayersCommand },
             new() { Title = "Turn on every flow listed that is off", Group = env, Detail = "writes", Command = session.TurnOnSolutionFlowsCommand },

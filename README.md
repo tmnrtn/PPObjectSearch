@@ -434,6 +434,22 @@ are read once per tab, a chunk of rows per request, and read again only for comp
 since - so a second search is instant. **Find usages** on a table's column (Table components tab)
 and on an environment variable (Value tab) runs the same search for that name.
 
+## Solution documentation
+
+**Document** (toolbar, with a solution selected) writes a readable inventory of the solution as
+Markdown, for a handover, an audit or a wiki:
+
+- the solution's name, version, publisher and managed state, and a count of components by type;
+- **tables** - custom columns with type and requirement, relationships and alternate keys;
+- **cloud flows** - on or off, trigger, connectors used, action count and a Mermaid diagram;
+- **environment variables** - type, default and the value in this environment, secrets redacted;
+- **plug-in steps** - message, table, stage, mode, rank and filtering attributes;
+- **security roles** - their privileges on the solution's tables;
+- **dependencies** on components outside the solution.
+
+Choose the sections, and either one Markdown file or a folder with an index and one file per
+component - for a docs repository. A section that cannot be read is listed under *Not documented*.
+
 ## Recent changes
 
 **Recent changes** (sidebar) answers "something broke yesterday - what changed?". It lists every

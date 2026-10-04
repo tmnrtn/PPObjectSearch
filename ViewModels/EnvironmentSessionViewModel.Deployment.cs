@@ -19,6 +19,20 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
         ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));
 
+    // ---------------------------------------------------------------- documentation
+
+    private RelayCommand? _documentSolutionCommand;
+    public RelayCommand DocumentSolutionCommand => _documentSolutionCommand ??= new RelayCommand(_ =>
+    {
+        if (_client is null || !IsConnected || SelectedSolution is null)
+        {
+            Status = "Choose a solution first - the documentation is of one solution.";
+            return;
+        }
+
+        new Views.DocumentationWindow { DataContext = new DocumentationViewModel(this), Owner = Application.Current.MainWindow }.ShowDialog();
+    });
+
     // ---------------------------------------------------------------- recent changes
 
     private RelayCommand? _recentChangesCommand;

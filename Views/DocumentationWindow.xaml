@@ -1,0 +1,34 @@
+<Window x:Class="PPObjectSearch.Views.DocumentationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindow}"
+        Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Style="{StaticResource WindowBody}">
+        <StackPanel Margin="20,16,20,16">
+            <TextBlock Text="Sections" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
+            <CheckBox Content="Tables - custom columns, relationships and keys" IsChecked="{Binding Options.Tables}" Margin="0,3" />
+            <CheckBox Content="Cloud flows - trigger, connectors and a Mermaid diagram" IsChecked="{Binding Options.Flows}" Margin="0,3" />
+            <CheckBox Content="Environment variables - type, default and current value (secrets redacted)"
+                      IsChecked="{Binding Options.EnvironmentVariables}" Margin="0,3" />
+            <CheckBox Content="Plug-in steps - message, table, stage, mode and filtering attributes" IsChecked="{Binding Options.PluginSteps}" Margin="0,3" />
+            <CheckBox Content="Security roles - privileges on the solution's tables" IsChecked="{Binding Options.SecurityRoles}" Margin="0,3" />
+            <CheckBox Content="Dependencies on components outside the solution" IsChecked="{Binding Options.Dependencies}" Margin="0,3" />
+
+            <TextBlock Text="Output" Style="{StaticResource SectionHeading}" Margin="0,14,0,8" />
+            <RadioButton Content="One Markdown file" IsChecked="{Binding Options.FilePerComponent, Converter={StaticResource NotBool}}" Margin="0,3" />
+            <RadioButton Content="A folder with an index and one file per component - for a docs repository"
+                         IsChecked="{Binding Options.FilePerComponent}" Margin="0,3" />
+
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,14,0,0" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button Content="Stop" Height="30" Margin="0,0,8,0" Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                <Button Style="{StaticResource PrimaryButton}" Content="Export…" Height="30" Padding="16,0" Command="{Binding ExportCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

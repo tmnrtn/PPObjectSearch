@@ -282,6 +282,9 @@
                 <Button Content="Search inside" Margin="6,0,0,0"
                         Command="{Binding ContentSearchCommand}"
                         ToolTip="Where is this used? Finds text inside the definitions of the listed flows, scripts, forms, views, plug-in steps, classic workflows and sitemaps (Ctrl+Shift+U)" />
+                <Button Content="Document" Margin="6,0,0,0"
+                        Command="{Binding DocumentSolutionCommand}"
+                        ToolTip="Write a readable inventory of the selected solution as Markdown - tables, flows with diagrams, environment variables, plug-in steps, roles and dependencies" />
                 <Button Content="Deployment settings" Margin="6,0,0,0"
                         Command="{Binding ExportDeploymentSettingsCommand}"
                         ToolTip="Writes the settings file pac solution import --settings-file takes for this solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />
