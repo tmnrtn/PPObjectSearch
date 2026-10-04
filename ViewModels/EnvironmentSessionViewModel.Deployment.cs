@@ -42,6 +42,15 @@ public sealed partial class EnvironmentSessionViewModel
         new Views.ChangesWindow { DataContext = new ChangesViewModel(this), Owner = Application.Current.MainWindow }.Show();
     });
 
+    // ---------------------------------------------------------------- failures
+
+    private RelayCommand? _failuresCommand;
+    public RelayCommand FailuresCommand => _failuresCommand ??= new RelayCommand(_ =>
+    {
+        if (_client is null || !IsConnected) return;
+        new Views.FailuresWindow { DataContext = new FailuresViewModel(this), Owner = Application.Current.MainWindow }.Show();
+    });
+
     // ---------------------------------------------------------------- security lookup
 
     private RelayCommand? _securityLookupCommand;

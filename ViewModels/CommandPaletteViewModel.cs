@@ -136,6 +136,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Search inside definitions", Group = env, Shortcut = "Ctrl+Shift+U", Command = session.ContentSearchCommand },
             new() { Title = "Solution history", Group = env, Command = session.SolutionHistoryCommand },
             new() { Title = "Recent changes", Group = env, Command = session.RecentChangesCommand },
+            new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
             new() { Title = "Users", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Users" },
             new() { Title = "Security roles", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
             new() { Title = "Mailboxes", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },

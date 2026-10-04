@@ -216,6 +216,10 @@
                                 ToolTip="What changed here, when and by whom: components modified recently, with solution operations on the same timeline.">
                             <TextBlock Text="Recent changes" VerticalAlignment="Center" />
                         </Button>
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding FailuresCommand}"
+                                ToolTip="Flow runs, workflow jobs and plug-ins that failed over a period: by component, by error and over time.">
+                            <TextBlock Text="Failures" VerticalAlignment="Center" />
+                        </Button>
                         <!-- Read-only: who is here, what they can do, and how mail reaches them. Two to a row, so the sidebar fits. -->
                         <TextBlock Text="ADMIN · READ-ONLY" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Faint}"
                                    Margin="8,8,8,4" />
