@@ -45,6 +45,17 @@ public sealed class FailureEvent
     public string ErrorLine => string.IsNullOrWhiteSpace(ErrorMessage)
         ? ErrorCode ?? "(no error text)"
         : ErrorMessage!.Split('\n', 2)[0].Trim();
+
+    /// <summary>
+    /// Where it failed, as far as the source says: a plug-in's message and table, a flow run's error
+    /// code. A run's failing action is not in the run record, so a flow stops at its code.
+    /// </summary>
+    public string StepLabel => Source switch
+    {
+        FailureSource.Plugin => string.IsNullOrWhiteSpace(Context) ? "Plug-in" : Context!,
+        FailureSource.CloudFlow => string.IsNullOrWhiteSpace(ErrorCode) ? "Flow run" : ErrorCode!,
+        _ => "System job"
+    };
 }
 
 /// <summary>Everything read for one period: the failures, and how many runs there were where that is known.</summary>
@@ -57,6 +68,11 @@ public sealed class FailureData
 
     /// <summary>Sources that could not be read, or were cut short, said rather than left empty.</summary>
     public List<string> Notes { get; } = new();
+
+    /// <summary>How much was read for this: flow runs of every outcome, failed system jobs, traced exceptions.</summary>
+    public int FlowRunsRead { get; set; }
+    public int SystemJobsRead { get; set; }
+    public int TraceLogsRead { get; set; }
 }
 
 /// <summary>What to read failures for. Null sets mean the whole environment.</summary>

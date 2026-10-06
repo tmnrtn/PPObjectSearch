@@ -84,6 +84,7 @@ public sealed partial class DataverseClient
             Uri.EscapeDataString(filter),
             row =>
             {
+                data.FlowRunsRead++;
                 if (!Guid.TryParse(JsonHelper.GetString(row, "_workflow_value"), out var workflow)) return;
                 if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) return;
 
@@ -125,6 +126,7 @@ public sealed partial class DataverseClient
             row => jobs.Add(row.Clone()), ct).ConfigureAwait(false);
 
         if (truncated) data.Notes.Add($"Classic workflows: only the newest {MaxFailureRows:N0} failed jobs were read.");
+        data.SystemJobsRead = jobs.Count;
 
         // A job names the activation that ran; the definition it belongs to is its parent.
         var activations = jobs.Select(j => ParseGuid(JsonHelper.GetString(j, "_workflowactivationid_value")))
@@ -183,6 +185,7 @@ public sealed partial class DataverseClient
             "&$filter=" + Uri.EscapeDataString(filter) + "&$orderby=createdon desc",
             row =>
             {
+                data.TraceLogsRead++;
                 var exception = JsonHelper.GetString(row, "exceptiondetails");
                 if (string.IsNullOrWhiteSpace(exception)) return;
 

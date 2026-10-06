@@ -1,17 +1,125 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Views;
 
 public partial class EnvironmentSessionView : UserControl
 {
+    private Window? _window;
+
+    /// <summary>Set while the view puts focus in the box itself, so that does not open the dropdown.</summary>
+    private bool _focusingSearchBox;
+
     public EnvironmentSessionView()
     {
         InitializeComponent();
-        Loaded += (_, _) => FocusMostUsefulBox();
-        DataContextChanged += (_, _) => FocusMostUsefulBox();
+        Loaded += (_, _) =>
+        {
+            FocusMostUsefulBox();
+            HookWindow();
+        };
+        Unloaded += (_, _) => UnhookWindow();
+        DataContextChanged += (_, e) =>
+        {
+            // The view is reused across tabs; a dropdown left open belongs to the tab left behind.
+            if (e.OldValue is EnvironmentSessionViewModel old) old.SearchDropdownOpen = false;
+            FocusMostUsefulBox();
+        };
+    }
+
+    private EnvironmentSessionViewModel? Session => DataContext as EnvironmentSessionViewModel;
+
+    // ---------------------------------------------------------------- search dropdown
+
+    /// <summary>
+    /// The dropdown stays open on its own (StaysOpen), so it would float over other windows and
+    /// stay behind when this one moves: both close it.
+    /// </summary>
+    private void HookWindow()
+    {
+        UnhookWindow();
+        _window = Window.GetWindow(this);
+        if (_window is null) return;
+
+        _window.Deactivated += CloseDropdown;
+        _window.LocationChanged += CloseDropdown;
+    }
+
+    private void UnhookWindow()
+    {
+        if (_window is null) return;
+
+        _window.Deactivated -= CloseDropdown;
+        _window.LocationChanged -= CloseDropdown;
+        _window = null;
+    }
+
+    private void CloseDropdown(object? sender, EventArgs e)
+    {
+        if (Session is { } session) session.SearchDropdownOpen = false;
+    }
+
+    /// <summary>Nothing to search inside, save or reopen until the environment is loaded.</summary>
+    private void OpenDropdown()
+    {
+        if (Session is { IsConnected: true } session) session.SearchDropdownOpen = true;
+    }
+
+    private void SearchBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_focusingSearchBox) OpenDropdown();
+    }
+
+    /// <summary>A click on the box opens the dropdown again, even when the box already has focus.</summary>
+    private void SearchBox_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => OpenDropdown();
+
+    /// <summary>Focus leaving for anywhere but the dropdown's own "⋯" menu closes it.</summary>
+    private void SearchBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is DependencyObject target && IsInDropdown(target)) return;
+        CloseDropdown(sender, e);
+    }
+
+    private bool IsInDropdown(DependencyObject element)
+    {
+        for (var current = element; current is not null;)
+        {
+            if (current is ContextMenu || ReferenceEquals(current, SearchDropdown.Child)) return true;
+
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    /// <summary>↓ and ↑ walk the dropdown, Enter runs its row, Esc closes it and then clears the box.</summary>
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Session is not { } session) return;
+
+        switch (e.Key)
+        {
+            case Key.Down when session.IsConnected:
+                session.MoveSuggestion(+1);
+                e.Handled = true;
+                break;
+            case Key.Up when session.SearchDropdownOpen:
+                session.MoveSuggestion(-1);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                e.Handled = session.RunSuggestion();
+                break;
+            case Key.Escape:
+                session.Escape();
+                e.Handled = true;
+                break;
+        }
     }
 
     /// <summary>
@@ -99,8 +207,16 @@ public partial class EnvironmentSessionView : UserControl
                 ? (Control)SearchBox
                 : EnvironmentBox;
 
-            target.Focus();
-            Keyboard.Focus(target);
+            _focusingSearchBox = true;
+            try
+            {
+                target.Focus();
+                Keyboard.Focus(target);
+            }
+            finally
+            {
+                _focusingSearchBox = false;
+            }
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 }

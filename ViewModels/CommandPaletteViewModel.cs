@@ -135,6 +135,8 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Refresh", Group = env, Shortcut = "F5", Command = session.RefreshCommand },
             new() { Title = "Search inside definitions", Group = env, Shortcut = "Ctrl+Shift+U", Command = session.ContentSearchCommand },
             new() { Title = "Solution history", Group = env, Command = session.SolutionHistoryCommand },
+            // An import log belongs to one import, so this opens the history to pick it from.
+            new() { Title = "Import log…", Group = env, Detail = "choose an import in Solution history", Command = session.SolutionHistoryCommand },
             new() { Title = "Recent changes", Group = env, Command = session.RecentChangesCommand },
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
             new() { Title = "Users", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Users" },
@@ -144,8 +146,8 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Security lookup", Group = env + " admin", Command = session.SecurityLookupCommand },
             new() { Title = "Entra team sync", Group = env, Detail = "writes", Command = session.EntraTeamSyncCommand },
             new() { Title = "Queue membership sync", Group = env, Detail = "writes", Command = session.QueueSyncCommand },
-            new() { Title = "Deployment settings file", Group = env, Command = session.ExportDeploymentSettingsCommand },
-            new() { Title = "Document this solution", Group = env, Command = session.DocumentSolutionCommand },
+            new() { Title = "Deployment settings…", Group = env, Detail = "settings file for pac solution import", Command = session.ExportDeploymentSettingsCommand },
+            new() { Title = "Documentation…", Group = env, Detail = "document this solution as Markdown", Command = session.DocumentSolutionCommand },
             new() { Title = "Export CSV", Group = env, Command = session.ExportCsvCommand },
             new() { Title = "Check layers", Group = env, Command = session.CheckUnmanagedLayersCommand },
             new() { Title = "Turn on every flow listed that is off", Group = env, Detail = "writes", Command = session.TurnOnSolutionFlowsCommand },
@@ -156,6 +158,15 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Switch account", Group = env, Command = session.SwitchAccountCommand },
             new() { Title = "Disconnect", Group = env, Command = session.DisconnectCommand }
         ]);
+
+        if (session.SelectedItem is { } selected)
+        {
+            items.Add(new PaletteItem
+            {
+                Title = "Dependency explorer…", Group = env, Detail = selected.PrimaryLabel,
+                Command = session.ExploreDependenciesCommand
+            });
+        }
 
         foreach (var recent in session.RecentObjects)
         {

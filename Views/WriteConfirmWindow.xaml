@@ -1,0 +1,29 @@
+<Window x:Class="PPObjectSearch.Views.WriteConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
+        Style="{StaticResource DialogWindow}"
+        Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <!-- Every one-click change asks here: which environment, what changes, and that it is logged. -->
+    <Border Style="{StaticResource WindowBody}">
+        <StackPanel>
+            <StackPanel Margin="18,16,18,16">
+                <local:EnvironmentLine x:Name="Environment" />
+                <TextBlock x:Name="Heading" Style="{StaticResource WindowHeading}" Margin="0,0,0,10" />
+                <TextBlock x:Name="Action" TextWrapping="Wrap" />
+                <TextBlock Text="Asks first; the change is recorded in the run log." Foreground="{DynamicResource Muted}"
+                           TextWrapping="Wrap" Margin="0,12,0,0" />
+            </StackPanel>
+
+            <Border Style="{StaticResource Footer}">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="CancelButton" Content="Cancel" Height="30" IsCancel="True" />
+                    <Button x:Name="ConfirmButton" Height="30" Margin="8,0,0,0" IsDefault="True"
+                            Style="{StaticResource PrimaryButton}" Click="Confirm_Click" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</Window>

@@ -25,7 +25,7 @@ public sealed class ShellViewModel : ObservableObject
         GlobalSearchCommand = new RelayCommand(_ => OpenGlobalSearch());
         CompareCommand = new RelayCommand(_ => OpenCompare());
         CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
-        ReadinessCommand = new RelayCommand(_ => OpenReadiness());
+        ReadinessCommand = new RelayCommand(p => OpenReadiness(p as EnvironmentSessionViewModel));
         CommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
@@ -193,13 +193,14 @@ public sealed class ShellViewModel : ObservableObject
     /// is in memory already, and which tables to read is a saved configuration rather than a
     /// property of the tabs.
     /// </summary>
-    private void OpenReadiness()
+    /// <param name="source">The tab whose solution to check, when opened from its Solution tools.</param>
+    private void OpenReadiness(EnvironmentSessionViewModel? source)
     {
         if (!RequireConnectedTabs(2, "Connect the environment the solution comes from and the one it is going to.")) return;
 
         new Views.ReadinessWindow
         {
-            DataContext = new ReadinessViewModel(Sessions),
+            DataContext = new ReadinessViewModel(Sessions, source),
             Owner = Application.Current.MainWindow
         }.Show();
     }

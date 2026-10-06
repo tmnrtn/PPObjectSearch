@@ -9,21 +9,20 @@ namespace PPObjectSearch.ViewModels;
 /// </summary>
 public static class WriteConfirmation
 {
-    /// <summary>Asks; replaced in tests. Returns true for yes.</summary>
-    internal static Func<string, string, bool> Prompt { get; set; } = (message, title) =>
-        MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    /// <summary>
+    /// Asks: the environment line (its colour, name, type and Writes allowed chip), the title as
+    /// the confirm button, and the change. Replaced in tests. Returns true for yes.
+    /// </summary>
+    internal static Func<EnvironmentSessionViewModel, string, string, bool> Prompt { get; set; } = (session, title, action) =>
+        Views.WriteConfirmWindow.Ask(ActiveWindow(), session, title, action);
 
     /// <summary>Shown when the guard refuses; replaced in tests.</summary>
     internal static Action<string, string> Refuse { get; set; } = (message, title) =>
         MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
 
-    /// <summary>The text of the confirmation, so it can be checked.</summary>
-    public static string Message(string action, string environmentName, string environmentHost, WritePermission permission) =>
-        $"{action}\n\n" +
-        $"Environment:  {environmentName}  ({permission.Type.SkuLabel})\n" +
-        $"{environmentHost}" +
-        (permission.IsAllowlisted ? "\nWrites allowed - this environment is allowlisted in settings.json." : string.Empty) +
-        "\n\nThe change is recorded in the run log.";
+    /// <summary>The tooltip of a button that writes: what it does, where, and that it asks first.</summary>
+    public static string ToolTip(string what, string environmentName) =>
+        $"{what} in {environmentName}. Asks first; recorded in the run log.";
 
     public static async Task<bool> AskAsync(EnvironmentSessionViewModel session, string title, string action)
     {
@@ -44,6 +43,10 @@ public static class WriteConfirmation
             return false;
         }
 
-        return Prompt(Message(action, session.Title, session.EnvironmentHost, permission), title);
+        return Prompt(session, title, action);
     }
+
+    /// <summary>The details window when the change was asked for there, else the main window.</summary>
+    private static Window? ActiveWindow() =>
+        Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
 }

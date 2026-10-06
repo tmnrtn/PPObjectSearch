@@ -1,6 +1,8 @@
 <Window x:Class="PPObjectSearch.Views.ImportLogWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
         Title="{Binding Title}"
         Style="{StaticResource AppWindow}"
         Height="660" Width="1100"
@@ -15,65 +17,119 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <WrapPanel Grid.Row="0" Margin="16,14,16,10">
-                <CheckBox Content="Failures and warnings only" Margin="0,0,16,6" VerticalAlignment="Center" IsChecked="{Binding ProblemsOnly}" />
-                <Button Content="Copy failures as Markdown" Height="32" Margin="0,0,8,6" Command="{Binding CopyProblemsCommand}" />
-                <Button Content="Save raw XML…" Height="32" Margin="0,0,8,6" Command="{Binding SaveXmlCommand}"
-                        ToolTip="The log exactly as Dataverse keeps it - what the maker portal offers as a download" />
-            </WrapPanel>
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <local:EnvironmentLine DataContext="{Binding Session}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Import log" Style="{StaticResource WindowHeading}" />
+                        <TextBlock Text="{Binding SolutionLabel}" Foreground="{DynamicResource Muted}" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420"
+                                   ToolTip="{Binding SolutionLabel}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads the environment - nothing is written" />
+                    </StackPanel>
+                </StackPanel>
 
-            <ProgressBar Grid.Row="1" Height="4" Margin="16,0,16,8" Maximum="100" Value="{Binding Progress, Mode=OneWay, TargetNullValue=0}"
+                <!-- The filter first, then read again, then export. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <CheckBox Content="Failures and warnings only" Margin="0,0,6,0" VerticalAlignment="Center"
+                              IsChecked="{Binding ProblemsOnly}" />
+                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="Markdown: the failures and warnings · XML: the raw log">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy failures as Markdown" Command="{Binding CopyProblemsCommand}"
+                                          ToolTip="The failures and warnings, to the clipboard" />
+                                <MenuItem Header="Save raw XML…" Command="{Binding SaveXmlCommand}"
+                                          ToolTip="The log exactly as Dataverse keeps it - what the maker portal offers as a download" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <ProgressBar Grid.Row="1" Height="4" Margin="18,0,18,8" Maximum="100" Value="{Binding Progress, Mode=OneWay, TargetNullValue=0}"
                          AutomationProperties.Name="Import progress"
                          Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
 
-            <DataGrid Grid.Row="2" ItemsSource="{Binding RowsView}" SelectedItem="{Binding SelectedRow}" IsReadOnly="True"
-                      AutomationProperties.Name="Components in the import"
-                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                <DataGrid.InputBindings>
-                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
-                    <KeyBinding Key="Enter" Command="{Binding OpenCommand}" />
-                </DataGrid.InputBindings>
-                <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Result" Width="96" SortMemberPath="Result" HeaderStyle="{StaticResource FirstHeader}">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <ContentControl Margin="16,0,8,0" Content="{Binding ResultLabel}">
-                                    <ContentControl.Style>
-                                        <Style TargetType="ContentControl" BasedOn="{StaticResource StatusPill}">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsFailure}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource RedSoft}" />
-                                                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding IsWarning}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
-                                                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ContentControl.Style>
-                                </ContentControl>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Type" Width="140" Binding="{Binding Section}" ElementStyle="{StaticResource CellMuted}" />
-                    <DataGridTextColumn Header="Component" Width="240" Binding="{Binding Name}" ElementStyle="{StaticResource Cell}" />
-                    <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorText}">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                                <Setter Property="ToolTip" Value="{Binding ErrorText}" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Finished" Width="90" Binding="{Binding At, StringFormat={}{0:HH:mm:ss}}" ElementStyle="{StaticResource CellMuted}" />
-                    <DataGridTextColumn Header="Took" Width="70" Binding="{Binding DurationLabel}" SortMemberPath="Duration" ElementStyle="{StaticResource CellMuted}" />
-                </DataGrid.Columns>
-            </DataGrid>
+            <Grid Grid.Row="2">
+                <DataGrid ItemsSource="{Binding RowsView}" SelectedItem="{Binding SelectedRow}" IsReadOnly="True"
+                          AutomationProperties.Name="Components in the import"
+                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                          Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
+                    <DataGrid.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
+                        <KeyBinding Key="Enter" Command="{Binding OpenCommand}" />
+                    </DataGrid.InputBindings>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Result" Width="96" SortMemberPath="Result" HeaderStyle="{StaticResource FirstHeader}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl Margin="16,0,8,0" Content="{Binding ResultLabel}">
+                                        <ContentControl.Style>
+                                            <Style TargetType="ContentControl" BasedOn="{StaticResource StatusPill}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFailure}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ContentControl.Style>
+                                    </ContentControl>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Type" Width="140" Binding="{Binding Section}" ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Component" Width="240" Binding="{Binding Name}" ElementStyle="{StaticResource Cell}" />
+                        <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorText}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                    <Setter Property="ToolTip" Value="{Binding ErrorText}" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Finished" Width="90" Binding="{Binding At, StringFormat={}{0:HH:mm:ss}}" ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Took" Width="70" Binding="{Binding DurationLabel}" SortMemberPath="Duration" ElementStyle="{StaticResource CellMuted}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Nothing to list: say why, and what to change. -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360"
+                            Visibility="{Binding HasRows, Converter={StaticResource NotBoolToVis}}">
+                    <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                               TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
 
             <Border Grid.Row="3" Style="{StaticResource StatusBar}">
-                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" ToolTip="{Binding Status}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding StatusLine}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" ToolTip="{Binding StatusLine}" />
+                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
             </Border>
         </Grid>
     </Border>

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Data;
 using PPObjectSearch.Core;
@@ -32,6 +33,9 @@ public sealed class ChangesViewModel : ObservableObject
     }
 
     public string Title => $"Recent changes — {_session.Title}";
+
+    /// <summary>The tab the window was opened from, for its environment line.</summary>
+    public EnvironmentSessionViewModel Session => _session;
 
     public ObservableCollection<ChangeEntry> Entries { get; } = new();
     public ListCollectionView EntriesView { get; }
@@ -102,6 +106,8 @@ public sealed class ChangesViewModel : ObservableObject
             if (!SetProperty(ref _isBusy, value)) return;
             RefreshCommand.RaiseCanExecuteChanged();
             CancelCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(EmptyHeading));
+            OnPropertyChanged(nameof(EmptyText));
         }
     }
 
@@ -109,8 +115,52 @@ public sealed class ChangesViewModel : ObservableObject
     public string Status
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        private set
+        {
+            if (SetProperty(ref _status, value)) OnPropertyChanged(nameof(StatusLine));
+        }
     }
+
+    private string _readSummary = string.Empty;
+    /// <summary>"Read 214 component changes and 3 solution operations in 2.4 s".</summary>
+    public string ReadSummary
+    {
+        get => _readSummary;
+        private set
+        {
+            if (SetProperty(ref _readSummary, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    /// <summary>The status bar's left side: what is happening, else what the last read covered.</summary>
+    public string StatusLine => string.IsNullOrEmpty(Status) ? ReadSummary : Status;
+
+    private string _warnings = string.Empty;
+    /// <summary>A read cut short, or solution history that could not be read - the warning banner.</summary>
+    public string Warnings
+    {
+        get => _warnings;
+        private set => SetProperty(ref _warnings, value);
+    }
+
+    /// <summary>The changes the type and unmanaged filters let through.</summary>
+    public int ShownCount => EntriesView.Count;
+
+    public string CountLabel => $"{ShownCount:N0} change{(ShownCount == 1 ? string.Empty : "s")}";
+
+    public bool HasEntries => ShownCount > 0;
+
+    /// <summary>Why the list is empty and what to change - shown in its place.</summary>
+    public string EmptyHeading => Entries.Count > 0 ? "Nothing matches"
+        : IsBusy ? "Reading changes"
+        : "No changes";
+
+    public string EmptyText => Entries.Count > 0
+        ? "No change matches the type" + (UnmanagedOnly ? " and Unmanaged only" : string.Empty) +
+          ". Choose All types" + (UnmanagedOnly ? ", or clear Unmanaged only." : ".")
+        : IsBusy
+            ? $"Components changed and solutions imported in the {Range.ToLowerInvariant()} are being read."
+            : $"Nothing was changed, imported or uninstalled in the {Range.ToLowerInvariant()}. Try a longer time range.";
 
     private DateTimeOffset _since;
 
@@ -133,6 +183,8 @@ public sealed class ChangesViewModel : ObservableObject
         try
         {
             Status = "Reading components changed since " + _since.ToString("yyyy-MM-dd HH:mm") + "...";
+            var clock = Stopwatch.StartNew();
+            var notes = new List<string>();
             var changed = await client.GetRecentlyChangedAsync(defaultSolution.SolutionId, _since, cts.Token);
 
             Status = $"Reading who changed {changed.Count:N0} component(s)...";
@@ -147,6 +199,7 @@ public sealed class ChangesViewModel : ObservableObject
             {
                 history = Array.Empty<SolutionHistoryEntry>();
                 Log.Warn("Solution history could not be read for the timeline", ex);
+                notes.Add("Solution history could not be read, so imports, upgrades and uninstalls are missing from the timeline - " + ex.Message);
             }
 
             if (cts.IsCancellationRequested) return;
@@ -166,9 +219,20 @@ public sealed class ChangesViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedType));
 
             Refresh();
-            Status = $"{Entries.Count(e => !e.IsSolutionOperation):N0} component change(s) and " +
-                     $"{Entries.Count(e => e.IsSolutionOperation):N0} solution operation(s) in the {Range.ToLowerInvariant()}." +
-                     (changed.IsTruncated ? $" Only the newest {Dataverse.DataverseClient.MaxRecentChanges:N0} components were read." : string.Empty);
+
+            if (changed.IsTruncated)
+            {
+                notes.Add($"Only the newest {Dataverse.DataverseClient.MaxRecentChanges:N0} changed components were read - " +
+                          "older changes in this time range are not listed. Choose a shorter time range to see them all.");
+            }
+            Warnings = string.Join(Environment.NewLine, notes);
+
+            var components = Entries.Count(e => !e.IsSolutionOperation);
+            var operations = Entries.Count(e => e.IsSolutionOperation);
+            ReadSummary = $"Read {components:N0} component change{(components == 1 ? string.Empty : "s")} and " +
+                          $"{operations:N0} solution operation{(operations == 1 ? string.Empty : "s")} " +
+                          $"in the {Range.ToLowerInvariant()} in {clock.Elapsed.TotalSeconds:0.0} s";
+            Status = string.Empty;
         }
         catch (OperationCanceledException)
         {
@@ -186,7 +250,15 @@ public sealed class ChangesViewModel : ObservableObject
         }
     }
 
-    private void Refresh() => EntriesView.Refresh();
+    private void Refresh()
+    {
+        EntriesView.Refresh();
+        OnPropertyChanged(nameof(ShownCount));
+        OnPropertyChanged(nameof(CountLabel));
+        OnPropertyChanged(nameof(HasEntries));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
+    }
 
     private void Open(ChangeEntry? entry)
     {

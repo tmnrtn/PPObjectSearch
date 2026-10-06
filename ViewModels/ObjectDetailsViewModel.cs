@@ -486,7 +486,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     public RelayCommand ExploreDependenciesCommand => _exploreDependenciesCommand ??= new RelayCommand(_ =>
     {
         var viewModel = new DependencyExplorerViewModel(_client, Item, _known,
-            Session is { } session ? item => session.OpenDetails(item) : null);
+            Session is { } session ? item => session.OpenDetails(item) : null, Session);
 
         new Views.DependencyExplorerWindow
         {
@@ -637,9 +637,19 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             OnPropertyChanged(nameof(SwitchStateLabel));
             OnPropertyChanged(nameof(OtherSwitchStateLabel));
             OnPropertyChanged(nameof(SwitchButtonLabel));
+            OnPropertyChanged(nameof(SwitchButtonText));
+            OnPropertyChanged(nameof(SwitchToolTip));
             ToggleSwitchCommand.RaiseCanExecuteChanged();
         }
     }
+
+    /// <summary>The header button: it asks before it writes, so its label ends in an ellipsis.</summary>
+    public string SwitchButtonText => SwitchButtonLabel.Length == 0 ? string.Empty : SwitchButtonLabel + "…";
+
+    /// <summary>"Turns the flow off in Contoso. Asks first; recorded in the run log."</summary>
+    public string? SwitchToolTip => SwitchKind is { } kind && Session is { } session
+        ? WriteConfirmation.ToolTip(EnvironmentSessionViewModel.Describe(kind, IsSwitchedOn != true), session.Title)
+        : null;
 
     public string? SwitchStateLabel => SwitchKind is { } kind && IsSwitchedOn is { } on
         ? on ? Switchable.States(kind).On : Switchable.States(kind).Off
@@ -756,7 +766,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             ? $"Remove the current value of {variable.SchemaName}, so its default applies?"
             : $"Set {variable.SchemaName} to:\n\n{Shorten(value)}";
 
-        if (!await WriteConfirmation.AskAsync(Session, "Environment variable", action)) return;
+        if (!await WriteConfirmation.AskAsync(Session, value is null ? "Remove value" : "Set value", action)) return;
 
         _isWriting = true;
         RaiseEnvironmentValueCommands();

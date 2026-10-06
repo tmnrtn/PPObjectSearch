@@ -43,6 +43,9 @@ public sealed class FailureErrorGroup
 /// <summary>Failures in one hour or day of the period.</summary>
 public sealed record FailureBucket(DateTimeOffset Start, string Label, int Failures, double Share);
 
+/// <summary>One bar of the summary band's trend: its size, how strongly it is drawn, and what it says.</summary>
+public sealed record FailureTrendBar(double Width, double Height, double Opacity, string Short, string ToolTip);
+
 /// <summary>Summaries over a period's failures - pure, so they can be checked without an environment.</summary>
 public static partial class FailureOverview
 {
@@ -72,8 +75,10 @@ public static partial class FailureOverview
             .ThenByDescending(r => r.Last)
             .ToList();
 
-    public static IReadOnlyList<FailureErrorGroup> ByError(FailureData data) =>
-        data.Events
+    public static IReadOnlyList<FailureErrorGroup> ByError(FailureData data) => ByError(data.Events);
+
+    public static IReadOnlyList<FailureErrorGroup> ByError(IEnumerable<FailureEvent> events) =>
+        events
             .GroupBy(e => Normalise(e.ErrorLine))
             .Select(g =>
             {
@@ -114,6 +119,49 @@ public static partial class FailureOverview
             .Select(b => new FailureBucket(b.Start, hourly ? b.Start.ToString("ddd HH:00") : b.Start.ToString("ddd d MMM"),
                 b.Count, (double)b.Count / max))
             .ToList();
+    }
+
+    /// <summary>Tallest bar in the summary band, in pixels.</summary>
+    public const double TrendHeight = 30;
+
+    /// <summary>
+    /// The trend as bars: 18px wide for a week or less of days, narrower as there are more, the
+    /// tallest <see cref="TrendHeight"/>. An empty bucket is a faint 2px stub, so the days still read.
+    /// </summary>
+    public static IReadOnlyList<FailureTrendBar> Bars(IReadOnlyList<FailureBucket> buckets)
+    {
+        if (buckets.Count == 0) return [];
+
+        var hourly = buckets.Count > 1 && buckets[1].Start - buckets[0].Start < TimeSpan.FromDays(1);
+        var width = buckets.Count <= 10 ? 18 : Math.Max(2, Math.Floor(190.0 / buckets.Count) - 3);
+        var max = Math.Max(1, buckets.Max(b => b.Failures));
+
+        return buckets
+            .Select(b => new FailureTrendBar(
+                width,
+                Math.Max(2, Math.Round(b.Failures * TrendHeight / max)),
+                b.Failures == 0 ? 0.25 : 1,
+                hourly
+                    ? b.Start.Hour % 6 == 0 ? b.Start.ToString("HH") : string.Empty
+                    : buckets.Count <= 10 ? b.Start.ToString("ddd")[..1] : string.Empty,
+                $"{b.Label}: {b.Failures:N0} failure{(b.Failures == 1 ? string.Empty : "s")}"))
+            .ToList();
+    }
+
+    /// <summary>The same read with only some sources' failures - what the source pills show.</summary>
+    public static FailureData Only(FailureData data, IReadOnlySet<FailureSource> sources)
+    {
+        var only = new FailureData
+        {
+            FlowRunsRead = data.FlowRunsRead,
+            SystemJobsRead = data.SystemJobsRead,
+            TraceLogsRead = data.TraceLogsRead
+        };
+
+        only.Events.AddRange(data.Events.Where(e => sources.Contains(e.Source)));
+        only.Notes.AddRange(data.Notes);
+        foreach (var (key, count) in data.RunCounts) only.RunCounts[key] = count;
+        return only;
     }
 
     /// <summary>

@@ -149,6 +149,28 @@ public sealed class UserLibrary
         Save();
     }
 
+    /// <summary>
+    /// Gives a search a new name - replacing any other search already called that, as saving
+    /// does - and saves.
+    /// </summary>
+    public void RenameSearch(string environmentUrl, string oldName, string newName)
+    {
+        var library = For(environmentUrl);
+
+        lock (_sync)
+        {
+            var search = library.Searches.FirstOrDefault(s => string.Equals(s.Name, oldName, StringComparison.CurrentCultureIgnoreCase));
+            if (search is null) return;
+
+            library.Searches.RemoveAll(s => !ReferenceEquals(s, search) &&
+                                            string.Equals(s.Name, newName, StringComparison.CurrentCultureIgnoreCase));
+            search.Name = newName;
+            library.Searches.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        Save();
+    }
+
     public void DeleteSearch(string environmentUrl, string name)
     {
         var library = For(environmentUrl);

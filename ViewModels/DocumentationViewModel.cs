@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using PPObjectSearch.Core;
 using PPObjectSearch.Services;
@@ -18,6 +19,12 @@ public sealed class DocumentationViewModel : ObservableObject
     }
 
     public string Title => $"Document {_session.SelectedSolution?.FriendlyName ?? "solution"}";
+
+    /// <summary>The tab the dialog was opened from, for its environment line.</summary>
+    public EnvironmentSessionViewModel Session => _session;
+
+    /// <summary>The solution being documented - the line under the heading.</summary>
+    public string SolutionLabel => _session.SelectedSolution?.DisplayLabel ?? "No solution selected";
     public DocumentationOptions Options { get; } = new();
 
     public AsyncRelayCommand ExportCommand { get; }
@@ -66,6 +73,7 @@ public sealed class DocumentationViewModel : ObservableObject
 
         _cts = new CancellationTokenSource();
         IsBusy = true;
+        var clock = Stopwatch.StartNew();
 
         try
         {
@@ -84,12 +92,12 @@ public sealed class DocumentationViewModel : ObservableObject
                     await File.WriteAllTextAsync(path, content, _cts.Token);
                 }
 
-                Status = $"Wrote {files.Count:N0} file(s) to {target}.";
+                Status = $"Wrote {files.Count:N0} file(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
             else
             {
                 await File.WriteAllTextAsync(target, files["README.md"], _cts.Token);
-                Status = $"Wrote {pages.Count - 1:N0} section page(s) to {target}.";
+                Status = $"Wrote {pages.Count - 1:N0} section page(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
         }
         catch (OperationCanceledException)

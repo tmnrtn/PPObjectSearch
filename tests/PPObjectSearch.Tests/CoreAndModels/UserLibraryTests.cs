@@ -64,6 +64,26 @@ public sealed class UserLibraryTests : IDisposable
     }
 
     [Fact]
+    public void Renaming_a_search_keeps_its_filters_resorts_and_replaces_a_namesake()
+    {
+        var library = UserLibrary.Load(FilePath);
+
+        library.SaveSearch(Env, new SavedSearch { Name = "Alpha", SearchText = "a", Type = "Process" });
+        library.SaveSearch(Env, new SavedSearch { Name = "Beta", SearchText = "b" });
+        library.SaveSearch(Env, new SavedSearch { Name = "Zulu", SearchText = "z" });
+
+        library.RenameSearch(Env, "alpha", "Zulu");
+
+        var searches = UserLibrary.Load(FilePath).For(Env).Searches;
+        Assert.Equal(["Beta", "Zulu"], searches.Select(s => s.Name));
+        Assert.Equal("Process", searches[1].Type);
+
+        // A name that is not there changes nothing.
+        library.RenameSearch(Env, "Missing", "Other");
+        Assert.Equal(2, library.For(Env).Searches.Count);
+    }
+
+    [Fact]
     public void A_library_that_will_not_read_starts_empty_and_is_kept_aside()
     {
         Directory.CreateDirectory(_dir);

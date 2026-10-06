@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
@@ -90,12 +91,14 @@ public sealed class DependencyExplorerViewModel : ObservableObject
         DataverseClient client,
         SolutionComponentItem item,
         IReadOnlyDictionary<Guid, SolutionComponentItem> known,
-        Action<SolutionComponentItem>? open)
+        Action<SolutionComponentItem>? open,
+        EnvironmentSessionViewModel? session = null)
     {
         _client = client;
         _item = item;
         _known = known;
         _open = open;
+        Session = session;
 
         Roots.Add(Group("What depends on this", DependencyDirection.Dependent));
         Roots.Add(Group("What this needs", DependencyDirection.Required));
@@ -108,6 +111,12 @@ public sealed class DependencyExplorerViewModel : ObservableObject
     }
 
     public string Title => $"Dependencies — {_item.PrimaryLabel}";
+
+    /// <summary>"Dependencies of contoso_status" - the window heading.</summary>
+    public string Heading => $"Dependencies of {_item.PrimaryLabel}";
+
+    /// <summary>The tab the window was opened from, for its environment line - null when it was not passed.</summary>
+    public EnvironmentSessionViewModel? Session { get; }
 
     public ObservableCollection<DependencyTreeNode> Roots { get; } = new();
     public ObservableCollection<DependencyNode> Impact { get; } = new();
@@ -126,6 +135,8 @@ public sealed class DependencyExplorerViewModel : ObservableObject
             if (!SetProperty(ref _isBusy, value)) return;
             ImpactCommand.RaiseCanExecuteChanged();
             CancelCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(EmptyHeading));
+            OnPropertyChanged(nameof(EmptyText));
         }
     }
 
@@ -133,7 +144,58 @@ public sealed class DependencyExplorerViewModel : ObservableObject
     public string Status
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        private set
+        {
+            if (SetProperty(ref _status, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    private string _readSummary = string.Empty;
+    /// <summary>"Read 37 dependents in 2.1 s, 5 of them outside this solution" - once the impact is walked.</summary>
+    public string ReadSummary
+    {
+        get => _readSummary;
+        private set
+        {
+            if (SetProperty(ref _readSummary, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    /// <summary>The status bar's left side: what is happening, else what the last walk covered.</summary>
+    public string StatusLine => string.IsNullOrEmpty(Status) ? ReadSummary : Status;
+
+    private string _warning = string.Empty;
+    /// <summary>A walk cut short at its depth or size limit - the warning banner.</summary>
+    public string Warning
+    {
+        get => _warning;
+        private set => SetProperty(ref _warning, value);
+    }
+
+    /// <summary>The removal impact has been walked, so its list (or its empty state) means something.</summary>
+    public bool IsImpactWalked => _impactGraph is not null;
+
+    public bool HasImpact => Impact.Count > 0;
+
+    /// <summary>"37 affected" once the impact is walked; empty before.</summary>
+    public string ImpactCountLabel => IsImpactWalked ? $"{Impact.Count:N0} affected" : string.Empty;
+
+    /// <summary>Why the impact list is empty - walking, not walked yet, or nothing depends on this.</summary>
+    public string EmptyHeading => IsBusy ? "Walking the dependents" : IsImpactWalked ? "Nothing depends on this" : "Not walked yet";
+
+    public string EmptyText => IsBusy
+        ? "The list fills in when the walk is done - the count so far is in the status bar."
+        : IsImpactWalked
+            ? "Removing it breaks nothing that Dataverse tracks."
+            : $"Press What breaks if I remove this? to follow what depends on it, and what depends on those, up to {DependencyWalker.DefaultMaxDepth} levels.";
+
+    private void ShowImpact()
+    {
+        OnPropertyChanged(nameof(IsImpactWalked));
+        OnPropertyChanged(nameof(HasImpact));
+        OnPropertyChanged(nameof(ImpactCountLabel));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private DependencyTreeNode Group(string label, DependencyDirection direction) =>
@@ -171,6 +233,10 @@ public sealed class DependencyExplorerViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         IsBusy = true;
         Impact.Clear();
+        _impactGraph = null; // so a walk that is stopped or fails does not read as "nothing depends on this"
+        ShowImpact();
+        Warning = string.Empty;
+        var clock = Stopwatch.StartNew();
 
         try
         {
@@ -191,11 +257,16 @@ public sealed class DependencyExplorerViewModel : ObservableObject
                 Impact.Add(node);
             }
 
+            ShowImpact();
+
+            // The count is on the right, an empty list explains itself, and a cut-short walk is a warning.
             var outside = Impact.Count(n => !n.InSolution);
-            Status = Impact.Count == 0
-                ? "Nothing depends on this - removing it breaks nothing that Dataverse tracks."
-                : $"Removing this would affect {Impact.Count:N0} component(s), {outside:N0} of them outside this solution." +
-                  (graph.IsTruncated ? $" (Stopped after {DependencyWalker.DefaultMaxDepth} levels or {DependencyWalker.DefaultMaxNodes:N0} components.)" : string.Empty);
+            ReadSummary = $"Read {Impact.Count:N0} dependent{(Impact.Count == 1 ? string.Empty : "s")} in {clock.Elapsed.TotalSeconds:0.0} s" +
+                          (Impact.Count == 0 ? string.Empty : $", {outside:N0} of them outside this solution");
+            Warning = graph.IsTruncated
+                ? $"The walk stopped after {DependencyWalker.DefaultMaxDepth} levels or {DependencyWalker.DefaultMaxNodes:N0} components - more may depend on this than is listed."
+                : string.Empty;
+            Status = string.Empty;
         }
         catch (OperationCanceledException)
         {

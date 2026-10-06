@@ -136,13 +136,6 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                    <!-- Turn on/off, activate/deactivate, enable/disable - through the write guard, confirmed, logged. -->
-                    <Button Style="{StaticResource RowButton}" Content="{Binding SwitchButtonLabel}" Margin="0,0,16,0"
-                            VerticalAlignment="Center"
-                            Command="{Binding ToggleSwitchCommand}"
-                            ToolTip="Change it in this environment. The write guard applies, you are asked to confirm, and the change is recorded in the run log."
-                            Visibility="{Binding HasSwitch, Converter={StaticResource BoolToVis}}" />
-
                     <!-- Tables only: an exact row count, found by probing pages rather than reading every row. -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
                                 Visibility="{Binding IsTable, Converter={StaticResource BoolToVis}}">
@@ -172,6 +165,16 @@
                             Command="{Binding OpenLinkCommand}" />
                     <Button AutomationProperties.Name="Read everything again" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30" Margin="8,0,0,0"
                             Command="{Binding RefreshCommand}" ToolTip="Read everything again" />
+
+                    <!-- Turn on/off, activate/deactivate, enable/disable - kept apart from what only reads:
+                         through the write guard, confirmed, logged. -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding HasSwitch, Converter={StaticResource BoolToVis}}">
+                        <Rectangle Style="{StaticResource VDivider}" Margin="12,0" />
+                        <TextBlock Style="{StaticResource WritesTag}" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource SmallButton}" Content="{Binding SwitchButtonText}"
+                                Command="{Binding ToggleSwitchCommand}" ToolTip="{Binding SwitchToolTip}" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
 

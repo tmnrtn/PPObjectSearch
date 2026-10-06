@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using PPObjectSearch.Core;
 using PPObjectSearch.Models;
@@ -14,7 +15,8 @@ public sealed class ReadinessViewModel : ObservableObject
 {
     private CancellationTokenSource? _cts;
 
-    public ReadinessViewModel(IEnumerable<EnvironmentSessionViewModel> sessions)
+    /// <param name="source">The environment to start from - the tab it was opened from - when there is one.</param>
+    public ReadinessViewModel(IEnumerable<EnvironmentSessionViewModel> sessions, EnvironmentSessionViewModel? source = null)
     {
         Sessions = new ObservableCollection<EnvironmentSessionViewModel>(sessions.Where(s => s.IsConnected));
 
@@ -25,7 +27,9 @@ public sealed class ReadinessViewModel : ObservableObject
             p => OpenFinding(p as ReadinessFinding ?? SelectedFinding),
             p => (p as ReadinessFinding ?? SelectedFinding)?.Item is not null);
 
-        _source = Sessions.FirstOrDefault(s => s.SelectedSolution is { IsDefaultSolution: false }) ?? Sessions.FirstOrDefault();
+        _source = (source is not null && Sessions.Contains(source) ? source : null)
+                  ?? Sessions.FirstOrDefault(s => s.SelectedSolution is { IsDefaultSolution: false })
+                  ?? Sessions.FirstOrDefault();
         _target = Sessions.FirstOrDefault(s => s != _source);
         _solution = _source?.SelectedSolution is { IsDefaultSolution: false } selected ? selected : null;
     }
@@ -46,6 +50,7 @@ public sealed class ReadinessViewModel : ObservableObject
         {
             if (!SetProperty(ref _source, value)) return;
             OnPropertyChanged(nameof(Solutions));
+            OnPropertyChanged(nameof(EmptyText));
             Solution = value?.SelectedSolution is { IsDefaultSolution: false } selected ? selected : null;
             RunCommand.RaiseCanExecuteChanged();
         }
@@ -57,7 +62,9 @@ public sealed class ReadinessViewModel : ObservableObject
         get => _target;
         set
         {
-            if (SetProperty(ref _target, value)) RunCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _target, value)) return;
+            RunCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(EmptyText));
         }
     }
 
@@ -71,7 +78,9 @@ public sealed class ReadinessViewModel : ObservableObject
         get => _solution;
         set
         {
-            if (SetProperty(ref _solution, value)) RunCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _solution, value)) return;
+            RunCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(EmptyText));
         }
     }
 
@@ -95,6 +104,7 @@ public sealed class ReadinessViewModel : ObservableObject
             ExportCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(NotChecked));
             OnPropertyChanged(nameof(HasNotChecked));
+            RaiseFindings();
         }
     }
 
@@ -113,14 +123,86 @@ public sealed class ReadinessViewModel : ObservableObject
             if (!SetProperty(ref _isRunning, value)) return;
             RunCommand.RaiseCanExecuteChanged();
             CancelCommand.RaiseCanExecuteChanged();
+            RaiseFindings();
         }
     }
 
-    private string _status = "Choose a solution, the environment it comes from, and the one it is going to.";
+    private string _status = string.Empty;
     public string Status
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        private set
+        {
+            if (!SetProperty(ref _status, value)) return;
+            OnPropertyChanged(nameof(StatusLine));
+            OnPropertyChanged(nameof(EmptyHeading));
+            OnPropertyChanged(nameof(EmptyText));
+        }
+    }
+
+    private string _readSummary = string.Empty;
+    /// <summary>"Read 214 components of Contoso Core in 6.1 s - 1 blocker, 3 warnings, 8 notes".</summary>
+    public string ReadSummary
+    {
+        get => _readSummary;
+        private set
+        {
+            if (SetProperty(ref _readSummary, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    /// <summary>The status bar's left side: what is happening, else what the last check covered.</summary>
+    public string StatusLine => string.IsNullOrEmpty(Status) ? ReadSummary : Status;
+
+    // ---------------------------------------------------------------- findings
+
+    public bool HasFindings => Findings.Count > 0;
+
+    /// <summary>Nothing to list and nothing running - the empty state shows in the grid's place.</summary>
+    public bool IsEmpty => !IsRunning && Findings.Count == 0;
+
+    public string FindingCountLabel => $"{Findings.Count:N0} finding{(Findings.Count == 1 ? string.Empty : "s")}";
+
+    /// <summary>Why the list is empty and what to change - shown in its place.</summary>
+    public string EmptyHeading => Report is not null
+        ? "Nothing found"
+        : string.IsNullOrEmpty(Status) ? "Nothing checked yet" : "The check did not finish";
+
+    public string EmptyText
+    {
+        get
+        {
+            if (Report is { } report)
+            {
+                return $"No blockers, warnings or notes for {report.Solution} in {report.Target}." +
+                       (report.NotChecked.Count > 0 ? " Some checks could not run - see above." : string.Empty);
+            }
+
+            if (!string.IsNullOrEmpty(Status)) return "The status bar says why. Check again when it is sorted.";
+            if (Source is null || Target is null || Source == Target) return "Choose the environment the solution comes from and a different one it is going to.";
+            return Solution is null
+                ? $"Choose a solution in {Source.Title}, then Check."
+                : $"Check {Solution.DisplayLabel} from {Source.Title} to {Target.Title} - nothing is written.";
+        }
+    }
+
+    private void RaiseFindings()
+    {
+        OnPropertyChanged(nameof(HasFindings));
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(FindingCountLabel));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
+    }
+
+    internal static string Describe(ReadinessReport report, int components, TimeSpan took)
+    {
+        static string Count(int n, string word) => $"{n:N0} {word}{(n == 1 ? string.Empty : "s")}";
+
+        return $"Read {Count(components, "component")} of {report.Solution} in {took.TotalSeconds:0.0} s - " +
+               $"{Count(report.Count(ReadinessSeverity.Blocker), "blocker")}, " +
+               $"{Count(report.Count(ReadinessSeverity.Warning), "warning")}, " +
+               $"{Count(report.Count(ReadinessSeverity.Info), "note")}";
     }
 
     private bool CanRun =>
@@ -142,6 +224,7 @@ public sealed class ReadinessViewModel : ObservableObject
         try
         {
             Status = $"Reading {solution.DisplayLabel} in {source.Title}...";
+            var clock = Stopwatch.StartNew();
             var components = await source.Client!.GetSolutionComponentsAsync(solution.SolutionId, ct: _cts.Token);
 
             var check = new ReadinessCheck(
@@ -160,7 +243,8 @@ public sealed class ReadinessViewModel : ObservableObject
             }
 
             Report = report;
-            Status = report.Summary;
+            ReadSummary = Describe(report, components.Count, clock.Elapsed);
+            Status = string.Empty;
         }
         catch (OperationCanceledException)
         {

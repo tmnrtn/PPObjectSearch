@@ -19,6 +19,48 @@
             <Setter Property="Margin" Value="0,0,0,7" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
+
+        <!-- The search dropdown: a heading, and rows that never take focus from the box. -->
+        <Style TargetType="TextBlock" x:Key="DropdownHeading">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Margin" Value="10,8,10,3" />
+        </Style>
+        <Style TargetType="Button" x:Key="DropdownRow">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Rectangle x:Name="Bar" Width="2" HorizontalAlignment="Left" Fill="{DynamicResource Accent}"
+                                       Visibility="Collapsed" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Hover}" />
+                </Trigger>
+                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Selected}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -94,6 +136,30 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
+
+                    <!-- What can be done with the solution picked: the shell's view model rides in Tag for Readiness. -->
+                    <Button Margin="12,0,0,0" Padding="9,0" core:Ui.OpensMenu="True"
+                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                            IsEnabled="{Binding IsSolutionPickerEnabled}"
+                            ToolTip="Document, deployment settings and readiness check for this solution">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Solution tools" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Document solution…" Command="{Binding DocumentSolutionCommand}"
+                                          ToolTip="Write a readable inventory of the selected solution as Markdown - tables, flows with diagrams, environment variables, plug-in steps, roles and dependencies" />
+                                <MenuItem Header="Deployment settings…" Command="{Binding ExportDeploymentSettingsCommand}"
+                                          ToolTip="Write the settings file pac solution import --settings-file takes for the selected solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />
+                                <MenuItem Header="Readiness check…" InputGestureText="Ctrl+Shift+R"
+                                          Command="{Binding PlacementTarget.Tag.ReadinessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}"
+                                          ToolTip="Will the selected solution import cleanly into another environment, and work there?" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                     <Button AutomationProperties.Name="F5 - re-reads the environment, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
                             ToolTip="F5 - re-reads the environment, bypassing the cache." />
@@ -153,14 +219,139 @@
             </Grid.ColumnDefinitions>
 
             <WrapPanel Grid.Column="0" Orientation="Horizontal">
+                <!-- Esc, ↑↓ and Enter are handled in code: they drive the dropdown first. -->
                 <TextBox x:Name="SearchBox" Width="220" Margin="0,0,6,0"
                          core:Ui.Icon="&#xE721;" core:Ui.KeyHint="Esc" core:Ui.Placeholder="Search"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Space separated keywords; every keyword must match the name, display name, schema name, type, owner or id.">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Escape" Command="{Binding ClearSearchCommand}" />
-                    </TextBox.InputBindings>
-                </TextBox>
+                         GotKeyboardFocus="SearchBox_GotKeyboardFocus"
+                         LostKeyboardFocus="SearchBox_LostKeyboardFocus"
+                         PreviewMouseLeftButtonUp="SearchBox_PreviewMouseLeftButtonUp"
+                         PreviewKeyDown="SearchBox_PreviewKeyDown"
+                         ToolTip="Space separated keywords; every keyword must match the name, display name, schema name, type, owner or id." />
+
+                <!-- Search inside definitions, saved searches and recent objects, under the box. -->
+                <Popup x:Name="SearchDropdown" PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom"
+                       IsOpen="{Binding SearchDropdownOpen}" StaysOpen="True" AllowsTransparency="True"
+                       Focusable="False" PopupAnimation="None">
+                    <Grid Margin="0,4,10,10">
+                        <Border Width="380" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                BorderThickness="1" CornerRadius="6" Padding="0,4">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                            </Border.Effect>
+                            <StackPanel>
+                                <!-- First and highlighted: Enter searches inside definitions for the words typed. -->
+                                <Button Style="{StaticResource DropdownRow}" Height="34"
+                                        DataContext="{Binding ContentSuggestion}"
+                                        Command="{Binding DataContext.RunSuggestionCommand, ElementName=SearchBox}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="Search inside definitions">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   DataContext="{Binding DataContext, ElementName=SearchBox}">
+                                            <Run Text="{Binding SearchInsideLabel, Mode=OneWay}" /><Run
+                                                 Text="{Binding SearchInsideTerm, Mode=OneWay}" FontWeight="SemiBold" /><Run
+                                                 Text="  flows, scripts, forms, views…" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                        </TextBlock>
+                                        <TextBlock Grid.Column="2" Text="Ctrl+Shift+U" Style="{StaticResource Shortcut}" Margin="8,0,0,0" />
+                                    </Grid>
+                                </Button>
+
+                                <StackPanel Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="SAVED SEARCHES" Style="{StaticResource DropdownHeading}" />
+                                    <ItemsControl ItemsSource="{Binding SavedSuggestions}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource DropdownRow}"
+                                                        Command="{Binding DataContext.RunSuggestionCommand, ElementName=SearchBox}"
+                                                        CommandParameter="{Binding}"
+                                                        AutomationProperties.Name="{Binding Title}">
+                                                    <Grid Background="Transparent">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                            <Run Text="{Binding Title, Mode=OneWay}" /><Run
+                                                                 Text="{Binding Detail, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter='  '}"
+                                                                 FontSize="11" Foreground="{DynamicResource Muted}" />
+                                                        </TextBlock>
+                                                        <!-- Shown on hover: rename or delete this search. -->
+                                                        <Button Grid.Column="1" Width="22" Height="20" Padding="0" Margin="6,0,0,0"
+                                                                Focusable="False" Content="⋯" Foreground="{DynamicResource Faint}"
+                                                                AutomationProperties.Name="Rename or delete this saved search"
+                                                                ToolTip="Rename or delete"
+                                                                Tag="{Binding DataContext, ElementName=SearchBox}"
+                                                                core:Ui.OpensMenu="True">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                                                    <Setter Property="Opacity" Value="0" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True">
+                                                                            <Setter Property="Opacity" Value="1" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <Button.ContextMenu>
+                                                                <ContextMenu>
+                                                                    <MenuItem Header="Rename…"
+                                                                              Command="{Binding PlacementTarget.Tag.RenameSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              CommandParameter="{Binding Payload}" />
+                                                                    <MenuItem Header="Delete"
+                                                                              Command="{Binding PlacementTarget.Tag.DeleteSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              CommandParameter="{Binding Payload}" />
+                                                                </ContextMenu>
+                                                            </Button.ContextMenu>
+                                                        </Button>
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <StackPanel Visibility="{Binding HasRecentObjects, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="RECENT" Style="{StaticResource DropdownHeading}" />
+                                    <ItemsControl ItemsSource="{Binding RecentSuggestions}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource DropdownRow}"
+                                                        Command="{Binding DataContext.RunSuggestionCommand, ElementName=SearchBox}"
+                                                        CommandParameter="{Binding}"
+                                                        AutomationProperties.Name="{Binding Title}">
+                                                    <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                                        <Run Text="{Binding Title, Mode=OneWay}" /><Run
+                                                             Text="{Binding Detail, Mode=OneWay, Converter={StaticResource Prefix}, ConverterParameter='  '}"
+                                                             FontSize="11" Foreground="{DynamicResource Muted}" />
+                                                    </TextBlock>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Margin="0,4,0,0" Padding="4,4,10,0">
+                                    <Grid>
+                                        <Button Style="{StaticResource LinkButton}" Content="Save this search…" FontSize="11" Height="22"
+                                                HorizontalAlignment="Left" Focusable="False"
+                                                Command="{Binding SaveSearchCommand}"
+                                                ToolTip="Name this search - its words and filters - so it can be picked again" />
+                                        <TextBlock Text="↑↓ Enter" FontSize="11" Foreground="{DynamicResource Faint}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Popup>
 
                 <ComboBox MinWidth="120" MaxWidth="260" Margin="0,0,6,0" Padding="7,0"
                           core:Ui.InlineLabel="Type" core:Ui.Placeholder="All types"
@@ -205,69 +396,22 @@
                           IsEnabled="{Binding IsConnected}"
                           ToolTip="Whether the object has an unmanaged customization on top of its managed layer. Unknown until 'Check layers' has been run." />
 
+                <!-- On: the active filter look, like the boxes beside it. -->
                 <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,0" IsChecked="{Binding FavouritesOnly}"
-                              IsEnabled="{Binding IsConnected}" ToolTip="Only the objects you have starred"
+                              IsEnabled="{Binding IsConnected}" ToolTip="Show only starred objects"
                               AutomationProperties.Name="Favourites only">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE734;" Margin="0,0,5,0" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE735;" Margin="0,0,5,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Amber}" />
                         <TextBlock Text="Favourites" VerticalAlignment="Center" />
                     </StackPanel>
                 </ToggleButton>
-
-                <Button Content="Saved" Margin="0,0,6,0" core:Ui.OpensMenu="True" IsEnabled="{Binding IsConnected}"
-                        ToolTip="Searches saved in this environment - their words and filters">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Save this search..." Command="{Binding SaveSearchCommand}" />
-                            <Separator Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}" />
-                            <MenuItem Header="Saved searches" IsEnabled="False"
-                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}" />
-                            <MenuItem Header="Open" ItemsSource="{Binding SavedSearches}"
-                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}">
-                                <MenuItem.ItemContainerStyle>
-                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                        <Setter Property="Header" Value="{Binding Name}" />
-                                        <Setter Property="Command" Value="{Binding DataContext.ApplySavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                        <Setter Property="CommandParameter" Value="{Binding}" />
-                                    </Style>
-                                </MenuItem.ItemContainerStyle>
-                            </MenuItem>
-                            <MenuItem Header="Delete" ItemsSource="{Binding SavedSearches}"
-                                      Visibility="{Binding HasSavedSearches, Converter={StaticResource BoolToVis}}">
-                                <MenuItem.ItemContainerStyle>
-                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                        <Setter Property="Header" Value="{Binding Name}" />
-                                        <Setter Property="Command" Value="{Binding DataContext.DeleteSavedSearchCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                        <Setter Property="CommandParameter" Value="{Binding}" />
-                                    </Style>
-                                </MenuItem.ItemContainerStyle>
-                            </MenuItem>
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
-
-                <Button Content="Recent" Margin="0,0,6,0" core:Ui.OpensMenu="True"
-                        IsEnabled="{Binding HasRecentObjects}"
-                        ToolTip="Objects whose details you opened lately in this environment">
-                    <Button.ContextMenu>
-                        <ContextMenu ItemsSource="{Binding RecentObjects}">
-                            <ContextMenu.ItemContainerStyle>
-                                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                                    <Setter Property="Header" Value="{Binding Label}" />
-                                    <Setter Property="InputGestureText" Value="{Binding TypeName}" />
-                                    <Setter Property="Command" Value="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <Setter Property="CommandParameter" Value="{Binding}" />
-                                </Style>
-                            </ContextMenu.ItemContainerStyle>
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
 
                 <Button Style="{StaticResource LinkButton}" Content="Clear" Command="{Binding ClearFiltersCommand}"
                         Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVis}}" />
             </WrapPanel>
 
-            <!-- The environment's own tools (solution history, admin) are in the sidebar. -->
+            <!-- The environment's own tools (solution history, admin) are in the sidebar; solution tools in the header. -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
                 <Button Content="Check layers"
                         Command="{Binding CheckUnmanagedLayersCommand}"
@@ -279,15 +423,6 @@
                 <Button Content="Export CSV" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
-                <Button Content="Search inside" Margin="6,0,0,0"
-                        Command="{Binding ContentSearchCommand}"
-                        ToolTip="Where is this used? Finds text inside the definitions of the listed flows, scripts, forms, views, plug-in steps, classic workflows and sitemaps (Ctrl+Shift+U)" />
-                <Button Content="Document" Margin="6,0,0,0"
-                        Command="{Binding DocumentSolutionCommand}"
-                        ToolTip="Write a readable inventory of the selected solution as Markdown - tables, flows with diagrams, environment variables, plug-in steps, roles and dependencies" />
-                <Button Content="Deployment settings" Margin="6,0,0,0"
-                        Command="{Binding ExportDeploymentSettingsCommand}"
-                        ToolTip="Writes the settings file pac solution import --settings-file takes for this solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />
                 <Button AutomationProperties.Name="Show or hide the detail pane" Content="&#xE8A0;" Margin="6,0,0,0"
                         Command="{Binding ToggleDetailPaneCommand}"
                         ToolTip="Show or hide the detail pane">
@@ -306,6 +441,7 @@
                 </Button>
             </StackPanel>
         </Grid>
+
 
         <!-- ============================================================ busy -->
         <Rectangle Grid.Row="2" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
@@ -628,6 +764,27 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- What writes is kept apart from what reads: only for types that have such actions. -->
+                            <StackPanel Visibility="{Binding DataContext.HasQuickActions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal" Margin="16,6,16,0">
+                                    <TextBlock Text="Change" Style="{StaticResource Label}" Margin="0" />
+                                    <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="16,6,16,6">
+                                    <Button Style="{StaticResource SmallButton}" Margin="0,0,6,0"
+                                            Content="{Binding DataContext.SwitchOffLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            ToolTip="{Binding DataContext.SwitchOffToolTip, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Command="{Binding DataContext.SwitchOffCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Visibility="{Binding DataContext.ShowSwitchOff, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+                                    <Button Style="{StaticResource SmallButton}" Margin="0,0,6,0"
+                                            Content="{Binding DataContext.SwitchOnLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            ToolTip="{Binding DataContext.SwitchOnToolTip, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Command="{Binding DataContext.SwitchOnCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Visibility="{Binding DataContext.ShowSwitchOn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Text="Asks first" FontSize="11" Foreground="{DynamicResource Faint}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
 
                             <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
                             <StackPanel Orientation="Horizontal" Margin="16,6,16,12">

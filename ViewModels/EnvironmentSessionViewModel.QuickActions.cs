@@ -20,6 +20,57 @@ public sealed partial class EnvironmentSessionViewModel
 
     public bool HasSwitchableSelection => SwitchableSelection.Count > 0;
 
+    // ---------------------------------------------------------------- detail pane: Change · WRITES
+
+    /// <summary>The selection has actions that write - the pane's Change group shows only then.</summary>
+    public bool HasQuickActions => HasSwitchableSelection;
+
+    private bool? _selectedSwitchedOn;
+    /// <summary>Whether the selected flow, process or step is on; null until read, or for anything else.</summary>
+    public bool? SelectedSwitchedOn
+    {
+        get => _selectedSwitchedOn;
+        private set
+        {
+            if (!SetProperty(ref _selectedSwitchedOn, value)) return;
+            OnPropertyChanged(nameof(ShowSwitchOn));
+            OnPropertyChanged(nameof(ShowSwitchOff));
+        }
+    }
+
+    /// <summary>The switch that applies: off for one that is on, on for one that is off; both for several, or while unknown.</summary>
+    public bool ShowSwitchOn => HasQuickActions && (HasMultipleSelected || SelectedSwitchedOn != true);
+    public bool ShowSwitchOff => HasQuickActions && (HasMultipleSelected || SelectedSwitchedOn != false);
+
+    /// <summary>"Turn off…": the labels of buttons that ask before they write end in an ellipsis.</summary>
+    public string SwitchOnLabel => SwitchOnHeader + "…";
+    public string SwitchOffLabel => SwitchOffHeader + "…";
+
+    public string SwitchOnToolTip => SwitchToolTip(true);
+    public string SwitchOffToolTip => SwitchToolTip(false);
+
+    /// <summary>What a switch does to one component of a kind, e.g. "Turns the flow off".</summary>
+    internal static string Describe(SwitchableKind kind, bool on) => (kind, on) switch
+    {
+        (SwitchableKind.CloudFlow, true) => "Turns the flow on",
+        (SwitchableKind.CloudFlow, false) => "Turns the flow off",
+        (SwitchableKind.Process, true) => "Activates the process",
+        (SwitchableKind.Process, false) => "Deactivates the process",
+        (_, true) => "Enables the plug-in step",
+        _ => "Disables the plug-in step"
+    };
+
+    private string SwitchToolTip(bool on)
+    {
+        var selection = SwitchableSelection;
+        if (selection.Count == 0) return string.Empty;
+
+        var what = selection.Count == 1
+            ? Describe(selection[0].Kind, on)
+            : $"{(on ? "Turns on" : "Turns off")} the {selection.Count:N0} selected";
+        return WriteConfirmation.ToolTip(what, Title);
+    }
+
     private AsyncRelayCommand? _switchOnCommand;
     /// <summary>Turns on, activates or enables every selected flow, process and plug-in step.</summary>
     public AsyncRelayCommand SwitchOnCommand => _switchOnCommand ??= new AsyncRelayCommand(
@@ -67,8 +118,15 @@ public sealed partial class EnvironmentSessionViewModel
     private void RaiseSwitchCommands()
     {
         OnPropertyChanged(nameof(HasSwitchableSelection));
+        OnPropertyChanged(nameof(HasQuickActions));
+        OnPropertyChanged(nameof(ShowSwitchOn));
+        OnPropertyChanged(nameof(ShowSwitchOff));
         OnPropertyChanged(nameof(SwitchOnHeader));
         OnPropertyChanged(nameof(SwitchOffHeader));
+        OnPropertyChanged(nameof(SwitchOnLabel));
+        OnPropertyChanged(nameof(SwitchOffLabel));
+        OnPropertyChanged(nameof(SwitchOnToolTip));
+        OnPropertyChanged(nameof(SwitchOffToolTip));
         SwitchOnCommand.RaiseCanExecuteChanged();
         SwitchOffCommand.RaiseCanExecuteChanged();
         TurnOnSolutionFlowsCommand.RaiseCanExecuteChanged();
@@ -153,6 +211,11 @@ public sealed partial class EnvironmentSessionViewModel
         finally
         {
             _isSwitching = false;
+
+            // What the pane knew about them is out of date now: read the selected one again.
+            foreach (var (item, _) in targets) _insights.Remove(item.ObjectId);
+            QueueSelectionInsight();
+
             RaiseSwitchCommands();
         }
     }

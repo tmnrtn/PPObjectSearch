@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Data;
@@ -34,6 +35,7 @@ public sealed class ImportLogViewModel : ObservableObject
         RowsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Rows);
         RowsView.Filter = o => !ProblemsOnly || o is ImportLogRow { IsProblem: true };
 
+        RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
         SaveXmlCommand = new RelayCommand(_ => SaveXml(), _ => _rawXml is not null);
         CopyProblemsCommand = new RelayCommand(_ => CopyProblems(), _ => _log is { } l && l.Failures + l.Warnings > 0);
         OpenCommand = new RelayCommand(p => Open(p as ImportLogRow ?? SelectedRow), p => ItemFor(p as ImportLogRow ?? SelectedRow) is not null);
@@ -41,9 +43,17 @@ public sealed class ImportLogViewModel : ObservableObject
 
     public string Title => $"Import log — {_entry.SolutionName} {_entry.Version}";
 
+    /// <summary>The tab the window was opened from, for its environment line.</summary>
+    public EnvironmentSessionViewModel Session => _session;
+
+    /// <summary>The solution and version the import brought in, after the heading.</summary>
+    public string SolutionLabel => $"{_entry.SolutionName} {_entry.Version}";
+
     public ObservableCollection<ImportLogRow> Rows { get; } = new();
     public ListCollectionView RowsView { get; }
 
+    /// <summary>Reads the import job and its log again.</summary>
+    public AsyncRelayCommand RefreshCommand { get; }
     public RelayCommand SaveXmlCommand { get; }
     public RelayCommand CopyProblemsCommand { get; }
     public RelayCommand OpenCommand { get; }
@@ -54,7 +64,7 @@ public sealed class ImportLogViewModel : ObservableObject
         get => _problemsOnly;
         set
         {
-            if (SetProperty(ref _problemsOnly, value)) RowsView.Refresh();
+            if (SetProperty(ref _problemsOnly, value)) Refresh();
         }
     }
 
@@ -72,8 +82,64 @@ public sealed class ImportLogViewModel : ObservableObject
     public string Status
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        private set
+        {
+            if (SetProperty(ref _status, value)) OnPropertyChanged(nameof(StatusLine));
+        }
     }
+
+    private string _readSummary = string.Empty;
+    /// <summary>"Read 412 components - 2 failures, 5 warnings - in 1.3 s. The import took 4.2 min."</summary>
+    public string ReadSummary
+    {
+        get => _readSummary;
+        private set
+        {
+            if (SetProperty(ref _readSummary, value)) OnPropertyChanged(nameof(StatusLine));
+        }
+    }
+
+    /// <summary>The status bar's left side: what is happening, else what the last read covered.</summary>
+    public string StatusLine => string.IsNullOrEmpty(Status) ? ReadSummary : Status;
+
+    private bool _isBusy;
+    /// <summary>Finding the job, following it while it runs, or reading its log.</summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (!SetProperty(ref _isBusy, value)) return;
+            RefreshCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(EmptyHeading));
+            OnPropertyChanged(nameof(EmptyText));
+        }
+    }
+
+    /// <summary>The rows the problems-only filter lets through.</summary>
+    public int ShownCount => RowsView.Count;
+
+    public string CountLabel => ProblemsOnly
+        ? $"{ShownCount:N0} of {Rows.Count:N0} component{(Rows.Count == 1 ? string.Empty : "s")}"
+        : $"{Rows.Count:N0} component{(Rows.Count == 1 ? string.Empty : "s")}";
+
+    public bool HasRows => ShownCount > 0;
+
+    private string _noLogText = string.Empty;
+
+    /// <summary>Why the list is empty and what to change - shown in its place.</summary>
+    public string EmptyHeading => Rows.Count > 0 ? "No failures or warnings"
+        : IsRunning ? "Import in progress"
+        : IsBusy ? "Reading the import log"
+        : "No import log";
+
+    public string EmptyText => Rows.Count > 0
+        ? "Every component imported cleanly. Clear Failures and warnings only to see them all."
+        : IsRunning
+            ? $"The log appears once the import finishes - {Progress:N0}% so far, checked every {PollInterval.TotalSeconds:N0} seconds."
+            : IsBusy
+                ? "Finding the import job behind this solution history row."
+                : _noLogText;
 
     private double? _progress;
     /// <summary>The job's progress while it runs; null once finished.</summary>
@@ -82,7 +148,10 @@ public sealed class ImportLogViewModel : ObservableObject
         get => _progress;
         private set
         {
-            if (SetProperty(ref _progress, value)) OnPropertyChanged(nameof(IsRunning));
+            if (!SetProperty(ref _progress, value)) return;
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(EmptyHeading));
+            OnPropertyChanged(nameof(EmptyText));
         }
     }
 
@@ -93,16 +162,22 @@ public sealed class ImportLogViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        if (IsBusy) return;
+        IsBusy = true;
+        _noLogText = "The import log lists no components.";
+
         try
         {
+            Status = "Finding the import job...";
             var jobs = await _client.GetImportJobsAsync(_entry.SolutionName, _cts.Token);
             _job = DataverseClient.MatchImportJob(jobs, _entry);
 
             if (_job is null)
             {
-                Status = jobs.Count == 0
+                _noLogText = jobs.Count == 0
                     ? $"No import job is kept for {_entry.SolutionName} - Dataverse removes them after a while, and exports and uninstalls have none."
                     : "No import job for this solution started near this operation - Dataverse may have removed it.";
+                Status = $"No import job found for {_entry.SolutionName} {_entry.Version}.";
                 return;
             }
 
@@ -117,10 +192,12 @@ public sealed class ImportLogViewModel : ObservableObject
 
             Progress = null;
             Status = "Reading the import log...";
+            var clock = Stopwatch.StartNew();
             _rawXml = await _client.GetImportJobDataAsync(_job.Id, _cts.Token);
 
             if (string.IsNullOrWhiteSpace(_rawXml))
             {
+                _noLogText = "The import job has no log - Dataverse keeps none for some operations.";
                 Status = "The import job has no log.";
                 return;
             }
@@ -128,10 +205,15 @@ public sealed class ImportLogViewModel : ObservableObject
             _log = ImportLogParser.Parse(_rawXml);
             Rows.Clear();
             foreach (var row in _log.Rows) Rows.Add(row);
-            ProblemsOnly = _log.Failures + _log.Warnings > 0;
+            _problemsOnly = _log.Failures + _log.Warnings > 0;
+            OnPropertyChanged(nameof(ProblemsOnly));
+            Refresh();
 
-            Status = $"{_log.Rows.Count:N0} component(s): {_log.Failures:N0} failure(s), {_log.Warnings:N0} warning(s)." +
-                     (_job.StartedOn is { } s && _job.CompletedOn is { } c ? $" Took {(c - s).TotalMinutes:N1} min." : string.Empty);
+            ReadSummary = $"Read {_log.Rows.Count:N0} component{(_log.Rows.Count == 1 ? string.Empty : "s")} - " +
+                          $"{_log.Failures:N0} failure{(_log.Failures == 1 ? string.Empty : "s")}, " +
+                          $"{_log.Warnings:N0} warning{(_log.Warnings == 1 ? string.Empty : "s")} - in {clock.Elapsed.TotalSeconds:0.0} s." +
+                          (_job.StartedOn is { } s && _job.CompletedOn is { } c ? $" The import took {(c - s).TotalMinutes:N1} min." : string.Empty);
+            Status = string.Empty;
         }
         catch (OperationCanceledException)
         {
@@ -140,13 +222,26 @@ public sealed class ImportLogViewModel : ObservableObject
         catch (Exception ex)
         {
             Progress = null;
+            _noLogText = "The import log could not be read - the status bar says why. Read again to try once more.";
             Status = "Could not read the import log - " + ex.Message;
         }
         finally
         {
+            IsBusy = false;
+            Refresh();
             SaveXmlCommand.RaiseCanExecuteChanged();
             CopyProblemsCommand.RaiseCanExecuteChanged();
         }
+    }
+
+    private void Refresh()
+    {
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(ShownCount));
+        OnPropertyChanged(nameof(CountLabel));
+        OnPropertyChanged(nameof(HasRows));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private SolutionComponentItem? ItemFor(ImportLogRow? row) =>

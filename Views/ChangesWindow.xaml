@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
         Title="{Binding Title}"
         Style="{StaticResource AppWindow}"
         Height="700" Width="1150"
@@ -11,49 +12,115 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <WrapPanel Grid.Row="0" Margin="16,14,16,12">
-                <ComboBox Width="170" Height="32" Margin="0,0,8,6" core:Ui.InlineLabel="Show"
-                          AutomationProperties.Name="Time range"
-                          ItemsSource="{Binding Ranges}" SelectedItem="{Binding Range}" />
-                <ComboBox Width="240" Height="32" Margin="0,0,8,6" core:Ui.InlineLabel="Type"
-                          AutomationProperties.Name="Type"
-                          ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" />
-                <CheckBox Content="Unmanaged only" Margin="4,0,12,6" VerticalAlignment="Center" IsChecked="{Binding UnmanagedOnly}"
-                          ToolTip="Direct customisations - changes made in this environment rather than imported" />
-                <Button Content="Refresh" Height="32" Margin="0,0,8,6" Command="{Binding RefreshCommand}" />
-                <Button Content="Stop" Height="32" Margin="0,0,8,6" Command="{Binding CancelCommand}"
-                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                <Button Content="Export CSV" Height="32" Margin="0,0,8,6" Command="{Binding ExportCsvCommand}" />
-                <Button Content="Export Markdown" Height="32" Margin="0,0,8,6" Command="{Binding ExportMarkdownCommand}"
-                        ToolTip="For an incident write-up" />
-            </WrapPanel>
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <local:EnvironmentLine DataContext="{Binding Session}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Recent changes" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads the environment - nothing is written" />
+                    </StackPanel>
+                </StackPanel>
 
-            <DataGrid Grid.Row="1" ItemsSource="{Binding EntriesView}" SelectedItem="{Binding SelectedEntry}" IsReadOnly="True"
-                      AutomationProperties.Name="Changes, newest first"
-                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                <DataGrid.InputBindings>
-                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
-                    <KeyBinding Key="Enter" Command="{Binding OpenCommand}" />
-                </DataGrid.InputBindings>
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="When" Width="140" SortMemberPath="When" HeaderStyle="{StaticResource FirstHeader}"
-                                        Binding="{Binding When, StringFormat={}{0:yyyy-MM-dd HH:mm}}" ElementStyle="{StaticResource CellFirst}" />
-                    <DataGridTextColumn Header="Kind" Width="90" Binding="{Binding Kind}" ElementStyle="{StaticResource CellMuted}" />
-                    <DataGridTextColumn Header="What" Width="*" Binding="{Binding What}" ElementStyle="{StaticResource Cell}" />
-                    <DataGridTextColumn Header="Type" Width="220" Binding="{Binding Type}" ElementStyle="{StaticResource CellMuted}" />
-                    <DataGridTextColumn Header="Modified by" Width="180" Binding="{Binding By}" ElementStyle="{StaticResource Cell}" />
-                    <DataGridTextColumn Header="Result" Width="220" Binding="{Binding Detail}" ElementStyle="{StaticResource CellMuted}" />
-                    <DataGridTextColumn Header="State" Width="90" Binding="{Binding ManagedLabel}" ElementStyle="{StaticResource CellMuted}" />
-                </DataGrid.Columns>
-            </DataGrid>
+                <!-- Filters first, then read again, then export. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <ComboBox Width="170" core:Ui.InlineLabel="Show" FontWeight="SemiBold"
+                              AutomationProperties.Name="Time range"
+                              ItemsSource="{Binding Ranges}" SelectedItem="{Binding Range}">
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                <Setter Property="FontWeight" Value="Normal" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+                    <ComboBox Width="220" Margin="6,0,0,0" core:Ui.InlineLabel="Type"
+                              AutomationProperties.Name="Type"
+                              ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" />
+                    <CheckBox Content="Unmanaged only" Margin="12,0,6,0" VerticalAlignment="Center" IsChecked="{Binding UnmanagedOnly}"
+                              ToolTip="Direct customisations - changes made in this environment rather than imported" />
+                    <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The changes shown, as CSV or Markdown">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="CSV: every change…" Command="{Binding ExportCsvCommand}"
+                                          ToolTip="Every change shown, one per line" />
+                                <MenuItem Header="Markdown: the timeline…" Command="{Binding ExportMarkdownCommand}"
+                                          ToolTip="The changes shown, for an incident write-up" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
 
-            <Border Grid.Row="2" Style="{StaticResource StatusBar}">
-                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" ToolTip="{Binding Status}" />
+            <!-- Warnings - a read cut short, or history that could not be read - under the header. -->
+            <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="18,10,18,0"
+                    Visibility="{Binding Warnings, Converter={StaticResource EmptyToCollapsed}}">
+                <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
+            </Border>
+
+            <ProgressBar Grid.Row="2" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <Grid Grid.Row="3">
+                <DataGrid ItemsSource="{Binding EntriesView}" SelectedItem="{Binding SelectedEntry}" IsReadOnly="True"
+                          AutomationProperties.Name="Changes, newest first"
+                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                          Visibility="{Binding HasEntries, Converter={StaticResource BoolToVis}}">
+                    <DataGrid.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
+                        <KeyBinding Key="Enter" Command="{Binding OpenCommand}" />
+                    </DataGrid.InputBindings>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="When" Width="140" SortMemberPath="When" HeaderStyle="{StaticResource FirstHeader}"
+                                            Binding="{Binding When, StringFormat={}{0:yyyy-MM-dd HH:mm}}" ElementStyle="{StaticResource CellFirst}" />
+                        <DataGridTextColumn Header="Kind" Width="90" Binding="{Binding Kind}" ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="What" Width="*" Binding="{Binding What}" ElementStyle="{StaticResource Cell}" />
+                        <DataGridTextColumn Header="Type" Width="220" Binding="{Binding Type}" ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="Modified by" Width="180" Binding="{Binding By}" ElementStyle="{StaticResource Cell}" />
+                        <DataGridTextColumn Header="Result" Width="220" Binding="{Binding Detail}" ElementStyle="{StaticResource CellMuted}" />
+                        <DataGridTextColumn Header="State" Width="90" Binding="{Binding ManagedLabel}" ElementStyle="{StaticResource CellMuted}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Nothing to list: say why, and what to change. -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360"
+                            Visibility="{Binding HasEntries, Converter={StaticResource NotBoolToVis}}">
+                    <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                               TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="4" Style="{StaticResource StatusBar}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding StatusLine}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" ToolTip="{Binding StatusLine}" />
+                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
             </Border>
         </Grid>
     </Border>

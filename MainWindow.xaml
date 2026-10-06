@@ -25,29 +25,20 @@
     </Window.InputBindings>
 
     <Window.Resources>
-        <!-- A sidebar action: label left, shortcut right in mono 10 Faint. -->
-        <Style TargetType="Button" x:Key="SidebarAction" BasedOn="{StaticResource GhostButton}">
-            <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="8,0" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Margin" Value="0,0,0,2" />
-        </Style>
-
-        <Style TargetType="TextBlock" x:Key="Shortcut">
-            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Right" />
-        </Style>
-
-        <!-- In the shortcut's slot: marks the tools that change the environment. -->
-        <Style TargetType="TextBlock" x:Key="WritesTag">
+        <!-- A group of the selected environment's tools: 10 SemiBold Faint. -->
+        <Style TargetType="TextBlock" x:Key="SidebarGroup">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource Amber}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Margin" Value="8,6,8,2" />
+        </Style>
+
+        <!-- The two halves of a two-column row of sidebar actions, 2px apart. -->
+        <Style TargetType="Button" x:Key="SidebarLeft" BasedOn="{StaticResource SidebarAction}">
+            <Setter Property="Margin" Value="0,0,1,0" />
+        </Style>
+        <Style TargetType="Button" x:Key="SidebarRight" BasedOn="{StaticResource SidebarAction}">
+            <Setter Property="Margin" Value="1,0,0,0" />
         </Style>
     </Window.Resources>
 
@@ -83,7 +74,7 @@
                              ScrollViewer.VerticalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
-                                <Setter Property="Height" Value="44" />
+                                <Setter Property="Height" Value="40" />
                                 <Setter Property="Padding" Value="8,0" />
                                 <Setter Property="AllowDrop" Value="True" />
                                 <EventSetter Event="PreviewMouseLeftButtonDown" Handler="Tab_PreviewMouseLeftButtonDown" />
@@ -143,7 +134,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Border Grid.Column="0" Style="{StaticResource EnvBar}" Height="26" Margin="0,0,9,0"
+                                    <Border Grid.Column="0" Style="{StaticResource EnvBar}" Height="24" Margin="0,0,9,0"
                                             Tag="{Binding EnvironmentSku}" />
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -197,10 +188,11 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!-- The selected environment's own tools, once it is connected. -->
+                    <!-- The selected environment's own tools, once it is connected. Every row has a
+                         fixed height, so the list fits at the default 780px without squeezing any. -->
                     <StackPanel DataContext="{Binding SelectedSession}"
                                 Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
-                        <StackPanel Orientation="Horizontal" Margin="8,14,8,6">
+                        <StackPanel Orientation="Horizontal" Margin="8,12,8,2">
                             <Border Style="{StaticResource EnvBar}" Width="3" Height="11" Margin="0,0,7,0"
                                     Tag="{Binding EnvironmentSku}" />
                             <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold"
@@ -208,108 +200,110 @@
                                        MaxWidth="190" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SolutionHistoryCommand}"
-                                ToolTip="Imports, upgrades, uninstalls and exports in this environment, with the error for any that failed.">
-                            <TextBlock Text="Solution history" VerticalAlignment="Center" />
-                        </Button>
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding RecentChangesCommand}"
-                                ToolTip="What changed here, when and by whom: components modified recently, with solution operations on the same timeline.">
-                            <TextBlock Text="Recent changes" VerticalAlignment="Center" />
-                        </Button>
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding FailuresCommand}"
-                                ToolTip="Flow runs, workflow jobs and plug-ins that failed over a period: by component, by error and over time.">
-                            <TextBlock Text="Failures" VerticalAlignment="Center" />
-                        </Button>
-                        <!-- Read-only: who is here, what they can do, and how mail reaches them. Two to a row, so the sidebar fits. -->
-                        <TextBlock Text="ADMIN · READ-ONLY" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Faint}"
-                                   Margin="8,8,8,4" />
+                        <!-- What happened here: changes, failures, imports, who can do what. -->
+                        <TextBlock Text="INVESTIGATE" Style="{StaticResource SidebarGroup}" />
                         <UniformGrid Columns="2">
-                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="0,0,1,2"
+                            <Button Style="{StaticResource SidebarLeft}" Command="{Binding RecentChangesCommand}"
+                                    ToolTip="What changed here, when and by whom">
+                                <TextBlock Text="Recent changes" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding FailuresCommand}"
+                                    ToolTip="Flow runs, workflow jobs and plug-ins that failed">
+                                <TextBlock Text="Failures" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarLeft}" Command="{Binding SolutionHistoryCommand}"
+                                    ToolTip="Imports, upgrades, uninstalls and exports">
+                                <TextBlock Text="Solution history" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding SecurityLookupCommand}"
+                                    ToolTip="Who can…, effective access, secured columns, compare roles">
+                                <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </UniformGrid>
+
+                        <!-- Read-only: who is here, what they can do, and how mail reaches them. -->
+                        <TextBlock Text="ADMIN · READ-ONLY" Style="{StaticResource SidebarGroup}" />
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource SidebarLeft}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Users"
                                     ToolTip="Users, with their teams and security roles">
                                 <TextBlock Text="Users" VerticalAlignment="Center" />
                             </Button>
-                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="1,0,0,2"
+                            <Button Style="{StaticResource SidebarRight}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Roles"
                                     ToolTip="Privileges, and who holds each role">
                                 <TextBlock Text="Security roles" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             </Button>
-                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="0,0,1,2"
+                            <Button Style="{StaticResource SidebarLeft}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Mailboxes"
                                     ToolTip="Server-side sync: approval and test results">
                                 <TextBlock Text="Mailboxes" VerticalAlignment="Center" />
                             </Button>
-                            <Button Style="{StaticResource SidebarAction}" Height="28" Margin="1,0,0,2"
+                            <Button Style="{StaticResource SidebarRight}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
                                     ToolTip="Owner, email settings, mailbox and members">
                                 <TextBlock Text="Queues" VerticalAlignment="Center" />
                             </Button>
                         </UniformGrid>
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SecurityLookupCommand}"
-                                ToolTip="Who can delete rows of a table? What can this user actually do? Who sees a secured column? How do two roles differ?">
-                            <TextBlock Text="Security lookup" VerticalAlignment="Center" />
-                        </Button>
 
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding EntraTeamSyncCommand}"
                                 ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind. Previews and asks before writing.">
                             <Grid>
                                 <TextBlock Text="Entra team sync…" VerticalAlignment="Center" />
-                                <TextBlock Text="WRITES" Style="{StaticResource WritesTag}" />
+                                <TextBlock Style="{StaticResource WritesTag}" />
                             </Grid>
                         </Button>
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding QueueSyncCommand}"
                                 ToolTip="Make a queue's members match a team's members, adding and removing. Previews and asks before writing.">
                             <Grid>
                                 <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" />
-                                <TextBlock Text="WRITES" Style="{StaticResource WritesTag}" />
+                                <TextBlock Style="{StaticResource WritesTag}" />
                             </Grid>
                         </Button>
                     </StackPanel>
 
                     <TextBlock Text="Across environments" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,14,8,6" />
+                               Foreground="{DynamicResource Muted}" Margin="8,12,8,2" />
 
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding GlobalSearchCommand}"
-                            ToolTip="One keyword across every connected environment (Ctrl+Shift+F)">
+                    <!-- Everything not listed here - import log, dependencies, documentation, closing windows - is in the palette. -->
+                    <Button Height="28" Margin="0,2" Padding="8,0" HorizontalContentAlignment="Stretch"
+                            Command="{Binding CommandPaletteCommand}"
+                            ToolTip="Every command and object, by name (Ctrl+K)">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Surface}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         <Grid>
+                            <TextBlock Text="Command palette…" VerticalAlignment="Center" />
+                            <TextBlock Text="Ctrl+K" Style="{StaticResource Shortcut}" />
+                        </Grid>
+                    </Button>
+
+                    <UniformGrid Columns="2">
+                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding GlobalSearchCommand}"
+                                ToolTip="One keyword across every connected environment (Ctrl+Shift+F)">
                             <TextBlock Text="Search all" VerticalAlignment="Center" />
-                            <TextBlock Text="Ctrl+Shift+F" Style="{StaticResource Shortcut}" />
-                        </Grid>
-                    </Button>
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding CompareCommand}"
-                            ToolTip="Diff the objects loaded in two environments (Ctrl+D)">
-                        <Grid>
-                            <TextBlock Text="Compare objects" VerticalAlignment="Center" />
-                            <TextBlock Text="Ctrl+D" Style="{StaticResource Shortcut}" />
-                        </Grid>
-                    </Button>
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding CompareDataCommand}"
-                            ToolTip="Diff the rows of reference data tables between two environments (Ctrl+Shift+D)">
-                        <Grid>
+                        </Button>
+                        <Button Style="{StaticResource SidebarRight}" Command="{Binding CompareCommand}"
+                                ToolTip="Diff the objects loaded in two environments (Ctrl+D)">
+                            <TextBlock Text="Compare" VerticalAlignment="Center" />
+                        </Button>
+                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding CompareDataCommand}"
+                                ToolTip="Diff reference data rows between two environments (Ctrl+Shift+D)">
                             <TextBlock Text="Compare data" VerticalAlignment="Center" />
-                            <TextBlock Text="Ctrl+Shift+D" Style="{StaticResource Shortcut}" />
-                        </Grid>
-                    </Button>
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding ReadinessCommand}"
-                            ToolTip="Will a solution import cleanly into another environment, and work there? (Ctrl+Shift+R)">
-                        <Grid>
-                            <TextBlock Text="Readiness check" VerticalAlignment="Center" />
-                            <TextBlock Text="Ctrl+Shift+R" Style="{StaticResource Shortcut}" />
-                        </Grid>
-                    </Button>
-
-                    <!-- Only there while there is something to close. -->
-                    <TextBlock Text="Open windows" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,14,8,6"
-                               Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}" />
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding CloseAllDetailsCommand}"
-                            Visibility="{Binding HasOpenDetails, Converter={StaticResource BoolToVis}}"
-                            ToolTip="Close every object details window, in every environment (Ctrl+Shift+W)">
-                        <Grid>
-                            <TextBlock Text="{Binding CloseAllDetailsLabel}" VerticalAlignment="Center" />
-                            <TextBlock Text="Ctrl+Shift+W" Style="{StaticResource Shortcut}" />
-                        </Grid>
-                    </Button>
+                        </Button>
+                        <Button Style="{StaticResource SidebarRight}" Command="{Binding ReadinessCommand}"
+                                ToolTip="Will a solution import cleanly into another environment? (Ctrl+Shift+R)">
+                            <TextBlock Text="Readiness" VerticalAlignment="Center" />
+                        </Button>
+                    </UniformGrid>
                 </StackPanel>
             </ScrollViewer>
 
@@ -319,49 +313,54 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Margin="8,0,0,6">
-                    <TextBlock Text="{x:Static core:AppVersion.Label}" ToolTip="{x:Static core:AppVersion.Description}"
-                               FontSize="11" Foreground="{DynamicResource Faint}" />
-                    <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" FontSize="11" Margin="0,2,0,0"
-                            Content="{Binding UpdateLabel}" Command="{Binding OpenUpdateCommand}"
-                            ToolTip="Open the release page on GitHub"
-                            Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
-                </StackPanel>
+                <Button Grid.Row="0" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" FontSize="11" Margin="2,0,0,6"
+                        Content="{Binding UpdateLabel}" Command="{Binding OpenUpdateCommand}"
+                        ToolTip="Open the release page on GitHub"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
 
-                <Button Grid.Row="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
-                        Margin="0,0,34,0" Content="Sign out all"
-                        ToolTip="Forget every signed-in account across all tenants."
-                        Command="{Binding SignOutAllCommand}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
-                            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Text}" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <Grid Grid.Row="1">
+                    <!-- The version is in this row's tooltip. -->
+                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
+                            Margin="0,0,34,0" Content="Sign out all"
+                            Command="{Binding SignOutAllCommand}">
+                        <Button.ToolTip>
+                            <StackPanel>
+                                <TextBlock Text="Forget every signed-in account across all tenants." />
+                                <TextBlock Text="{x:Static core:AppVersion.Description}" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource Muted}" />
+                            </StackPanel>
+                        </Button.ToolTip>
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
 
-                <Button AutomationProperties.Name="Theme" Grid.Row="1" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
-                        Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
-                        Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
-                        core:Ui.OpensMenu="True">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Use Windows setting" IsChecked="{Binding IsSystemTheme, Mode=OneWay}"
-                                      Command="{Binding SetThemeCommand}" CommandParameter="System" />
-                            <MenuItem Header="Light" IsChecked="{Binding IsLightTheme, Mode=OneWay}"
-                                      Command="{Binding SetThemeCommand}" CommandParameter="Light" />
-                            <MenuItem Header="Dark" IsChecked="{Binding IsDarkTheme, Mode=OneWay}"
-                                      Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
-                            <Separator />
-                            <MenuItem Header="Open log folder" Command="{Binding OpenLogFolderCommand}"
-                                      ToolTip="The app's log - attach today's file to a problem report" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
+                    <Button AutomationProperties.Name="Theme" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
+                            Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                            Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
+                            core:Ui.OpensMenu="True">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Use Windows setting" IsChecked="{Binding IsSystemTheme, Mode=OneWay}"
+                                          Command="{Binding SetThemeCommand}" CommandParameter="System" />
+                                <MenuItem Header="Light" IsChecked="{Binding IsLightTheme, Mode=OneWay}"
+                                          Command="{Binding SetThemeCommand}" CommandParameter="Light" />
+                                <MenuItem Header="Dark" IsChecked="{Binding IsDarkTheme, Mode=OneWay}"
+                                          Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+                                <Separator />
+                                <MenuItem Header="Open log folder" Command="{Binding OpenLogFolderCommand}"
+                                          ToolTip="The app's log - attach today's file to a problem report" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </Grid>
             </Grid>
         </Grid>
 

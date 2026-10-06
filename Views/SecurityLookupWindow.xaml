@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
         Title="{Binding Title}"
         Style="{StaticResource AppWindow}"
         Height="720" Width="1180"
@@ -17,11 +18,49 @@
     <Border Style="{StaticResource WindowBody}">
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <TabControl SelectedIndex="{Binding TabIndex}" Margin="0,6,0,0">
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <local:EnvironmentLine DataContext="{Binding Session}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Security lookup" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads the environment - nothing is written" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Look up again, then export. The inputs belong to each tab, below. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    <Button AutomationProperties.Name="Look up again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RunCommand}" ToolTip="Look up again" />
+                    <Button Content="Export CSV" Margin="6,0,0,0" Command="{Binding ExportCommand}"
+                            ToolTip="Export what this tab shows" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Warnings - the pickers' lists could not be read - under the header. -->
+            <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="18,0,18,10"
+                    Visibility="{Binding Notes, Converter={StaticResource EmptyToCollapsed}}">
+                <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" />
+            </Border>
+
+            <ProgressBar Grid.Row="2" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <TabControl Grid.Row="3" SelectedIndex="{Binding TabIndex}">
 
                 <!-- ============================================================ who can -->
                 <TabItem Header="Who can…">
@@ -39,28 +78,37 @@
                                     Command="{Binding RunCommand}" />
                         </WrapPanel>
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="320" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <DataGrid ItemsSource="{Binding Grants}" IsReadOnly="True" AutomationProperties.Name="Roles that grant it"
-                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,1,0">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Role" Width="*" Binding="{Binding Role}" HeaderStyle="{StaticResource FirstHeader}"
-                                                        ElementStyle="{StaticResource CellFirst}" />
-                                    <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
-                                </DataGrid.Columns>
-                            </DataGrid>
-                            <DataGrid Grid.Column="1" ItemsSource="{Binding Holders}" IsReadOnly="True" AutomationProperties.Name="Who holds it"
-                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Name" Width="220" Binding="{Binding Name}" HeaderStyle="{StaticResource FirstHeader}"
-                                                        ElementStyle="{StaticResource CellFirst}" />
-                                    <DataGridTextColumn Header="Kind" Width="70" Binding="{Binding Kind}" />
-                                    <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
-                                    <DataGridTextColumn Header="Via" Width="*" Binding="{Binding Via}" ElementStyle="{StaticResource CellMuted}" />
-                                </DataGrid.Columns>
-                            </DataGrid>
+                            <Grid Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="320" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <DataGrid ItemsSource="{Binding Grants}" IsReadOnly="True" AutomationProperties.Name="Roles that grant it"
+                                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,1,0">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Role" Width="*" Binding="{Binding Role}" HeaderStyle="{StaticResource FirstHeader}"
+                                                            ElementStyle="{StaticResource CellFirst}" />
+                                        <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <DataGrid Grid.Column="1" ItemsSource="{Binding Holders}" IsReadOnly="True" AutomationProperties.Name="Who holds it"
+                                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Width="220" Binding="{Binding Name}" HeaderStyle="{StaticResource FirstHeader}"
+                                                            ElementStyle="{StaticResource CellFirst}" />
+                                        <DataGridTextColumn Header="Kind" Width="70" Binding="{Binding Kind}" />
+                                        <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
+                                        <DataGridTextColumn Header="Via" Width="*" Binding="{Binding Via}" ElementStyle="{StaticResource CellMuted}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                            <!-- Nothing to list: say why, and what to change. -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                           TextAlignment="Center" Margin="0,4,0,0" />
+                            </StackPanel>
                         </Grid>
                     </DockPanel>
                 </TabItem>
@@ -76,37 +124,47 @@
                                     Command="{Binding RunCommand}"
                                     ToolTip="The widest depth across every role the user holds, directly and through their teams" />
                         </WrapPanel>
-                        <DataGrid ItemsSource="{Binding EffectiveRows}" IsReadOnly="True" AutomationProperties.Name="Effective privileges"
-                                  BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Table" Width="220" Binding="{Binding Table}" HeaderStyle="{StaticResource FirstHeader}"
-                                                    ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTemplateColumn Header="Create" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Create}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Read" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Read}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Write" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Write}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Delete" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Delete}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Append" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Append}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Append to" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding AppendTo}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Assign" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Assign}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Share" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Share}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <Grid>
+                            <DataGrid ItemsSource="{Binding EffectiveRows}" IsReadOnly="True" AutomationProperties.Name="Effective privileges"
+                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                                      Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Table" Width="220" Binding="{Binding Table}" HeaderStyle="{StaticResource FirstHeader}"
+                                                        ElementStyle="{StaticResource CellFirst}" />
+                                    <DataGridTemplateColumn Header="Create" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Create}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Read" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Read}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Write" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Write}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Delete" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Delete}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Append" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Append}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Append to" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding AppendTo}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Assign" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Assign}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Share" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter Content="{Binding Share}" ContentTemplate="{StaticResource EffectiveCellTemplate}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <!-- Nothing to list: say why, and what to change. -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                           TextAlignment="Center" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Grid>
                     </DockPanel>
                 </TabItem>
 
@@ -124,18 +182,28 @@
                             <Button Style="{StaticResource PrimaryButton}" Content="Look up" Height="32" Padding="16,0" Margin="0,0,8,6"
                                     Command="{Binding RunCommand}" />
                         </WrapPanel>
-                        <DataGrid ItemsSource="{Binding FieldGrants}" IsReadOnly="True" AutomationProperties.Name="Field security profiles"
-                                  BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Profile" Width="240" Binding="{Binding ProfileName}" HeaderStyle="{StaticResource FirstHeader}"
-                                                    ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridCheckBoxColumn Header="Read" Width="60" Binding="{Binding CanRead, Mode=OneWay}" />
-                                <DataGridCheckBoxColumn Header="Create" Width="60" Binding="{Binding CanCreate, Mode=OneWay}" />
-                                <DataGridCheckBoxColumn Header="Update" Width="60" Binding="{Binding CanUpdate, Mode=OneWay}" />
-                                <DataGridTextColumn Header="Users" Width="*" Binding="{Binding UsersLabel}" />
-                                <DataGridTextColumn Header="Teams" Width="*" Binding="{Binding TeamsLabel}" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <Grid>
+                            <DataGrid ItemsSource="{Binding FieldGrants}" IsReadOnly="True" AutomationProperties.Name="Field security profiles"
+                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                                      Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Profile" Width="240" Binding="{Binding ProfileName}" HeaderStyle="{StaticResource FirstHeader}"
+                                                        ElementStyle="{StaticResource CellFirst}" />
+                                    <DataGridCheckBoxColumn Header="Read" Width="60" Binding="{Binding CanRead, Mode=OneWay}" />
+                                    <DataGridCheckBoxColumn Header="Create" Width="60" Binding="{Binding CanCreate, Mode=OneWay}" />
+                                    <DataGridCheckBoxColumn Header="Update" Width="60" Binding="{Binding CanUpdate, Mode=OneWay}" />
+                                    <DataGridTextColumn Header="Users" Width="*" Binding="{Binding UsersLabel}" />
+                                    <DataGridTextColumn Header="Teams" Width="*" Binding="{Binding TeamsLabel}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <!-- Nothing to list: say why, and what to change. -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                           TextAlignment="Center" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Grid>
                     </DockPanel>
                 </TabItem>
 
@@ -159,35 +227,42 @@
                                     Command="{Binding RunCommand}"
                                     ToolTip="Two roles side by side - or the same role in two environments" />
                         </WrapPanel>
-                        <DataGrid ItemsSource="{Binding Differences}" IsReadOnly="True" AutomationProperties.Name="Privileges that differ"
-                                  BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Table" Width="240" Binding="{Binding Table}" HeaderStyle="{StaticResource FirstHeader}"
-                                                    ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTextColumn Header="Privilege" Width="200" Binding="{Binding Action}" />
-                                <DataGridTextColumn Width="*" Binding="{Binding LeftLabel}" SortMemberPath="Left"
-                                                    Header="First role" />
-                                <DataGridTextColumn Width="*" Binding="{Binding RightLabel}" SortMemberPath="Right"
-                                                    Header="Second role" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <Grid>
+                            <DataGrid ItemsSource="{Binding Differences}" IsReadOnly="True" AutomationProperties.Name="Privileges that differ"
+                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                                      Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Table" Width="240" Binding="{Binding Table}" HeaderStyle="{StaticResource FirstHeader}"
+                                                        ElementStyle="{StaticResource CellFirst}" />
+                                    <DataGridTextColumn Header="Privilege" Width="200" Binding="{Binding Action}" />
+                                    <DataGridTextColumn Width="*" Binding="{Binding LeftLabel}" SortMemberPath="Left"
+                                                        Header="First role" />
+                                    <DataGridTextColumn Width="*" Binding="{Binding RightLabel}" SortMemberPath="Right"
+                                                        Header="Second role" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <!-- Nothing to list: say why, and what to change. -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                           TextAlignment="Center" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Grid>
                     </DockPanel>
                 </TabItem>
             </TabControl>
 
-            <Border Grid.Row="1" Style="{StaticResource StatusBar}">
+            <Border Grid.Row="4" Style="{StaticResource StatusBar}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
-                               VerticalAlignment="Center" ToolTip="{Binding Status}" />
-                    <Button Grid.Column="1" Content="Stop" Height="28" Margin="8,0,0,0" Command="{Binding CancelCommand}"
-                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button Grid.Column="2" Content="Export CSV" Height="28" Margin="8,0,0,0" Command="{Binding ExportCommand}"
-                            ToolTip="Export what this tab shows" />
+                    <TextBlock Text="{Binding StatusLine}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" ToolTip="{Binding StatusLine}" />
+                    <TextBlock Grid.Column="1" Text="{Binding ResultCountLabel}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
                 </Grid>
             </Border>
         </Grid>

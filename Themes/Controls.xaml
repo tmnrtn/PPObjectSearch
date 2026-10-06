@@ -531,6 +531,32 @@
         <Setter Property="FontSize" Value="13" />
     </Style>
 
+    <!-- A sidebar row: 26 tall, label left, anything in the right slot right-aligned. -->
+    <Style TargetType="Button" x:Key="SidebarAction" BasedOn="{StaticResource GhostButton}">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- A keyboard shortcut beside a command: mono 10 Faint, right-aligned. -->
+    <Style TargetType="TextBlock" x:Key="Shortcut">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- Marks a tool or a group of actions that change the environment. -->
+    <Style TargetType="TextBlock" x:Key="WritesTag">
+        <Setter Property="Text" Value="WRITES" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
     <!-- Title bar caption buttons. -->
     <Style TargetType="Button" x:Key="CaptionButton">
         <Setter Property="Width" Value="46" />
