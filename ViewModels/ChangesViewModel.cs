@@ -29,6 +29,7 @@ public sealed class ChangesViewModel : ObservableObject
         ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => Entries.Count > 0);
         ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => Entries.Count > 0);
         OpenCommand = new RelayCommand(p => Open(p as ChangeEntry ?? SelectedEntry), p => (p as ChangeEntry ?? SelectedEntry)?.Item is not null);
+        AuditCommand = new RelayCommand(p => OpenAudit(p as ChangeEntry ?? SelectedEntry), p => HasAudit(p as ChangeEntry ?? SelectedEntry));
     }
 
     public string Title => $"Recent changes — {_session.Title}";
@@ -42,6 +43,9 @@ public sealed class ChangesViewModel : ObservableObject
     public RelayCommand ExportCsvCommand { get; }
     public RelayCommand ExportMarkdownCommand { get; }
     public RelayCommand OpenCommand { get; }
+
+    /// <summary>Who changed a flow's state, a step's state or a variable's value, from Dataverse auditing.</summary>
+    public RelayCommand AuditCommand { get; }
 
     public IReadOnlyList<string> Ranges { get; } = ["Last 24 hours", "Last 7 days", "Last 30 days"];
 
@@ -89,7 +93,9 @@ public sealed class ChangesViewModel : ObservableObject
         get => _selectedEntry;
         set
         {
-            if (SetProperty(ref _selectedEntry, value)) OpenCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _selectedEntry, value)) return;
+            OpenCommand.RaiseCanExecuteChanged();
+            AuditCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -191,6 +197,20 @@ public sealed class ChangesViewModel : ObservableObject
     private void Open(ChangeEntry? entry)
     {
         if (entry?.Item is { } item) _session.OpenDetails(item);
+    }
+
+    internal static bool HasAudit(ChangeEntry? entry) =>
+        entry?.Item is { } item && item.ObjectId != Guid.Empty && Dataverse.DataverseClient.HasAuditHistory(item.ComponentType);
+
+    private void OpenAudit(ChangeEntry? entry)
+    {
+        if (!HasAudit(entry) || _session.Client is not { } client) return;
+
+        new Views.AuditHistoryWindow
+        {
+            DataContext = new AuditHistoryViewModel(client, entry!.Item!, _session.Title),
+            Owner = System.Windows.Application.Current.MainWindow
+        }.Show();
     }
 
     private void Export(bool markdown)

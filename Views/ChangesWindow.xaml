@@ -27,6 +27,8 @@
                 <Button Content="Refresh" Height="32" Margin="0,0,8,6" Command="{Binding RefreshCommand}" />
                 <Button Content="Stop" Height="32" Margin="0,0,8,6" Command="{Binding CancelCommand}"
                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                <Button Content="Audit history" Height="32" Margin="0,0,8,6" Command="{Binding AuditCommand}"
+                        ToolTip="Who turned a flow on or off, enabled or disabled a step, or changed a variable's value - where Dataverse auditing records it" />
                 <Button Content="Export CSV" Height="32" Margin="0,0,8,6" Command="{Binding ExportCsvCommand}" />
                 <Button Content="Export Markdown" Height="32" Margin="0,0,8,6" Command="{Binding ExportMarkdownCommand}"
                         ToolTip="For an incident write-up" />
