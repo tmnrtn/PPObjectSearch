@@ -33,7 +33,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Filters first, then read again, then export. -->
+                <!-- Filters first, then the selected change's audit history, then read again, then export. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                     <ComboBox Width="170" core:Ui.InlineLabel="Show" FontWeight="SemiBold"
                               AutomationProperties.Name="Time range"
@@ -49,6 +49,8 @@
                               ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" />
                     <CheckBox Content="Unmanaged only" Margin="12,0,6,0" VerticalAlignment="Center" IsChecked="{Binding UnmanagedOnly}"
                               ToolTip="Direct customisations - changes made in this environment rather than imported" />
+                    <Button Content="Audit history" Margin="6,0,0,0" Command="{Binding AuditCommand}"
+                            ToolTip="Who turned a flow on or off, enabled or disabled a step, or changed a variable's value - where Dataverse auditing records it" />
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
                     <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
