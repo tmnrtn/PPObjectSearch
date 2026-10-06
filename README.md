@@ -616,15 +616,22 @@ parts they are made of.
 
 | Type | Overview |
 | --- | --- |
-| Canvas app | Owner, type, version, last published and commit message; the connectors and connection references it uses |
-| Model-driven app | Version, published date, navigation; its sitemap as area / group / item / what it opens; the components and security roles in the app |
-| Copilot Studio agent | Language, authentication, access, last published; its topics, knowledge sources and actions |
+| Canvas app | Owner, type, version, last published and commit message; the connectors and connection references it uses; who it is shared with, and their role |
+| Model-driven app | Version, published date, navigation; its sitemap as an indented tree of areas, groups and what each item opens; the tables, forms, views, dashboards, charts and business process flows in the app, named and grouped by kind; its security roles |
+| Copilot Studio agent | Language, authentication, access, last published; its topics, knowledge sources and actions; the channels set up in its configuration, and the flows its topics and actions call |
 | Custom API | Function or action, binding and bound table, plug-in type, run privilege; request parameters and response properties |
 | Security role | Its privilege matrix by table, and its other privileges |
-| Global choice | Its options with value, label, colour and description |
+| Global choice | Its options with value, label, colour and description; the columns that use it, by table |
 | Business process flow | Its stages, with category and table |
+| Business rule | Table, scope and state; the rule as If / Else if / Else steps, each with its actions - lock or unlock, show or hide, require, set a value, show an error or a recommendation - instead of raw XAML |
 
 A part that cannot be read is named at the top of the tab rather than left empty.
+
+A canvas app's sharing is not in Dataverse: it is read from the Power Apps API, which shows it only
+to the app's owners and co-owners and to environment admins - the tab says so for anyone else.
+**Play app** opens a canvas app in the player rather than the studio, and **Open in Environment
+admin** opens a security role in the [Environment admin](#environment-admin) role view, with its
+users, teams and business units.
 
 ## Dependency graph
 
@@ -834,7 +841,9 @@ component type's OData entity set name — `roleeditorlayout` becomes `/objects/
 That segment is read from table metadata rather than guessed, so it is correct for component
 types this app has never heard of. Tables and columns use the table designer instead, and cloud
 flows are the known exception to the rule: they are `workflow` rows but the portal files them
-under `cloudflows`.
+under `cloudflows`. Copilot Studio agents open in Copilot Studio, business process flows in the
+process designer, and business rules in the classic process editor, which hands them to the rule
+designer.
 
 Links degrade in steps rather than collapsing to nothing. A component whose object route cannot
 be built still links to **that type's object list inside the solution**; only a component whose

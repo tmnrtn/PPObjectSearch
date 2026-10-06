@@ -155,6 +155,14 @@
                                 ToolTip="The table's rows in the read-only Table data window - filter, choose columns, export" />
                     </StackPanel>
 
+                    <!-- A canvas app can be played as well as edited; a role's members are managed in Environment admin. -->
+                    <Button Content="Play app" Height="30" Margin="0,0,8,0" Command="{Binding PlayCommand}"
+                            ToolTip="Open the app to run it, rather than in the studio"
+                            Visibility="{Binding HasPlayUrl, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Open in Environment admin" Height="30" Margin="0,0,8,0" Command="{Binding ShowRoleInAdminCommand}"
+                            ToolTip="The role's users, teams and business units, in the Environment admin role view"
+                            Visibility="{Binding CanShowRoleInAdmin, Converter={StaticResource BoolToVis}}" />
+
                     <!-- A cloud flow lives in Power Automate too; both buttons are secondary then. -->
                     <Button Content="Open in Power Automate" Height="30" Margin="0,0,8,0"
                             Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}"
@@ -185,8 +193,7 @@
             <Grid Grid.Row="1">
                 <!-- One selection: the caller's tab, else the type's own (SelectedTab). -->
                 <TabControl SelectedValuePath="Tag" SelectedValue="{Binding SelectedTab}">
-                    <!-- A cloud flow drawn as the designer draws it. Read-only. -->
-                    <!-- Apps, agents, custom APIs, roles, choices, business process flows: key properties and their parts. -->
+                    <!-- Apps, agents, custom APIs, roles, choices, business process flows and business rules: key properties and their parts. -->
                     <TabItem Header="Overview" Tag="{x:Static models:DetailsTab.Overview}"
                              Visibility="{Binding HasOverview, Converter={StaticResource BoolToVis}}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -225,6 +232,7 @@
                         </ScrollViewer>
                     </TabItem>
 
+                    <!-- A cloud flow drawn as the designer draws it. Read-only. -->
                     <TabItem Header="Design" Tag="{x:Static models:DetailsTab.Design}" Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <TextBlock Text="{Binding DesignStatus}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"

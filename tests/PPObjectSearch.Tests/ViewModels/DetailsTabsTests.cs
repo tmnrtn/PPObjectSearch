@@ -22,6 +22,16 @@ public class DetailsTabsTests
 
     private static SolutionComponentItem CloudFlow() => Item(29, 5);
 
+    [Fact]
+    public void A_business_rule_opens_on_its_overview()
+    {
+        var rule = Item(29, 2);
+
+        Assert.Equal(DetailsTab.Overview, DetailsTabs.DefaultFor(DetailsTabs.KindOf(rule)));
+        Assert.Equal([DetailsTab.Overview, DetailsTab.Layers, DetailsTab.Dependencies], DetailsTabs.TabsFor(DetailsTabs.KindOf(rule)));
+        Assert.Equal(["Overview", "Dependencies"], DetailsTabs.ShortcutsFor(rule).Select(s => s.Label));
+    }
+
     private static ObjectDetailsViewModel Details(SolutionComponentItem item, DetailsShortcut? openOn = null, string? environmentId = "env-1") =>
         new(Fakes.Dataverse(new FakeHttpHandler()), item, new Dictionary<Guid, SolutionComponentItem>(),
             environmentId: environmentId, openOn: openOn);
@@ -39,7 +49,9 @@ public class DetailsTabsTests
     [InlineData(29, 0, null, ObjectKind.ClassicWorkflow)]
     [InlineData(29, null, "Modern Flow", ObjectKind.CloudFlow)]
     [InlineData(29, null, "Workflow (classic)", ObjectKind.ClassicWorkflow)]
-    [InlineData(29, 2, null, ObjectKind.Other)]
+    [InlineData(29, 2, null, ObjectKind.BusinessRule)]
+    [InlineData(29, null, "Business Rule", ObjectKind.BusinessRule)]
+    [InlineData(29, 1, null, ObjectKind.Other)]
     [InlineData(26, null, null, ObjectKind.Other)]
     public void An_object_is_told_apart_by_type_and_category(int type, int? category, string? subType, ObjectKind expected)
     {

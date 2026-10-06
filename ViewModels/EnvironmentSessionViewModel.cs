@@ -485,13 +485,19 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     /// Users, roles, mailboxes and queues - read-only. One window per tab: asking again brings it
     /// forward on the tab asked for.
     /// </summary>
-    private void ShowEnvironmentAdmin(AdminTab tab)
+    private void ShowEnvironmentAdmin(AdminTab tab) => ShowEnvironmentAdmin(tab, null);
+
+    /// <summary>A security role in Environment admin's role view, from its details.</summary>
+    internal void ShowRoleInAdmin(Guid roleId) => ShowEnvironmentAdmin(AdminTab.Roles, roleId);
+
+    private void ShowEnvironmentAdmin(AdminTab tab, Guid? selectId)
     {
         if (_client is null) return;
 
         if (_adminWindow is { DataContext: EnvironmentAdminViewModel open })
         {
-            open.SelectedTab = tab;
+            if (selectId is { } id) _ = open.ShowAsync(tab, id);
+            else open.SelectedTab = tab;
             if (_adminWindow.WindowState == WindowState.Minimized) _adminWindow.WindowState = WindowState.Normal;
             _adminWindow.Activate();
             return;
@@ -502,7 +508,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         window.Closed += (_, _) => { if (ReferenceEquals(_adminWindow, window)) _adminWindow = null; };
         _adminWindow = window;
         window.Show();
-        _ = viewModel.LoadAsync();
+        _ = selectId is { } select ? viewModel.OpenAtAsync(tab, select) : viewModel.LoadAsync();
     }
 
     /// <summary>Make a queue's members match a team's, adding and removing.</summary>
