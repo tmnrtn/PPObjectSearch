@@ -26,6 +26,8 @@ public sealed partial class DataverseClient
     /// </summary>
     public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth);
 
+    public PowerApps.PowerAppsClient CreatePowerAppsClient() => new(_auth);
+
     public async Task<IReadOnlyList<ProcessRun>> GetCloudFlowRunsAsync(
         Guid workflowId, CancellationToken ct = default, int top = MaxRunHistory)
     {

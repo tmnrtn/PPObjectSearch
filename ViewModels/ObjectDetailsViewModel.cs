@@ -447,6 +447,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             var overview = await _client.GetOverviewAsync(Item);
+            if (Kind == ObjectKind.CanvasApp) await AddSharingAsync(overview);
 
             foreach (var property in overview.Properties) OverviewProperties.Add(property);
 
@@ -478,6 +479,53 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             problems.Add("overview: " + ex.Message);
         }
     }
+
+    /// <summary>
+    /// Who a canvas app is shared with. Dataverse does not hold it; the Power Apps API does, for the
+    /// app's owners and co-owners and for environment admins.
+    /// </summary>
+    private async Task AddSharingAsync(ComponentOverview overview)
+    {
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            overview.Problems.Add("shared with: the environment's Power Platform id is not known, so the Power Apps API cannot be asked");
+            return;
+        }
+
+        try
+        {
+            using var powerApps = _client.CreatePowerAppsClient();
+            var permissions = await powerApps.GetAppPermissionsAsync(_environmentId!, Item.ObjectId);
+
+            overview.Tables.Add(new OverviewTable
+            {
+                Title = "Shared with",
+                Columns = ["Who", "Email", "Type", "Role"],
+                Rows = permissions.Select(p => (IReadOnlyList<string?>)[p.Principal, p.Email, p.Type, p.Role]).ToList()
+            });
+        }
+        catch (Exception ex) when (ex is PowerApps.PowerAppsException or System.Net.Http.HttpRequestException)
+        {
+            overview.Problems.Add("shared with: " + ex.Message);
+        }
+    }
+
+    /// <summary>A canvas app in the player, beside the maker portal's edit link.</summary>
+    public string? PlayUrl => Kind == ObjectKind.CanvasApp
+        ? MakerPortalLinkBuilder.BuildPlayUrl(_environmentId, Item.ObjectId, _client.Cloud)
+        : null;
+
+    public bool HasPlayUrl => PlayUrl is not null;
+
+    private RelayCommand? _playCommand;
+    public RelayCommand PlayCommand => _playCommand ??= new RelayCommand(_ => OpenUrl(PlayUrl), _ => HasPlayUrl);
+
+    /// <summary>A security role's members, teams and business units are managed in Environment admin.</summary>
+    public bool CanShowRoleInAdmin => Kind == ObjectKind.SecurityRole && HasSession && Item.ObjectId != Guid.Empty;
+
+    private RelayCommand? _showRoleInAdminCommand;
+    public RelayCommand ShowRoleInAdminCommand => _showRoleInAdminCommand ??=
+        new RelayCommand(_ => Session?.ShowRoleInAdmin(Item.ObjectId), _ => CanShowRoleInAdmin);
 
     // ---------------------------------------------------------------- dependency graph
 

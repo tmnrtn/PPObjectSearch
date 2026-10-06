@@ -34,7 +34,8 @@ public enum ObjectKind
     CustomApi,
     SecurityRole,
     OptionSet,
-    BusinessProcessFlow
+    BusinessProcessFlow,
+    BusinessRule
 }
 
 /// <summary>
@@ -68,7 +69,7 @@ public static class DetailsTabs
         // A connection reference's type code is assigned per environment, so its table name is what to go by.
         _ when string.Equals(item.ComponentLogicalName, "connectionreference", StringComparison.OrdinalIgnoreCase) =>
             ObjectKind.ConnectionReference,
-        // Apps, agents, custom APIs, roles, choices and business process flows have an Overview.
+        // Apps, agents, custom APIs, roles, choices, business process flows and business rules have an Overview.
         _ => Dataverse.DataverseClient.OverviewKindOf(item)
     };
 
@@ -92,7 +93,7 @@ public static class DetailsTabs
     /// <summary>The kinds whose own tab is the Overview: a property list and the parts that make them up.</summary>
     public static bool HasOverview(ObjectKind kind) => kind is ObjectKind.CanvasApp or ObjectKind.ModelDrivenApp
         or ObjectKind.Agent or ObjectKind.CustomApi or ObjectKind.SecurityRole or ObjectKind.OptionSet
-        or ObjectKind.BusinessProcessFlow;
+        or ObjectKind.BusinessProcessFlow or ObjectKind.BusinessRule;
 
     /// <summary>The tabs the window shows for this kind, type-specific first.</summary>
     public static IReadOnlyList<DetailsTab> TabsFor(ObjectKind kind)

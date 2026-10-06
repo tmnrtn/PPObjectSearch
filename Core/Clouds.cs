@@ -15,7 +15,11 @@ public sealed record Cloud(
     string GlobalDiscovery,
     string MakerPortal,
     string FlowPortal,
-    IReadOnlyList<string> EnvironmentHostSuffixes);
+    IReadOnlyList<string> EnvironmentHostSuffixes,
+    string? PowerAppsResource = null,
+    string? PowerAppsApi = null,
+    string? PlayPortal = null,
+    string? CopilotStudioPortal = null);
 
 public static class Clouds
 {
@@ -29,7 +33,11 @@ public static class Clouds
         "https://globaldisco.crm.dynamics.com",
         "https://make.powerapps.com",
         "https://make.powerautomate.com",
-        [".dynamics.com"]);
+        [".dynamics.com"],
+        PowerAppsResource: "https://service.powerapps.com/",
+        PowerAppsApi: "https://api.powerapps.com",
+        PlayPortal: "https://apps.powerapps.com",
+        CopilotStudioPortal: "https://copilotstudio.microsoft.com");
 
     /// <summary>GCC: the commercial directory and Graph, the government Power Platform services.</summary>
     public static readonly Cloud UsGcc = new(
@@ -42,7 +50,10 @@ public static class Clouds
         "https://globaldisco.crm9.dynamics.com",
         "https://make.gov.powerapps.us",
         "https://make.gov.powerautomate.us",
-        [".crm9.dynamics.com"]);
+        [".crm9.dynamics.com"],
+        PowerAppsResource: "https://gov.service.powerapps.us/",
+        PowerAppsApi: "https://gov.api.powerapps.us",
+        PlayPortal: "https://apps.gov.powerapps.us");
 
     public static readonly Cloud UsGccHigh = new(
         "US Government (GCC High)",
@@ -54,7 +65,10 @@ public static class Clouds
         "https://globaldisco.crm.microsoftdynamics.us",
         "https://make.high.powerapps.us",
         "https://make.high.powerautomate.us",
-        [".microsoftdynamics.us"]);
+        [".microsoftdynamics.us"],
+        PowerAppsResource: "https://high.service.powerapps.us/",
+        PowerAppsApi: "https://high.api.powerapps.us",
+        PlayPortal: "https://apps.high.powerapps.us");
 
     public static readonly Cloud UsDod = new(
         "US Government (DoD)",
@@ -66,7 +80,10 @@ public static class Clouds
         "https://globaldisco.crm.appsplatform.us",
         "https://make.apps.appsplatform.us",
         "https://make.powerautomate.appsplatform.us",
-        [".appsplatform.us"]);
+        [".appsplatform.us"],
+        PowerAppsResource: "https://service.apps.appsplatform.us/",
+        PowerAppsApi: "https://api.apps.appsplatform.us",
+        PlayPortal: "https://play.apps.appsplatform.us");
 
     public static readonly Cloud China = new(
         "China (21Vianet)",
@@ -78,7 +95,10 @@ public static class Clouds
         "https://globaldisco.crm.dynamics.cn",
         "https://make.powerapps.cn",
         "https://make.powerautomate.cn",
-        [".dynamics.cn"]);
+        [".dynamics.cn"],
+        PowerAppsResource: "https://service.powerapps.cn/",
+        PowerAppsApi: "https://api.powerapps.cn",
+        PlayPortal: "https://apps.powerapps.cn");
 
     public static readonly IReadOnlyList<Cloud> All = [UsGcc, UsGccHigh, UsDod, China, Public];
 

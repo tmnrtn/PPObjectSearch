@@ -22,7 +22,7 @@ public class ComponentOverviewTests
     [InlineData(29, null, 4, ObjectKind.BusinessProcessFlow)]
     [InlineData(10070, "bot", null, ObjectKind.Agent)]
     [InlineData(10101, "customapi", null, ObjectKind.CustomApi)]
-    [InlineData(29, null, 2, ObjectKind.Other)]
+    [InlineData(29, null, 2, ObjectKind.BusinessRule)]
     [InlineData(26, null, null, ObjectKind.Other)]
     public void Each_type_with_an_overview_is_recognised(int type, string? logical, int? category, ObjectKind expected)
     {

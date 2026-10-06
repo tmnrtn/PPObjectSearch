@@ -77,13 +77,47 @@ public class MakerPortalLinkBuilderTests
     }
 
     [Theory]
-    [InlineData("Business Rule")]
+    [InlineData("Workflow")]
     [InlineData(null)]
     public void Classic_process_lands_on_the_workflows_type_list(string? subType)
     {
         var url = Builder().Build(Item(29, "workflow", subType: subType), SolutionId);
 
         Assert.Equal($"{SolutionRoot}/objects/workflows", url);
+    }
+
+    [Fact]
+    public void Business_rule_opens_in_the_classic_process_editor()
+    {
+        var url = Builder().Build(Item(29, "workflow", subType: "Business Rule"), SolutionId);
+
+        Assert.Equal($"{EnvUrl}/sfa/workflow/edit.aspx?id=%7b{ObjectId}%7d", url);
+    }
+
+    [Fact]
+    public void Business_process_flow_opens_in_the_process_designer()
+    {
+        var url = Builder().Build(Item(29, "workflow", subType: "Business Process Flow"), SolutionId);
+
+        Assert.Equal($"{EnvUrl}/Tools/ProcessControl/UnifiedProcessDesigner.aspx?id={ObjectId}", url);
+    }
+
+    [Fact]
+    public void Agent_opens_in_Copilot_Studio()
+    {
+        var url = Builder().Build(Item(10100, "bot"), SolutionId);
+
+        Assert.Equal($"https://copilotstudio.microsoft.com/environments/{EnvId}/bots/{ObjectId}/overview", url);
+    }
+
+    [Fact]
+    public void Canvas_app_plays_in_its_clouds_player()
+    {
+        Assert.Equal($"https://apps.powerapps.com/play/e/{EnvId}/a/{ObjectId}",
+            MakerPortalLinkBuilder.BuildPlayUrl(EnvId, ObjectId));
+        Assert.Equal($"https://apps.high.powerapps.us/play/e/{EnvId}/a/{ObjectId}",
+            MakerPortalLinkBuilder.BuildPlayUrl(EnvId, ObjectId, PPObjectSearch.Core.Clouds.UsGccHigh));
+        Assert.Null(MakerPortalLinkBuilder.BuildPlayUrl(null, ObjectId));
     }
 
     [Fact]

@@ -143,6 +143,9 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
     /// <summary>Reads the tab on show - called when the window opens.</summary>
     public Task LoadAsync() => Pane(SelectedTab).EnsureLoadedAsync();
 
+    /// <summary>Opens on one row, as the window's first place - nothing to go back to.</summary>
+    internal Task OpenAtAsync(AdminTab tab, Guid id) => MoveToAsync(new AdminLocation(tab, id, null));
+
     /// <summary>
     /// Follows a link to another tab's row, reading the tab first if it has not been. Where it
     /// came from goes on the Back stack; a manual tab click does not.

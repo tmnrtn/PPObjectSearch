@@ -171,6 +171,21 @@ public sealed class MakerPortalLinkBuilder
         return null;
     }
 
+    private static bool IsBusinessProcessFlow(SolutionComponentItem item) =>
+        item.ProcessCategory == 4 || (item.SubType ?? string.Empty).Contains("Business Process Flow", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBusinessRule(SolutionComponentItem item) =>
+        item.ProcessCategory == 2 || (item.SubType ?? string.Empty).Contains("Business Rule", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A canvas app in the player, for running it rather than editing it.</summary>
+    public static string? BuildPlayUrl(string? environmentId, Guid appId, Core.Cloud? cloud = null)
+    {
+        if (string.IsNullOrWhiteSpace(environmentId) || appId == Guid.Empty) return null;
+        if ((cloud ?? Core.Clouds.Public).PlayPortal is not { } play) return null;
+
+        return play + "/play/e/" + Uri.EscapeDataString(environmentId.Trim()) + "/a/" + appId;
+    }
+
     /// <summary>
     /// The category lives on SubType - every process reports its type as "Process". Dataverse
     /// labels category 5 "Modern Flow"; the portals call it a cloud flow, so accept either.
@@ -190,6 +205,24 @@ public sealed class MakerPortalLinkBuilder
             _overrides.TryGetValue(item.ComponentLogicalName!, out var byName)) return byName;
 
         if (DefaultTemplates.TryGetValue(item.ComponentType, out var template)) return template;
+
+        // Copilot Studio agents are edited in Copilot Studio, which has no solution-object page.
+        if (string.Equals(item.ComponentLogicalName, "bot", StringComparison.OrdinalIgnoreCase) &&
+            _cloud.CopilotStudioPortal is { } copilot)
+        {
+            return copilot + "/environments/{envId}/bots/{objectId}/overview";
+        }
+
+        // Business process flows open in the process designer, business rules in the classic
+        // process editor, which hands a rule to the rule designer.
+        if (item.ComponentType == 29 && IsBusinessProcessFlow(item))
+        {
+            return "{envUrl}/Tools/ProcessControl/UnifiedProcessDesigner.aspx?id={objectId}";
+        }
+        if (item.ComponentType == 29 && IsBusinessRule(item))
+        {
+            return "{envUrl}/sfa/workflow/edit.aspx?id=%7b{objectId}%7d";
+        }
 
         // Classic workflows, business rules and BPFs have no object page of their own; their
         // type list is the most useful place to land.
