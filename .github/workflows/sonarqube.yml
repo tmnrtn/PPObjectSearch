@@ -1,13 +1,9 @@
 name: SonarQube
 
 # Analyses main on the self-hosted SonarQube server: the build, the tests and their coverage.
-# Configure it under Settings > Secrets and variables > Actions:
-#   SONAR_TOKEN        secret    a project analysis token from the server
-#   SONAR_HOST_URL     variable  the server's address, e.g. https://sonarqube.example.com
-#   SONAR_PROJECT_KEY  variable  optional, defaults to PPObjectSearch
-#   SONAR_RUNS_ON      variable  optional, JSON runner labels, e.g. ["self-hosted","windows"] -
-#                                 needed when the server is not reachable from GitHub's runners
-# With no SONAR_HOST_URL set the job is skipped, so forks and unconfigured clones stay green.
+# The server's address and token live in 1Password, read through a service account whose token
+# is the repository's only secret for this: OP_SERVICE_ACCOUNT_TOKEN.
+# Pull requests are not analysed - the server is Community Edition, which analyses one branch.
 on:
   push:
     branches: [main]
@@ -23,9 +19,9 @@ concurrency:
 
 jobs:
   analyse:
-    if: vars.SONAR_HOST_URL != ''
-    # The app is WPF, so whichever runner this is must be Windows.
-    runs-on: ${{ fromJSON(vars.SONAR_RUNS_ON || '"windows-latest"') }}
+    # Forks have neither the 1Password token nor a project on the server.
+    if: github.repository == 'tmnrtn/PPObjectSearch'
+    runs-on: windows-latest
 
     steps:
       # Full history, so the server can attribute issues to commits and track new code.
@@ -33,6 +29,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Masked in the log, and exported only to the steps below.
+      - name: Load secrets from 1Password
+        uses: 1password/load-secrets-action@24a7d5bdc04e9e8699efdaee16fa227e14d597eb # v5.0.1
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          SONAR_HOST_URL: op://CI/SonarQube/url
+          SONAR_TOKEN: op://CI/SonarQube/token
 
       - name: Set up .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
@@ -46,13 +52,9 @@ jobs:
       # Everything built between begin and end is analysed.
       - name: Begin analysis
         shell: pwsh
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'PPObjectSearch' }}
         run: |
           dotnet sonarscanner begin `
-            /k:"$env:SONAR_PROJECT_KEY" `
+            /k:"tmnrtn_PPObjectSearch" `
             /d:sonar.host.url="$env:SONAR_HOST_URL" `
             /d:sonar.token="$env:SONAR_TOKEN" `
             /d:sonar.cs.opencover.reportsPaths="tests/PPObjectSearch.Tests/TestResults/**/coverage.opencover.xml" `
@@ -77,6 +79,4 @@ jobs:
       - name: End analysis
         if: (success() || failure()) && steps.build.outcome == 'success'
         shell: pwsh
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: dotnet sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"

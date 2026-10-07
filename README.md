@@ -119,11 +119,10 @@ too: every resource a view uses must be defined, and the light and dark themes m
 same keys. CI reports line and branch coverage on each run's summary page. The release
 workflow runs them before publishing.
 
-Each push to main is also analysed on a self-hosted SonarQube server
-(`.github/workflows/sonarqube.yml`), with test results and coverage. Set the `SONAR_TOKEN` secret
-and the `SONAR_HOST_URL` variable to turn it on (and optionally `SONAR_PROJECT_KEY`, and
-`SONAR_RUNS_ON` for a self-hosted runner when the server is not reachable from GitHub's); without
-them the job is skipped.
+Each push to main is also analysed on the self-hosted SonarQube server
+(`.github/workflows/sonarqube.yml`), with test results and coverage. Its address and token are
+read from 1Password (`op://CI/SonarQube/url` and `op://CI/SonarQube/token`) through a service
+account, whose token is the repository secret `OP_SERVICE_ACCOUNT_TOKEN`.
 
 ## Command line (ppos)
 
