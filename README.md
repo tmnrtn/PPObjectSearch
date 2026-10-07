@@ -119,6 +119,12 @@ too: every resource a view uses must be defined, and the light and dark themes m
 same keys. CI reports line and branch coverage on each run's summary page. The release
 workflow runs them before publishing.
 
+Each push to main is also analysed on a self-hosted SonarQube server
+(`.github/workflows/sonarqube.yml`), with test results and coverage. Set the `SONAR_TOKEN` secret
+and the `SONAR_HOST_URL` variable to turn it on (and optionally `SONAR_PROJECT_KEY`, and
+`SONAR_RUNS_ON` for a self-hosted runner when the server is not reachable from GitHub's); without
+them the job is skipped.
+
 ## Command line (ppos)
 
 `ppos.exe`, released beside the app, runs the read-only checks a pipeline wants before promoting a
