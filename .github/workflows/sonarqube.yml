@@ -1,8 +1,8 @@
 name: SonarQube
 
 # Analyses main on the self-hosted SonarQube server: the build, the tests and their coverage.
-# The server's address and token live in 1Password, read through a service account whose token
-# is the repository's only secret for this: OP_SERVICE_ACCOUNT_TOKEN.
+# The work is tools/sonar.ps1, the same script a developer runs locally; it needs the repository
+# secrets SONAR_HOST_URL and SONAR_TOKEN (copies of the values sonar.env points to in 1Password).
 # Pull requests are not analysed - the server is Community Edition, which analyses one branch.
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   analyse:
-    # Forks have neither the 1Password token nor a project on the server.
+    # Forks have neither the secrets nor a project on the server.
     if: github.repository == 'tmnrtn/PPObjectSearch'
     runs-on: windows-latest
 
@@ -30,53 +30,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Masked in the log, and exported only to the steps below.
-      - name: Load secrets from 1Password
-        uses: 1password/load-secrets-action@24a7d5bdc04e9e8699efdaee16fa227e14d597eb # v5.0.1
-        with:
-          export-env: true
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          SONAR_HOST_URL: op://CI/SonarQube/url
-          SONAR_TOKEN: op://CI/SonarQube/token
-
       - name: Set up .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           global-json-file: global.json
 
-      # The scanner fetches a Java runtime from the server it reports to (SonarQube 10.6 and later).
-      - name: Install SonarScanner for .NET
-        run: dotnet tool install --global dotnet-sonarscanner --version 11.3.0
-
-      # Everything built between begin and end is analysed.
-      - name: Begin analysis
+      - name: Analyse
         shell: pwsh
-        run: |
-          dotnet sonarscanner begin `
-            /k:"tmnrtn_PPObjectSearch" `
-            /d:sonar.host.url="$env:SONAR_HOST_URL" `
-            /d:sonar.token="$env:SONAR_TOKEN" `
-            /d:sonar.cs.opencover.reportsPaths="tests/PPObjectSearch.Tests/TestResults/**/coverage.opencover.xml" `
-            /d:sonar.cs.vstest.reportsPaths="tests/PPObjectSearch.Tests/TestResults/*.trx"
-
-      - name: Restore
-        run: dotnet restore PPObjectSearch.slnx --locked-mode
-
-      - name: Build
-        id: build
-        run: dotnet build PPObjectSearch.slnx -c Release --no-restore
-
-      # OpenCover, the coverage format SonarQube reads for C#.
-      - name: Test
-        run: >
-          dotnet test tests/PPObjectSearch.Tests -c Release --no-build
-          --logger "trx;LogFileName=results.trx"
-          --collect:"XPlat Code Coverage;Format=opencover"
-          --results-directory tests/PPObjectSearch.Tests/TestResults
-
-      # Runs even when a test fails, so the server still sees the build's issues.
-      - name: End analysis
-        if: (success() || failure()) && steps.build.outcome == 'success'
-        shell: pwsh
-        run: dotnet sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./tools/sonar.ps1

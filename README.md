@@ -120,9 +120,20 @@ same keys. CI reports line and branch coverage on each run's summary page. The r
 workflow runs them before publishing.
 
 Each push to main is also analysed on the self-hosted SonarQube server
-(`.github/workflows/sonarqube.yml`), with test results and coverage. Its address and token are
-read from 1Password (`op://CI/SonarQube/url` and `op://CI/SonarQube/token`) through a service
-account, whose token is the repository secret `OP_SERVICE_ACCOUNT_TOKEN`.
+(`.github/workflows/sonarqube.yml`), with test results and coverage. The workflow runs
+`tools/sonar.ps1`, which can be run locally too, taking the server's address and token from
+1Password through the references in `sonar.env`:
+
+```powershell
+op run --env-file sonar.env -- pwsh tools/sonar.ps1
+```
+
+CI needs the same two values as the repository secrets `SONAR_HOST_URL` and `SONAR_TOKEN`:
+
+```powershell
+op read op://CI/SonarQube/url | gh secret set SONAR_HOST_URL
+op read op://CI/SonarQube/token | gh secret set SONAR_TOKEN
+```
 
 ## Command line (ppos)
 
