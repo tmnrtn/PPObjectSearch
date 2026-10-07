@@ -131,8 +131,8 @@ op run --env-file sonar.env -- pwsh tools/sonar.ps1
 CI needs the same two values as the repository secrets `SONAR_HOST_URL` and `SONAR_TOKEN`:
 
 ```powershell
-op read op://CI/SonarQube/url | gh secret set SONAR_HOST_URL
-op read op://CI/SonarQube/token | gh secret set SONAR_TOKEN
+op read op://Homelab/sonarqube/SONAR_HOST_URL | gh secret set SONAR_HOST_URL
+op read op://Homelab/sonarqube/SONAR_TOKEN | gh secret set SONAR_TOKEN
 ```
 
 ## Command line (ppos)
