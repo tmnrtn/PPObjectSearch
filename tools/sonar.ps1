@@ -26,13 +26,16 @@ try {
   $results = 'tests/PPObjectSearch.Tests/TestResults'
   if (Test-Path $results) { Remove-Item $results -Recurse -Force }
 
-  # Everything built between begin and end is analysed.
+  # Everything built between begin and end is analysed. The views' code-behind only wires
+  # controls to their view models and needs a live window, so it is left out of coverage;
+  # it is still analysed for issues.
   dotnet sonarscanner begin `
     /k:"tmnrtn_PPObjectSearch" `
     /d:sonar.host.url="$env:SONAR_HOST_URL" `
     /d:sonar.token="$env:SONAR_TOKEN" `
     /d:sonar.cs.opencover.reportsPaths="$results/**/coverage.opencover.xml" `
-    /d:sonar.cs.vstest.reportsPaths="$results/*.trx"
+    /d:sonar.cs.vstest.reportsPaths="$results/*.trx" `
+    /d:sonar.coverage.exclusions="Views/**,**/*.xaml.cs"
   if ($LASTEXITCODE) { throw 'SonarScanner begin failed.' }
 
   dotnet restore PPObjectSearch.slnx --locked-mode
