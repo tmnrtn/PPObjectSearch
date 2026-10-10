@@ -132,7 +132,7 @@ CI needs the same two values as the repository secrets `SONAR_HOST_URL` and `SON
 
 ```powershell
 gh secret set SONAR_HOST_URL --body https://sq.tmnrtn.com
-op read "op://Homelab/sonarqube/api key" | gh secret set SONAR_TOKEN
+op read op://Homelab/sonarqube/SONAR_TOKEN | gh secret set SONAR_TOKEN
 ```
 
 ## Command line (ppos)
