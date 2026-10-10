@@ -220,8 +220,8 @@ public sealed class QueueSyncViewModel : ObservableObject
 
         try
         {
-            var teamsTask = _client.GetTeamsAsync(entraGroupTeamsOnly: false);
-            var queuesTask = _client.GetQueuesAsync();
+            var teamsTask = _client.GetTeamsAsync(entraGroupTeamsOnly: false, CancellationToken.None);
+            var queuesTask = _client.GetQueuesAsync(CancellationToken.None);
             var teams = await teamsTask;
             var queues = await queuesTask;
 
@@ -266,8 +266,9 @@ public sealed class QueueSyncViewModel : ObservableObject
     {
         if (SelectedTeam is not { } team || SelectedQueue is not { } queue) return;
 
-        _previewCts?.Cancel();
+        var superseded = _previewCts;
         var cts = _previewCts = new CancellationTokenSource();
+        if (superseded is not null) await superseded.CancelAsync();
 
         IsBusy = true;
         Status = $"Reading the members of {team.Name} and {queue.Name}...";
@@ -301,16 +302,16 @@ public sealed class QueueSyncViewModel : ObservableObject
 
             Warnings = string.Join("  ", warnings);
 
+            var nothingToDo = AdditiveOnly ? "Every team member is already in the queue." : "The queue already matches the team.";
             Status = $"Previewed at {DateTime.Now:T}: team {teamMembers.Count:N0}, queue {queueMembers.Count:N0} members. " +
-                     (CountAdd + CountRemove == 0
-                         ? AdditiveOnly ? "Every team member is already in the queue." : "The queue already matches the team."
-                         : "Nothing is changed until you apply and confirm.");
+                     (CountAdd + CountRemove == 0 ? nothingToDo : "Nothing is changed until you apply and confirm.");
 
             OnPropertyChanged(nameof(HasPlan));
             OnPropertyChanged(nameof(PlanHeading));
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            // A newer preview, or a change of team or queue, took over.
         }
         catch (Exception ex)
         {
@@ -332,7 +333,7 @@ public sealed class QueueSyncViewModel : ObservableObject
         {
             IsBusy = true;
             Status = "Checking what kind of environment this is...";
-            permission = await Session.EvaluateWritePermissionAsync();
+            permission = await Session.EvaluateWritePermissionAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -366,19 +367,14 @@ public sealed class QueueSyncViewModel : ObservableObject
             Account = Session.AccountName,
             Permission = permission,
             Changes = changes,
-            ApplyEach = (change, ct) => change.Kind == MembershipChangeKind.Add
-                ? _client.AddQueueMemberAsync(queue.QueueId, change.SystemUserId, ct)
-                : additive
-                    ? throw new InvalidOperationException("This sync is additive only; nobody is removed.")
-                    : _client.RemoveQueueMemberAsync(queue.QueueId, change.SystemUserId, ct),
-            ReadMemberIds = async ct => (await _client.GetQueueMembersAsync(queue.QueueId, ct)).Select(u => u.SystemUserId).ToHashSet(),
-            Note = string.Join("  ", new[]
+            ApplyEach = (change, ct) =>
             {
-                AdditiveOnly && CountKeep > 0
-                    ? $"Additive only: {CountKeep:N0} queue member(s) not in the team are kept - nobody is removed."
-                    : null,
-                Warnings.Length > 0 ? Warnings : null
-            }.Where(n => n is not null)) is { Length: > 0 } note ? note : null
+                if (change.Kind == MembershipChangeKind.Add) return _client.AddQueueMemberAsync(queue.QueueId, change.SystemUserId, ct);
+                if (additive) throw new InvalidOperationException("This sync is additive only; nobody is removed.");
+                return _client.RemoveQueueMemberAsync(queue.QueueId, change.SystemUserId, ct);
+            },
+            ReadMemberIds = async ct => (await _client.GetQueueMembersAsync(queue.QueueId, ct)).Select(u => u.SystemUserId).ToHashSet(),
+            Note = ApplyNote()
         });
 
         var window = new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() };
@@ -395,6 +391,19 @@ public sealed class QueueSyncViewModel : ObservableObject
         var outcome = viewModel.Status;
         await PreviewAsync();
         Status = outcome + " The preview has been read again.";
+    }
+
+    /// <summary>Said beside the changes: what an additive sync keeps, and the preview's warnings.</summary>
+    private string? ApplyNote()
+    {
+        var notes = new List<string>();
+        if (AdditiveOnly && CountKeep > 0)
+        {
+            notes.Add($"Additive only: {CountKeep:N0} queue member(s) not in the team are kept - nobody is removed.");
+        }
+
+        if (Warnings.Length > 0) notes.Add(Warnings);
+        return notes.Count > 0 ? string.Join("  ", notes) : null;
     }
 
     private void Replan()

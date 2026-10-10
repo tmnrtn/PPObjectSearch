@@ -104,9 +104,9 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand CloseAllDetailsCommand { get; }
 
     /// <summary>Object details windows open across every tab.</summary>
-    public int OpenDetailsCount => DetailsWindows.Count;
-    public bool HasOpenDetails => OpenDetailsCount > 0;
-    public string CloseAllDetailsLabel => $"Close all details ({OpenDetailsCount})";
+    public static int OpenDetailsCount => DetailsWindows.Count;
+    public static bool HasOpenDetails => OpenDetailsCount > 0;
+    public static string CloseAllDetailsLabel => $"Close all details ({OpenDetailsCount})";
     public RelayCommand GlobalSearchCommand { get; }
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }

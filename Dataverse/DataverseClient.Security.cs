@@ -44,9 +44,7 @@ public sealed partial class DataverseClient
         foreach (var privilege in privileges.EnumerateArray())
         {
             if (!Guid.TryParse(JsonHelper.GetString(privilege, "PrivilegeId"), out var id)) continue;
-            var type = privilege.TryGetProperty("PrivilegeType", out var t)
-                ? t.ValueKind == JsonValueKind.Number ? t.GetInt32() : PrivilegeTypeFromName(t.GetString())
-                : 0;
+            var type = privilege.TryGetProperty("PrivilegeType", out var t) ? PrivilegeTypeOf(t) : 0;
 
             if (PrivilegeActions.TryGetValue(type, out var action))
             {
@@ -56,6 +54,10 @@ public sealed partial class DataverseClient
 
         return results;
     }
+
+    /// <summary>The privilege type as a number, whether it came as one or by name.</summary>
+    private static int PrivilegeTypeOf(JsonElement type) =>
+        type.ValueKind == JsonValueKind.Number ? type.GetInt32() : PrivilegeTypeFromName(type.GetString());
 
     private static int PrivilegeTypeFromName(string? name) =>
         PrivilegeActions.FirstOrDefault(p => string.Equals(p.Value, name, StringComparison.OrdinalIgnoreCase)).Key;

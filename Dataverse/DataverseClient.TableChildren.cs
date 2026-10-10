@@ -34,7 +34,7 @@ public sealed partial class DataverseClient
         if (metadataId != Guid.Empty) keys.Add($"EntityDefinitions({metadataId})");
         if (!string.IsNullOrWhiteSpace(logicalNameHint))
         {
-            keys.Add($"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalNameHint!.ToLowerInvariant())}')");
+            keys.Add($"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalNameHint.ToLowerInvariant())}')");
         }
 
         for (var i = 0; i < keys.Count; i++)
@@ -52,11 +52,10 @@ public sealed partial class DataverseClient
 
                 return new TableIdentity(
                     id == Guid.Empty ? metadataId : id,
-                    logicalName!,
+                    logicalName,
                     JsonHelper.GetInt(row, "ObjectTypeCode"),
                     ReadLabel(row, "DisplayName"));
             }
-            catch (OperationCanceledException) { throw; }
             catch (DataverseException) when (i + 1 < keys.Count)
             {
                 // Try the next way of naming the table before giving up on it.
@@ -98,7 +97,7 @@ public sealed partial class DataverseClient
             return new TableChild
             {
                 Kind = TableChildKind.Column,
-                Name = logicalName!,
+                Name = logicalName,
                 DisplayName = ReadLabel(row, "DisplayName"),
                 Detail = detail,
                 IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
@@ -177,7 +176,7 @@ public sealed partial class DataverseClient
             return new TableChild
             {
                 Kind = TableChildKind.Key,
-                Name = logicalName!,
+                Name = logicalName,
                 DisplayName = ReadLabel(row, "DisplayName"),
                 Detail = string.IsNullOrWhiteSpace(columns) ? JsonHelper.GetString(row, "EntityKeyIndexStatus") : columns,
                 IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
@@ -287,7 +286,6 @@ public sealed partial class DataverseClient
 
                 return RecordProperties.Flatten(doc.RootElement);
             }
-            catch (OperationCanceledException) { throw; }
             catch (DataverseException) when (i + 1 < queries.Count)
             {
                 // Fall back to the less specific query.
@@ -343,7 +341,7 @@ public sealed partial class DataverseClient
         return new TableChild
         {
             Kind = TableChildKind.Relationship,
-            Name = schemaName!,
+            Name = schemaName,
             Detail = string.IsNullOrWhiteSpace(otherEntity) ? shape : $"{shape}  {otherEntity}",
             IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
             Id = id,
@@ -369,7 +367,6 @@ public sealed partial class DataverseClient
         {
             return await ReadListAsync(url, ct, read, Annotations.Formatted).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) { throw; }
         catch (DataverseException) when (table.ObjectTypeCode is not null)
         {
             var byCode = EnvironmentUrl + ApiPath + selectClause + $"{typeColumn} eq {table.ObjectTypeCode}";
@@ -635,7 +632,7 @@ internal static class RecordProperties
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value)) return;
 
-        rows.Add(new ComponentProperty { Name = name!, Value = value! });
+        rows.Add(new ComponentProperty { Name = name, Value = value });
     }
 
     private static string Combine(string? path, string name) =>

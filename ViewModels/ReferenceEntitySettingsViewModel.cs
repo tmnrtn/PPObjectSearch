@@ -254,7 +254,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
                 Source = RecordKeySource.AlternateKey,
                 AlternateKeyName = key.LogicalName,
                 Columns = key.KeyAttributes,
-                Title = string.IsNullOrWhiteSpace(key.DisplayName) ? "Alternate key" : key.DisplayName!,
+                Title = string.IsNullOrWhiteSpace(key.DisplayName) ? "Alternate key" : key.DisplayName,
                 Value = key.LogicalName,
                 Hint = "Columns: " + string.Join(", ", key.KeyAttributes)
             });

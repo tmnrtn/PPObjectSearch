@@ -19,7 +19,12 @@ public sealed class DependencyNode
 
     public bool InSolution => Item is not null;
     public string Where => InSolution ? "In this solution" : "Outside this solution";
-    public string ManagedLabel => Item is null ? string.Empty : Item.IsManaged ? "Managed" : "Unmanaged";
+    public string ManagedLabel => Item switch
+    {
+        null => string.Empty,
+        { IsManaged: true } => "Managed",
+        _ => "Unmanaged"
+    };
 }
 
 /// <summary>"A depends on B": removing B breaks A.</summary>
@@ -39,7 +44,7 @@ public sealed class DependencyGraph
         var ids = Nodes.Keys.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => $"n{x.i}");
         var md = new StringBuilder();
 
-        if (!string.IsNullOrWhiteSpace(title)) md.AppendLine("---").AppendLine($"title: {Text(title!)}").AppendLine("---");
+        if (!string.IsNullOrWhiteSpace(title)) md.AppendLine("---").AppendLine($"title: {Text(title)}").AppendLine("---");
         md.AppendLine("flowchart LR");
 
         foreach (var node in Nodes.Values.OrderBy(n => n.Level).ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase))

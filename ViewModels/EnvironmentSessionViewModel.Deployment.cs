@@ -139,12 +139,12 @@ public sealed partial class EnvironmentSessionViewModel
             var variableInfo = new List<EnvironmentVariableInfo>();
             foreach (var variable in variables)
             {
-                variableInfo.Add(await _client.GetEnvironmentVariableAsync(variable.ObjectId, isValueRecord: false));
+                variableInfo.Add(await _client.GetEnvironmentVariableAsync(variable.ObjectId, isValueRecord: false, CancellationToken.None));
             }
 
-            var referenceInfo = await _client.GetConnectionReferencesAsync(references.Select(r => r.ObjectId));
+            var referenceInfo = await _client.GetConnectionReferencesAsync(references.Select(r => r.ObjectId), CancellationToken.None);
 
-            await File.WriteAllTextAsync(dialog.FileName, DeploymentSettings.Build(variableInfo, referenceInfo, withValues));
+            await File.WriteAllTextAsync(dialog.FileName, DeploymentSettings.Build(variableInfo, referenceInfo, withValues), CancellationToken.None);
 
             var (blankVariables, blankReferences) = DeploymentSettings.Blanks(variableInfo, referenceInfo, withValues);
             Status = $"Wrote {variableInfo.Count:N0} variable(s) and {referenceInfo.Count:N0} connection reference(s) to {dialog.FileName}" +

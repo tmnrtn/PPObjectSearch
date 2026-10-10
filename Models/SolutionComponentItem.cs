@@ -98,7 +98,7 @@ public sealed class SolutionComponentItem : ObservableObject
     /// <summary>Best label for the Name column - display name where there is one.</summary>
     [JsonIgnore]
     public string PrimaryLabel =>
-        !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName! : Name;
+        !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName : Name;
 
     /// <summary>Secondary identifier shown alongside the label (logical / schema name).</summary>
     [JsonIgnore]
@@ -106,7 +106,7 @@ public sealed class SolutionComponentItem : ObservableObject
     {
         get
         {
-            var secondary = !string.IsNullOrWhiteSpace(SchemaName) ? SchemaName! : Name;
+            var secondary = !string.IsNullOrWhiteSpace(SchemaName) ? SchemaName : Name;
             return string.Equals(secondary, PrimaryLabel, StringComparison.Ordinal) ? string.Empty : secondary;
         }
     }

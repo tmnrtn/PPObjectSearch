@@ -77,7 +77,8 @@ public sealed class PowerAutomateClient : IDisposable
             var actions = new Dictionary<string, FlowActionResult>(StringComparer.Ordinal);
             var pages = 0;
 
-            for (string? url = $"{runUrl}/actions?{ApiVersion}"; url is not null; pages++)
+            string? url = $"{runUrl}/actions?{ApiVersion}";
+            while (url is not null)
             {
                 if (pages >= MaxPages)
                 {
@@ -96,6 +97,7 @@ public sealed class PowerAutomateClient : IDisposable
                 }
 
                 url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
+                pages++;
             }
 
             return new FlowRunDetail(
@@ -185,7 +187,8 @@ public sealed class PowerAutomateClient : IDisposable
         var repetitions = new FlowRepetitions();
         var pages = 0;
 
-        for (string? url = $"{run.RunUrl}/actions/{Uri.EscapeDataString(actionName)}/repetitions?{ApiVersion}"; url is not null; pages++)
+        string? url = $"{run.RunUrl}/actions/{Uri.EscapeDataString(actionName)}/repetitions?{ApiVersion}";
+        while (url is not null)
         {
             // Unlike the run's own steps this is not an error: the iterations read so far are
             // still worth showing, as long as they are not presented as all of them.
@@ -212,6 +215,7 @@ public sealed class PowerAutomateClient : IDisposable
             }
 
             url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
+            pages++;
         }
 
         return repetitions;
@@ -249,7 +253,7 @@ public sealed class PowerAutomateClient : IDisposable
 
         while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
         {
-            buffer.Write(chunk, 0, read);
+            await buffer.WriteAsync(chunk.AsMemory(0, read), ct).ConfigureAwait(false);
             if (buffer.Length > MaxContentBytes) throw TooLarge(null);
         }
 

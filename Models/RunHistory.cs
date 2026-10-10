@@ -137,11 +137,12 @@ public sealed class EnvironmentVariableInfo
     /// <summary>What a flow or app actually gets: the current value, else the default.</summary>
     public string? EffectiveValue => HasCurrentValue ? CurrentValue : DefaultValue;
 
-    public string EffectiveSource => HasCurrentValue
-        ? "The current value set in this environment is in effect."
-        : DefaultValue is null
-            ? "Neither a current value nor a default is set, so the variable has no value here."
-            : "No current value is set in this environment, so the default is in effect.";
+    public string EffectiveSource => (HasCurrentValue, DefaultValue) switch
+    {
+        (true, _) => "The current value set in this environment is in effect.",
+        (_, null) => "Neither a current value nor a default is set, so the variable has no value here.",
+        _ => "No current value is set in this environment, so the default is in effect."
+    };
 }
 
 /// <summary>One solution operation recorded in msdyn_solutionhistory - an import, upgrade, export and so on.</summary>
@@ -182,10 +183,12 @@ public sealed class SolutionHistoryEntry
 
     public bool IsFinished => StatusCode == 1;
 
-    public RunOutcome Outcome =>
-        !IsFinished ? RunOutcome.Running
-        : Succeeded == true ? RunOutcome.Succeeded
-        : RunOutcome.Failed;
+    public RunOutcome Outcome => (IsFinished, Succeeded) switch
+    {
+        (false, _) => RunOutcome.Running,
+        (_, true) => RunOutcome.Succeeded,
+        _ => RunOutcome.Failed
+    };
 
     public string ResultLabel => StatusCode switch
     {
@@ -207,9 +210,12 @@ public sealed class SolutionHistoryEntry
         _ => string.Empty
     };
 
-    public string DurationLabel => TotalSeconds is { } s
-        ? ProcessRun.FormatDuration(s * 1000L)
-        : StartTime is { } start && EndTime is { } end ? ProcessRun.FormatDuration((long)(end - start).TotalMilliseconds) : string.Empty;
+    public string DurationLabel => (TotalSeconds, StartTime, EndTime) switch
+    {
+        ({ } s, _, _) => ProcessRun.FormatDuration(s * 1000L),
+        (_, { } start, { } end) => ProcessRun.FormatDuration((long)(end - start).TotalMilliseconds),
+        _ => string.Empty
+    };
 
     public bool HasError => !string.IsNullOrWhiteSpace(ExceptionMessage) || !string.IsNullOrWhiteSpace(ErrorCode);
 
@@ -233,9 +239,12 @@ public sealed class LatestRunSummary
     /// <summary>For the pill's colour, which follows the row's Outcome.</summary>
     public RunOutcome Outcome => Run.Outcome;
 
-    public string FailedLabel => Considered <= 1
-        ? (Failed == 1 ? "the only run failed" : "the only run")
-        : $"{Failed} of last {Considered} failed";
+    public string FailedLabel => Considered switch
+    {
+        <= 1 when Failed == 1 => "the only run failed",
+        <= 1 => "the only run",
+        _ => $"{Failed} of last {Considered} failed"
+    };
 
     /// <summary>The error's first line; the detail is in the details window.</summary>
     public string? ErrorLine => string.IsNullOrWhiteSpace(Run.ErrorMessage)

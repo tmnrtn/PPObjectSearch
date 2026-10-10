@@ -17,6 +17,17 @@ namespace PPObjectSearch.Services;
 /// </summary>
 public static partial class FlowDesignParser
 {
+    /// <summary>The definition under "properties" (a solution export), else under "definition", else the root itself.</summary>
+    private static JsonElement DefinitionOf(JsonElement root)
+    {
+        if (root.TryGetProperty("properties", out var properties) && properties.TryGetProperty("definition", out var wrapped))
+        {
+            return wrapped;
+        }
+
+        return root.TryGetProperty("definition", out var definition) ? definition : root;
+    }
+
     public static FlowDesign Parse(string clientData)
     {
         // A flow nests two to four levels per scope, loop or switch case, under five for the
@@ -25,10 +36,7 @@ public static partial class FlowDesignParser
         using var doc = JsonDocument.Parse(clientData, new JsonDocumentOptions { MaxDepth = 256 });
         var root = doc.RootElement;
 
-        var definition =
-            root.TryGetProperty("properties", out var properties) && properties.TryGetProperty("definition", out var d1) ? d1
-            : root.TryGetProperty("definition", out var d2) ? d2
-            : root;
+        var definition = DefinitionOf(root);
 
         if (definition.ValueKind != JsonValueKind.Object ||
             (!definition.TryGetProperty("triggers", out _) && !definition.TryGetProperty("actions", out _)))
@@ -36,7 +44,8 @@ public static partial class FlowDesignParser
             throw new FormatException("The flow's definition has no triggers or actions.");
         }
 
-        var connections = ReadConnectionReferences(properties.ValueKind == JsonValueKind.Object ? properties : root);
+        var connections = ReadConnectionReferences(
+            root.TryGetProperty("properties", out var properties) && properties.ValueKind == JsonValueKind.Object ? properties : root);
         var context = new Context(connections);
 
         var triggers = new List<FlowNode>();
@@ -88,16 +97,16 @@ public static partial class FlowDesignParser
         foreach (var name in order)
         {
             var preds = new List<string>();
-            foreach (var runAfter in nodes[name].RunAfter)
+            foreach (var predecessor in nodes[name].RunAfter.Select(runAfter => runAfter.Action))
             {
-                if (nodes.ContainsKey(runAfter.Action))
+                if (nodes.ContainsKey(predecessor))
                 {
-                    preds.Add(runAfter.Action);
-                    successors[runAfter.Action].Add(name);
+                    preds.Add(predecessor);
+                    successors[predecessor].Add(name);
                 }
                 else
                 {
-                    context.Warnings.Add($"'{nodes[name].DisplayName}' runs after '{runAfter.Action.Replace('_', ' ')}', which is not in {where}.");
+                    context.Warnings.Add($"'{nodes[name].DisplayName}' runs after '{predecessor.Replace('_', ' ')}', which is not in {where}.");
                 }
             }
 
@@ -141,9 +150,9 @@ public static partial class FlowDesignParser
         /// than one predecessor is a join: the branch stops there and hands it to the group, which
         /// places it after the branches - in <paramref name="joins"/>.
         /// </summary>
-        public List<FlowStep> Chain(IReadOnlyList<string> heads, bool inBranch, List<string> joins)
+        public List<IFlowStep> Chain(IReadOnlyList<string> heads, bool inBranch, List<string> joins)
         {
-            var steps = new List<FlowStep>();
+            var steps = new List<IFlowStep>();
             var current = heads.ToList();
 
             while (current.Count > 0)
@@ -345,8 +354,10 @@ public static partial class FlowDesignParser
                 if (element.TryGetProperty("recurrence", out var recurrence))
                 {
                     var interval = recurrence.TryGetProperty("interval", out var n) ? n.ToString() : "1";
-                    var frequency = Str(recurrence, "frequency");
-                    return frequency is null ? null : $"Every {interval} {frequency.ToLowerInvariant()}{(interval == "1" ? "" : "s")}";
+                    if (Str(recurrence, "frequency") is not { } frequency) return null;
+
+                    var plural = interval == "1" ? "" : "s";
+                    return $"Every {interval} {frequency.ToLowerInvariant()}{plural}";
                 }
 
                 return null;
@@ -447,16 +458,22 @@ public static partial class FlowDesignParser
 
         foreach (var reference in references.EnumerateObject())
         {
-            var api =
-                reference.Value.TryGetProperty("api", out var a) && Str(a, "name") is { } apiName ? apiName
-                : Str(reference.Value, "apiName")
-                  ?? (Str(reference.Value, "id") is { } id ? id.Split('/').Last() : null);
-
-            if (api is not null) map[reference.Name] = api;
+            if (ReferenceApi(reference.Value) is { } api) map[reference.Name] = api;
         }
 
         return map;
     }
+
+    /// <summary>A connection reference's API name: its "api" object's name, else "apiName", else the end of its id.</summary>
+    private static string? ReferenceApi(JsonElement reference)
+    {
+        if (reference.TryGetProperty("api", out var api) && Str(api, "name") is { } apiName) return apiName;
+
+        return Str(reference, "apiName") ?? LastSegment(Str(reference, "id"));
+    }
+
+    /// <summary>"/providers/Microsoft.PowerApps/apis/shared_office365" becomes "shared_office365".</summary>
+    private static string? LastSegment(string? path) => path?.Split('/')[^1];
 
     [GeneratedRegex(@"\['(?<name>[^']+)'\]\['connectionId'\]")]
     private static partial Regex LegacyConnectionRegex();
@@ -468,11 +485,12 @@ public static partial class FlowDesignParser
             return (null, null);
         }
 
-        var api =
-            Str(host, "apiId")?.Split('/').Last()
-            ?? (Str(host, "connectionName") is { } reference
-                ? connections.TryGetValue(reference, out var mapped) ? mapped : reference
-                : null);
+        var api = LastSegment(Str(host, "apiId"));
+
+        if (api is null && Str(host, "connectionName") is { } reference)
+        {
+            api = connections.TryGetValue(reference, out var mapped) ? mapped : reference;
+        }
 
         // The older ApiConnection shape names the connection inside an expression.
         if (api is null &&
@@ -538,10 +556,12 @@ public static partial class FlowDesignParser
         ["SearchRecords"] = "Search rows",
     };
 
-    internal static string ConnectorName(string api) =>
-        Connectors.TryGetValue(api, out var name)
-            ? name
-            : api.StartsWith("shared_", StringComparison.OrdinalIgnoreCase) ? api["shared_".Length..] : api;
+    internal static string ConnectorName(string api)
+    {
+        if (Connectors.TryGetValue(api, out var name)) return name;
+
+        return api.StartsWith("shared_", StringComparison.OrdinalIgnoreCase) ? api["shared_".Length..] : api;
+    }
 
     internal static string OperationName(string api, string operationId) =>
         api.Equals("shared_commondataserviceforapps", StringComparison.OrdinalIgnoreCase) &&
@@ -551,10 +571,14 @@ public static partial class FlowDesignParser
 
     // ---------------------------------------------------------------- helpers
 
+    /// <summary>Between a lower case letter and a capital, before the last capital of a run, and at spaces.</summary>
+    [GeneratedRegex(@"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|\s+")]
+    private static partial Regex WordBreakRegex();
+
     /// <summary>"GetItemV2" becomes "Get item V2"; "SendEmail_V2" becomes "Send email V2".</summary>
     internal static string SplitWords(string identifier)
     {
-        var words = Regex.Split(identifier.Replace('_', ' '), @"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|\s+")
+        var words = WordBreakRegex().Split(identifier.Replace('_', ' '))
             .Where(w => w.Length > 0)
             .ToList();
 

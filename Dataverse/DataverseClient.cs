@@ -173,19 +173,24 @@ public sealed partial class DataverseClient : IDisposable
     {
         // The batch itself succeeds (200) even when the GET inside it was throttled, so the retry
         // handler never sees the 429; a throttled inner request is retried here instead.
-        for (var attempt = 1; ; attempt++)
+        for (var attempt = 1; attempt < Core.RetryHandler.DefaultMaxAttempts; attempt++)
         {
             try
             {
                 return await SendBatchedGetAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
             }
-            catch (DataverseException ex) when (attempt < Core.RetryHandler.DefaultMaxAttempts &&
-                                                 ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
+            catch (DataverseException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
             {
                 await Task.Delay(Core.RetryHandler.Backoff(attempt), ct).ConfigureAwait(false);
             }
         }
+
+        // The last attempt's failure, throttled or not, is the caller's.
+        return await SendBatchedGetAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
     }
+
+    [GeneratedRegex(@"HTTP/1\.\d\s+(?<code>\d{3})")]
+    private static partial Regex BatchStatusLineRegex();
 
     private async Task<JsonDocument> SendBatchedGetAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize)
     {
@@ -221,7 +226,7 @@ public sealed partial class DataverseClient : IDisposable
         }
 
         // The batch part carries its own HTTP status line ahead of the JSON payload.
-        var innerStatus = Regex.Match(payload, @"HTTP/1\.\d\s+(?<code>\d{3})");
+        var innerStatus = BatchStatusLineRegex().Match(payload);
         var json = ExtractJsonObject(payload);
 
         if (innerStatus.Success && !innerStatus.Groups["code"].Value.StartsWith('2'))
@@ -381,7 +386,7 @@ public sealed partial class DataverseClient : IDisposable
                         if (string.IsNullOrWhiteSpace(logicalName)) continue;
 
                         Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
-                        map[logicalName!] = new TableMetadata(id, JsonHelper.GetString(row, "EntitySetName"));
+                        map[logicalName] = new TableMetadata(id, JsonHelper.GetString(row, "EntitySetName"));
                     }
                 }
 
@@ -652,10 +657,6 @@ public sealed partial class DataverseClient : IDisposable
                 await ApplyConnectionReferenceStatesAsync(parallel, ct).ConfigureAwait(false);
                 return parallel;
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
             catch (DataverseException)
             {
                 // Partitioned read failed mid-flight - fall back to the single serial query.
@@ -668,7 +669,11 @@ public sealed partial class DataverseClient : IDisposable
         items.IsTruncated = await ReadAllPagesAsync(
             BuildComponentsUrl(solutionId, null),
             items,
-            added => progress?.Report(total += added),
+            added =>
+            {
+                total += added;
+                progress?.Report(total);
+            },
             ct).ConfigureAwait(false);
 
         await ApplyProcessCategoriesAsync(items, ct).ConfigureAwait(false);
@@ -730,7 +735,7 @@ public sealed partial class DataverseClient : IDisposable
                                 label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
                             }
 
-                            if (!string.IsNullOrWhiteSpace(label)) categories[id] = label!;
+                            if (!string.IsNullOrWhiteSpace(label)) categories[id] = label;
                         }
                     }
 
@@ -795,10 +800,6 @@ public sealed partial class DataverseClient : IDisposable
             var url = BuildComponentsUrl(solutionId, (0, 1)) + "&$top=1";
             using var _ = await GetJsonAsync(url, ct).ConfigureAwait(false);
             return true;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (DataverseException)
         {

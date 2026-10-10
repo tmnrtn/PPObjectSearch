@@ -59,10 +59,13 @@ public sealed class ReferenceEntityViewModel : ObservableObject
     }
 
     /// <summary>Drives the colour of <see cref="ResultLabel"/>: "Differences", "Match", "Off" or "None".</summary>
-    public string Result => !IsEnabled ? "Off"
-        : DifferenceCount is null ? "None"
-        : DifferenceCount == 0 ? "Match"
-        : "Differences";
+    public string Result => (IsEnabled, DifferenceCount) switch
+    {
+        (false, _) => "Off",
+        (_, null) => "None",
+        (_, 0) => "Match",
+        _ => "Differences"
+    };
 
     /// <summary>"8 diff", "Match" or "Off", at the right of the table list.</summary>
     public string ResultLabel => Result switch
@@ -148,7 +151,6 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
     /// <summary>Whether the target may be written to, re-asked whenever the target changes.</summary>
     private WritePermission? _permission;
-    private DataverseClient? _permissionFrom;
 
     public ReferenceDataCompareViewModel(IEnumerable<EnvironmentSessionViewModel> sessions, AppSettings settings)
     {
@@ -276,7 +278,6 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             _targetEntities = null;
             _targetEntitiesFrom = null;
             _permission = null;
-            _permissionFrom = null;
 
             OnPropertyChanged(nameof(TargetHeader));
             OnPropertyChanged(nameof(WriteStatus));
@@ -544,9 +545,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         if (Source?.Client is not { } sourceClient || Target?.Client is not { } targetClient) return;
 
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var superseded = _cts;
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
+        if (superseded is not null) await superseded.CancelAsync();
 
         IsBusy = true;
         _all.Clear();
@@ -635,6 +637,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             IsBusy = false;
             ExportCommand.RaiseCanExecuteChanged();
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
         }
     }
 
@@ -835,10 +839,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     private async Task<WritePermission> EnsurePermissionAsync(DataverseClient targetClient)
     {
         var environmentId = _settings.GetEnvironmentId(targetClient.EnvironmentUrl);
-        var type = await targetClient.GetEnvironmentTypeAsync(environmentId);
+        var type = await targetClient.GetEnvironmentTypeAsync(environmentId, CancellationToken.None);
 
         _permission = WriteGuard.Evaluate(_settings, targetClient.EnvironmentUrl, type);
-        _permissionFrom = targetClient;
 
         return _permission;
     }
@@ -851,7 +854,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             return _targetEntities;
         }
 
-        var entities = await targetClient.GetEntitiesAsync();
+        var entities = await targetClient.GetEntitiesAsync(CancellationToken.None);
 
         _targetEntities = entities.ToDictionary(e => e.LogicalName, StringComparer.OrdinalIgnoreCase);
         _targetEntitiesFrom = targetClient;
@@ -1019,7 +1022,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 IsBusy = true;
                 Status = $"Reading the table list from {SourceHeader}...";
 
-                _sourceEntities = await client.GetEntitiesAsync();
+                _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;
             }
         }
@@ -1038,7 +1041,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         var window = new Views.EntityPickerWindow { DataContext = picker, Owner = OwnerWindow() };
         if (window.ShowDialog() != true) return;
 
-        foreach (var entity in picker.SelectedEntities)
+        var chosen = picker.SelectedEntities();
+        foreach (var entity in chosen)
         {
             Add(new ReferenceEntityViewModel(
                 new ReferenceEntityConfig
@@ -1050,7 +1054,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         }
 
         Status = $"{Entities.Count} table(s) configured.";
-        if (picker.SelectedEntities.Any()) IsDirty = true;
+        if (chosen.Count > 0) IsDirty = true;
         RaiseCommandStates();
     }
 
@@ -1071,7 +1075,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         var settings = new ReferenceEntitySettingsViewModel(entity.Config, summary, client);
         var window = new Views.ReferenceEntitySettingsWindow { DataContext = settings, Owner = OwnerWindow() };
 
-        _ = settings.LoadAsync();
+        _ = settings.LoadAsync(CancellationToken.None);
 
         if (window.ShowDialog() != true) return;
 
@@ -1088,7 +1092,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 IsBusy = true;
                 Status = $"Reading the table list from {SourceHeader}...";
 
-                _sourceEntities = await client.GetEntitiesAsync();
+                _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;
             }
 

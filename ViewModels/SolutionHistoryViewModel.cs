@@ -139,12 +139,12 @@ public sealed class SolutionHistoryViewModel : ObservableObject
             var failed = Entries.Count(e => e.Outcome == RunOutcome.Failed);
             var oldest = Entries.Where(e => e.StartTime is not null).Select(e => e.StartTime!.Value).DefaultIfEmpty().Min();
 
+            var recent = Entries.Count >= DataverseClient.MaxSolutionHistory ? " (the most recent)" : string.Empty;
+            var since = oldest == default ? "." : $" back to {oldest:yyyy-MM-dd}.";
+            var failures = failed > 0 ? $" {failed:N0} failed." : string.Empty;
             Status = Entries.Count == 0
                 ? "No solution operations recorded."
-                : $"{Entries.Count:N0} operation(s)" +
-                  (Entries.Count >= DataverseClient.MaxSolutionHistory ? " (the most recent)" : string.Empty) +
-                  (oldest == default ? "." : $" back to {oldest:yyyy-MM-dd}.") +
-                  (failed > 0 ? $" {failed:N0} failed." : string.Empty);
+                : $"{Entries.Count:N0} operation(s){recent}{since}{failures}";
         }
         catch (Exception ex)
         {
@@ -183,15 +183,9 @@ public sealed class SolutionHistoryViewModel : ObservableObject
             _ => true
         };
 
-    private bool MatchesSearch(SolutionHistoryEntry entry)
-    {
-        foreach (var term in SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (!entry.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase)) return false;
-        }
-
-        return true;
-    }
+    private bool MatchesSearch(SolutionHistoryEntry entry) =>
+        SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .All(term => entry.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private void Export()
     {

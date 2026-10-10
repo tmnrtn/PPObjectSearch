@@ -46,25 +46,27 @@ public sealed class RetryHandler : DelegatingHandler
         AutomaticDecompression = DecompressionMethods.All
     });
 
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         // A request can only be sent once, so a retried one is a copy. Its body is read up front
         // so every copy can carry it.
-        var body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        var body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        for (var attempt = 1; ; attempt++)
+        var attempt = 0;
+        while (true)
         {
+            attempt++;
             var current = attempt == 1 ? request : Clone(request, body);
             HttpResponseMessage response;
 
             try
             {
                 if (attempt == 1 && body is not null) request.Content = Copy(request.Content!, body);
-                response = await base.SendAsync(current, ct).ConfigureAwait(false);
+                response = await base.SendAsync(current, cancellationToken).ConfigureAwait(false);
             }
-            catch (HttpRequestException) when (attempt < _maxAttempts && IsSafeToRepeat(request.Method) && !ct.IsCancellationRequested)
+            catch (HttpRequestException) when (attempt < _maxAttempts && IsSafeToRepeat(request.Method) && !cancellationToken.IsCancellationRequested)
             {
-                await _delay(Backoff(attempt), ct).ConfigureAwait(false);
+                await _delay(Backoff(attempt), cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -73,7 +75,7 @@ public sealed class RetryHandler : DelegatingHandler
             var wait = RetryAfter(response) ?? Backoff(attempt);
             response.Dispose();
 
-            await _delay(wait > MaxDelay ? MaxDelay : wait, ct).ConfigureAwait(false);
+            await _delay(wait > MaxDelay ? MaxDelay : wait, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -25,8 +25,19 @@ public sealed class ImportLogRow
     public bool IsWarning => Result.Equals("warning", StringComparison.OrdinalIgnoreCase);
     public bool IsProblem => IsFailure || IsWarning;
 
-    public string ResultLabel => IsFailure ? "Failure" : IsWarning ? "Warning" : "Success";
-    public string DurationLabel => Duration is { } d ? d.TotalSeconds < 1 ? "<1 s" : $"{d.TotalSeconds:N0} s" : string.Empty;
+    public string ResultLabel => (IsFailure, IsWarning) switch
+    {
+        (true, _) => "Failure",
+        (_, true) => "Warning",
+        _ => "Success"
+    };
+
+    public string DurationLabel => Duration switch
+    {
+        null => string.Empty,
+        { TotalSeconds: < 1 } => "<1 s",
+        { } d => $"{d.TotalSeconds:N0} s"
+    };
 }
 
 /// <summary>An import log as a whole.</summary>

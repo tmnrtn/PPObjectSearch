@@ -18,7 +18,12 @@ public sealed class ChangeEntry
     public SolutionComponentItem? Item { get; init; }
 
     public bool IsSolutionOperation => Item is null;
-    public string ManagedLabel => IsSolutionOperation ? string.Empty : IsManaged ? "Managed" : "Unmanaged";
+    public string ManagedLabel => (IsSolutionOperation, IsManaged) switch
+    {
+        (true, _) => string.Empty,
+        (_, true) => "Managed",
+        _ => "Unmanaged"
+    };
 }
 
 /// <summary>What changed in an environment and when: component edits and solution operations on one timeline.</summary>
@@ -52,6 +57,13 @@ public static class ChangeTimeline
         {
             if ((operation.StartTime ?? operation.EndTime) is not { } when || when < since) continue;
 
+            var managed = operation.IsManaged switch
+            {
+                true => " · managed",
+                false => " · unmanaged",
+                null => string.Empty
+            };
+
             entries.Add(new ChangeEntry
             {
                 When = when,
@@ -60,7 +72,7 @@ public static class ChangeTimeline
                 Type = operation.OperationLabel,
                 Detail = $"{operation.ResultLabel}" +
                          (operation.Version is { Length: > 0 } v ? $" · version {v}" : string.Empty) +
-                         (operation.IsManaged is { } managed ? managed ? " · managed" : " · unmanaged" : string.Empty) +
+                         managed +
                          (operation.ExceptionMessage is { Length: > 0 } error ? $" · {error}" : string.Empty)
             });
         }

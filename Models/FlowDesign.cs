@@ -79,27 +79,31 @@ public sealed class FlowNode
         or FlowNodeKind.Until or FlowNodeKind.Scope;
 
     /// <summary>"Microsoft Dataverse · List rows", or the type label for a built-in step.</summary>
-    public string Summary => Connector is not null
-        ? Operation is not null ? $"{Connector} · {Operation}" : Connector
-        : TypeLabel;
+    public string Summary => (Connector, Operation) switch
+    {
+        ({ } connector, { } operation) => $"{connector} · {operation}",
+        ({ } connector, null) => connector,
+        _ => TypeLabel
+    };
 }
 
 /// <summary>A labelled set of steps inside a container: "Yes", "No", "Case: 3", "Default".</summary>
 public sealed record FlowBranch(string Label, FlowSequence Steps);
 
 /// <summary>Steps in the order they run.</summary>
-public sealed record FlowSequence(IReadOnlyList<FlowStep> Steps)
+public sealed record FlowSequence(IReadOnlyList<IFlowStep> Steps)
 {
-    public static readonly FlowSequence Empty = new(Array.Empty<FlowStep>());
+    public static readonly FlowSequence Empty = new(Array.Empty<IFlowStep>());
 }
 
-public abstract record FlowStep;
+/// <summary>One step of a sequence: an action, or branches side by side.</summary>
+public interface IFlowStep;
 
 /// <summary>A single trigger or action.</summary>
-public sealed record FlowActionStep(FlowNode Node) : FlowStep;
+public sealed record FlowActionStep(FlowNode Node) : IFlowStep;
 
 /// <summary>Branches that run side by side, after the same step.</summary>
-public sealed record FlowParallelStep(IReadOnlyList<FlowSequence> Branches) : FlowStep;
+public sealed record FlowParallelStep(IReadOnlyList<FlowSequence> Branches) : IFlowStep;
 
 /// <summary>A cloud flow's design, read from its definition.</summary>
 public sealed record FlowDesign(
