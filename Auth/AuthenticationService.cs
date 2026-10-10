@@ -228,10 +228,11 @@ public sealed class EnvironmentAuthContext
     /// MSAL. A null token means none is to be had - silently it reads as "no token", and an
     /// interactive request fails.
     /// </summary>
-    internal EnvironmentAuthContext(Func<string, CancellationToken, Task<string?>> tokenSource)
+    internal EnvironmentAuthContext(Func<string, CancellationToken, Task<string?>> tokenSource, string? tenantId = null)
     {
         _auth = new AuthenticationService();
         _tokenSource = tokenSource;
+        TenantId = tenantId;
     }
 
     /// <summary>

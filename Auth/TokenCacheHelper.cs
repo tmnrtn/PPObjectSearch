@@ -156,7 +156,8 @@ internal static class TokenCacheHelper
 
 internal static class AppPaths
 {
-    public static string DataDirectory { get; } = Path.Combine(
+    /// <summary>Where the app keeps its files. Settable so tests can keep them out of the real profile.</summary>
+    public static string DataDirectory { get; internal set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PPObjectSearch");
 }
