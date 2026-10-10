@@ -153,6 +153,8 @@ public class DataverseClientTableChildrenTests
 
     // ---- Relationships and keys ----
 
+    private static readonly string[] OneToManyThenManyToOneThenManyToMany = ["account_contacts", "account_owner", "account_lead", "account_self"];
+
     [Fact]
     public async Task Relationships_are_described_from_this_tables_point_of_view()
     {
@@ -172,7 +174,7 @@ public class DataverseClientTableChildrenTests
 
         var relationships = await client.GetTableRelationshipsAsync(Account);
 
-        Assert.Equal(new[] { "account_contacts", "account_owner", "account_lead", "account_self" }, relationships.Select(r => r.Name));
+        Assert.Equal(OneToManyThenManyToOneThenManyToMany, relationships.Select(r => r.Name));
         Assert.All(relationships, r => Assert.Equal(TableChildKind.Relationship, r.Kind));
         Assert.Equal("1:N  contact", relationships[0].Detail);
         Assert.True(relationships[0].IsManaged);
@@ -331,6 +333,8 @@ public class DataverseClientTableChildrenTests
         Assert.Single(handler.Requests);
     }
 
+    private static readonly string[] FormMergedWithFormattedValues = ["name=Main", "type=Main  (2)", "ownerid=Tom  (o-1)", "isdefault=True"];
+
     [Fact]
     public async Task Record_child_properties_merge_formatted_values()
     {
@@ -341,14 +345,15 @@ public class DataverseClientTableChildrenTests
 
         var properties = await client.GetChildPropertiesAsync(Child("systemforms(x)"));
 
-        Assert.Equal(new[] { "name=Main", "type=Main  (2)", "ownerid=Tom  (o-1)", "isdefault=True" },
-            properties.Select(p => $"{p.Name}={p.Value}"));
+        Assert.Equal(FormMergedWithFormattedValues, properties.Select(p => $"{p.Name}={p.Value}"));
     }
 
     // ---- RecordProperties.Flatten ----
 
-    private static IReadOnlyList<string> Flatten(string json) =>
+    private static List<string> Flatten(string json) =>
         RecordProperties.Flatten(JsonDocument.Parse(json).RootElement).Select(p => $"{p.Name}={p.Value}").ToList();
+
+    private static readonly string[] CollapsedLabelAndManagedProperty = ["DisplayName=Account", "IsAuditEnabled=True"];
 
     [Fact]
     public void Flatten_collapses_labels_and_managed_properties()
@@ -357,8 +362,15 @@ public class DataverseClientTableChildrenTests
             $"{{\"DisplayName\":{Label("Account")},\"Description\":{{\"UserLocalizedLabel\":null,\"LocalizedLabels\":[]}}," +
             "\"IsAuditEnabled\":{\"Value\":true,\"CanBeChanged\":true,\"ManagedPropertyLogicalName\":\"canmodifyauditsettings\"}}");
 
-        Assert.Equal(new[] { "DisplayName=Account", "IsAuditEnabled=True" }, rows);
+        Assert.Equal(CollapsedLabelAndManagedProperty, rows);
     }
+
+    private static readonly string[] NumberedOptionLines =
+    [
+        "OptionSet.Name=statuscode",
+        "OptionSet.Option 1=Active  (1)  state 0  #0000ff",
+        "OptionSet.Option 2=(unlabelled)  (2)  default status 2  - Gone"
+    ];
 
     [Fact]
     public void Flatten_reads_options_as_numbered_single_lines()
@@ -368,19 +380,16 @@ public class DataverseClientTableChildrenTests
             $"{{\"Value\":1,\"Label\":{Label("Active")},\"State\":0,\"Color\":\"#0000ff\"}}," +
             $"{{\"Value\":2,\"Label\":{{\"UserLocalizedLabel\":null,\"LocalizedLabels\":[]}},\"DefaultStatus\":2,\"Description\":{Label("Gone")}}}]}}}}");
 
-        Assert.Equal(new[]
-        {
-            "OptionSet.Name=statuscode",
-            "OptionSet.Option 1=Active  (1)  state 0  #0000ff",
-            "OptionSet.Option 2=(unlabelled)  (2)  default status 2  - Gone"
-        }, rows);
+        Assert.Equal(NumberedOptionLines, rows);
     }
+
+    private static readonly string[] JoinedAndIndexed = ["KeyAttributes=a, b", "Address[0].x=1", "Address[1].x=2"];
 
     [Fact]
     public void Flatten_joins_scalar_arrays_and_indexes_non_plural_paths()
     {
         var rows = Flatten("{\"KeyAttributes\":[\"a\",\"b\"],\"Address\":[{\"x\":1},{\"x\":2}],\"Empty\":[],\"Nothing\":null}");
 
-        Assert.Equal(new[] { "KeyAttributes=a, b", "Address[0].x=1", "Address[1].x=2" }, rows);
+        Assert.Equal(JoinedAndIndexed, rows);
     }
 }

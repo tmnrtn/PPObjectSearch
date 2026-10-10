@@ -6,6 +6,9 @@ namespace PPObjectSearch.Tests.ReferenceData;
 
 public class ReferenceDataConfigTests
 {
+    private static readonly string[] FullKeyColumns = ["new_code"];
+    private static readonly string[] FullExcludedColumns = ["createdon"];
+
     private static ReferenceEntityConfig FullEntity() => new()
     {
         LogicalName = "new_thing",
@@ -38,9 +41,9 @@ public class ReferenceDataConfigTests
         Assert.Equal("Thing", clone.DisplayName);
         Assert.Equal(RecordKeySource.Columns, clone.KeySource);
         Assert.Equal("new_key", clone.AlternateKeyName);
-        Assert.Equal(new[] { "new_code" }, clone.KeyColumns);
+        Assert.Equal(FullKeyColumns, clone.KeyColumns);
         Assert.Equal("statecode eq 0", clone.Filter);
-        Assert.Equal(new[] { "createdon" }, clone.ExcludedColumns);
+        Assert.Equal(FullExcludedColumns, clone.ExcludedColumns);
         Assert.False(clone.IsEnabled);
     }
 
@@ -58,8 +61,8 @@ public class ReferenceDataConfigTests
         clone.LogicalName = "changed";
         clone.IsEnabled = true;
 
-        Assert.Equal(new[] { "new_code" }, original.KeyColumns);
-        Assert.Equal(new[] { "createdon" }, original.ExcludedColumns);
+        Assert.Equal(FullKeyColumns, original.KeyColumns);
+        Assert.Equal(FullExcludedColumns, original.ExcludedColumns);
         Assert.Equal("new_thing", original.LogicalName);
         Assert.False(original.IsEnabled);
     }
@@ -122,7 +125,7 @@ public class ReferenceDataConfigTests
         Assert.Equal("Currencies", original.Name);
         Assert.Single(original.Entities);
         Assert.Equal("statecode eq 0", original.Entities[0].Filter);
-        Assert.Equal(new[] { "new_code" }, original.Entities[0].KeyColumns);
+        Assert.Equal(FullKeyColumns, original.Entities[0].KeyColumns);
         Assert.Equal(250, original.MaxRowsPerEntity);
     }
 
@@ -156,6 +159,8 @@ public class ReferenceDataConfigTests
         Assert.False(SystemColumns.IsNoise(name));
     }
 
+    private static readonly string[] PrimaryIdAndHousekeeping = ["new_thingid", "createdon", "ModifiedBy"];
+
     [Fact]
     public void Default_exclusions_are_the_primary_id_and_housekeeping_columns()
     {
@@ -169,7 +174,7 @@ public class ReferenceDataConfigTests
             Col("statecode", "StateType")
         };
 
-        Assert.Equal(new[] { "new_thingid", "createdon", "ModifiedBy" }, SystemColumns.DefaultExclusions(columns));
+        Assert.Equal(PrimaryIdAndHousekeeping, SystemColumns.DefaultExclusions(columns));
     }
 
     [Fact]

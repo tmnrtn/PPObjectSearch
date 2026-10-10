@@ -64,6 +64,8 @@ public class CompareViewModelTests
         Assert.Equal(expected, vm.MatchDescription);
     }
 
+    private static readonly string[] OnBothSides = ["Notify", "account"];
+
     [Fact]
     public void The_status_filter_shows_one_side_or_both()
     {
@@ -77,7 +79,7 @@ public class CompareViewModelTests
         Assert.Equal(["new_b.js"], Shown(vm));
 
         vm.StatusFilter = CompareStatusFilter.Both;
-        Assert.Equal(new[] { "Notify", "account" }.Order(StringComparer.Ordinal), Shown(vm).Order(StringComparer.Ordinal));
+        Assert.Equal(OnBothSides.Order(StringComparer.Ordinal), Shown(vm).Order(StringComparer.Ordinal));
 
         vm.StatusFilter = CompareStatusFilter.All;
         Assert.Equal(4, vm.RowsView.Count);

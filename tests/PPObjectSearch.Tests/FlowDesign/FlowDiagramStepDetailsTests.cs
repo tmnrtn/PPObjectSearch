@@ -140,6 +140,8 @@ public class FlowDiagramStepDetailsTests
         Assert.Equal(1, changes.Count(c => c == nameof(FlowCardViewModel.DetailTooltip)));
     }
 
+    private static readonly string[] OneStepOfEachKind = ["Route", "Call api", "Run child", "Stop", "Pause", "Odd one"];
+
     [Fact]
     public void Every_kind_of_control_and_built_in_step_has_its_own_icon()
     {
@@ -154,7 +156,7 @@ public class FlowDiagramStepDetailsTests
             } }
             """);
 
-        var glyphs = new[] { "Route", "Call api", "Run child", "Stop", "Pause", "Odd one" }.Select(t => Card(d, t).Glyph).ToList();
+        var glyphs = OneStepOfEachKind.Select(t => Card(d, t).Glyph).ToList();
 
         Assert.Equal(glyphs.Count, glyphs.Distinct().Count());
         Assert.Equal(FlowNodeKind.Switch, Card(d, "Route").Kind);

@@ -10,7 +10,7 @@ using static PPObjectSearch.Tests.ViewModels.DetailsHarness;
 namespace PPObjectSearch.Tests.ViewModels;
 
 /// <summary>A table in the details window: what it owns, each child's properties, and its row count.</summary>
-public class ObjectDetailsTableTests
+public partial class ObjectDetailsTableTests
 {
     private static readonly Guid NameColumn = Guid.Parse("c0000000-0000-0000-0000-000000000001");
     private static readonly Guid NumberColumn = Guid.Parse("c0000000-0000-0000-0000-000000000002");
@@ -66,11 +66,15 @@ public class ObjectDetailsTableTests
         return json.Append("]}").ToString();
     }
 
+    /// <summary>The page number a FetchXML page probe asks for.</summary>
+    [GeneratedRegex(@"page='(\d+)'")]
+    private static partial Regex PageNumber();
+
     /// <summary>Answers page probes as a table of exactly fifty thousand rows would.</summary>
     private static void FiftyThousandRows(FakeHttpHandler handler) =>
         handler.On(HttpMethod.Get, "<fetch page=", request =>
         {
-            var page = int.Parse(Regex.Match(request.Url, "page='(\\d+)'").Groups[1].Value);
+            var page = int.Parse(PageNumber().Match(request.Url).Groups[1].Value);
             return FakeHttpHandler.Json(Page(page, page <= 10 ? 5000 : 0));
         });
 

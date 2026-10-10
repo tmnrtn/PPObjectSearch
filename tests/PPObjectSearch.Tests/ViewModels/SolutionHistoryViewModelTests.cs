@@ -15,14 +15,17 @@ public class SolutionHistoryViewModelTests
     private const string Formatted = "@OData.Community.Display.V1.FormattedValue";
     private const string Route = "msdyn_solutionhistories?";
 
-    private static Dictionary<string, object?> Row(string name, int operation, string operationLabel, int status, bool? result,
+    /// <summary>An operation's stored value and the label Dataverse formats it as.</summary>
+    private readonly record struct Operation(int Code, string Label);
+
+    private static Dictionary<string, object?> Row(string name, Operation operation, int status, bool? result,
         string? start, string? errorCode = null, string? end = null) => new()
     {
         ["msdyn_solutionhistoryid"] = Guid.NewGuid(),
         ["msdyn_name"] = name,
         ["msdyn_solutionversion"] = "1.0.0.0",
-        ["msdyn_operation"] = operation,
-        ["msdyn_operation" + Formatted] = operationLabel,
+        ["msdyn_operation"] = operation.Code,
+        ["msdyn_operation" + Formatted] = operation.Label,
         ["msdyn_ismanaged"] = true,
         ["msdyn_publishername"] = "Contoso",
         ["msdyn_starttime"] = start,
@@ -37,11 +40,11 @@ public class SolutionHistoryViewModelTests
 
     private static string History() => Page(
     [
-        Row("Contoso Core", 0, "Import", 1, true, "2026-03-01T12:00:00Z"),
-        Row("Contoso Portal", 0, "Import", 1, false, "2026-02-01T12:00:00Z", errorCode: "0x80048033"),
-        Row("Contoso Legacy", 1, "Uninstall", 1, true, "2026-01-15T12:00:00Z", end: "2026-01-15T12:01:00Z"),
-        Row("Contoso Core", 2, "Export", 1, true, "2026-01-10T12:00:00Z"),
-        Row("Contoso Core", 3, "Publish", 0, null, null)
+        Row("Contoso Core", new(0, "Import"), 1, true, "2026-03-01T12:00:00Z"),
+        Row("Contoso Portal", new(0, "Import"), 1, false, "2026-02-01T12:00:00Z", errorCode: "0x80048033"),
+        Row("Contoso Legacy", new(1, "Uninstall"), 1, true, "2026-01-15T12:00:00Z", end: "2026-01-15T12:01:00Z"),
+        Row("Contoso Core", new(2, "Export"), 1, true, "2026-01-10T12:00:00Z"),
+        Row("Contoso Core", new(3, "Publish"), 0, null, null)
     ]);
 
     private static SolutionHistoryViewModel History(FakeHttpHandler handler) =>
@@ -117,7 +120,7 @@ public class SolutionHistoryViewModelTests
     [Fact]
     public async Task An_asynchronous_export_counts_as_an_export()
     {
-        var history = await Loaded(Page([Row("Contoso Core", 10, "Export (async)", 1, true, "2026-03-01T12:00:00Z")]));
+        var history = await Loaded(Page([Row("Contoso Core", new(10, "Export (async)"), 1, true, "2026-03-01T12:00:00Z")]));
 
         history.StatusFilter = SolutionHistoryFilter.Exports;
 
@@ -155,7 +158,7 @@ public class SolutionHistoryViewModelTests
     public async Task A_full_page_is_marked_as_the_most_recent_and_undated_rows_give_no_date()
     {
         var rows = Enumerable.Range(0, DataverseClient.MaxSolutionHistory)
-            .Select(i => Row($"Solution {i}", 2, "Export", 1, true, start: null));
+            .Select(i => Row($"Solution {i}", new(2, "Export"), 1, true, start: null));
 
         var history = await Loaded(Page(rows));
 

@@ -157,6 +157,8 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
     // ---------------------------------------------------------------- opening
 
+    private static readonly string[] ConnectedTitles = ["dev", "test"];
+
     [Fact]
     public void Only_connected_environments_are_offered_and_the_first_saved_configuration_is_loaded()
     {
@@ -167,7 +169,7 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
         var vm = new ReferenceDataCompareViewModel(sessions, Settings(config, Config("Second")));
 
-        Assert.Equal(new[] { "dev", "test" }, vm.Sessions.Select(s => s.Title));
+        Assert.Equal(ConnectedTitles, vm.Sessions.Select(s => s.Title));
         Assert.Equal("dev", vm.SourceHeader);
         Assert.Equal("test", vm.TargetHeader);
         Assert.Equal(2, vm.Configurations.Count);
@@ -563,6 +565,8 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
     // ---------------------------------------------------------------- configurations
 
+    private static readonly string[] LastComparedColumns = ["new_code", "new_name", "new_parentid"];
+
     [Fact]
     public async Task Saving_keeps_the_tables_and_the_columns_the_last_comparison_used()
     {
@@ -577,7 +581,7 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         var saved = Assert.Single(vm.Configurations);
         Assert.Same(saved, vm.SelectedConfiguration);
         Assert.Equal(300, saved.MaxRowsPerEntity);
-        Assert.Equal(new[] { "new_code", "new_name", "new_parentid" }, saved.Entities![0].ComparedColumns!.OrderBy(c => c));
+        Assert.Equal(LastComparedColumns, saved.Entities![0].ComparedColumns!.OrderBy(c => c));
         Assert.False(vm.IsDirty);
         Assert.Equal("Saved configuration 'Lookups'.", vm.Status);
 
@@ -586,6 +590,8 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         Assert.NotSame(saved, persisted);
     }
 
+    private static readonly string[] ChosenColumns = ["new_code"];
+
     [Fact]
     public void Columns_already_chosen_are_saved_as_they_are()
     {
@@ -593,8 +599,11 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
         vm.SaveConfigurationCommand.Execute(null);
 
-        Assert.Equal(new[] { "new_code" }, vm.Configurations[0].Entities![0].ComparedColumns);
+        Assert.Equal(ChosenColumns, vm.Configurations[0].Entities![0].ComparedColumns);
     }
+
+    private static readonly string[] AskedOnce = ["Save configuration"];
+    private static readonly string[] ExistingThenFresh = ["Lookups", "Fresh"];
 
     [Fact]
     public void A_configuration_without_a_name_is_asked_for_one_first()
@@ -610,13 +619,13 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         vm.AskName = (_, _, _) => "   ";
         vm.SaveConfigurationCommand.Execute(null);
 
-        Assert.Equal(new[] { "Save configuration" }, asked);
+        Assert.Equal(AskedOnce, asked);
         Assert.Single(vm.Configurations);
 
         vm.AskName = (_, _, _) => "Fresh";
         vm.SaveConfigurationCommand.Execute(null);
 
-        Assert.Equal(new[] { "Lookups", "Fresh" }, vm.Configurations.Select(c => c.Name));
+        Assert.Equal(ExistingThenFresh, vm.Configurations.Select(c => c.Name));
         Assert.Equal("Fresh", vm.ConfigurationName);
         Assert.Equal(2, settings.ReferenceDataConfigurations!.Count);
     }
@@ -652,6 +661,8 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         Assert.False(vm.IsDirty);
     }
 
+    private static readonly string[] RenamedInPlace = ["Renamed", "Other"];
+
     [Fact]
     public void Renaming_replaces_the_configuration_under_its_new_name()
     {
@@ -663,12 +674,14 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         vm.RenameConfigurationCommand.Execute(null);
 
         Assert.Equal("Lookups", offered);
-        Assert.Equal(new[] { "Renamed", "Other" }, vm.Configurations.Select(c => c.Name));
+        Assert.Equal(RenamedInPlace, vm.Configurations.Select(c => c.Name));
         Assert.Same(vm.Configurations[0], vm.SelectedConfiguration);
         Assert.Equal("Renamed", vm.ConfigurationName);
         Assert.Equal("Renamed the configuration to 'Renamed'.", vm.Status);
         Assert.Equal("Renamed", settings.ReferenceDataConfigurations![0].Name);
     }
+
+    private static readonly string[] NamesUnchanged = ["Lookups", "Other"];
 
     [Fact]
     public void Renaming_to_a_name_already_taken_or_unchanged_changes_nothing()
@@ -687,7 +700,7 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         vm.RenameConfigurationCommand.Execute(null);
 
         Assert.Same(selected, vm.SelectedConfiguration);
-        Assert.Equal(new[] { "Lookups", "Other" }, vm.Configurations.Select(c => c.Name));
+        Assert.Equal(NamesUnchanged, vm.Configurations.Select(c => c.Name));
 
         vm.NewConfigurationCommand.Execute(null);
         vm.AskName = (_, _, _) => throw new InvalidOperationException("Nothing is selected to rename.");

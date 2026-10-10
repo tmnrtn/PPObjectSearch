@@ -82,12 +82,15 @@ public class RunHistoryModelsTests
         Assert.StartsWith("Neither a current value nor a default", nothing.EffectiveSource);
     }
 
+    /// <summary>When a history entry ran: its total seconds, its start and end, or any of them.</summary>
+    private readonly record struct Timing(int? Seconds = null, DateTimeOffset? Start = null, DateTimeOffset? End = null);
+
     private static SolutionHistoryEntry History(int? status = 1, bool? succeeded = true, string? sub = null, bool? managed = null,
-        int? seconds = null, DateTimeOffset? start = null, DateTimeOffset? end = null, string? error = null, string? exception = null) => new()
+        Timing timing = default, string? error = null, string? exception = null) => new()
     {
         Id = Guid.NewGuid(), SolutionName = "Core", Version = "1.0", Operation = "Import", SubOperation = sub, StatusCode = status,
-        Succeeded = succeeded, IsManaged = managed, TotalSeconds = seconds, StartTime = start, EndTime = end, ErrorCode = error,
-        ExceptionMessage = exception, PublisherName = "Contoso"
+        Succeeded = succeeded, IsManaged = managed, TotalSeconds = timing.Seconds, StartTime = timing.Start, EndTime = timing.End,
+        ErrorCode = error, ExceptionMessage = exception, PublisherName = "Contoso"
     };
 
     [Theory]
@@ -128,9 +131,9 @@ public class RunHistoryModelsTests
     {
         var start = new DateTimeOffset(2024, 1, 1, 10, 0, 0, TimeSpan.Zero);
 
-        Assert.Equal("1:00:00", History(seconds: 3600).DurationLabel);
-        Assert.Equal("0:02:00", History(start: start, end: start.AddMinutes(2)).DurationLabel);
-        Assert.Equal(string.Empty, History(start: start).DurationLabel);
+        Assert.Equal("1:00:00", History(timing: new(Seconds: 3600)).DurationLabel);
+        Assert.Equal("0:02:00", History(timing: new(Start: start, End: start.AddMinutes(2))).DurationLabel);
+        Assert.Equal(string.Empty, History(timing: new(Start: start)).DurationLabel);
     }
 
     [Fact]

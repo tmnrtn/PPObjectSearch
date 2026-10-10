@@ -11,6 +11,8 @@ public class DataverseClientReferenceDataTests
 {
     private static readonly EntitySummary Thing = new("new_thing", "Thing", "new_things", "new_thingid", "new_name", false, false);
 
+    private static readonly string[] NameColumn = ["new_name"];
+
     [Fact]
     public async Task Rows_keep_their_annotations_beside_their_values()
     {
@@ -35,7 +37,7 @@ public class DataverseClientReferenceDataTests
             }]}
             """);
 
-        var rows = await Fakes.Dataverse(handler).GetRecordsAsync(Thing, new[] { "new_name" }, null, 10);
+        var rows = await Fakes.Dataverse(handler).GetRecordsAsync(Thing, NameColumn, null, 10);
 
         var row = Assert.Single(rows);
         Assert.Equal(id, row.Id);
@@ -57,17 +59,21 @@ public class DataverseClientReferenceDataTests
         Assert.DoesNotContain("$filter", url);
     }
 
+    private static readonly string[] PrimaryIdTwiceInDifferentCase = ["new_thingid", "NEW_THINGID"];
+
     [Fact]
     public async Task A_filter_is_sent_with_only_its_unsafe_characters_escaped()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "new_things?", """{"value":[]}""");
 
-        await Fakes.Dataverse(handler).GetRecordsAsync(Thing, new[] { "new_thingid", "NEW_THINGID" }, "  contains(new_name,'50% & #1+') ", 10);
+        await Fakes.Dataverse(handler).GetRecordsAsync(Thing, PrimaryIdTwiceInDifferentCase, "  contains(new_name,'50% & #1+') ", 10);
 
         var raw = handler.Requests[0].Uri.OriginalString;
         Assert.Contains("$select=new_thingid&", raw);
         Assert.EndsWith("&$filter=contains(new_name,'50%25 %26 %231%2B')", raw);
     }
+
+    private static readonly int[] RowsReadAfterEachPage = [1, 2];
 
     [Fact]
     public async Task Paging_stops_at_the_row_cap_and_reports_progress_per_page()
@@ -83,9 +89,11 @@ public class DataverseClientReferenceDataTests
         Assert.Equal(2, rows.Count);
         Assert.All(rows, r => Assert.Equal(Guid.Empty, r.Id));
         Assert.All(rows, r => Assert.Null(r.PrimaryName));
-        Assert.Equal(new[] { 1, 2 }, progress);
+        Assert.Equal(RowsReadAfterEachPage, progress);
         Assert.Equal(2, handler.Requests.Count);
     }
+
+    private static readonly string[] ReadableTablesSorted = ["account", "zeta"];
 
     [Fact]
     public async Task Tables_without_a_row_endpoint_or_that_are_private_are_left_out_and_the_rest_sorted()
@@ -105,13 +113,15 @@ public class DataverseClientReferenceDataTests
 
         var entities = await Fakes.Dataverse(handler).GetEntitiesAsync();
 
-        Assert.Equal(new[] { "account", "zeta" }, entities.Select(e => e.LogicalName));
+        Assert.Equal(ReadableTablesSorted, entities.Select(e => e.LogicalName));
         var account = entities[0];
         Assert.Equal("accountid", account.PrimaryIdAttribute);
         Assert.Null(account.PrimaryNameAttribute);
         Assert.True(account.IsManaged);
         Assert.True(entities[1].IsActivity);
     }
+
+    private static readonly string[] ComparableColumns = ["new_amount", "new_name"];
 
     [Fact]
     public async Task Columns_that_restate_another_or_hold_no_comparable_value_are_dropped()
@@ -130,12 +140,14 @@ public class DataverseClientReferenceDataTests
 
         var columns = await Fakes.Dataverse(handler).GetEntityColumnsAsync("New_Thing");
 
-        Assert.Equal(new[] { "new_amount", "new_name" }, columns.Select(c => c.LogicalName));
+        Assert.Equal(ComparableColumns, columns.Select(c => c.LogicalName));
         Assert.True(columns[0].IsValidForCreate);
         Assert.False(columns[1].IsValidForCreate);
         Assert.False(columns[1].IsValidForUpdate);
         Assert.Contains("EntityDefinitions(LogicalName='new_thing')", handler.Requests[0].Url);
     }
+
+    private static readonly string[] NonEmptyKeyColumns = ["new_code"];
 
     [Fact]
     public async Task Keys_without_columns_are_skipped_and_a_schema_name_stands_in_for_a_missing_logical_name()
@@ -153,7 +165,7 @@ public class DataverseClientReferenceDataTests
 
         var key = Assert.Single(keys);
         Assert.Equal("new_CodeKey", key.LogicalName);
-        Assert.Equal(new[] { "new_code" }, key.KeyAttributes);
+        Assert.Equal(NonEmptyKeyColumns, key.KeyAttributes);
     }
 
     [Fact]

@@ -119,19 +119,24 @@ public class DefinitionDiffTests
         Assert.Contains(changes, c => c.PropertyName == "name" && c.Kind == DefinitionChangeKind.Added);
     }
 
+    private static readonly string[] SortedIgnoringCase = ["a", "b", "C"];
+
     [Fact]
     public void Compare_sorts_changes_by_property_name_ignoring_case()
     {
         var changes = DefinitionDiff.Compare("{}", "{\"b\":1,\"C\":1,\"a\":1}")!;
 
-        Assert.Equal(new[] { "a", "b", "C" }, changes.Select(c => c.PropertyName));
+        Assert.Equal(SortedIgnoringCase, changes.Select(c => c.PropertyName));
     }
+
+    private static readonly string[] Prioritized = ["c", "D"];
+    private static readonly string[] PrioritizedThenSorted = ["C", "d", "a", "b"];
 
     [Fact]
     public void Compare_puts_prioritized_properties_first_matching_case_insensitively()
     {
-        var changes = DefinitionDiff.Compare("{}", "{\"b\":1,\"C\":1,\"a\":1,\"d\":1}", new[] { "c", "D" })!;
+        var changes = DefinitionDiff.Compare("{}", "{\"b\":1,\"C\":1,\"a\":1,\"d\":1}", Prioritized)!;
 
-        Assert.Equal(new[] { "C", "d", "a", "b" }, changes.Select(c => c.PropertyName));
+        Assert.Equal(PrioritizedThenSorted, changes.Select(c => c.PropertyName));
     }
 }

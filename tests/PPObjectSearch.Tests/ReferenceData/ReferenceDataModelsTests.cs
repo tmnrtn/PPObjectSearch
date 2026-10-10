@@ -106,13 +106,16 @@ public class ReferenceDataModelsTests
         Assert.False(createOnly.IsWritable(isCreate: false));
     }
 
+    private static readonly string[] PairKeyColumns = ["new_code", "new_region"];
+    private static readonly string[] CodeKeyColumns = ["new_code"];
+
     [Fact]
     public void AlternateKeyInfo_label_lists_its_columns()
     {
         Assert.Equal("Code key (new_code, new_region)",
-            new AlternateKeyInfo("new_codekey", "Code key", new[] { "new_code", "new_region" }).Label);
+            new AlternateKeyInfo("new_codekey", "Code key", PairKeyColumns).Label);
         Assert.Equal("new_codekey (new_code)",
-            new AlternateKeyInfo("new_codekey", null, new[] { "new_code" }).Label);
+            new AlternateKeyInfo("new_codekey", null, CodeKeyColumns).Label);
         Assert.Equal("Code key",
             new AlternateKeyInfo("new_codekey", "Code key", Array.Empty<string>()).Label);
     }
@@ -168,6 +171,8 @@ public class ReferenceDataModelsTests
         Assert.Equal("abc label", record.Label("new_code"));
     }
 
+    private static readonly string[] EachColumnOnce = ["new_code", "_new_parentid_value", "new_amount"];
+
     [Fact]
     public void Compare_plan_selects_key_and_value_columns_once_each()
     {
@@ -176,7 +181,7 @@ public class ReferenceDataModelsTests
             keys: new[] { code },
             values: new[] { Col("NEW_CODE"), Lookup("new_parentid"), Col("new_amount", "MoneyType") });
 
-        Assert.Equal(new[] { "new_code", "_new_parentid_value", "new_amount" }, plan.SelectNames.ToArray());
+        Assert.Equal(EachColumnOnce, plan.SelectNames.ToArray());
         Assert.Equal("Thing (new_thing)", plan.EntityLabel);
     }
 }

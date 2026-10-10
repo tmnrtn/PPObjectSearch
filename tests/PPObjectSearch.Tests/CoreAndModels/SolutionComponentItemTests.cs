@@ -85,6 +85,8 @@ public class SolutionComponentItemTests
         Assert.Equal(expected, item.UnmanagedLayerLabel);
     }
 
+    private static readonly string[] UnmanagedLayerProperties = ["HasUnmanagedLayer", "UnmanagedLayerLabel"];
+
     [Fact]
     public void Setting_HasUnmanagedLayer_raises_change_for_it_and_its_label()
     {
@@ -94,7 +96,7 @@ public class SolutionComponentItemTests
 
         item.HasUnmanagedLayer = true;
 
-        Assert.Equal(new[] { "HasUnmanagedLayer", "UnmanagedLayerLabel" }, raised);
+        Assert.Equal(UnmanagedLayerProperties, raised);
     }
 
     [Fact]

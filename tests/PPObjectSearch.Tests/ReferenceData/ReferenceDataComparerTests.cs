@@ -158,6 +158,8 @@ public class ReferenceDataComparerTests
         Assert.Equal(ReconcileAction.Update, item.Action);
     }
 
+    private static readonly string[] ValueThenKeyDifference = ["new_name", "new_code"];
+
     [Fact]
     public void A_key_change_carries_value_differences_too()
     {
@@ -167,7 +169,7 @@ public class ReferenceDataComparerTests
 
         var row = Assert.Single(ReferenceDataComparer.Compare(plan, new[] { source }, new[] { target }).Rows);
 
-        Assert.Equal(new[] { "new_name", "new_code" }, row.Differences.Select(d => d.Column.LogicalName));
+        Assert.Equal(ValueThenKeyDifference, row.Differences.Select(d => d.Column.LogicalName));
     }
 
     [Fact]
@@ -451,6 +453,8 @@ public class ReferenceDataComparerTests
         Assert.Equal(G(99).ToString(), row.TargetId);
     }
 
+    private static readonly string[] JoinedKeys = ["A | EU", "A | US"];
+
     [Fact]
     public void Compare_joins_composite_key_parts()
     {
@@ -461,7 +465,7 @@ public class ReferenceDataComparerTests
             new[] { Row(G(1)).With("new_code", "A").With("new_region", "EU").Build() },
             new[] { Row(G(2)).With("new_code", "A").With("new_region", "US").Build() });
 
-        Assert.Equal(new[] { "A | EU", "A | US" }, result.Rows.Select(r => r.Key).ToArray());
+        Assert.Equal(JoinedKeys, result.Rows.Select(r => r.Key).ToArray());
         Assert.Equal(RecordCompareStatus.OnlyInSource, result.Rows[0].Status);
         Assert.Equal(RecordCompareStatus.OnlyInTarget, result.Rows[1].Status);
     }
@@ -634,6 +638,9 @@ public class ReferenceDataComparerTests
         Assert.Null(column.TargetValue);
     }
 
+    private static readonly string[] EveryComparedColumn = ["new_name", "new_amount", "new_flag"];
+    private static readonly bool[] OnlyTheNameDiffers = [true, false, false];
+
     [Fact]
     public void AllColumns_lists_every_compared_column_and_agrees_with_the_differences()
     {
@@ -647,8 +654,8 @@ public class ReferenceDataComparerTests
         var row = Assert.Single(result.Rows);
         var all = row.AllColumns();
 
-        Assert.Equal(new[] { "new_name", "new_amount", "new_flag" }, all.Select(c => c.Column.LogicalName).ToArray());
-        Assert.Equal(new[] { true, false, false }, all.Select(c => c.IsDifferent).ToArray());
+        Assert.Equal(EveryComparedColumn, all.Select(c => c.Column.LogicalName).ToArray());
+        Assert.Equal(OnlyTheNameDiffers, all.Select(c => c.IsDifferent).ToArray());
         Assert.Equal(
             row.Differences.Select(d => d.Column.LogicalName),
             all.Where(c => c.IsDifferent).Select(c => c.Column.LogicalName));

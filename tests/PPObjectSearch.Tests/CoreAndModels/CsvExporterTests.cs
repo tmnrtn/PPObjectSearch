@@ -125,6 +125,9 @@ public sealed class CsvExporterTests : IDisposable
         Assert.StartsWith("n,,,Table,,,Unmanaged,No," + expected + ",", row);
     }
 
+    private static readonly IReadOnlyList<string?> DevLeadingValues = ["Dev", "https://dev.crm.dynamics.com", "Default"];
+    private static readonly string[] LeadingHeaders = ["Environment", "Environment URL", "Solution"];
+
     [Fact]
     public void Write_puts_leading_columns_ahead_of_each_item()
     {
@@ -132,8 +135,8 @@ public sealed class CsvExporterTests : IDisposable
         try
         {
             CsvExporter.Write(path,
-                new[] { (Item(name: "n"), (IReadOnlyList<string?>)new[] { "Dev", "https://dev.crm.dynamics.com", "Default" }) },
-                new[] { "Environment", "Environment URL", "Solution" });
+                new[] { (Item(name: "n"), DevLeadingValues) },
+                LeadingHeaders);
 
             var lines = File.ReadAllLines(path);
             Assert.StartsWith("Environment,Environment URL,Solution,Name,", lines[0]);
@@ -152,6 +155,8 @@ public sealed class CsvExporterTests : IDisposable
             CsvExporter.Line("Status", "=cmd|' /C calc'!A0", "two\nlines", null, "a,b"));
     }
 
+    private static readonly string[] ItemNamesInOrder = ["first", "second", "third"];
+
     [Fact]
     public void Write_writes_one_row_per_item_in_order()
     {
@@ -159,7 +164,7 @@ public sealed class CsvExporterTests : IDisposable
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(4, lines.Length);
-        Assert.Equal(new[] { "first", "second", "third" }, lines.Skip(1).Select(l => l.Split(',')[0]));
+        Assert.Equal(ItemNamesInOrder, lines.Skip(1).Select(l => l.Split(',')[0]));
     }
 
     [Fact]

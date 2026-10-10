@@ -208,6 +208,8 @@ public class ReconcileViewModelTests
         Assert.Equal(2, handler.Requests.Count(r => r.Method == HttpMethod.Patch));
     }
 
+    private static readonly string[] ChangedColumn = ["new_name"];
+
     [Fact]
     public async Task Every_write_is_logged_with_the_row_as_it_was()
     {
@@ -225,7 +227,7 @@ public class ReconcileViewModelTests
         var update = entries.Single(e => e.Action == "Update");
         Assert.Equal("old", update.Before!["new_name"]!.GetValue<string>());
         Assert.Equal("changed", update.After!["new_name"]!.GetValue<string>());
-        Assert.Equal(new[] { "new_name" }, update.Columns);
+        Assert.Equal(ChangedColumn, update.Columns);
 
         var delete = entries.Single(e => e.Action == "Delete");
         Assert.Equal(G(3), delete.Id);
