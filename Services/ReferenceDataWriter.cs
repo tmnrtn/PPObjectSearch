@@ -184,7 +184,7 @@ public sealed class ReferenceDataWriter
                             entitySet, target.Id, TargetPrimaryId(plan.Entity), before, columns, EntitySetOf);
                     }
 
-                    await _target.DeleteRecordAsync(entitySet, target.Id, ct, target.ETag).ConfigureAwait(false);
+                    await _target.DeleteRecordAsync(entitySet, target.Id, target.ETag, ct).ConfigureAwait(false);
                     return new ReconcileOutcome(item, true, "Deleted.") { Id = target.Id, Before = before, Undo = undo };
                 }
 
@@ -214,7 +214,7 @@ public sealed class ReferenceDataWriter
                     {
                         try
                         {
-                            await _target.UpdateRecordAsync(entitySet, source.Id, state, ct).ConfigureAwait(false);
+                            await _target.UpdateRecordAsync(entitySet, source.Id, state, ct: ct).ConfigureAwait(false);
                         }
                         catch (DataverseException ex)
                         {
@@ -273,7 +273,7 @@ public sealed class ReferenceDataWriter
                         undo = WriteUndo.ForUpdate(entitySet, target.Id, body, before, EntitySetOf);
                     }
 
-                    await _target.UpdateRecordAsync(entitySet, target.Id, body, ct, target.ETag).ConfigureAwait(false);
+                    await _target.UpdateRecordAsync(entitySet, target.Id, body, target.ETag, ct).ConfigureAwait(false);
                     Remember(plan.Entity, source.PrimaryName, target.Id);
                     return new ReconcileOutcome(item, true,
                         $"Updated {body.Count} column(s).{Note(skipped)}" +

@@ -8,7 +8,7 @@ namespace PPObjectSearch.Core;
 /// stock <see cref="SystemCommands"/>; binding them once at class level means no window needs its
 /// own CommandBindings.
 /// </summary>
-public static class WindowChromeSupport
+public static partial class WindowChromeSupport
 {
     /// <summary>Dialogs show only a Close button.</summary>
     public static readonly DependencyProperty IsDialogProperty = DependencyProperty.RegisterAttached(
@@ -33,8 +33,8 @@ public static class WindowChromeSupport
 
     private const int SM_CXPADDEDBORDER = 92;
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    private static partial int GetSystemMetrics(int index);
 
     private static double GetDpiScale()
     {

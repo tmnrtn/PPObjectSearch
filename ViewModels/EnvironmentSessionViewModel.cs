@@ -925,7 +925,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             switch (DetailsTabs.KindOf(item))
             {
                 case ObjectKind.CloudFlow:
-                    run = LatestRunSummary.From(await client.GetCloudFlowRunsAsync(item.ObjectId, CancellationToken.None, RecentRunCount));
+                    run = LatestRunSummary.From(await client.GetCloudFlowRunsAsync(item.ObjectId, RecentRunCount, CancellationToken.None));
                     break;
                 case ObjectKind.EnvironmentVariable:
                     variable = await client.GetEnvironmentVariableAsync(item.ObjectId, item.ComponentType == 381, CancellationToken.None);

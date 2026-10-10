@@ -102,7 +102,7 @@ public sealed partial class DataverseClient
         var (state, status) = Switchable.Codes(kind, on);
 
         return UpdateRecordAsync(Switchable.EntitySet(kind), id,
-            new Dictionary<string, object?> { ["statecode"] = state, ["statuscode"] = status }, ct);
+            new Dictionary<string, object?> { ["statecode"] = state, ["statuscode"] = status }, ct: ct);
     }
 
     /// <summary>
@@ -115,14 +115,14 @@ public sealed partial class DataverseClient
     {
         if (value is null)
         {
-            if (variable.ValueId is { } existing) await DeleteRecordAsync("environmentvariablevalues", existing, ct).ConfigureAwait(false);
+            if (variable.ValueId is { } existing) await DeleteRecordAsync("environmentvariablevalues", existing, ct: ct).ConfigureAwait(false);
             return null;
         }
 
         if (variable.ValueId is { } id)
         {
             await UpdateRecordAsync("environmentvariablevalues", id,
-                new Dictionary<string, object?> { ["value"] = value }, ct).ConfigureAwait(false);
+                new Dictionary<string, object?> { ["value"] = value }, ct: ct).ConfigureAwait(false);
             return id;
         }
 

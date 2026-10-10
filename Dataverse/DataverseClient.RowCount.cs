@@ -150,37 +150,47 @@ public sealed partial class DataverseClient
             return count;
         }
 
+        var rows = await CountFromPageProbesAsync(Probe).ConfigureAwait(false);
+        return (rows, requests);
+    }
+
+    /// <summary>
+    /// The row count, from as few pages as it takes to find the last one: <paramref name="probe"/>
+    /// reads one page and says how many rows it held.
+    /// </summary>
+    private static async Task<long> CountFromPageProbesAsync(Func<int, Task<int>> probe)
+    {
         // Page 1 settles every table that fits in a single page.
-        var first = await Probe(1).ConfigureAwait(false);
-        if (first < CountPageSize) return (first, requests);
+        var first = await probe(1).ConfigureAwait(false);
+        if (first < CountPageSize) return first;
 
         // Double until a page is not full: lo is the last page known full, hi the first known not.
         var lo = 1;
         var hi = 2;
         int atHi;
 
-        while ((atHi = await Probe(hi).ConfigureAwait(false)) == CountPageSize)
+        while ((atHi = await probe(hi).ConfigureAwait(false)) == CountPageSize)
         {
             lo = hi;
             hi = Math.Min(hi * 2, MaxCountPage + 1);
         }
 
-        if (atHi > 0) return ((long)(hi - 1) * CountPageSize + atHi, requests);
+        if (atHi > 0) return (long)(hi - 1) * CountPageSize + atHi;
 
         // hi is empty: halve between the last full page and it until they are neighbours, stopping
         // early on a page that is part full, which is the last page.
         while (hi - lo > 1)
         {
             var mid = lo + (hi - lo) / 2;
-            var count = await Probe(mid).ConfigureAwait(false);
+            var count = await probe(mid).ConfigureAwait(false);
 
             if (count == CountPageSize) lo = mid;
             else if (count == 0) hi = mid;
-            else return ((long)(mid - 1) * CountPageSize + count, requests);
+            else return (long)(mid - 1) * CountPageSize + count;
         }
 
         // Every page up to lo is full and the next is empty.
-        return ((long)lo * CountPageSize, requests);
+        return (long)lo * CountPageSize;
     }
 
     /// <summary>
@@ -192,23 +202,11 @@ public sealed partial class DataverseClient
         var table = await GetTableDefinitionAsync(metadataId, ct).ConfigureAwait(false);
         var names = Uri.EscapeDataString($"[\"{table.LogicalName}\"]");
 
-        long? rows = null;
+        long? rows;
         using (var doc = await GetJsonAsync(
                    EnvironmentUrl + ApiPath + $"RetrieveTotalRecordCount(EntityNames=@p1)?@p1={names}", ct).ConfigureAwait(false))
         {
-            if (doc.RootElement.TryGetProperty("EntityRecordCountCollection", out var collection) &&
-                collection.TryGetProperty("Keys", out var keys) && collection.TryGetProperty("Values", out var values))
-            {
-                for (var i = 0; i < keys.GetArrayLength() && i < values.GetArrayLength(); i++)
-                {
-                    if (string.Equals(keys[i].GetString(), table.LogicalName, StringComparison.OrdinalIgnoreCase) &&
-                        values[i].TryGetInt64(out var count))
-                    {
-                        rows = count;
-                        break;
-                    }
-                }
-            }
+            rows = TotalRecordCount(doc.RootElement, table.LogicalName);
         }
 
         if (rows is null) return null;
@@ -234,5 +232,26 @@ public sealed partial class DataverseClient
         }
 
         return new RowCountSnapshot(rows.Value, lastUpdated);
+    }
+
+    /// <summary>One table's count from a RetrieveTotalRecordCount response, which pairs table names with counts by position.</summary>
+    private static long? TotalRecordCount(JsonElement response, string logicalName)
+    {
+        if (!response.TryGetProperty("EntityRecordCountCollection", out var collection) ||
+            !collection.TryGetProperty("Keys", out var keys) || !collection.TryGetProperty("Values", out var values))
+        {
+            return null;
+        }
+
+        for (var i = 0; i < keys.GetArrayLength() && i < values.GetArrayLength(); i++)
+        {
+            if (string.Equals(keys[i].GetString(), logicalName, StringComparison.OrdinalIgnoreCase) &&
+                values[i].TryGetInt64(out var count))
+            {
+                return count;
+            }
+        }
+
+        return null;
     }
 }
