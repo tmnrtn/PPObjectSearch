@@ -33,28 +33,45 @@ public static class FuzzyMatch
         {
             if (char.IsWhiteSpace(wanted)) continue;
 
-            var found = -1;
-            for (var i = at; i < text.Length; i++)
-            {
-                if (char.ToLowerInvariant(text[i]) != char.ToLowerInvariant(wanted)) continue;
-
-                if (found < 0) found = i;
-                if (!preferWordStarts || IsWordStart(text, i)) { found = i; break; }
-            }
-
+            var found = Find(wanted, text, at, preferWordStarts);
             if (found < 0) return null;
 
-            score += 1;
-            if (found == previous + 1) score += 5;
-            if (IsWordStart(text, found)) score += 8;
-            if (found == 0) score += 4;
-
+            score += LetterScore(text, found, previous);
             previous = found;
             at = found + 1;
         }
 
         // Among equal matches, the shorter label is the closer one.
         return score * 100 - Math.Min(text.Length, 99);
+    }
+
+    /// <summary>
+    /// Where the letter next appears from <paramref name="at"/> on: the first word start holding it
+    /// when word starts are preferred (falling back to its first appearance), otherwise its first
+    /// appearance. -1 when it does not appear.
+    /// </summary>
+    private static int Find(char wanted, string text, int at, bool preferWordStarts)
+    {
+        var first = -1;
+        for (var i = at; i < text.Length; i++)
+        {
+            if (char.ToLowerInvariant(text[i]) != char.ToLowerInvariant(wanted)) continue;
+
+            if (!preferWordStarts || IsWordStart(text, i)) return i;
+            if (first < 0) first = i;
+        }
+
+        return first;
+    }
+
+    /// <summary>One for the letter, more when it runs on from the last one, starts a word or starts the label.</summary>
+    private static int LetterScore(string text, int found, int previous)
+    {
+        var score = 1;
+        if (found == previous + 1) score += 5;
+        if (IsWordStart(text, found)) score += 8;
+        if (found == 0) score += 4;
+        return score;
     }
 
     private static bool IsWordStart(string text, int i) =>

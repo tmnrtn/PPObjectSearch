@@ -131,21 +131,7 @@ public sealed partial class DataverseClient
         // A job names the activation that ran; the definition it belongs to is its parent.
         var activations = jobs.Select(j => ParseGuid(JsonHelper.GetString(j, "_workflowactivationid_value")))
             .OfType<Guid>().Distinct().ToList();
-        var parents = new Dictionary<Guid, (Guid Id, string? Name)>();
-
-        foreach (var chunk in activations.Chunk(50))
-        {
-            using var doc = await GetJsonAsync(
-                EnvironmentUrl + ApiPath + "workflows?$select=workflowid,name,_parentworkflowid_value&$filter=" +
-                InFilter("workflowid", chunk.Select(id => id.ToString())), ct).ConfigureAwait(false);
-            if (!doc.RootElement.TryGetProperty("value", out var value)) continue;
-
-            foreach (var row in value.EnumerateArray())
-            {
-                if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
-                parents[id] = (ParseGuid(JsonHelper.GetString(row, "_parentworkflowid_value")) ?? id, JsonHelper.GetString(row, "name"));
-            }
-        }
+        var parents = await GetParentWorkflowsAsync(activations, ct).ConfigureAwait(false);
 
         foreach (var job in jobs)
         {
@@ -153,20 +139,47 @@ public sealed partial class DataverseClient
             var (workflow, name) = activation is { } a && parents.TryGetValue(a, out var parent) ? parent : (activation ?? Guid.Empty, null);
             if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) continue;
 
-            var friendly = JsonHelper.GetString(job, "friendlymessage");
-            data.Events.Add(new FailureEvent
-            {
-                Source = FailureSource.ClassicWorkflow,
-                ComponentKey = workflow.ToString(),
-                ComponentName = name ?? JsonHelper.GetString(job, "name") ?? "System job",
-                When = JsonHelper.GetDate(job, "completedon") ?? from,
-                ErrorCode = JsonHelper.GetInt(job, "errorcode")?.ToString(CultureInfo.InvariantCulture) ?? JsonHelper.GetString(job, "errorcode"),
-                ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? JsonHelper.GetString(job, "message") : friendly,
-                RunName = JsonHelper.GetString(job, "name"),
-                Regarding = Label(job, "_regardingobjectid_value"),
-                WorkflowId = workflow == Guid.Empty ? null : workflow
-            });
+            data.Events.Add(ClassicFailureEvent(job, workflow, name, from));
         }
+    }
+
+    /// <summary>Each activation's definition - its parent workflow, or itself when it has none - and that one's name.</summary>
+    private async Task<Dictionary<Guid, (Guid Id, string? Name)>> GetParentWorkflowsAsync(List<Guid> activations, CancellationToken ct)
+    {
+        var parents = new Dictionary<Guid, (Guid Id, string? Name)>();
+
+        foreach (var chunk in activations.Chunk(50))
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + "workflows?$select=workflowid,name,_parentworkflowid_value&$filter=" +
+                InFilter("workflowid", chunk.Select(id => id.ToString())), ct).ConfigureAwait(false);
+
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
+            {
+                if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
+                parents[id] = (ParseGuid(JsonHelper.GetString(row, "_parentworkflowid_value")) ?? id, JsonHelper.GetString(row, "name"));
+            }
+        }
+
+        return parents;
+    }
+
+    private static FailureEvent ClassicFailureEvent(JsonElement job, Guid workflow, string? name, DateTimeOffset from)
+    {
+        var friendly = JsonHelper.GetString(job, "friendlymessage");
+
+        return new FailureEvent
+        {
+            Source = FailureSource.ClassicWorkflow,
+            ComponentKey = workflow.ToString(),
+            ComponentName = name ?? JsonHelper.GetString(job, "name") ?? "System job",
+            When = JsonHelper.GetDate(job, "completedon") ?? from,
+            ErrorCode = JsonHelper.GetInt(job, "errorcode")?.ToString(CultureInfo.InvariantCulture) ?? JsonHelper.GetString(job, "errorcode"),
+            ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? JsonHelper.GetString(job, "message") : friendly,
+            RunName = JsonHelper.GetString(job, "name"),
+            Regarding = Label(job, "_regardingobjectid_value"),
+            WorkflowId = workflow == Guid.Empty ? null : workflow
+        };
     }
 
     private async Task PluginFailuresAsync(DateTimeOffset from, DateTimeOffset to, FailureQuery query, FailureData data, CancellationToken ct)

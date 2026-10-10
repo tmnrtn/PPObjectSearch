@@ -17,17 +17,17 @@ public sealed partial class DataverseClient
         "name,status,starttime,endtime,duration,triggertype,errorcode,errormessage,workflowid";
 
     /// <summary>
-    /// A cloud flow's recent runs, newest first. Dataverse keeps these in the flowrun table - an
-    /// elastic table, for 28 days by default - and only once flow run history in Dataverse is on.
-    /// </summary>
-    /// <summary>
     /// A client for the Power Automate API, signed in as this environment's account - for a cloud
     /// flow run step by step, which the flowrun table does not record.
     /// </summary>
     public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth, _handler);
 
+    /// <summary>
+    /// A cloud flow's recent runs, newest first. Dataverse keeps these in the flowrun table - an
+    /// elastic table, for 28 days by default - and only once flow run history in Dataverse is on.
+    /// </summary>
     public async Task<IReadOnlyList<ProcessRun>> GetCloudFlowRunsAsync(
-        Guid workflowId, CancellationToken ct = default, int top = MaxRunHistory)
+        Guid workflowId, int top = MaxRunHistory, CancellationToken ct = default)
     {
         var baseUrl = EnvironmentUrl + ApiPath +
                       $"flowruns?$select={SelectFlowRun}&$filter=_workflow_value eq {workflowId}&$top={top}";
@@ -46,9 +46,8 @@ public sealed partial class DataverseClient
         using (doc)
         {
             var runs = new List<ProcessRun>();
-            if (!doc.RootElement.TryGetProperty("value", out var value)) return runs;
 
-            foreach (var row in value.EnumerateArray())
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
                 var status = JsonHelper.GetString(row, "status") ?? "Unknown";
 
@@ -84,13 +83,9 @@ public sealed partial class DataverseClient
                    EnvironmentUrl + ApiPath +
                    $"workflows?$select=workflowid&$filter=_parentworkflowid_value eq {workflowId}", ct).ConfigureAwait(false))
         {
-            if (activations.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    if (Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) ids.Add(id);
-                }
-            }
+            ids.AddRange(JsonHelper.Rows(activations.RootElement)
+                .Select(row => ParseGuid(JsonHelper.GetString(row, "workflowid")))
+                .OfType<Guid>());
         }
 
         var runs = new List<ProcessRun>();
@@ -108,37 +103,7 @@ public sealed partial class DataverseClient
 
             using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
-            if (!doc.RootElement.TryGetProperty("value", out var jobs)) continue;
-
-            foreach (var row in jobs.EnumerateArray())
-            {
-                var code = JsonHelper.GetInt(row, "statuscode");
-                var started = JsonHelper.GetDate(row, "startedon") ?? JsonHelper.GetDate(row, "createdon");
-                var completed = JsonHelper.GetDate(row, "completedon");
-                var friendly = JsonHelper.GetString(row, "friendlymessage");
-                var message = JsonHelper.GetString(row, "message");
-
-                runs.Add(new ProcessRun
-                {
-                    Name = JsonHelper.GetString(row, "name") ?? string.Empty,
-                    Status = JsonHelper.GetString(row, "statuscode@" + Annotations.Formatted) ?? code?.ToString() ?? "Unknown",
-                    Outcome = code switch
-                    {
-                        30 => RunOutcome.Succeeded,
-                        31 => RunOutcome.Failed,
-                        32 => RunOutcome.Cancelled,
-                        0 or 10 or 20 or 21 or 22 => RunOutcome.Running,
-                        _ => RunOutcome.Other
-                    },
-                    StartTime = started,
-                    EndTime = completed,
-                    DurationMs = started is { } s && completed is { } c ? (long)(c - s).TotalMilliseconds : null,
-                    TriggerType = "System job",
-                    ErrorCode = JsonHelper.GetString(row, "errorcode"),
-                    ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? message : friendly,
-                    Regarding = JsonHelper.GetString(row, "_regardingobjectid_value@" + Annotations.Formatted)
-                });
-            }
+            runs.AddRange(JsonHelper.Rows(doc.RootElement).Select(ReadSystemJobRun));
         }
 
         return runs
@@ -147,15 +112,43 @@ public sealed partial class DataverseClient
             .ToList();
     }
 
+    private static ProcessRun ReadSystemJobRun(JsonElement row)
+    {
+        var code = JsonHelper.GetInt(row, "statuscode");
+        var started = JsonHelper.GetDate(row, "startedon") ?? JsonHelper.GetDate(row, "createdon");
+        var completed = JsonHelper.GetDate(row, "completedon");
+        var friendly = JsonHelper.GetString(row, "friendlymessage");
+        var message = JsonHelper.GetString(row, "message");
+
+        return new ProcessRun
+        {
+            Name = JsonHelper.GetString(row, "name") ?? string.Empty,
+            Status = JsonHelper.GetString(row, "statuscode@" + Annotations.Formatted) ?? code?.ToString() ?? "Unknown",
+            Outcome = code switch
+            {
+                30 => RunOutcome.Succeeded,
+                31 => RunOutcome.Failed,
+                32 => RunOutcome.Cancelled,
+                0 or 10 or 20 or 21 or 22 => RunOutcome.Running,
+                _ => RunOutcome.Other
+            },
+            StartTime = started,
+            EndTime = completed,
+            DurationMs = started is { } s && completed is { } c ? (long)(c - s).TotalMilliseconds : null,
+            TriggerType = "System job",
+            ErrorCode = JsonHelper.GetString(row, "errorcode"),
+            ErrorMessage = string.IsNullOrWhiteSpace(friendly) ? message : friendly,
+            Regarding = JsonHelper.GetString(row, "_regardingobjectid_value@" + Annotations.Formatted)
+        };
+    }
+
     /// <summary>Whether plug-ins write to the trace log at all: off, exceptions only, or everything.</summary>
     public async Task<PluginTraceSetting?> GetPluginTraceSettingAsync(CancellationToken ct = default)
     {
         using var doc = await GetJsonAsync(
             EnvironmentUrl + ApiPath + "organizations?$select=plugintracelogsetting", ct).ConfigureAwait(false);
 
-        if (!doc.RootElement.TryGetProperty("value", out var value)) return null;
-
-        foreach (var row in value.EnumerateArray())
+        foreach (var row in JsonHelper.Rows(doc.RootElement))
         {
             if (JsonHelper.GetInt(row, "plugintracelogsetting") is { } setting) return (PluginTraceSetting)setting;
         }
@@ -194,14 +187,12 @@ public sealed partial class DataverseClient
                     EnvironmentUrl + ApiPath +
                     $"plugintypes?$select=typename&$filter=_pluginassemblyid_value eq {objectId}", ct).ConfigureAwait(false);
 
-                var names = types.RootElement.TryGetProperty("value", out var value)
-                    ? value.EnumerateArray()
-                        .Select(row => JsonHelper.GetString(row, "typename"))
-                        .Where(n => !string.IsNullOrWhiteSpace(n))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Take(40)
-                        .ToList()
-                    : new List<string?>();
+                var names = JsonHelper.Rows(types.RootElement)
+                    .Select(row => JsonHelper.GetString(row, "typename"))
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(40)
+                    .ToList();
 
                 if (names.Count == 0) return Array.Empty<PluginTraceEntry>();
 
@@ -223,9 +214,8 @@ public sealed partial class DataverseClient
         using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
         var entries = new List<PluginTraceEntry>();
-        if (!doc.RootElement.TryGetProperty("value", out var rows)) return entries;
 
-        foreach (var row in rows.EnumerateArray())
+        foreach (var row in JsonHelper.Rows(doc.RootElement))
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, "plugintracelogid"), out var id)) continue;
 

@@ -140,18 +140,18 @@ public static class WriteUndo
         switch (step.Method)
         {
             case UndoMethod.Delete:
-                await client.DeleteRecordAsync(step.EntitySet, step.Id, ct).ConfigureAwait(false);
+                await client.DeleteRecordAsync(step.EntitySet, step.Id, ct: ct).ConfigureAwait(false);
                 break;
 
             case UndoMethod.Update:
-                await client.UpdateRecordAsync(step.EntitySet, step.Id, Values(step.Body), ct).ConfigureAwait(false);
+                await client.UpdateRecordAsync(step.EntitySet, step.Id, Values(step.Body), ct: ct).ConfigureAwait(false);
                 break;
 
             default:
                 await client.CreateRecordAsync(step.EntitySet, step.Id, Values(step.Body), ct).ConfigureAwait(false);
                 if (step.Then is { Count: > 0 })
                 {
-                    await client.UpdateRecordAsync(step.EntitySet, step.Id, Values(step.Then), ct).ConfigureAwait(false);
+                    await client.UpdateRecordAsync(step.EntitySet, step.Id, Values(step.Then), ct: ct).ConfigureAwait(false);
                 }
                 break;
         }

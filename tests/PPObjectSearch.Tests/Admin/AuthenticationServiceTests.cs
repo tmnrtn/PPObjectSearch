@@ -102,7 +102,7 @@ public sealed class AuthenticationServiceTests : IDisposable
         var auth = new AuthenticationService();
 
         var page = await SignInPageAsync((open, ct) =>
-            auth.AcquireTokenAsync(Resource, null, "remembered-account", forceAccountPicker: true, ct, open));
+            auth.AcquireTokenAsync(Resource, null, "remembered-account", forceAccountPicker: true, openBrowser: open, ct: ct));
 
         Assert.Equal("login.microsoftonline.com", page.Host);
         Assert.StartsWith("/organizations/", page.AbsolutePath);

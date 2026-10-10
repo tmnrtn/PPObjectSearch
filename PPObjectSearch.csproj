@@ -15,6 +15,8 @@
     <Description>Keyword search over the objects in a Power Platform solution.</Description>
     <!-- Releases publish for win-x64; naming it here puts its runtime packages in the lock file. -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- LibraryImport's generated P/Invoke stubs need it; the app's own code has no unsafe blocks. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

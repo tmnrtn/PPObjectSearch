@@ -12,6 +12,10 @@ public sealed partial class DataverseClient
     public const int SecurityRoleType = 20;
     public const int OptionSetType = 9;
 
+    private const string UniqueNameColumn = "uniquename";
+    private const string DescriptionHeading = "Description";
+    private const string TableHeading = "Table";
+
     /// <summary>The kind of Overview a component gets, or Other where it has none.</summary>
     public static ObjectKind OverviewKindOf(SolutionComponentItem item)
     {
@@ -147,11 +151,11 @@ public sealed partial class DataverseClient
         using var doc = await GetOneAsync(
             $"appmodules({id})?$select=name,uniquename,description,appmoduleversion,publishedon,clienttype,navigationtype", ct).ConfigureAwait(false);
         var app = doc.RootElement;
-        var unique = JsonHelper.GetString(app, "uniquename");
+        var unique = JsonHelper.GetString(app, UniqueNameColumn);
 
         overview.Properties.Add(new("Name", JsonHelper.GetString(app, "name")));
         overview.Properties.Add(new("Unique name", unique));
-        overview.Properties.Add(new("Description", JsonHelper.GetString(app, "description")));
+        overview.Properties.Add(new(DescriptionHeading, JsonHelper.GetString(app, "description")));
         overview.Properties.Add(new("Version", JsonHelper.GetString(app, "appmoduleversion")));
         overview.Properties.Add(new("Published", Shown(app, "publishedon")));
         overview.Properties.Add(new("Navigation", Shown(app, "navigationtype")));
@@ -281,9 +285,9 @@ public sealed partial class DataverseClient
             "executeprivilegename,allowedcustomprocessingsteptype,_plugintypeid_value", ct).ConfigureAwait(false);
         var api = doc.RootElement;
 
-        overview.Properties.Add(new("Unique name", JsonHelper.GetString(api, "uniquename")));
+        overview.Properties.Add(new("Unique name", JsonHelper.GetString(api, UniqueNameColumn)));
         overview.Properties.Add(new("Display name", JsonHelper.GetString(api, "displayname")));
-        overview.Properties.Add(new("Description", JsonHelper.GetString(api, "description")));
+        overview.Properties.Add(new(DescriptionHeading, JsonHelper.GetString(api, "description")));
         overview.Properties.Add(new("Kind", JsonHelper.GetBool(api, "isfunction") == true ? "Function (GET)" : "Action (POST)"));
         overview.Properties.Add(new("Binding", Shown(api, "bindingtype")));
         overview.Properties.Add(new("Bound table", JsonHelper.GetString(api, "boundentitylogicalname")));
@@ -294,16 +298,16 @@ public sealed partial class DataverseClient
 
         var requests = await ReadRowsAsync(
             EnvironmentUrl + ApiPath + $"customapirequestparameters?$select=uniquename,type,isoptional,logicalentityname&$filter=_customapiid_value eq {id}",
-            row => (IReadOnlyList<string?>)[JsonHelper.GetString(row, "uniquename"), Shown(row, "type"),
+            row => (IReadOnlyList<string?>)[JsonHelper.GetString(row, UniqueNameColumn), Shown(row, "type"),
                 JsonHelper.GetBool(row, "isoptional") == true ? "Optional" : "Required", JsonHelper.GetString(row, "logicalentityname")],
             ct).ConfigureAwait(false);
-        overview.Tables.Add(new OverviewTable { Title = "Request parameters", Columns = ["Name", "Type", "", "Table"], Rows = requests });
+        overview.Tables.Add(new OverviewTable { Title = "Request parameters", Columns = ["Name", "Type", "", TableHeading], Rows = requests });
 
         var responses = await ReadRowsAsync(
             EnvironmentUrl + ApiPath + $"customapiresponseproperties?$select=uniquename,type,logicalentityname&$filter=_customapiid_value eq {id}",
-            row => (IReadOnlyList<string?>)[JsonHelper.GetString(row, "uniquename"), Shown(row, "type"), JsonHelper.GetString(row, "logicalentityname")],
+            row => (IReadOnlyList<string?>)[JsonHelper.GetString(row, UniqueNameColumn), Shown(row, "type"), JsonHelper.GetString(row, "logicalentityname")],
             ct).ConfigureAwait(false);
-        overview.Tables.Add(new OverviewTable { Title = "Response properties", Columns = ["Name", "Type", "Table"], Rows = responses });
+        overview.Tables.Add(new OverviewTable { Title = "Response properties", Columns = ["Name", "Type", TableHeading], Rows = responses });
     }
 
     private async Task RoleAsync(Guid id, ComponentOverview overview, CancellationToken ct)
@@ -318,7 +322,7 @@ public sealed partial class DataverseClient
         overview.Tables.Add(new OverviewTable
         {
             Title = "Table privileges",
-            Columns = ["Table", "Create", "Read", "Write", "Delete", "Append", "Append to", "Assign", "Share"],
+            Columns = [TableHeading, "Create", "Read", "Write", "Delete", "Append", "Append to", "Assign", "Share"],
             Rows = tables.Select(t => (IReadOnlyList<string?>)[t.Table, D(t.Create), D(t.Read), D(t.Write), D(t.Delete),
                 D(t.Append), D(t.AppendTo), D(t.Assign), D(t.Share)]).ToList()
         });
@@ -353,7 +357,7 @@ public sealed partial class DataverseClient
             }
         }
 
-        overview.Tables.Add(new OverviewTable { Title = "Options", Columns = ["Value", "Label", "Colour", "Description"], Rows = rows });
+        overview.Tables.Add(new OverviewTable { Title = "Options", Columns = ["Value", "Label", "Colour", DescriptionHeading], Rows = rows });
     }
 
     private static string? LocalizedLabel(JsonElement owner, string property) =>
@@ -369,6 +373,6 @@ public sealed partial class DataverseClient
             row => (IReadOnlyList<string?>)[JsonHelper.GetString(row, "stagename"), Shown(row, "stagecategory"), JsonHelper.GetString(row, "primaryentitytypecode")],
             ct).ConfigureAwait(false);
 
-        overview.Tables.Add(new OverviewTable { Title = "Stages", Columns = ["Stage", "Category", "Table"], Rows = stages });
+        overview.Tables.Add(new OverviewTable { Title = "Stages", Columns = ["Stage", "Category", TableHeading], Rows = stages });
     }
 }

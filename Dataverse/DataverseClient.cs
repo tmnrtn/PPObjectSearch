@@ -136,7 +136,7 @@ public sealed partial class DataverseClient : IDisposable
         // Skip the doomed GET entirely when the URL is already over the limit.
         if (url.Length > MaxGetUrlLength)
         {
-            return await GetJsonViaBatchAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, annotations, maxPageSize, ct).ConfigureAwait(false);
         }
 
         try
@@ -165,7 +165,7 @@ public sealed partial class DataverseClient : IDisposable
         }
         catch (DataverseException ex) when (ex.StatusCode == HttpStatusCode.RequestUriTooLong)
         {
-            return await GetJsonViaBatchAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
+            return await GetJsonViaBatchAsync(url, annotations, maxPageSize, ct).ConfigureAwait(false);
         }
     }
 
@@ -173,7 +173,7 @@ public sealed partial class DataverseClient : IDisposable
     /// Issues a GET inside a $batch POST. The URL travels in the request body, so paging cookies
     /// of any length are fine.
     /// </summary>
-    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize = true)
+    private async Task<JsonDocument> GetJsonViaBatchAsync(string url, string? annotations, bool maxPageSize, CancellationToken ct)
     {
         // The batch itself succeeds (200) even when the GET inside it was throttled, so the retry
         // handler never sees the 429; a throttled inner request is retried here instead.
@@ -181,7 +181,7 @@ public sealed partial class DataverseClient : IDisposable
         {
             try
             {
-                return await SendBatchedGetAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
+                return await SendBatchedGetAsync(url, annotations, maxPageSize, ct).ConfigureAwait(false);
             }
             catch (DataverseException ex) when (ex.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
             {
@@ -190,13 +190,13 @@ public sealed partial class DataverseClient : IDisposable
         }
 
         // The last attempt's failure, throttled or not, is the caller's.
-        return await SendBatchedGetAsync(url, ct, annotations, maxPageSize).ConfigureAwait(false);
+        return await SendBatchedGetAsync(url, annotations, maxPageSize, ct).ConfigureAwait(false);
     }
 
     [GeneratedRegex(@"HTTP/1\.\d\s+(?<code>\d{3})")]
     private static partial Regex BatchStatusLineRegex();
 
-    private async Task<JsonDocument> SendBatchedGetAsync(string url, CancellationToken ct, string? annotations, bool maxPageSize)
+    private async Task<JsonDocument> SendBatchedGetAsync(string url, string? annotations, bool maxPageSize, CancellationToken ct)
     {
         var token = await _auth.GetTokenAsync(EnvironmentUrl, ct).ConfigureAwait(false);
         var boundary = "batch_" + Guid.NewGuid().ToString("N");
@@ -333,14 +333,12 @@ public sealed partial class DataverseClient : IDisposable
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
 
-            if (!doc.RootElement.TryGetProperty("value", out var value)) return null;
-
             // Hosts are compared exactly: a substring match would let "hr.crm.dynamics.com" pick
             // up "contosohr.crm.dynamics.com", and the id it returned would then be used to read
             // the environment's type for the write guard.
             var host = new Uri(EnvironmentUrl).Host;
 
-            foreach (var instance in value.EnumerateArray())
+            foreach (var instance in JsonHelper.Rows(doc.RootElement))
             {
                 foreach (var name in new[] { "ApiUrl", "Url" })
                 {
@@ -378,24 +376,14 @@ public sealed partial class DataverseClient : IDisposable
         {
             var url = EnvironmentUrl + ApiPath + "EntityDefinitions?$select=LogicalName,MetadataId,EntitySetName";
 
-            while (url.Length > 0)
+            await ForEachRowAsync(url, null, row =>
             {
-                using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+                var logicalName = JsonHelper.GetString(row, "LogicalName");
+                if (string.IsNullOrWhiteSpace(logicalName)) return;
 
-                if (doc.RootElement.TryGetProperty("value", out var value))
-                {
-                    foreach (var row in value.EnumerateArray())
-                    {
-                        var logicalName = JsonHelper.GetString(row, "LogicalName");
-                        if (string.IsNullOrWhiteSpace(logicalName)) continue;
-
-                        Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
-                        map[logicalName] = new TableMetadata(id, JsonHelper.GetString(row, "EntitySetName"));
-                    }
-                }
-
-                url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-            }
+                var id = Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var parsed) ? parsed : Guid.Empty;
+                map[logicalName] = new TableMetadata(id, JsonHelper.GetString(row, "EntitySetName"));
+            }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -431,9 +419,7 @@ public sealed partial class DataverseClient : IDisposable
         var results = new List<DependencyRef>();
         using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
-        if (!doc.RootElement.TryGetProperty("value", out var value)) return results;
-
-        foreach (var row in value.EnumerateArray())
+        foreach (var row in JsonHelper.Rows(doc.RootElement))
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, prefix + "objectid"), out var id)) continue;
 
@@ -469,43 +455,33 @@ public sealed partial class DataverseClient : IDisposable
         var solutions = new List<ContainingSolution>();
         var seen = new HashSet<Guid>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, null, row =>
         {
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    if (!row.TryGetProperty("solutionid", out var solution) ||
-                        solution.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
-
-                    if (!Guid.TryParse(JsonHelper.GetString(solution, "solutionid"), out var id)) continue;
-                    if (!seen.Add(id)) continue;
-
-                    var uniqueName = JsonHelper.GetString(solution, "uniquename") ?? id.ToString();
-
-                    solutions.Add(new ContainingSolution
-                    {
-                        SolutionId = id,
-                        UniqueName = uniqueName,
-                        FriendlyName = JsonHelper.GetString(solution, "friendlyname") ?? uniqueName,
-                        IsManaged = JsonHelper.GetBool(solution, "ismanaged") ?? false,
-                        Version = JsonHelper.GetString(solution, "version")
-                    });
-                }
-            }
-
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+            if (ReadContainingSolution(row) is { } solution && seen.Add(solution.SolutionId)) solutions.Add(solution);
+        }, ct).ConfigureAwait(false);
 
         return solutions
             .OrderBy(s => s.IsManaged ? 1 : 0)
             .ThenBy(s => s.FriendlyName, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>The solution a solutioncomponents row expands to; null when the row has none.</summary>
+    private static ContainingSolution? ReadContainingSolution(JsonElement row)
+    {
+        if (!row.TryGetProperty("solutionid", out var solution) || solution.ValueKind != JsonValueKind.Object) return null;
+        if (!Guid.TryParse(JsonHelper.GetString(solution, "solutionid"), out var id)) return null;
+
+        var uniqueName = JsonHelper.GetString(solution, "uniquename") ?? id.ToString();
+
+        return new ContainingSolution
+        {
+            SolutionId = id,
+            UniqueName = uniqueName,
+            FriendlyName = JsonHelper.GetString(solution, "friendlyname") ?? uniqueName,
+            IsManaged = JsonHelper.GetBool(solution, "ismanaged") ?? false,
+            Version = JsonHelper.GetString(solution, "version")
+        };
     }
 
     /// <summary>
@@ -530,19 +506,16 @@ public sealed partial class DataverseClient : IDisposable
         using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
 
         var layers = new List<ComponentLayer>();
-        if (doc.RootElement.TryGetProperty("value", out var value))
+        foreach (var row in JsonHelper.Rows(doc.RootElement))
         {
-            foreach (var row in value.EnumerateArray())
+            layers.Add(new ComponentLayer
             {
-                layers.Add(new ComponentLayer
-                {
-                    SolutionName = JsonHelper.GetString(row, "msdyn_solutionname") ?? "(unknown)",
-                    PublisherName = JsonHelper.GetString(row, "msdyn_publishername"),
-                    Order = JsonHelper.GetInt(row, "msdyn_order") ?? 0,
-                    ComponentJson = JsonHelper.GetString(row, "msdyn_componentjson"),
-                    ChangesRaw = JsonHelper.GetString(row, "msdyn_changes")
-                });
-            }
+                SolutionName = JsonHelper.GetString(row, "msdyn_solutionname") ?? "(unknown)",
+                PublisherName = JsonHelper.GetString(row, "msdyn_publishername"),
+                Order = JsonHelper.GetInt(row, "msdyn_order") ?? 0,
+                ComponentJson = JsonHelper.GetString(row, "msdyn_componentjson"),
+                ChangesRaw = JsonHelper.GetString(row, "msdyn_changes")
+            });
         }
 
         // Dataverse numbers the stack from the bottom up, so the highest order is the layer
@@ -607,34 +580,25 @@ public sealed partial class DataverseClient : IDisposable
 
         var solutions = new List<SolutionInfo>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, null, row =>
         {
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-            if (doc.RootElement.TryGetProperty("value", out var value))
+            var idText = JsonHelper.GetString(row, "solutionid");
+            if (!Guid.TryParse(idText, out var id)) return;
+
+            var uniqueName = JsonHelper.GetString(row, "uniquename") ?? id.ToString();
+
+            solutions.Add(new SolutionInfo
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var idText = JsonHelper.GetString(row, "solutionid");
-                    if (!Guid.TryParse(idText, out var id)) continue;
-
-                    var uniqueName = JsonHelper.GetString(row, "uniquename") ?? id.ToString();
-
-                    solutions.Add(new SolutionInfo
-                    {
-                        SolutionId = id,
-                        UniqueName = uniqueName,
-                        FriendlyName = JsonHelper.GetString(row, "friendlyname") ?? uniqueName,
-                        IsManaged = JsonHelper.GetBool(row, "ismanaged") ?? false,
-                        Version = JsonHelper.GetString(row, "version"),
-                        PublisherName = row.TryGetProperty("publisherid", out var pub) && pub.ValueKind == JsonValueKind.Object
-                            ? JsonHelper.GetString(pub, "friendlyname")
-                            : null
-                    });
-                }
-            }
-
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+                SolutionId = id,
+                UniqueName = uniqueName,
+                FriendlyName = JsonHelper.GetString(row, "friendlyname") ?? uniqueName,
+                IsManaged = JsonHelper.GetBool(row, "ismanaged") ?? false,
+                Version = JsonHelper.GetString(row, "version"),
+                PublisherName = row.TryGetProperty("publisherid", out var pub) && pub.ValueKind == JsonValueKind.Object
+                    ? JsonHelper.GetString(pub, "friendlyname")
+                    : null
+            });
+        }, ct).ConfigureAwait(false);
 
         return solutions;
     }
@@ -694,7 +658,6 @@ public sealed partial class DataverseClient : IDisposable
     /// the authoritative source for telling a cloud flow from a business rule, BPF or action.
     /// The component summary does not carry it.
     /// </summary>
-
     private async Task ApplyProcessCategoriesAsync(IReadOnlyList<SolutionComponentItem> items, CancellationToken ct)
     {
         var processes = items.Where(i => i.ComponentType == 29 && i.ObjectId != Guid.Empty).ToList();
@@ -705,46 +668,10 @@ public sealed partial class DataverseClient : IDisposable
             var categories = new Dictionary<Guid, string>();
             var codes = new Dictionary<Guid, int>();
 
-            // Only the processes in this solution are asked about, fifty to a request. Reading the
-            // whole table instead pages through every activation and system flow in the
-            // environment - tens of thousands of rows in a large one - on every switch of solution.
-            // A solution holding very many processes falls back to one read of the definitions.
-            const string select = "workflows?$select=workflowid,category&$filter=";
-            var queries = processes.Count <= ProcessCategoryChunkLimit
-                ? processes.Select(p => p.ObjectId).Distinct().Chunk(50)
-                    .Select(chunk => select + InFilter("workflowid", chunk.Select(id => id.ToString())))
-                    .ToList()
-                : new List<string> { select + "type eq 1" };
-
-            foreach (var query in queries)
+            foreach (var query in ProcessCategoryQueries(processes))
             {
-                var url = EnvironmentUrl + ApiPath + query;
-
-                while (url.Length > 0)
-                {
-                    using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
-
-                    if (doc.RootElement.TryGetProperty("value", out var value))
-                    {
-                        foreach (var row in value.EnumerateArray())
-                        {
-                            if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
-
-                            var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
-                            var category = JsonHelper.GetInt(row, "category");
-                            if (category is not null) codes[id] = category.Value;
-
-                            if (string.IsNullOrWhiteSpace(label))
-                            {
-                                label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(label)) categories[id] = label;
-                        }
-                    }
-
-                    url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-                }
+                await ForEachRowAsync(EnvironmentUrl + ApiPath + query, Annotations.Formatted,
+                    row => ReadProcessCategory(row, codes, categories), ct).ConfigureAwait(false);
             }
 
             foreach (var process in processes)
@@ -766,6 +693,43 @@ public sealed partial class DataverseClient : IDisposable
             Services.Log.Warn("Process categories could not be read", ex);
             // Best effort - processes simply keep whatever sub type the summary supplied.
         }
+    }
+
+    /// <summary>
+    /// Only the processes in this solution are asked about, fifty to a request. Reading the
+    /// whole table instead pages through every activation and system flow in the
+    /// environment - tens of thousands of rows in a large one - on every switch of solution.
+    /// A solution holding very many processes falls back to one read of the definitions.
+    /// </summary>
+    private static List<string> ProcessCategoryQueries(List<SolutionComponentItem> processes)
+    {
+        const string select = "workflows?$select=workflowid,category&$filter=";
+
+        return processes.Count <= ProcessCategoryChunkLimit
+            ? processes.Select(p => p.ObjectId).Distinct().Chunk(50)
+                .Select(chunk => select + InFilter("workflowid", chunk.Select(id => id.ToString())))
+                .ToList()
+            : new List<string> { select + "type eq 1" };
+    }
+
+    /// <summary>
+    /// A workflow row's category: its code, and its label - the server's own, or the name this
+    /// app knows for the code when the server sends none.
+    /// </summary>
+    private static void ReadProcessCategory(JsonElement row, Dictionary<Guid, int> codes, Dictionary<Guid, string> labels)
+    {
+        if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) return;
+
+        var label = JsonHelper.GetString(row, "category@OData.Community.Display.V1.FormattedValue");
+        var category = JsonHelper.GetInt(row, "category");
+        if (category is not null) codes[id] = category.Value;
+
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            label = category is null ? null : ComponentTypes.GetProcessCategoryName(category.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(label)) labels[id] = label;
     }
 
     private string BuildComponentsUrl(Guid solutionId, (int Low, int High)? typeRange)
@@ -865,20 +829,35 @@ public sealed partial class DataverseClient : IDisposable
             using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
             var added = 0;
-            if (doc.RootElement.TryGetProperty("value", out var value))
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    into.Add(ReadComponent(row));
-                    added++;
-                }
+                into.Add(ReadComponent(row));
+                added++;
             }
 
             onRowsAdded(added);
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+            url = JsonHelper.NextLink(doc.RootElement);
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Pages through a collection to the end, handing each row to <paramref name="onRow"/> while
+    /// its page is still open. GetJsonAsync refuses a nextLink on any other host.
+    /// </summary>
+    private async Task ForEachRowAsync(string url, string? annotations, Action<JsonElement> onRow, CancellationToken ct)
+    {
+        while (url.Length > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            using var doc = await GetJsonAsync(url, ct, annotations).ConfigureAwait(false);
+
+            foreach (var row in JsonHelper.Rows(doc.RootElement)) onRow(row);
+
+            url = JsonHelper.NextLink(doc.RootElement);
+        }
     }
 
     private static SolutionComponentItem ReadComponent(JsonElement row)
@@ -940,6 +919,16 @@ public sealed partial class DataverseClient : IDisposable
 
 internal static class JsonHelper
 {
+    /// <summary>The rows of a Web API collection response - none when it carries no value array.</summary>
+    public static IEnumerable<JsonElement> Rows(JsonElement root)
+    {
+        if (!root.TryGetProperty("value", out var value)) return Enumerable.Empty<JsonElement>();
+        return value.EnumerateArray();
+    }
+
+    /// <summary>The next page of a collection response, or empty on its last page.</summary>
+    public static string NextLink(JsonElement root) => GetString(root, "@odata.nextLink") ?? string.Empty;
+
     public static string? GetString(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object) return null;
@@ -1000,31 +989,29 @@ internal static class JsonHelper
     {
         if (depth > 8) return null;
 
-        switch (element.ValueKind)
+        return element.ValueKind switch
         {
-            case JsonValueKind.Object:
-                foreach (var property in element.EnumerateObject())
-                {
-                    if (property.NameEquals(name) && property.Value.ValueKind == JsonValueKind.String)
-                    {
-                        var text = property.Value.GetString();
-                        if (!string.IsNullOrWhiteSpace(text)) return text;
-                    }
+            JsonValueKind.Object => FindStringInProperties(element, name, depth),
+            JsonValueKind.Array => element.EnumerateArray()
+                .Select(child => FindStringDeep(child, name, depth + 1))
+                .FirstOrDefault(nested => nested is not null),
+            _ => null
+        };
+    }
 
-                    var nested = FindStringDeep(property.Value, name, depth + 1);
-                    if (nested is not null) return nested;
-                }
+    /// <summary>An object's own property of that name if it holds text, otherwise the first found inside each property in turn.</summary>
+    private static string? FindStringInProperties(JsonElement element, string name, int depth)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.NameEquals(name) && property.Value.ValueKind == JsonValueKind.String)
+            {
+                var text = property.Value.GetString();
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
 
-                break;
-
-            case JsonValueKind.Array:
-                foreach (var child in element.EnumerateArray())
-                {
-                    var nested = FindStringDeep(child, name, depth + 1);
-                    if (nested is not null) return nested;
-                }
-
-                break;
+            var nested = FindStringDeep(property.Value, name, depth + 1);
+            if (nested is not null) return nested;
         }
 
         return null;

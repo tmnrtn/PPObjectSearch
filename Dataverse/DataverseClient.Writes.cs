@@ -51,8 +51,8 @@ public sealed partial class DataverseClient
         string entitySetName,
         Guid id,
         IReadOnlyDictionary<string, object?> values,
-        CancellationToken ct = default,
-        string? etag = null)
+        string? etag = null,
+        CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Patch, EnvironmentUrl + ApiPath + $"{entitySetName}({id})")
@@ -68,7 +68,7 @@ public sealed partial class DataverseClient
     }
 
     /// <summary>Deletes a row - with an <paramref name="etag"/>, only if it is still the version read.</summary>
-    public async Task DeleteRecordAsync(string entitySetName, Guid id, CancellationToken ct = default, string? etag = null)
+    public async Task DeleteRecordAsync(string entitySetName, Guid id, string? etag = null, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Delete, EnvironmentUrl + ApiPath + $"{entitySetName}({id})");

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PPObjectSearch.Models;
 
 namespace PPObjectSearch.Dataverse;
@@ -30,30 +31,25 @@ public sealed partial class DataverseClient
 
         var results = new List<DeleteBehaviour>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, null, row =>
         {
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var entity = JsonHelper.GetString(row, "ReferencingEntity");
-                    var attribute = JsonHelper.GetString(row, "ReferencingAttribute");
-                    var delete = ReadNested(row, "CascadeConfiguration", "Delete");
-
-                    if (string.IsNullOrWhiteSpace(entity) || string.IsNullOrWhiteSpace(attribute)) continue;
-                    if (delete is not ("Cascade" or "Restrict" or "RemoveLink")) continue;
-
-                    results.Add(new DeleteBehaviour(entity, attribute, delete));
-                }
-            }
-
-            // GetJsonAsync refuses a nextLink on any other host.
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+            if (ReadDeleteBehaviour(row) is { } behaviour) results.Add(behaviour);
+        }, ct).ConfigureAwait(false);
 
         return results;
+    }
+
+    /// <summary>A relationship's delete behaviour, when it is one that reaches past the deleted row.</summary>
+    private static DeleteBehaviour? ReadDeleteBehaviour(JsonElement row)
+    {
+        var entity = JsonHelper.GetString(row, "ReferencingEntity");
+        var attribute = JsonHelper.GetString(row, "ReferencingAttribute");
+        var delete = ReadNested(row, "CascadeConfiguration", "Delete");
+
+        if (string.IsNullOrWhiteSpace(entity) || string.IsNullOrWhiteSpace(attribute)) return null;
+        if (delete is not ("Cascade" or "Restrict" or "RemoveLink")) return null;
+
+        return new DeleteBehaviour(entity, attribute, delete);
     }
 
     /// <summary>

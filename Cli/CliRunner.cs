@@ -19,6 +19,8 @@ public sealed class CliRunner
     public const int Usage = 2;
     public const int Failed = 3;
 
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+
     public const string Help = """
         ppos - Power Platform Object Search, from the command line. Read-only.
 
@@ -194,7 +196,7 @@ public sealed class CliRunner
             {
                 status = r.Status.ToString(), name = r.Name, type = r.ComponentTypeName, subType = r.SubType,
                 objectId = (r.Left ?? r.Right)?.ObjectId
-            }), new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine,
+            }), IndentedJson) + Environment.NewLine,
             _ => DiffMarkdown(name, leftUrl, rightUrl, rows)
         });
 
