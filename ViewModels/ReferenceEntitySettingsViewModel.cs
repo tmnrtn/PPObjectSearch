@@ -164,11 +164,12 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
 
             BuildKeyOptions(keys);
             ApplyExclusions(_config.ExcludedColumns, _config.ComparedColumns);
-            SelectSavedKey(keys);
+            var fallback = SelectSavedKey(keys);
 
-            Status = keys.Count == 0
+            var summary = keys.Count == 0
                 ? $"{columns.Count:N0} comparable columns. This table defines no alternate keys."
                 : $"{columns.Count:N0} comparable columns, {keys.Count} alternate key(s).";
+            Status = fallback is null ? summary : $"{summary} {fallback}";
         }
         catch (OperationCanceledException)
         {
@@ -269,7 +270,11 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         });
     }
 
-    private void SelectSavedKey(IReadOnlyList<AlternateKeyInfo> keys)
+    /// <summary>
+    /// Selects the key the configuration was saved with. Returns a note when that was an alternate
+    /// key that no longer exists, so the dialog can say why it shows the primary key instead.
+    /// </summary>
+    private string? SelectSavedKey(IReadOnlyList<AlternateKeyInfo> keys)
     {
         SelectedKey = _config.KeySource switch
         {
@@ -284,16 +289,14 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
             _ => KeyOptions[0]
         };
 
+        SyncKeyTicks();
+
         // A saved alternate key that no longer exists falls back to the primary key above; say so
         // rather than letting the dialog quietly show a different key than was saved.
-        if (_config.KeySource == RecordKeySource.AlternateKey &&
-            SelectedKey?.Source != RecordKeySource.AlternateKey)
-        {
-            Status = $"The saved alternate key '{_config.AlternateKeyName}' no longer exists on this table " +
-                     $"({keys.Count} found); fell back to the primary key.";
-        }
-
-        SyncKeyTicks();
+        return _config.KeySource == RecordKeySource.AlternateKey && SelectedKey?.Source != RecordKeySource.AlternateKey
+            ? $"The saved alternate key '{_config.AlternateKeyName}' no longer exists on this table " +
+              $"({keys.Count} found); fell back to the primary key."
+            : null;
     }
 
     /// <summary>Puts the key ticks where the chosen key says they should be, so switching to

@@ -149,6 +149,24 @@ public class EnvironmentSessionConnectTests
     });
 
     [Fact]
+    public Task After_a_failed_sign_in_nothing_opens_details() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        env.Handler.OnError(HttpMethod.Get, "/WhoAmI", HttpStatusCode.Unauthorized, "The user is not a member of the organization.");
+        var session = await env.ConnectedAsync();
+        var item = TestSessions.Item("Account");
+
+        // On this thread a details window could not even be created, so getting past this shows none was tried.
+        session.OpenDetails(item);
+        session.SelectedItem = item;
+        session.ExploreDependenciesCommand.Execute(null);
+
+        Assert.NotNull(session.Client);
+        Assert.False(session.IsConnected);
+        Assert.Equal(0, DetailsWindows.Count);
+    });
+
+    [Fact]
     public Task A_failed_sign_in_leaves_the_tab_disconnected_with_the_reason() => EnvironmentSessionThread.Run(async () =>
     {
         var env = new FakeEnvironment();
@@ -175,7 +193,7 @@ public class EnvironmentSessionConnectTests
     });
 
     [Fact]
-    public Task Connecting_again_while_signing_in_cancels_the_first_attempt() => EnvironmentSessionThread.Run(async () =>
+    public Task Connecting_again_while_signing_in_cancels_the_first_attempt_quietly() => EnvironmentSessionThread.Run(async () =>
     {
         var env = new FakeEnvironment();
         env.AddSolution("Default Solution", "Default");
@@ -196,10 +214,39 @@ public class EnvironmentSessionConnectTests
         firstWhoAmI.SetResult();
         await Task.WhenAll(first, second);
 
-        Assert.Contains("Cancelled.", statuses);
-        Assert.Contains(statuses, s => s.StartsWith("Loaded 0 objects", StringComparison.Ordinal));
+        // The overtaken attempt says nothing over the newer one's result.
+        Assert.DoesNotContain("Cancelled.", statuses);
+        Assert.StartsWith("Loaded 0 objects", session.Status, StringComparison.Ordinal);
+        Assert.False(session.IsBusy);
         Assert.True(session.IsConnected);
         Assert.Equal("Default", session.SelectedSolution?.UniqueName);
+    });
+
+    [Fact]
+    public Task Signing_out_while_signing_in_leaves_the_tab_signed_out() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        env.AddSolution("Default Solution", "Default");
+        var whoAmI = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        env.Handler.OnAsync(HttpMethod.Get, "/WhoAmI", async _ =>
+        {
+            Interlocked.Increment(ref calls);
+            await whoAmI.Task;
+            return FakeHttpHandler.Json("{\"UserId\":\"11111111-0000-0000-0000-000000000001\"}");
+        });
+        var session = env.Session();
+
+        var connecting = session.ConnectAsync();
+        await EnvironmentSessionThread.Until(() => calls == 1, "the sign-in");
+        session.Reset("Signed out.");
+        whoAmI.SetResult();
+        await connecting;
+
+        Assert.Equal("Signed out.", session.Status);
+        Assert.False(session.IsConnected);
+        Assert.False(session.IsBusy);
+        Assert.Empty(session.Solutions);
     });
 
     [Fact]

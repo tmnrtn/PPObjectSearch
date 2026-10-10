@@ -129,6 +129,8 @@ public class ReferenceEntitySettingsViewModelTests
 
         Assert.Equal(RecordKeySource.PrimaryId, vm.SelectedKey!.Source);
         Assert.Equal(PrimaryKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Contains("comparable columns", vm.Status);
+        Assert.Contains("The saved alternate key 'new_dropped' no longer exists", vm.Status);
     }
 
     [Fact]
