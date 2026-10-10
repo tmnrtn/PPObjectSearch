@@ -14,7 +14,7 @@ public class CompareViewModelTests
     private static readonly Guid Account = Guid.Parse("a0000000-0000-0000-0000-000000000001");
 
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_comparedAt")]
-    private static extern ref DateTime? ComparedAt(CompareViewModel vm);
+    private static extern ref DateTimeOffset? ComparedAt(CompareViewModel vm);
 
     private static SolutionInfo Solution(string name) => new() { SolutionId = Guid.NewGuid(), UniqueName = name.Replace(" ", ""), FriendlyName = name };
 
@@ -296,10 +296,10 @@ public class CompareViewModelTests
         var (dev, prod) = Pair();
         using var vm = new CompareViewModel([dev, prod]);
 
-        ComparedAt(vm) = DateTime.Now.AddMinutes(-5);
+        ComparedAt(vm) = DateTimeOffset.Now.AddMinutes(-5);
         Assert.Equal("Compared 5 min ago", vm.ComparedAgo);
 
-        var at = DateTime.Now.AddHours(-2);
+        var at = DateTimeOffset.Now.AddHours(-2);
         ComparedAt(vm) = at;
         Assert.Equal($"Compared at {at:HH:mm}", vm.ComparedAgo);
     }

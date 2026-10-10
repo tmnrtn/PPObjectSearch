@@ -65,7 +65,7 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
     public RelayCommand CompareDefinitionCommand { get; }
 
     private readonly DispatcherTimer _agoTimer;
-    private DateTime? _comparedAt;
+    private DateTimeOffset? _comparedAt;
 
     /// <summary>"Compared 2 min ago" - empty until the first comparison.</summary>
     public string ComparedAgo
@@ -74,10 +74,13 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
         {
             if (_comparedAt is not { } at) return string.Empty;
 
-            var elapsed = DateTime.Now - at;
-            return elapsed.TotalMinutes < 1 ? "Compared just now"
-                : elapsed.TotalHours < 1 ? $"Compared {(int)elapsed.TotalMinutes} min ago"
-                : $"Compared at {at:HH:mm}";
+            var elapsed = DateTimeOffset.Now - at;
+            return elapsed switch
+            {
+                { TotalMinutes: < 1 } => "Compared just now",
+                { TotalHours: < 1 } => $"Compared {(int)elapsed.TotalMinutes} min ago",
+                _ => $"Compared at {at:HH:mm}"
+            };
         }
     }
 
@@ -302,7 +305,7 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
 
         SelectedTypeFilter = TypeFilters[0];
 
-        _comparedAt = DateTime.Now;
+        _comparedAt = DateTimeOffset.Now;
         OnPropertyChanged(nameof(ComparedAgo));
         OnPropertyChanged(nameof(MatchDescription));
         OnPropertyChanged(nameof(LeftHeader));

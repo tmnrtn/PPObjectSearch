@@ -14,7 +14,7 @@ public sealed class CsvExporterTests : IDisposable
 
     public void Dispose()
     {
-        try { File.Delete(_path); } catch (IOException) { }
+        try { File.Delete(_path); } catch (IOException) { /* best effort: a temp file left behind is harmless */ }
     }
 
     private string WriteAndRead(params SolutionComponentItem[] items)

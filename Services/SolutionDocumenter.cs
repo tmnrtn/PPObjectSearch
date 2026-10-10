@@ -95,7 +95,7 @@ public sealed class SolutionDocumenter
                 .ConfigureAwait(false);
         }
 
-        pages.Insert(0, new DocPage("index", solution.FriendlyName, Summary(solution, items, environment, pages, dependencies, problems)));
+        pages.Insert(0, new DocPage("index", solution.FriendlyName, Summary(solution, items, environment, dependencies, problems)));
         return pages;
     }
 
@@ -123,7 +123,12 @@ public sealed class SolutionDocumenter
             foreach (var page in group)
             {
                 var name = page.FileName;
-                for (var n = 2; files.ContainsKey(name); n++) name = page.FileName[..^3] + $"-{n}.md";
+                var n = 2;
+                while (files.ContainsKey(name))
+                {
+                    name = page.FileName[..^3] + $"-{n}.md";
+                    n++;
+                }
 
                 files[name] = page.Markdown;
                 index.AppendLine($"- [{page.Title}]({name})");
@@ -140,7 +145,7 @@ public sealed class SolutionDocumenter
 
     private static string Summary(
         SolutionInfo solution, IReadOnlyList<SolutionComponentItem> items, string environment,
-        IReadOnlyList<DocPage> pages, string? dependencies, IReadOnlyList<string> problems)
+        string? dependencies, IReadOnlyList<string> problems)
     {
         var md = new StringBuilder()
             .AppendLine($"# {solution.FriendlyName}")
@@ -223,7 +228,13 @@ public sealed class SolutionDocumenter
             var flow = await _client.GetCloudFlowAsync(item.ObjectId, ct).ConfigureAwait(false);
             var md = new StringBuilder().AppendLine($"# {item.PrimaryLabel}").AppendLine();
 
-            md.AppendLine($"State: {(flow.IsOn == true ? "on" : flow.IsOn == false ? "off" : "unknown")}").AppendLine();
+            var state = flow.IsOn switch
+            {
+                true => "on",
+                false => "off",
+                null => "unknown"
+            };
+            md.AppendLine($"State: {state}").AppendLine();
 
             if (string.IsNullOrWhiteSpace(flow.Definition))
             {
@@ -232,7 +243,7 @@ public sealed class SolutionDocumenter
                 continue;
             }
 
-            var design = FlowDesignParser.Parse(flow.Definition!);
+            var design = FlowDesignParser.Parse(flow.Definition);
             var trigger = design.Triggers.FirstOrDefault();
             md.AppendLine($"**Trigger:** {Cell(trigger?.Summary ?? "none")}").AppendLine();
 

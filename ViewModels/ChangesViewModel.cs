@@ -151,16 +151,20 @@ public sealed class ChangesViewModel : ObservableObject
     public bool HasEntries => ShownCount > 0;
 
     /// <summary>Why the list is empty and what to change - shown in its place.</summary>
-    public string EmptyHeading => Entries.Count > 0 ? "Nothing matches"
-        : IsBusy ? "Reading changes"
-        : "No changes";
+    public string EmptyHeading => (Entries.Count > 0, IsBusy) switch
+    {
+        (true, _) => "Nothing matches",
+        (_, true) => "Reading changes",
+        _ => "No changes"
+    };
 
-    public string EmptyText => Entries.Count > 0
-        ? "No change matches the type" + (UnmanagedOnly ? " and Unmanaged only" : string.Empty) +
-          ". Choose All types" + (UnmanagedOnly ? ", or clear Unmanaged only." : ".")
-        : IsBusy
-            ? $"Components changed and solutions imported in the {Range.ToLowerInvariant()} are being read."
-            : $"Nothing was changed, imported or uninstalled in the {Range.ToLowerInvariant()}. Try a longer time range.";
+    public string EmptyText => (Entries.Count > 0, IsBusy) switch
+    {
+        (true, _) when UnmanagedOnly => "No change matches the type and Unmanaged only. Choose All types, or clear Unmanaged only.",
+        (true, _) => "No change matches the type. Choose All types.",
+        (_, true) => $"Components changed and solutions imported in the {Range.ToLowerInvariant()} are being read.",
+        _ => $"Nothing was changed, imported or uninstalled in the {Range.ToLowerInvariant()}. Try a longer time range."
+    };
 
     private DateTimeOffset _since;
 
@@ -175,8 +179,9 @@ public sealed class ChangesViewModel : ObservableObject
             return;
         }
 
-        _cts?.Cancel();
+        var superseded = _cts;
         var cts = _cts = new CancellationTokenSource();
+        if (superseded is not null) await superseded.CancelAsync();
         IsBusy = true;
         _since = DateTimeOffset.Now - Span(Range);
 

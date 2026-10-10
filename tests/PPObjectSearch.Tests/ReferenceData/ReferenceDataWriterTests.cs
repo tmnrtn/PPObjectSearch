@@ -231,7 +231,7 @@ public class ReferenceDataWriterTests
         var value = ReferenceDataWriter.ToWriteValue(raw, Col("c", type));
 
         Assert.IsType<decimal>(value);
-        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), (decimal)value!);
+        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), (decimal)value);
     }
 
     [Fact]
@@ -594,7 +594,7 @@ public class ReferenceDataWriterTests
             Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build(), null));
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        var body = BodyOf(handler.Requests.Last());
+        var body = BodyOf(handler.Requests[^1]);
         Assert.Equal($"/new_parents({G(502)})", body.GetProperty("new_ParentId@odata.bind").GetString());
     }
 
@@ -655,7 +655,7 @@ public class ReferenceDataWriterTests
 
         Assert.True(outcome.Succeeded, outcome.Message);
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("$filter"));
-        Assert.Equal($"/new_parents({G(10)})", BodyOf(handler.Requests.Last()).GetProperty("new_ParentId@odata.bind").GetString());
+        Assert.Equal($"/new_parents({G(10)})", BodyOf(handler.Requests[^1]).GetProperty("new_ParentId@odata.bind").GetString());
     }
 
     [Fact]

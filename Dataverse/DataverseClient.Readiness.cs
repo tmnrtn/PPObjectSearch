@@ -26,10 +26,7 @@ public sealed partial class DataverseClient
         var results = new List<MissingDependency>();
 
         // The response wraps the dependency rows; accept either shape it has been seen in.
-        var rows = doc.RootElement.TryGetProperty("EntityCollection", out var collection)
-            ? collection.ValueKind == JsonValueKind.Array ? collection
-              : collection.TryGetProperty("Entities", out var entities) ? entities : default
-            : doc.RootElement.TryGetProperty("value", out var value) ? value : default;
+        var rows = DependencyRows(doc.RootElement);
 
         if (rows.ValueKind != JsonValueKind.Array) return results;
 
@@ -46,6 +43,19 @@ public sealed partial class DataverseClient
         }
 
         return results;
+    }
+
+    /// <summary>The rows under EntityCollection - itself an array, or holding Entities - else under value.</summary>
+    private static JsonElement DependencyRows(JsonElement response)
+    {
+        if (!response.TryGetProperty("EntityCollection", out var collection))
+        {
+            return response.TryGetProperty("value", out var value) ? value : default;
+        }
+
+        if (collection.ValueKind == JsonValueKind.Array) return collection;
+
+        return collection.TryGetProperty("Entities", out var entities) ? entities : default;
     }
 
     /// <summary>

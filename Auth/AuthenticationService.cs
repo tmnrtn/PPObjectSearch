@@ -24,6 +24,10 @@ public sealed class AuthenticationService
 {
     public const string DefaultClientId = "51f81489-12ee-4a9e-aaae-a2591f45987d";
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S1075:URIs should not be hardcoded",
+        Justification = "MSAL's loopback redirect, which the public client above is registered with.")]
+    private const string LoopbackRedirectUri = "http://localhost";
+
     private readonly string _clientId;
     private readonly IMsalHttpClientFactory? _httpClientFactory;
     private readonly ConcurrentDictionary<string, IPublicClientApplication> _apps = new(StringComparer.OrdinalIgnoreCase);
@@ -54,7 +58,7 @@ public sealed class AuthenticationService
                 .WithAuthority(key, validateAuthority: false)
                 // Loopback redirect: MSAL runs a temporary listener and uses the system browser,
                 // so existing SSO / MFA sessions are reused.
-                .WithRedirectUri("http://localhost");
+                .WithRedirectUri(LoopbackRedirectUri);
 
             if (_httpClientFactory is not null) builder = builder.WithHttpClientFactory(_httpClientFactory);
 

@@ -73,7 +73,7 @@ public class EntityPickerViewModelTests
         Assert.True(picker.HasSelection);
         Assert.Equal("Add 2 tables", picker.AddLabel);
         Assert.Equal("2 selected · 4 of 4 tables shown", picker.Summary);
-        Assert.Equal(["account", "new_country"], picker.SelectedEntities.Select(e => e.LogicalName));
+        Assert.Equal(["account", "new_country"], picker.SelectedEntities().Select(e => e.LogicalName));
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class EntityPickerViewModelTests
 
         Assert.False(account.IsSelected);
         Assert.True(account.IsTicked);
-        Assert.Empty(picker.SelectedEntities);
+        Assert.Empty(picker.SelectedEntities());
     }
 
     [Fact]

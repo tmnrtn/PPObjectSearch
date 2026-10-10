@@ -210,10 +210,13 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     /// <summary>"Read 2 min ago" beside the refresh button - how stale the comparison is.</summary>
     public string LastReadLabel => _lastRead is { } at ? "Read " + Ago(DateTimeOffset.Now - at) : string.Empty;
 
-    internal static string Ago(TimeSpan age) => age.TotalSeconds < 60 ? "just now"
-        : age.TotalMinutes < 60 ? $"{(int)age.TotalMinutes} min ago"
-        : age.TotalHours < 24 ? $"{(int)age.TotalHours} h ago"
-        : "over a day ago";
+    internal static string Ago(TimeSpan age) => age switch
+    {
+        { TotalSeconds: < 60 } => "just now",
+        { TotalMinutes: < 60 } => $"{(int)age.TotalMinutes} min ago",
+        { TotalHours: < 24 } => $"{(int)age.TotalHours} h ago",
+        _ => "over a day ago"
+    };
 
     private void MarkRead()
     {
@@ -342,7 +345,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         try
         {
             var selectedId = SelectedTeam?.TeamId;
-            var teams = await _client.GetTeamsAsync(entraGroupTeamsOnly: true);
+            var teams = await _client.GetTeamsAsync(entraGroupTeamsOnly: true, CancellationToken.None);
 
             Teams.Clear();
             foreach (var team in teams) Teams.Add(team);
@@ -367,9 +370,10 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     /// <summary>Reads both sides afresh - the team from Dataverse, the group from Graph.</summary>
     private async Task LoadComparisonAsync()
     {
-        _loadCts?.Cancel();
+        var superseded = _loadCts;
         var cts = _loadCts = new CancellationTokenSource();
         var ct = cts.Token;
+        if (superseded is not null) await superseded.CancelAsync();
 
         var team = SelectedTeam;
         Rows.Clear();
@@ -573,7 +577,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
                 }
 
                 // Tests have no application; there, a lock does the dispatcher's job of one at a time.
-                if (Application.Current?.Dispatcher is { } dispatcher) dispatcher.Invoke(Report);
+                if (Application.Current?.Dispatcher is { } dispatcher) await dispatcher.InvokeAsync(Report);
                 else lock (_reportGate) Report();
             });
 
@@ -607,7 +611,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
         try
         {
-            var users = await _client.FindUsersForEntraUsersAsync(targets.Select(r => r.Row.Entra!));
+            var users = await _client.FindUsersForEntraUsersAsync(targets.Select(r => r.Row.Entra!), CancellationToken.None);
 
             var byObjectId = users
                 .Where(u => u.AadObjectId is not null)
@@ -698,7 +702,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             permission = await EnsurePermissionAsync();
 
             var groupOnly = Rows.Where(r => r.Status == EntraMatchStatus.EntraOnly).ToList();
-            var existing = await _client.GetUsersByAadObjectIdsAsync(groupOnly.Select(r => r.Row.Entra!.Id));
+            var existing = await _client.GetUsersByAadObjectIdsAsync(groupOnly.Select(r => r.Row.Entra!.Id), CancellationToken.None);
             var byObjectId = existing
                 .Where(u => u.AadObjectId is not null)
                 .GroupBy(u => u.AadObjectId!.Value.ToString())
@@ -938,12 +942,11 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         var pulled = changes.Select(c => c.SystemUserId.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var nowInTeam = Rows.Count(r => r.Status == EntraMatchStatus.Both && r.Row.Entra is { } e && pulled.Contains(e.Id));
 
+        var rest = syncAfter
+            ? " The rest may land in a few minutes - Re-read, then Diagnose to see why any remain."
+            : " Run Sync from Entra to add the rest.";
         Status += $" {nowInTeam:N0} of {changes.Count:N0} pulled-in user(s) are now in the team." +
-                  (nowInTeam < changes.Count
-                      ? syncAfter
-                          ? " The rest may land in a few minutes - Re-read, then Diagnose to see why any remain."
-                          : " Run Sync from Entra to add the rest."
-                      : string.Empty);
+                  (nowInTeam < changes.Count ? rest : string.Empty);
     }
 
     /// <summary>Shows the confirmation; true if anything was run, after which the team has been re-read.</summary>
@@ -966,7 +969,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         try
         {
             IsBusy = true;
-            _teamMembers = await _client.GetTeamMembersAsync(team.TeamId);
+            _teamMembers = await _client.GetTeamMembersAsync(team.TeamId, CancellationToken.None);
             Rebuild();
         }
         catch (Exception ex)
@@ -987,38 +990,46 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     /// <summary>Asked afresh for every preview, so allowing or blocking writes from the sidebar
     /// applies to a window that is already open.</summary>
-    private Task<WritePermission> EnsurePermissionAsync() => Session.EvaluateWritePermissionAsync();
+    private Task<WritePermission> EnsurePermissionAsync() => Session.EvaluateWritePermissionAsync(CancellationToken.None);
 
     // ---------------------------------------------------------------- button hints
 
     /// <summary>What each footer button does - or, while it is disabled, why.</summary>
-    public string DiagnoseHint =>
-        !HasComparison ? "Pick a team to compare first."
-        : CountDataverseOnly + CountEntraOnly == 0 ? "Nothing to diagnose: the team and the group match."
-        : "Say why each 'team only' user is still in the team (asks Entra) and why each 'group only' user is not " +
-          "(looks up their Dataverse user). Read-only.";
+    public string DiagnoseHint => (HasComparison, CountDataverseOnly + CountEntraOnly) switch
+    {
+        (false, _) => "Pick a team to compare first.",
+        (_, 0) => "Nothing to diagnose: the team and the group match.",
+        _ => "Say why each 'team only' user is still in the team (asks Entra) and why each 'group only' user is not " +
+             "(looks up their Dataverse user). Read-only."
+    };
 
-    public string RemoveLeftoversHint =>
-        !HasComparison ? "Pick a team to compare first."
-        : CountDataverseOnly == 0 ? "Nothing to remove: nobody is in the team without being in the Entra group."
-        : "Preview removing the 'team only' users the sync leaves behind. Nothing changes until you confirm.";
+    public string RemoveLeftoversHint => (HasComparison, CountDataverseOnly) switch
+    {
+        (false, _) => "Pick a team to compare first.",
+        (_, 0) => "Nothing to remove: nobody is in the team without being in the Entra group.",
+        _ => "Preview removing the 'team only' users the sync leaves behind. Nothing changes until you confirm."
+    };
 
-    public string PullInHint =>
-        !HasComparison ? "Pick a team to compare first."
-        : Group is null ? "Unavailable: the Entra group was not found."
-        : CountEntraOnly == 0 ? "Nobody to pull in: every group member is already in the team."
-        : "Preview provisioning 'group only' users who have no Dataverse user, or a disabled one, with a WhoAmI made as " +
-          "each of them - then a team sync. Nothing changes until you confirm.";
+    public string PullInHint => (HasComparison, Group, CountEntraOnly) switch
+    {
+        (false, _, _) => "Pick a team to compare first.",
+        (_, null, _) => "Unavailable: the Entra group was not found.",
+        (_, _, 0) => "Nobody to pull in: every group member is already in the team.",
+        _ => "Preview provisioning 'group only' users who have no Dataverse user, or a disabled one, with a WhoAmI made as " +
+             "each of them - then a team sync. Nothing changes until you confirm."
+    };
 
     public string CopyScriptHint => NeedsUserSyncCount > 0
         ? $"Copy an Add-AdminPowerAppsSyncUser PowerShell script for the {NeedsUserSyncCount:N0} user(s) who need provisioning, for a Power Platform admin to run."
         : "Diagnose first: the script covers 'group only' users who need provisioning into the environment.";
 
-    public string SyncHint =>
-        !HasComparison ? "Pick a team to compare first."
-        : Group is null ? "Unavailable: the Entra group was not found, and syncing against a missing group could empty the team."
-        : "Preview Dataverse's SyncGroupMembersToTeam for this team. It can only add group members who already " +
-          "have a Dataverse user. Nothing changes until you confirm.";
+    public string SyncHint => (HasComparison, Group) switch
+    {
+        (false, _) => "Pick a team to compare first.",
+        (_, null) => "Unavailable: the Entra group was not found, and syncing against a missing group could empty the team.",
+        _ => "Preview Dataverse's SyncGroupMembersToTeam for this team. It can only add group members who already " +
+             "have a Dataverse user. Nothing changes until you confirm."
+    };
 
     private void RaiseCommands()
     {

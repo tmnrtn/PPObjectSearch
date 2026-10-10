@@ -272,19 +272,10 @@ public sealed class GlobalSearchViewModel : ObservableObject
         }
     }
 
-    private bool MatchesTerms(GlobalSearchRow row)
-    {
-        foreach (var term in _terms)
-        {
-            if (!row.Item.SearchIndex.Contains(term, StringComparison.Ordinal) &&
-                !row.Environment.Contains(term, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private bool MatchesTerms(GlobalSearchRow row) =>
+        _terms.All(term =>
+            row.Item.SearchIndex.Contains(term, StringComparison.Ordinal) ||
+            row.Environment.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private void Export()
     {

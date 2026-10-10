@@ -29,7 +29,7 @@ public class FlowDiagramStepDetailsTests
           } }
         """;
 
-    private sealed record UnknownStep : FlowStep;
+    private sealed record UnknownStep : IFlowStep;
 
     private static FlowActionResult Result(string name, FlowStepOutcome outcome, string? status = null, double seconds = 1,
         string? errorCode = null, string? error = null) =>

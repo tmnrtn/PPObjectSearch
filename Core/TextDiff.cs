@@ -32,7 +32,7 @@ public sealed class DiffRow
 /// values are frequently one long JSON or XML string, so callers are expected to run values
 /// through <see cref="Prettify"/> first - a diff of two 4000-character lines tells you nothing.
 /// </summary>
-public static class TextDiff
+public static partial class TextDiff
 {
     /// <summary>The line-alignment table is O(n*m), so past this size (after the lines the two
     /// sides share at either end are set aside) the Myers diff below is used instead.</summary>
@@ -54,7 +54,8 @@ public static class TextDiff
     /// is what keeps a changed value from dragging its surrounding quotes, colons and commas into
     /// the highlight - in JSON and XML values that is most of the line.
     /// </summary>
-    private static readonly Regex Tokenizer = new(@"\s+|\w+|[^\w\s]", RegexOptions.Compiled);
+    [GeneratedRegex(@"\s+|\w+|[^\w\s]")]
+    private static partial Regex Tokenizer();
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     public static IReadOnlyList<DiffRow> Compare(string? before, string? after)
@@ -232,7 +233,14 @@ public static class TextDiff
     private static IReadOnlyList<DiffRow>? Myers(string[] left, string[] right)
     {
         var ids = new Dictionary<string, int>(StringComparer.Ordinal);
-        int Id(string line) => ids.TryGetValue(line, out var id) ? id : ids[line] = ids.Count;
+        int Id(string line)
+        {
+            if (ids.TryGetValue(line, out var id)) return id;
+
+            id = ids.Count;
+            ids[line] = id;
+            return id;
+        }
 
         var a = left.Select(Id).ToArray();
         var b = right.Select(Id).ToArray();
@@ -419,7 +427,7 @@ public static class TextDiff
     }
 
     private static string[] Tokenize(string line)
-        => Tokenizer.Matches(line).Select(m => m.Value).ToArray();
+        => Tokenizer().Matches(line).Select(m => m.Value).ToArray();
 
     /// <summary>Collapses neighbouring runs that share a flag, so the view draws a handful of
     /// spans rather than one per word.</summary>

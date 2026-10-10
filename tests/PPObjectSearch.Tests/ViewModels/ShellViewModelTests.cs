@@ -284,9 +284,9 @@ public sealed class ShellViewModelTests : IDisposable
     {
         var shell = Start(ThreeTabs).Shell;
 
-        Assert.Equal(0, shell.OpenDetailsCount);
-        Assert.False(shell.HasOpenDetails);
-        Assert.Equal("Close all details (0)", shell.CloseAllDetailsLabel);
+        Assert.Equal(0, ShellViewModel.OpenDetailsCount);
+        Assert.False(ShellViewModel.HasOpenDetails);
+        Assert.Equal("Close all details (0)", ShellViewModel.CloseAllDetailsLabel);
         Assert.False(shell.CloseAllDetailsCommand.CanExecute(null));
     }
 

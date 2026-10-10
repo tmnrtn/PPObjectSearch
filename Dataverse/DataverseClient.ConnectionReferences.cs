@@ -134,10 +134,10 @@ public sealed partial class DataverseClient
                 return names;
             }
 
-            foreach (var reference in references.EnumerateObject())
+            foreach (var reference in references.EnumerateObject().Select(r => r.Value))
             {
-                if (reference.Value.ValueKind != JsonValueKind.Object) continue;
-                if (!reference.Value.TryGetProperty("connection", out var connection) ||
+                if (reference.ValueKind != JsonValueKind.Object) continue;
+                if (!reference.TryGetProperty("connection", out var connection) ||
                     connection.ValueKind != JsonValueKind.Object)
                 {
                     continue;

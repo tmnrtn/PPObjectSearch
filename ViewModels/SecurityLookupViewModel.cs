@@ -51,7 +51,7 @@ public sealed class SecurityLookupViewModel : ObservableObject
     private DataverseClient Client => _session.Client ?? throw new InvalidOperationException("Not connected.");
 
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; }
-    public IReadOnlyList<string> Actions => SecurityLookup.Actions;
+    public IReadOnlyList<string> Actions { get; } = SecurityLookup.Actions;
 
     public AsyncRelayCommand RunCommand { get; }
     public RelayCommand CancelCommand { get; }
@@ -301,12 +301,12 @@ public sealed class SecurityLookupViewModel : ObservableObject
 
         try
         {
-            foreach (var table in (await Client.GetEntitiesAsync()).OrderBy(t => t.LogicalName, StringComparer.OrdinalIgnoreCase))
+            foreach (var table in (await Client.GetEntitiesAsync(CancellationToken.None)).OrderBy(t => t.LogicalName, StringComparer.OrdinalIgnoreCase))
             {
                 Tables.Add(table);
             }
 
-            foreach (var user in (await Client.GetUsersAsync()).Where(u => !u.IsDisabled)) Users.Add(user);
+            foreach (var user in (await Client.GetUsersAsync(CancellationToken.None)).Where(u => !u.IsDisabled)) Users.Add(user);
 
             await LoadRolesAsync(LeftSession, LeftRoles);
             await LoadRolesAsync(RightSession, RightRoles);
@@ -336,7 +336,7 @@ public sealed class SecurityLookupViewModel : ObservableObject
 
     private async Task RunAsync()
     {
-        _cts = new CancellationTokenSource();
+        var cts = _cts = new CancellationTokenSource();
         _reads.Remove(Tab);
         IsBusy = true;
 
@@ -344,10 +344,10 @@ public sealed class SecurityLookupViewModel : ObservableObject
         {
             switch (Tab)
             {
-                case SecurityLookupTab.WhoCan: await WhoCanAsync(_cts.Token); break;
-                case SecurityLookupTab.Effective: await EffectiveAsync(_cts.Token); break;
-                case SecurityLookupTab.SecuredColumn: await SecuredColumnAsync(_cts.Token); break;
-                default: await CompareRolesAsync(_cts.Token); break;
+                case SecurityLookupTab.WhoCan: await WhoCanAsync(cts.Token); break;
+                case SecurityLookupTab.Effective: await EffectiveAsync(cts.Token); break;
+                case SecurityLookupTab.SecuredColumn: await SecuredColumnAsync(cts.Token); break;
+                default: await CompareRolesAsync(cts.Token); break;
             }
         }
         catch (OperationCanceledException)
@@ -360,6 +360,8 @@ public sealed class SecurityLookupViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsBusy = false;
         }
     }

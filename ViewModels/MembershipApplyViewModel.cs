@@ -288,16 +288,22 @@ public sealed class MembershipApplyViewModel : ObservableObject
         ? $"Yes, let Dataverse change the membership of {TargetName} - it is expected to remove {RemoveCount:N0} user(s)."
         : $"Yes, remove {RemoveCount:N0} user(s) from {TargetName}.";
 
-    public string ApplyLabel =>
-        HasRemoves && !RemoveAcknowledged ? "Confirm removals to apply"
-        : IsForecast ? "Run sync"
-        : (AddCount, RemoveCount) switch
+    public string ApplyLabel
+    {
+        get
         {
-            (0, 0) => "Nothing to apply",
-            (var a, 0) => $"{AddVerb} {a:N0}",
-            (0, var r) => $"Remove {r:N0}",
-            var (a, r) => $"{AddVerb} {a:N0} · remove {r:N0}"
-        };
+            if (HasRemoves && !RemoveAcknowledged) return "Confirm removals to apply";
+            if (IsForecast) return "Run sync";
+
+            return (AddCount, RemoveCount) switch
+            {
+                (0, 0) => "Nothing to apply",
+                (var a, 0) => $"{AddVerb} {a:N0}",
+                (0, var r) => $"Remove {r:N0}",
+                var (a, r) => $"{AddVerb} {a:N0} · remove {r:N0}"
+            };
+        }
+    }
 
     public bool IsDestructiveApply => HasRemoves && RemoveAcknowledged;
 
@@ -402,8 +408,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
     {
         if (!Permission.Allowed) return;
 
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
         IsRunning = true;
 
         _log ??= WriteLog.Start("membership", _request.WriteLogFolder);
@@ -430,6 +436,9 @@ public sealed class MembershipApplyViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
+
             IsRunning = false;
             HasRun = true;
             if (_log?.Problem is { } problem) Status += " " + problem;
@@ -504,7 +513,7 @@ public sealed class MembershipApplyViewModel : ObservableObject
             System.IO.Directory.CreateDirectory(folder);
 
             var start = _log is not null && System.IO.File.Exists(_log.Path)
-                ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_log.Path}\"")
+                ? new System.Diagnostics.ProcessStartInfo(Auth.AppPaths.Explorer, $"/select,\"{_log.Path}\"")
                 : new System.Diagnostics.ProcessStartInfo { FileName = folder, UseShellExecute = true };
 
             System.Diagnostics.Process.Start(start)?.Dispose();

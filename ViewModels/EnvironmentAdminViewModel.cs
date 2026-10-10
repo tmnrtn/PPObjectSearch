@@ -1077,9 +1077,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
             foreach (var member in members.OrderBy(m => m.FullName, StringComparer.CurrentCultureIgnoreCase)) Members.Add(member);
             Mailbox = mailbox;
 
-            DetailStatus = Members.Count == 0
-                ? queue.IsPrivate ? "This private queue has no members, so nobody can see its items." : "No members. A public queue is open to everyone with access to queues."
-                : $"{Members.Count:N0} member(s)" + (Members.Count(m => m.IsDisabled == true) is > 0 and var off ? $", {off:N0} disabled." : ".");
+            DetailStatus = Members.Count == 0 ? NoMembersText(queue) : MembersText();
         }
         catch (Exception ex)
         {
@@ -1089,6 +1087,17 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         {
             if (request == DetailRequest) IsLoadingDetails = false;
         }
+    }
+
+    private static string NoMembersText(QueueDetail queue) => queue.IsPrivate
+        ? "This private queue has no members, so nobody can see its items."
+        : "No members. A public queue is open to everyone with access to queues.";
+
+    /// <summary>"12 member(s), 2 disabled."</summary>
+    private string MembersText()
+    {
+        var disabled = Members.Count(m => m.IsDisabled == true);
+        return $"{Members.Count:N0} member(s)" + (disabled > 0 ? $", {disabled:N0} disabled." : ".");
     }
 
     private Task ShowMailboxAsync() =>

@@ -3,7 +3,7 @@ namespace PPObjectSearch.Models;
 /// <summary>A labelled value on the Overview tab.</summary>
 public sealed record OverviewProperty(string Label, string? Value)
 {
-    public string Shown => string.IsNullOrWhiteSpace(Value) ? "—" : Value!;
+    public string Shown => string.IsNullOrWhiteSpace(Value) ? "—" : Value;
 }
 
 /// <summary>A list on the Overview tab - a model-driven app's tables, a custom API's parameters...</summary>

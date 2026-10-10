@@ -136,10 +136,12 @@ public static class CodeHighlighting
     }
 
     /// <summary>The colour a named highlighting colour takes in a theme; null for the editor's text colour.</summary>
-    internal static Color? ColourFor(string namedColour, bool isDark) =>
-        Roles.TryGetValue(namedColour, out var role) && Palette.TryGetValue(role, out var colours)
-            ? isDark ? colours.Dark : colours.Light
-            : null;
+    internal static Color? ColourFor(string namedColour, bool isDark)
+    {
+        if (!Roles.TryGetValue(namedColour, out var role) || !Palette.TryGetValue(role, out var colours)) return null;
+
+        return isDark ? colours.Dark : colours.Light;
+    }
 
     /// <summary>The named colours of a definition that the palette does not know - none, ideally.</summary>
     internal static IEnumerable<string> UnmappedColours(CodeLanguage language) =>

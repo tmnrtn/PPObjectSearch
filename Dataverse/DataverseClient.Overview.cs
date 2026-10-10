@@ -118,9 +118,8 @@ public sealed partial class DataverseClient
                 using var refs = JsonDocument.Parse(json);
                 if (refs.RootElement.ValueKind == JsonValueKind.Object)
                 {
-                    foreach (var reference in refs.RootElement.EnumerateObject())
+                    foreach (var value in refs.RootElement.EnumerateObject().Select(reference => reference.Value))
                     {
-                        var value = reference.Value;
                         connections.Add([
                             JsonHelper.GetString(value, "displayName") ?? JsonHelper.GetString(value, "apiName"),
                             JsonHelper.GetString(value, "id")?.Split('/').LastOrDefault(),
@@ -161,7 +160,7 @@ public sealed partial class DataverseClient
 
         // The app's sitemap shares its unique name.
         using var sitemaps = await GetOneAsync(
-            $"sitemaps?$select=sitemapxml&$filter=sitemapnameunique eq '{Escape(unique!)}'", ct).ConfigureAwait(false);
+            $"sitemaps?$select=sitemapxml&$filter=sitemapnameunique eq '{Escape(unique)}'", ct).ConfigureAwait(false);
         if (sitemaps.RootElement.TryGetProperty("value", out var rows) && rows.GetArrayLength() > 0 &&
             JsonHelper.GetString(rows[0], "sitemapxml") is { Length: > 0 } xml)
         {
@@ -193,16 +192,21 @@ public sealed partial class DataverseClient
             e.Element("Titles")?.Elements("Title").FirstOrDefault()?.Attribute("Title")?.Value
             ?? (string?)e.Attribute("Title") ?? (string?)e.Attribute("Id");
 
+        // What a subarea opens: a table, else a URL.
+        static string? Opens(XElement sub)
+        {
+            if ((string?)sub.Attribute("Entity") is { Length: > 0 } entity) return $"Table: {entity}";
+
+            return (string?)sub.Attribute("Url") is { Length: > 0 } url ? url : null;
+        }
+
         foreach (var area in root.Descendants("Area"))
         {
             foreach (var group in area.Elements("Group"))
             {
                 foreach (var sub in group.Elements("SubArea"))
                 {
-                    var opens = (string?)sub.Attribute("Entity") is { Length: > 0 } entity ? $"Table: {entity}"
-                        : (string?)sub.Attribute("Url") is { Length: > 0 } url ? url
-                        : null;
-                    rows.Add([Title(area), Title(group), Title(sub), opens]);
+                    rows.Add([Title(area), Title(group), Title(sub), Opens(sub)]);
                 }
             }
         }

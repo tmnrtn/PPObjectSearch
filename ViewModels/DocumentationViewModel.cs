@@ -79,15 +79,15 @@ public sealed class DocumentationViewModel : ObservableObject
 
         if (target is null) return;
 
-        _cts = new CancellationTokenSource();
+        var cts = _cts = new CancellationTokenSource();
         IsBusy = true;
         var clock = Stopwatch.StartNew();
 
         try
         {
-            var items = await client.GetSolutionComponentsAsync(solution.SolutionId, ct: _cts.Token);
+            var items = await client.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
             var pages = await new SolutionDocumenter(client).BuildAsync(
-                solution, items, _session.Title, Options, new Progress<string>(m => Status = m), _cts.Token);
+                solution, items, _session.Title, Options, new Progress<string>(m => Status = m), cts.Token);
 
             var files = SolutionDocumenter.Render(pages, Options.FilePerComponent);
 
@@ -97,14 +97,14 @@ public sealed class DocumentationViewModel : ObservableObject
                 {
                     var path = Path.Combine(target, name.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                    await File.WriteAllTextAsync(path, content, _cts.Token);
+                    await File.WriteAllTextAsync(path, content, cts.Token);
                 }
 
                 Status = $"Wrote {files.Count:N0} file(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
             else
             {
-                await File.WriteAllTextAsync(target, files["README.md"], _cts.Token);
+                await File.WriteAllTextAsync(target, files["README.md"], cts.Token);
                 Status = $"Wrote {pages.Count - 1:N0} section page(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
         }
@@ -118,6 +118,8 @@ public sealed class DocumentationViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsBusy = false;
         }
     }

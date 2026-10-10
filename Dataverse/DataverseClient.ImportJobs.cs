@@ -20,8 +20,7 @@ public sealed partial class DataverseClient
 
         return await ReadRowsAsync(url, row =>
             Guid.TryParse(JsonHelper.GetString(row, "importjobid"), out var id)
-                ? new ImportJobInfo(id, JsonHelper.GetString(row, "solutionname"),
-                    row.TryGetProperty("progress", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.Number ? p.GetDouble() : null,
+                ? new ImportJobInfo(id, JsonHelper.GetString(row, "solutionname"), ImportProgress(row),
                     JsonHelper.GetDate(row, "startedon"), JsonHelper.GetDate(row, "completedon"), JsonHelper.GetDate(row, "createdon"))
                 : null, ct).ConfigureAwait(false);
     }
@@ -34,10 +33,13 @@ public sealed partial class DataverseClient
             ct, maxPageSize: false).ConfigureAwait(false);
         var row = doc.RootElement;
 
-        return new ImportJobInfo(id, JsonHelper.GetString(row, "solutionname"),
-            row.TryGetProperty("progress", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.Number ? p.GetDouble() : null,
+        return new ImportJobInfo(id, JsonHelper.GetString(row, "solutionname"), ImportProgress(row),
             JsonHelper.GetDate(row, "startedon"), JsonHelper.GetDate(row, "completedon"), JsonHelper.GetDate(row, "createdon"));
     }
+
+    /// <summary>The job's percentage complete; null where it has none.</summary>
+    private static double? ImportProgress(System.Text.Json.JsonElement row) =>
+        row.TryGetProperty("progress", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.Number ? p.GetDouble() : null;
 
     /// <summary>The import log: importjob.data, the XML the maker portal offers as a download.</summary>
     public async Task<string?> GetImportJobDataAsync(Guid id, CancellationToken ct = default)

@@ -108,9 +108,9 @@ public static class SecurityLookup
                     : (string.Empty, PrivilegeMatrix.Friendly(p.Name));
                 var key = (table.ToLowerInvariant(), action);
 
-                index[key] = index.TryGetValue(key, out var existing)
-                    ? (existing.Item1, existing.Item2 > p.Depth ? existing.Item2 : p.Depth)
-                    : (table, p.Depth);
+                // The deepest grant wins; the spelling stays the first one seen.
+                if (!index.TryGetValue(key, out var existing)) index[key] = (table, p.Depth);
+                else if (p.Depth > existing.Item2) index[key] = (existing.Item1, p.Depth);
             }
             return index;
         }

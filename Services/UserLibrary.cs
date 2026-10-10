@@ -79,7 +79,14 @@ public sealed class UserLibrary
             // Unlike settings, losing these is an inconvenience rather than a hazard: start empty,
             // but keep the file that would not read beside the new one.
             Log.Warn($"The library at {path} could not be read; starting empty", ex);
-            try { File.Copy(path, path + ".bad", overwrite: true); } catch (Exception copy) when (copy is IOException or UnauthorizedAccessException) { }
+            try
+            {
+                File.Copy(path, path + ".bad", overwrite: true);
+            }
+            catch (Exception copy) when (copy is IOException or UnauthorizedAccessException)
+            {
+                // The copy is a courtesy; starting empty does not depend on it.
+            }
             library = new UserLibrary();
         }
 

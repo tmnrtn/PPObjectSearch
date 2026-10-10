@@ -12,7 +12,7 @@ public sealed class AppSettingsTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { /* best effort: a temp folder left behind is harmless */ }
     }
 
     [Fact]
