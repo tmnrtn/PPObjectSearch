@@ -16,10 +16,9 @@ namespace PPObjectSearch.Auth;
 /// </summary>
 internal static class TokenCacheHelper
 {
-    private static readonly string CacheFile =
-        Path.Combine(AppPaths.DataDirectory, "msal.cache");
+    private static string CacheFile => Path.Combine(AppPaths.DataDirectory, "msal.cache");
 
-    private static readonly string LockFile = CacheFile + ".lock";
+    private static string LockFile => CacheFile + ".lock";
 
     /// <summary>Held from MSAL's before-access to its after-access notification.</summary>
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -156,7 +155,8 @@ internal static class TokenCacheHelper
 
 internal static class AppPaths
 {
-    public static string DataDirectory { get; } = Path.Combine(
+    /// <summary>Where the app keeps its files. Settable so tests can keep them out of the real profile.</summary>
+    public static string DataDirectory { get; internal set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PPObjectSearch");
 }

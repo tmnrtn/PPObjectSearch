@@ -26,7 +26,7 @@ public sealed class CachedComponents
 /// </summary>
 public static class ComponentCache
 {
-    private static readonly string CacheDirectory = Path.Combine(AppPaths.DataDirectory, "cache");
+    private static string CacheDirectory => Path.Combine(AppPaths.DataDirectory, "cache");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
