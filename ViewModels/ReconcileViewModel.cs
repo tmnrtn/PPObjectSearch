@@ -96,7 +96,7 @@ public sealed record ReconcileTarget(
 /// Apply is unavailable until the write guard has cleared the target environment - and, where the
 /// run includes deletions, until those have been acknowledged separately.
 /// </summary>
-public sealed class ReconcileViewModel : ObservableObject
+public sealed class ReconcileViewModel : ObservableObject, IDisposable
 {
     private readonly DataverseClient _targetClient;
     private readonly IReadOnlyDictionary<string, EntitySummary> _targetEntities;
@@ -107,6 +107,17 @@ public sealed class ReconcileViewModel : ObservableObject
     private WriteLog? _log;
     private CancellationTokenSource? _cts;
     private CancellationTokenSource? _impactCts;
+
+    /// <summary>Stops a run or an impact check still in progress when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+        _impactCts?.Cancel();
+        _impactCts?.Dispose();
+        _impactCts = null;
+    }
 
     public ReconcileViewModel(
         IReadOnlyList<RecordComparison> selected,

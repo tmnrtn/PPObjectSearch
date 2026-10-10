@@ -46,10 +46,18 @@ public sealed class QueuePlanRowViewModel
 /// added, queue members not in the team are removed. Everything is previewed first and written
 /// only once confirmed.
 /// </summary>
-public sealed class QueueSyncViewModel : ObservableObject
+public sealed class QueueSyncViewModel : ObservableObject, IDisposable
 {
     private readonly DataverseClient _client;
     private CancellationTokenSource? _previewCts;
+
+    /// <summary>Stops a preview still reading when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewCts = null;
+    }
     private IReadOnlyList<MemberUser> _teamMembers = Array.Empty<MemberUser>();
     private IReadOnlyList<MemberUser> _queueMembers = Array.Empty<MemberUser>();
 
@@ -314,7 +322,7 @@ public sealed class QueueSyncViewModel : ObservableObject
             Warnings = string.Join("  ", warnings);
 
             var nothingToDo = AdditiveOnly ? "Every team member is already in the queue." : "The queue already matches the team.";
-            Status = $"Previewed at {DateTime.Now:T}: team {teamMembers.Count:N0}, queue {queueMembers.Count:N0} members. " +
+            Status = $"Previewed at {DateTimeOffset.Now:T}: team {teamMembers.Count:N0}, queue {queueMembers.Count:N0} members. " +
                      (CountAdd + CountRemove == 0 ? nothingToDo : "Nothing is changed until you apply and confirm.");
 
             OnPropertyChanged(nameof(HasPlan));

@@ -14,7 +14,7 @@ namespace PPObjectSearch.ViewModels;
 /// ended in error over a period - a summary band with the trend and each source's count, then the
 /// failing components, each with its failures grouped by error and its latest ones a click away.
 /// </summary>
-public sealed class FailuresViewModel : ObservableObject
+public sealed class FailuresViewModel : ObservableObject, IDisposable
 {
     private const int ProcessType = 29;
     private const int PluginTypeType = 90;
@@ -35,7 +35,8 @@ public sealed class FailuresViewModel : ObservableObject
     {
         _session = session;
 
-        var today = DateTime.Today;
+        // The pickers hold calendar days; this is today's, in local time.
+        var today = DateTimeOffset.Now.Date;
         _customFrom = today.AddDays(-7);
         _customTo = today;
 
@@ -501,6 +502,13 @@ public sealed class FailuresViewModel : ObservableObject
     {
         _session.PropertyChanged -= OnSessionChanged;
         _cts?.Cancel();
+    }
+
+    public void Dispose()
+    {
+        Detach();
+        _cts?.Dispose();
+        _cts = null;
     }
 
     // ---------------------------------------------------------------- export

@@ -440,7 +440,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             HasComparison = true;
             MarkRead();
 
-            Status = $"Read at {DateTime.Now:T}. Dataverse syncs group teams lazily, on sign-in: 'group only' is usually someone who " +
+            Status = $"Read at {DateTimeOffset.Now:T}. Dataverse syncs group teams lazily, on sign-in: 'group only' is usually someone who " +
                      "has not used the environment since joining; 'team only' is usually someone removed but not yet re-synced.";
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

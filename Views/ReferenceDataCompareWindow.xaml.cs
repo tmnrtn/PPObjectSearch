@@ -41,4 +41,10 @@ public partial class ReferenceDataCompareWindow : Window
 
         if (viewModel.EditEntityCommand.CanExecute(entity)) viewModel.EditEntityCommand.Execute(entity);
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        (DataContext as IDisposable)?.Dispose();
+        base.OnClosed(e);
+    }
 }

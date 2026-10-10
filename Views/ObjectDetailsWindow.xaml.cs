@@ -12,7 +12,7 @@ public partial class ObjectDetailsWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        (DataContext as ObjectDetailsViewModel)?.Detach();
+        (DataContext as ObjectDetailsViewModel)?.Dispose();
         base.OnClosed(e);
     }
 

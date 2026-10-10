@@ -21,11 +21,19 @@ public enum SecurityLookupTab
 /// a user can actually do, who sees a secured column, and how two roles differ - in one
 /// environment or across two. Read-only.
 /// </summary>
-public sealed class SecurityLookupViewModel : ObservableObject
+public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
 {
     private readonly EnvironmentSessionViewModel _session;
     private readonly Dictionary<SecurityLookupTab, TabRead> _reads = new();
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a lookup still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     /// <summary>What a tab's last lookup covered, and what to say if it found nothing.</summary>
     private sealed record TabRead(string Summary, string EmptyHeading, string EmptyText);

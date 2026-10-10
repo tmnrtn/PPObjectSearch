@@ -14,7 +14,7 @@ namespace PPObjectSearch.ViewModels;
 /// (the question worth asking before deleting anything), and - for a table - what it owns,
 /// down to the properties of each column, relationship, key, form, view, chart and dashboard.
 /// </summary>
-public sealed class ObjectDetailsViewModel : ObservableObject
+public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 {
     /// <summary>solutioncomponent type code for a table.</summary>
     private const int TableComponentType = 1;
@@ -1378,6 +1378,15 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         // A row count can be many requests; nobody is left to read the answer.
         _countCts?.Cancel();
         FlowDiagram?.Detach();
+    }
+
+    /// <summary>Detaches, and lets go of the row count's source and the flow diagram's.</summary>
+    public void Dispose()
+    {
+        Detach();
+        _countCts?.Dispose();
+        _countCts = null;
+        FlowDiagram?.Dispose();
     }
 
     private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

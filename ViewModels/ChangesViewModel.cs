@@ -12,13 +12,21 @@ namespace PPObjectSearch.ViewModels;
 /// "Something broke yesterday - what changed?" Components modified recently, with who modified
 /// them where the table records it, on one timeline with solution imports, upgrades and uninstalls.
 /// </summary>
-public sealed class ChangesViewModel : ObservableObject
+public sealed class ChangesViewModel : ObservableObject, IDisposable
 {
     /// <summary>The type filter's first choice, which filters nothing.</summary>
     private const string AllTypes = "All types";
 
     private readonly EnvironmentSessionViewModel _session;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a read still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     public ChangesViewModel(EnvironmentSessionViewModel session)
     {

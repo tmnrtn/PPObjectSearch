@@ -23,7 +23,7 @@ public static class Log
 
     /// <summary>Today's file, which is where the next line goes.</summary>
     public static string CurrentFile =>
-        Path.Combine(Folder, $"ppobjectsearch-{DateTime.Now:yyyyMMdd}.log");
+        Path.Combine(Folder, $"ppobjectsearch-{DateTimeOffset.Now:yyyyMMdd}.log");
 
     public static void Info(string message) => Write("INFO", message, null);
 
@@ -34,7 +34,7 @@ public static class Log
     private static void Write(string level, string message, Exception? ex)
     {
         var line = new StringBuilder()
-            .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture))
+            .Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture))
             .Append(' ').Append(level).Append(' ')
             .Append('[').Append(Environment.CurrentManagedThreadId).Append("] ")
             .Append(message);
@@ -63,13 +63,13 @@ public static class Log
         if (_pruned) return;
         _pruned = true;
 
-        var cutoff = DateTime.Now.AddDays(-KeepDays);
+        var cutoff = DateTime.UtcNow.AddDays(-KeepDays);
 
         foreach (var file in Directory.EnumerateFiles(Folder, "ppobjectsearch-*.log"))
         {
             try
             {
-                if (File.GetLastWriteTime(file) < cutoff) File.Delete(file);
+                if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
