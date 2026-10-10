@@ -1081,9 +1081,9 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(search)) return true;
 
-        return search
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .All(term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
+        return Array.TrueForAll(
+            search.Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
     }
 
     public void Dispose()

@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using PPObjectSearch.Auth;
-using PPObjectSearch.Dataverse;
 using PPObjectSearch.Services;
 using PPObjectSearch.Tests.Infrastructure;
 using PPObjectSearch.ViewModels;

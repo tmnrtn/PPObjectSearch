@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
@@ -91,6 +92,7 @@ public sealed partial class EnvironmentSessionViewModel
     // checks that there is a connection and nothing else under way.
     private bool CanSwitch => !_isSwitching;
 
+    [MemberNotNullWhen(true, nameof(_client))]
     private bool ReadyToSwitch()
     {
         if (_client is not null && IsConnected && !IsBusy) return true;
@@ -149,7 +151,7 @@ public sealed partial class EnvironmentSessionViewModel
         IReadOnlyDictionary<Guid, bool> states;
         try
         {
-            states = await _client!.GetSwitchStatesAsync(SwitchableKind.CloudFlow, flows.Select(f => f.ObjectId).ToList(), CancellationToken.None);
+            states = await _client.GetSwitchStatesAsync(SwitchableKind.CloudFlow, flows.Select(f => f.ObjectId).ToList(), CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -181,7 +183,7 @@ public sealed partial class EnvironmentSessionViewModel
         _isSwitching = true;
         RaiseSwitchCommands();
 
-        var actions = new QuickActions(_client!, AccountName);
+        var actions = new QuickActions(_client, AccountName);
         var done = 0;
         var failed = new List<string>();
 

@@ -489,7 +489,7 @@ internal static class RecordProperties
         var items = element.EnumerateArray().ToList();
 
         // A list of plain values reads better on one line than as ten indexed rows.
-        if (items.Count > 0 && items.All(i => i.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)))
+        if (items.Count > 0 && items.TrueForAll(i => i.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)))
         {
             Add(rows, path, string.Join(", ", items.Select(Scalar).Where(v => v is not null)));
             return;

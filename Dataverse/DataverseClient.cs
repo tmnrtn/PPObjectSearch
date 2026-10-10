@@ -809,7 +809,7 @@ public sealed partial class DataverseClient : IDisposable
         // The cap is per slice while reading, so it is applied once more to the whole.
         var all = new ComponentList();
         all.AddRange(slices.SelectMany(s => s.Rows).Take(MaxRows));
-        all.IsTruncated = slices.Any(s => s.Truncated) || slices.Sum(s => s.Rows.Count) > MaxRows;
+        all.IsTruncated = Array.Exists(slices, s => s.Truncated) || slices.Sum(s => s.Rows.Count) > MaxRows;
         return all;
     }
 

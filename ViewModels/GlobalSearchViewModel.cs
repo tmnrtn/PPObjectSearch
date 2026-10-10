@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -276,7 +275,7 @@ public sealed class GlobalSearchViewModel : ObservableObject
     }
 
     private bool MatchesTerms(GlobalSearchRow row) =>
-        _terms.All(term =>
+        Array.TrueForAll(_terms, term =>
             row.Item.SearchIndex.Contains(term, StringComparison.Ordinal) ||
             row.Environment.Contains(term, StringComparison.OrdinalIgnoreCase));
 

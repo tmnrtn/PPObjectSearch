@@ -163,7 +163,7 @@ public class FailuresWindowTests
         var handler = Handler(stateFails: true);
         var vm = await Loaded(handler);
 
-        await TestSessions.Until(() => handler.Requests.Any(r => r.Url.Contains("statecode")));
+        await TestSessions.Until(() => handler.Requests.Exists(r => r.Url.Contains("statecode")));
 
         Assert.Null(vm.SelectedStateLabel);
         Assert.Equal("Sync orders", vm.SelectedComponent!.ComponentName);
@@ -175,7 +175,7 @@ public class FailuresWindowTests
         var handler = Handler(stateMissing: true);
         var vm = await Loaded(handler);
 
-        await TestSessions.Until(() => handler.Requests.Any(r => r.Url.Contains("statecode")));
+        await TestSessions.Until(() => handler.Requests.Exists(r => r.Url.Contains("statecode")));
 
         Assert.Null(vm.SelectedStateLabel);
         Assert.False(vm.IsSelectedOn);

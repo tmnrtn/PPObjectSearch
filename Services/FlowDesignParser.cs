@@ -144,7 +144,7 @@ public static partial class FlowDesignParser
     {
         public HashSet<string> Placed { get; } = new(StringComparer.Ordinal);
 
-        private bool Ready(string name) => !Placed.Contains(name) && predecessors[name].All(Placed.Contains);
+        private bool Ready(string name) => !Placed.Contains(name) && predecessors[name].TrueForAll(Placed.Contains);
 
         private IEnumerable<string> InOrder(IEnumerable<string> names)
         {

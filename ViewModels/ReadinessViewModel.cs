@@ -236,10 +236,11 @@ public sealed class ReadinessViewModel : ObservableObject, IDisposable
         {
             Status = $"Reading {solution.DisplayLabel} in {source.Title}...";
             var clock = Stopwatch.StartNew();
-            var components = await source.Client!.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
+            var sourceClient = source.Client!;
+            var components = await sourceClient.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
 
             var check = new ReadinessCheck(
-                source.Client, target.Client!,
+                source.Client!, target.Client!,
                 target.Client!.CreatePowerAutomateClient(), target.EnvironmentId);
 
             var report = await check.RunAsync(solution, components, source.Title, target.Title,

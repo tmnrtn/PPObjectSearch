@@ -103,6 +103,6 @@ public static class Clouds
             ? null
             // GCC shares the public authority and DoD shares GCC High's; the environment's host
             // tells those apart, so an authority alone means the cloud that is usually behind it.
-            : new[] { Public, UsGccHigh, China }
-                .FirstOrDefault(c => string.Equals(new Uri(c.Authority).Host, host, StringComparison.OrdinalIgnoreCase));
+            : Array.Find(new[] { Public, UsGccHigh, China },
+                c => string.Equals(new Uri(c.Authority).Host, host, StringComparison.OrdinalIgnoreCase));
 }

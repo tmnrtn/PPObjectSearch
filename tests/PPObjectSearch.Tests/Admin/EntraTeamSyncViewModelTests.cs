@@ -2,7 +2,6 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
-using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 using PPObjectSearch.Tests.Infrastructure;

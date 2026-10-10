@@ -166,7 +166,7 @@ public sealed class UserLibrary
 
         lock (_sync)
         {
-            var search = library.Searches.FirstOrDefault(s => string.Equals(s.Name, oldName, StringComparison.CurrentCultureIgnoreCase));
+            var search = library.Searches.Find(s => string.Equals(s.Name, oldName, StringComparison.CurrentCultureIgnoreCase));
             if (search is null) return;
 
             library.Searches.RemoveAll(s => !ReferenceEquals(s, search) &&

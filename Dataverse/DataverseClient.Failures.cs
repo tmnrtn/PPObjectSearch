@@ -239,10 +239,10 @@ public sealed partial class DataverseClient
     {
         var lines = details.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
 
-        var message = lines.FirstOrDefault(l => l.StartsWith("Message:", StringComparison.OrdinalIgnoreCase));
+        var message = lines.Find(l => l.StartsWith("Message:", StringComparison.OrdinalIgnoreCase));
         if (message is not null && message.Length > "Message:".Length) return message["Message:".Length..].Trim();
 
-        return lines.FirstOrDefault(l => !l.StartsWith("Unhandled exception", StringComparison.OrdinalIgnoreCase))
+        return lines.Find(l => !l.StartsWith("Unhandled exception", StringComparison.OrdinalIgnoreCase))
                ?? lines.FirstOrDefault()
                ?? details.Trim();
     }

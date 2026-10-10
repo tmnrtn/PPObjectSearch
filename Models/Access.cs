@@ -142,7 +142,7 @@ public sealed record MailboxInfo(
 
             // incoming/outgoingemailstatus: 0 Not Run, 1 Success, 2 Failure.
             if (results.Contains(2)) return MailboxTestStatus.Failed;
-            if (results.All(r => r == 1)) return MailboxTestStatus.Passed;
+            if (results.TrueForAll(r => r == 1)) return MailboxTestStatus.Passed;
             return results.Contains(1) ? MailboxTestStatus.Partial : MailboxTestStatus.NotRun;
         }
     }

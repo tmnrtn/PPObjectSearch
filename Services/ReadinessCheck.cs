@@ -288,7 +288,7 @@ public sealed class ReadinessCheck
 
         foreach (var reference in source)
         {
-            var item = items.FirstOrDefault(i => i.ObjectId == reference.Id);
+            var item = items.Find(i => i.ObjectId == reference.Id);
             target.TryGetValue(reference.LogicalName, out var there);
             var connection = there?.ConnectionId is { Length: > 0 } id
                 ? connections?.FirstOrDefault(c => string.Equals(c.Name, id, StringComparison.OrdinalIgnoreCase))

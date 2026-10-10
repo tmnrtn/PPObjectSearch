@@ -35,8 +35,10 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     {
         _session = session;
 
-        // The pickers hold calendar days; this is today's, in local time.
-        var today = DateTimeOffset.Now.Date;
+        // The pickers hold calendar days; this is today's, in local time. Like a picked day it has
+        // no kind: Range gives it today's offset, which a local-kind day from before a clock change
+        // would not take.
+        var today = DateTimeOffset.UtcNow.ToLocalTime().Date;
         _customFrom = today.AddDays(-7);
         _customTo = today;
 

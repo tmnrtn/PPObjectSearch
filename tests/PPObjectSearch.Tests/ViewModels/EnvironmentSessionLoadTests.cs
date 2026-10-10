@@ -130,7 +130,7 @@ public class EnvironmentSessionLoadTests
         var gate = env.Gate(slow);
 
         session.SelectedSolution = session.Solutions.Single(s => s.UniqueName == "slow");
-        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Any(r => r.Url.Contains(slow.ToString(), StringComparison.Ordinal)), "the slow read");
+        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Exists(r => r.Url.Contains(slow.ToString(), StringComparison.Ordinal)), "the slow read");
         session.SelectedSolution = session.Solutions.Single(s => s.UniqueName == "quick");
         await EnvironmentSessionThread.Until(() => !session.IsBusy, "the quick load");
         gate.SetResult();

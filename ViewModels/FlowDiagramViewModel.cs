@@ -814,8 +814,9 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
     /// </summary>
     private void CancelRunReads()
     {
-        _runCts?.Cancel();
-        _runCts?.Dispose();
+        var cts = _runCts;
+        cts?.Cancel();
+        cts?.Dispose();
         _runCts = null;
     }
 
@@ -1196,7 +1197,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         foreach (var card in _cards)
         {
             var match = terms.Length > 0 &&
-                        terms.All(t => card.SearchText.Contains(t, StringComparison.CurrentCultureIgnoreCase));
+                        Array.TrueForAll(terms, t => card.SearchText.Contains(t, StringComparison.CurrentCultureIgnoreCase));
             card.IsMatch = match;
 
             if (!match) continue;

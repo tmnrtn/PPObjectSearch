@@ -1,5 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Windows;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
@@ -1447,8 +1446,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
             // The stored count is one quick request, so it shows before the child components load.
             if (_detached) return;
-            if (IsTable) await LoadRowCountSnapshotAsync();
-            if (IsTable) await LoadChildComponentsAsync(problems);
+            if (IsTable)
+            {
+                await LoadRowCountSnapshotAsync();
+                await LoadChildComponentsAsync(problems);
+            }
             if (_detached) return;
             await LoadKindTabsAsync(problems);
 
@@ -1664,7 +1666,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         var terms = ChildFilter.ToLowerInvariant()
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var child in children.Where(c => terms.All(t => c.FilterIndex.Contains(t, StringComparison.Ordinal))))
+        foreach (var child in children.Where(c => Array.TrueForAll(terms, t => c.FilterIndex.Contains(t, StringComparison.Ordinal))))
         {
             Children.Add(child);
         }

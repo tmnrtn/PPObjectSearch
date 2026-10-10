@@ -292,7 +292,7 @@ public class DataverseAdminClientTests
     {
         var oid = Guid.NewGuid();
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/WhoAmI",
-            JsonSerializer.Serialize(new { UserId = UserId, BusinessUnitId = Guid.NewGuid(), OrganizationId = Guid.NewGuid() }));
+            JsonSerializer.Serialize(new { UserId, BusinessUnitId = Guid.NewGuid(), OrganizationId = Guid.NewGuid() }));
 
         var userId = await Fakes.Dataverse(handler).WhoAmIAsAsync(oid);
 

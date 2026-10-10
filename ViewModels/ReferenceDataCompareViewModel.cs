@@ -698,7 +698,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
         foreach (var entity in Entities)
         {
-            var compared = _fetched.Any(f => string.Equals(
+            var compared = _fetched.Exists(f => string.Equals(
                 f.Plan.Entity.LogicalName, entity.LogicalName, StringComparison.OrdinalIgnoreCase));
 
             entity.DifferenceCount = compared

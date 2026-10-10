@@ -111,7 +111,7 @@ public sealed partial class EnvironmentSessionViewModel
             });
         }
 
-        var highlighted = _suggestions.FirstOrDefault(s => s.IsHighlighted);
+        var highlighted = _suggestions.Find(s => s.IsHighlighted);
 
         _suggestions.Clear();
         _suggestions.Add(ContentSuggestion);
@@ -147,7 +147,7 @@ public sealed partial class EnvironmentSessionViewModel
     public bool RunSuggestion(SearchSuggestion? row = null)
     {
         if (row is null && !SearchDropdownOpen) return false;
-        row ??= _suggestions.FirstOrDefault(s => s.IsHighlighted) ?? ContentSuggestion;
+        row ??= _suggestions.Find(s => s.IsHighlighted) ?? ContentSuggestion;
 
         SearchDropdownOpen = false;
 
