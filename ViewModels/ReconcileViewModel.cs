@@ -386,7 +386,8 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            if (ReferenceEquals(_impactCts, cts)) IsCheckingImpact = false;
+            // Only a newer check keeps the flag; a closed window (no source left) clears it too.
+            if (_impactCts is null || ReferenceEquals(_impactCts, cts)) IsCheckingImpact = false;
         }
     }
 

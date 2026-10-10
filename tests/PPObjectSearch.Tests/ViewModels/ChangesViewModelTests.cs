@@ -306,6 +306,7 @@ public class ChangesViewModelTests
         Assert.Equal("Stopped.", vm.Status);
         Assert.Empty(vm.Entries);
         Assert.Single(handler.Requests);
+        Assert.False(vm.IsBusy);
     }
 
     [Fact]

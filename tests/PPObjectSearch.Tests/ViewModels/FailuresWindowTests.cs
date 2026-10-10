@@ -492,6 +492,7 @@ public class FailuresWindowTests
         Assert.Equal(0, vm.TotalFailures);
         Assert.Empty(vm.Components);
         Assert.Empty(raised);
+        Assert.False(vm.IsBusy);
     }
 
     [Fact]

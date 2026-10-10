@@ -240,7 +240,8 @@ public sealed class ChangesViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            if (ReferenceEquals(_cts, cts)) IsBusy = false;
+            // Only a newer read keeps the flag; a closed window (no source left) clears it too.
+            if (_cts is null || ReferenceEquals(_cts, cts)) IsBusy = false;
             ExportCsvCommand.RaiseCanExecuteChanged();
             ExportMarkdownCommand.RaiseCanExecuteChanged();
         }

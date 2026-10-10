@@ -324,6 +324,7 @@ public sealed class QueueSyncViewModelTests : IDisposable
         Assert.Equal(0, sync.CountAll);
         Assert.DoesNotContain("Previewed at", sync.Status);
         Assert.False(sync.ApplyCommand.CanExecute(null));
+        Assert.False(sync.IsBusy);
     });
 
     // ---------------------------------------------------------------- confirm and apply

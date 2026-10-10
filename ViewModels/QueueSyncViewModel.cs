@@ -338,7 +338,8 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            if (ReferenceEquals(cts, _previewCts)) IsBusy = false;
+            // Only a newer preview keeps the flag; a closed window (no source left) clears it too.
+            if (_previewCts is null || ReferenceEquals(cts, _previewCts)) IsBusy = false;
         }
     }
 
