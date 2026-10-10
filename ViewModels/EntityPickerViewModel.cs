@@ -36,10 +36,15 @@ public sealed class EntityPick : ObservableObject
 
     public string Label => Entity.Label;
     public string LogicalName => Entity.LogicalName;
-    public string StateLabel => IsAlreadyAdded ? "Already added" : (Entity.IsManaged ? "Managed" : "Unmanaged");
+    public string StateLabel => (IsAlreadyAdded, Entity.IsManaged) switch
+    {
+        (true, _) => "Already added",
+        (_, true) => "Managed",
+        _ => "Unmanaged"
+    };
 
     /// <summary>The display name alone; the logical name sits beside it in mono.</summary>
-    public string DisplayLabel => string.IsNullOrWhiteSpace(Entity.DisplayName) ? Entity.LogicalName : Entity.DisplayName!;
+    public string DisplayLabel => string.IsNullOrWhiteSpace(Entity.DisplayName) ? Entity.LogicalName : Entity.DisplayName;
 }
 
 /// <summary>
@@ -151,7 +156,7 @@ public sealed class EntityPickerViewModel : ObservableObject
         OnPropertyChanged(nameof(AddLabel));
     }
 
-    public IReadOnlyList<EntitySummary> SelectedEntities =>
+    public IReadOnlyList<EntitySummary> SelectedEntities() =>
         Items.Where(i => i is { IsSelected: true, IsAlreadyAdded: false }).Select(i => i.Entity).ToList();
 
     private bool Filter(object obj)

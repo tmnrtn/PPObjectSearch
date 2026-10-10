@@ -20,9 +20,9 @@ public partial class ReferenceDataCompareWindow : Window
 
         // The header box mirrors the row boxes: ticked, clear, or mixed.
         var selected = ResultsGrid.SelectedItems.Count;
-        SelectAllBox.IsChecked = selected == 0 ? false
-            : selected == ResultsGrid.Items.Count ? true
-            : null;
+        if (selected == 0) SelectAllBox.IsChecked = false;
+        else if (selected == ResultsGrid.Items.Count) SelectAllBox.IsChecked = true;
+        else SelectAllBox.IsChecked = null;
     }
 
     /// <summary>Anything short of every row ticked becomes every row; every row becomes none.</summary>

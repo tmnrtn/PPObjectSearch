@@ -22,7 +22,6 @@ public sealed class ImportLogViewModel : ObservableObject
     private readonly DataverseClient _client;
     private readonly SolutionHistoryEntry _entry;
     private readonly CancellationTokenSource _cts = new();
-    private ImportJobInfo? _job;
     private string? _rawXml;
     private ImportLog? _log;
 
@@ -119,27 +118,35 @@ public sealed class ImportLogViewModel : ObservableObject
     /// <summary>The rows the problems-only filter lets through.</summary>
     public int ShownCount => RowsView.Count;
 
-    public string CountLabel => ProblemsOnly
-        ? $"{ShownCount:N0} of {Rows.Count:N0} component{(Rows.Count == 1 ? string.Empty : "s")}"
-        : $"{Rows.Count:N0} component{(Rows.Count == 1 ? string.Empty : "s")}";
+    public string CountLabel
+    {
+        get
+        {
+            var components = Rows.Count == 1 ? "component" : "components";
+            return ProblemsOnly ? $"{ShownCount:N0} of {Rows.Count:N0} {components}" : $"{Rows.Count:N0} {components}";
+        }
+    }
 
     public bool HasRows => ShownCount > 0;
 
     private string _noLogText = string.Empty;
 
     /// <summary>Why the list is empty and what to change - shown in its place.</summary>
-    public string EmptyHeading => Rows.Count > 0 ? "No failures or warnings"
-        : IsRunning ? "Import in progress"
-        : IsBusy ? "Reading the import log"
-        : "No import log";
+    public string EmptyHeading => (Rows.Count > 0, IsRunning, IsBusy) switch
+    {
+        (true, _, _) => "No failures or warnings",
+        (_, true, _) => "Import in progress",
+        (_, _, true) => "Reading the import log",
+        _ => "No import log"
+    };
 
-    public string EmptyText => Rows.Count > 0
-        ? "Every component imported cleanly. Clear Failures and warnings only to see them all."
-        : IsRunning
-            ? $"The log appears once the import finishes - {Progress:N0}% so far, checked every {PollInterval.TotalSeconds:N0} seconds."
-            : IsBusy
-                ? "Finding the import job behind this solution history row."
-                : _noLogText;
+    public string EmptyText => (Rows.Count > 0, IsRunning, IsBusy) switch
+    {
+        (true, _, _) => "Every component imported cleanly. Clear Failures and warnings only to see them all.",
+        (_, true, _) => $"The log appears once the import finishes - {Progress:N0}% so far, checked every {PollInterval.TotalSeconds:N0} seconds.",
+        (_, _, true) => "Finding the import job behind this solution history row.",
+        _ => _noLogText
+    };
 
     private double? _progress;
     /// <summary>The job's progress while it runs; null once finished.</summary>
@@ -157,8 +164,12 @@ public sealed class ImportLogViewModel : ObservableObject
 
     public bool IsRunning => Progress is not null;
 
-    /// <summary>Stops following a running import - the window is closing.</summary>
-    public void Stop() => _cts.Cancel();
+    /// <summary>Stops following a running import - the window is closing, so nothing reads again.</summary>
+    public void Stop()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 
     public async Task LoadAsync()
     {
@@ -168,11 +179,14 @@ public sealed class ImportLogViewModel : ObservableObject
 
         try
         {
-            Status = "Finding the import job...";
-            var jobs = await _client.GetImportJobsAsync(_entry.SolutionName, _cts.Token);
-            _job = DataverseClient.MatchImportJob(jobs, _entry);
+            // Taken once: the source is disposed when the window closes, and the token outlives it.
+            var ct = _cts.Token;
 
-            if (_job is null)
+            Status = "Finding the import job...";
+            var jobs = await _client.GetImportJobsAsync(_entry.SolutionName, ct);
+            var job = DataverseClient.MatchImportJob(jobs, _entry);
+
+            if (job is null)
             {
                 _noLogText = jobs.Count == 0
                     ? $"No import job is kept for {_entry.SolutionName} - Dataverse removes them after a while, and exports and uninstalls have none."
@@ -182,18 +196,18 @@ public sealed class ImportLogViewModel : ObservableObject
             }
 
             // A running import is followed: its progress, then its log once it finishes.
-            while (!_job.IsFinished)
+            while (!job.IsFinished)
             {
-                Progress = _job.Progress ?? 0;
+                Progress = job.Progress ?? 0;
                 Status = $"Import in progress - {Progress:N0}%. Refreshing every {PollInterval.TotalSeconds:N0} seconds.";
-                await Task.Delay(PollInterval, _cts.Token);
-                _job = await _client.GetImportJobAsync(_job.Id, _cts.Token) ?? _job;
+                await Task.Delay(PollInterval, ct);
+                job = await _client.GetImportJobAsync(job.Id, ct) ?? job;
             }
 
             Progress = null;
             Status = "Reading the import log...";
             var clock = Stopwatch.StartNew();
-            _rawXml = await _client.GetImportJobDataAsync(_job.Id, _cts.Token);
+            _rawXml = await _client.GetImportJobDataAsync(job.Id, ct);
 
             if (string.IsNullOrWhiteSpace(_rawXml))
             {
@@ -212,7 +226,7 @@ public sealed class ImportLogViewModel : ObservableObject
             ReadSummary = $"Read {_log.Rows.Count:N0} component{(_log.Rows.Count == 1 ? string.Empty : "s")} - " +
                           $"{_log.Failures:N0} failure{(_log.Failures == 1 ? string.Empty : "s")}, " +
                           $"{_log.Warnings:N0} warning{(_log.Warnings == 1 ? string.Empty : "s")} - in {clock.Elapsed.TotalSeconds:0.0} s." +
-                          (_job.StartedOn is { } s && _job.CompletedOn is { } c ? $" The import took {(c - s).TotalMinutes:N1} min." : string.Empty);
+                          (job.StartedOn is { } s && job.CompletedOn is { } c ? $" The import took {(c - s).TotalMinutes:N1} min." : string.Empty);
             Status = string.Empty;
         }
         catch (OperationCanceledException)

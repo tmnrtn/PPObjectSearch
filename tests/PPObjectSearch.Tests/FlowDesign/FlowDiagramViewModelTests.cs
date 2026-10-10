@@ -88,7 +88,7 @@ public class FlowDiagramViewModelTests
     {
         var d = Diagram();
 
-        var parallel = Assert.IsType<FlowParallelViewModel>(d.Steps.Last());
+        var parallel = Assert.IsType<FlowParallelViewModel>(d.Steps[^1]);
         Assert.Equal("Parallel · 2 branches", parallel.Heading);
         Assert.All(parallel.Branches, b => Assert.False(b.HasLabel));
     }

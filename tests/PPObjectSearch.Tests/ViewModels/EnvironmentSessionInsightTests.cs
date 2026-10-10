@@ -254,6 +254,13 @@ public class EnvironmentSessionInsightTests
         session.SelectedLayerFilter = session.LayerFilters.Single(f => f.Name == "Unmanaged layer");
         Assert.Equal("Account", Assert.Single(session.ItemsView.Cast<SolutionComponentItem>()).PrimaryLabel);
 
+        // Checking again takes only what is still unchecked.
+        session.SelectedLayerFilter = session.LayerFilters[0];
+        await session.CheckUnmanagedLayersCommand.ExecuteAsync(null);
+        Assert.Equal("Checked 0 object(s) for an unmanaged layer (1 of this type aren't supported by the layers check; " +
+                     "1 could not be read - run the check again to retry them).", session.Status);
+        Assert.Equal(4, env.Handler.Requests.Count(r => r.Url.Contains("msdyn_componentlayers", StringComparison.Ordinal)));
+
         // What was found outlasts a fresh read of the solution.
         await session.RefreshCommand.ExecuteAsync(null);
         Assert.True(Row(session, "account").HasUnmanagedLayer);

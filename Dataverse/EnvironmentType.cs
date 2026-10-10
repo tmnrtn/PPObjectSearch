@@ -148,10 +148,7 @@ public static class EnvironmentTypeProbe
                         return new EnvironmentTypeInfo(
                             sku,
                             JsonHelper.GetString(properties, "displayName"),
-                            sku != EnvironmentSku.Unknown ? null
-                            : string.IsNullOrWhiteSpace(rawSku)
-                                ? "The Power Platform API returned no environment type for this environment."
-                                : $"The Power Platform API reported an environment type this app does not know: '{rawSku}'.");
+                            sku != EnvironmentSku.Unknown ? null : UnknownSkuNote(rawSku));
                     }
 
                     url = JsonHelper.GetString(doc.RootElement, "nextLink");
@@ -216,6 +213,11 @@ public static class EnvironmentTypeProbe
 
         return hosts;
     }
+
+    /// <summary>Why the type is Unknown: the API gave none, or one this app does not know.</summary>
+    private static string UnknownSkuNote(string? rawSku) => string.IsNullOrWhiteSpace(rawSku)
+        ? "The Power Platform API returned no environment type for this environment."
+        : $"The Power Platform API reported an environment type this app does not know: '{rawSku}'.";
 
     /// <summary>
     /// Anything unrecognised stays Unknown rather than being guessed at, so a SKU this app has

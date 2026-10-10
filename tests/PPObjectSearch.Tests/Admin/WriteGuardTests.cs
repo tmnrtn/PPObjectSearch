@@ -124,7 +124,7 @@ public class WriteGuardTests
 
         WriteGuard.Allow(settings, Url);
 
-        Assert.Equal(2, settings.AllowProductionWrites!.Count);
+        Assert.Equal(2, settings.AllowProductionWrites.Count);
         Assert.False(WriteGuard.Evaluate(settings, "https://third.crm11.dynamics.com", Type(EnvironmentSku.Production)).Allowed);
     }
 

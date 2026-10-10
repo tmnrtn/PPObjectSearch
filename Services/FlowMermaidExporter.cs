@@ -187,17 +187,17 @@ public static class FlowMermaidExporter
         }
 
         private void Line(int depth, string text) => _text.Append(' ', depth * 4).AppendLine(text);
-    }
 
-    /// <summary>A run-after status in words, as on the diagram's badges.</summary>
-    private static string Outcome(string status) => status.ToLowerInvariant() switch
-    {
-        "failed" => "failed",
-        "skipped" => "skipped",
-        "timedout" => "timed out",
-        "succeeded" => "succeeded",
-        var other => other
-    };
+        /// <summary>A run-after status in words, as on the diagram's badges.</summary>
+        private static string Outcome(string status) => status.ToLowerInvariant() switch
+        {
+            "failed" => "failed",
+            "skipped" => "skipped",
+            "timedout" => "timed out",
+            "succeeded" => "succeeded",
+            var other => other
+        };
+    }
 
     /// <summary>
     /// Mermaid's entity codes for the characters that would end or break a quoted label - and for

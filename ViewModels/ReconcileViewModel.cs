@@ -45,10 +45,12 @@ public sealed class ReconcileRow : ObservableObject
     }
 
     /// <summary>What the Result column shows: the outcome once run, "Skipped" for an action left off.</summary>
-    public string ResultLabel =>
-        Succeeded is null && IsBlocked ? Item.BlockedReason!
-        : Succeeded is null && !IsIncluded ? "Skipped"
-        : Result;
+    public string ResultLabel => (Succeeded, IsBlocked, IsIncluded) switch
+    {
+        (null, true, _) => Item.BlockedReason!,
+        (null, _, false) => "Skipped",
+        _ => Result
+    };
 
     private bool? _succeeded;
     public bool? Succeeded
@@ -337,8 +339,9 @@ public sealed class ReconcileViewModel : ObservableObject
 
     private async Task CheckDeleteImpactAsync()
     {
-        _impactCts?.Cancel();
+        var superseded = _impactCts;
         var cts = _impactCts = new CancellationTokenSource();
+        if (superseded is not null) await superseded.CancelAsync();
 
         var deletes = Rows
             .Where(r => r.IsDelete && r.IsIncluded && r.Item.Row.Target is not null)
@@ -359,7 +362,7 @@ public sealed class ReconcileViewModel : ObservableObject
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            return;
+            // Superseded or called off: whatever cancelled it has the text now.
         }
         catch (Exception ex)
         {
@@ -379,10 +382,12 @@ public sealed class ReconcileViewModel : ObservableObject
     private int IncludedCount => Rows.Count(r => r.IsIncluded);
 
     /// <summary>"Apply 5 changes", or what is still in the way of applying.</summary>
-    public string ApplyLabel =>
-        HasDeletes && !DeleteAcknowledged ? "Confirm deletion to apply"
-        : IncludedCount == 1 ? "Apply 1 change"
-        : $"Apply {IncludedCount:N0} changes";
+    public string ApplyLabel => (HasDeletes && !DeleteAcknowledged, IncludedCount) switch
+    {
+        (true, _) => "Confirm deletion to apply",
+        (_, 1) => "Apply 1 change",
+        (_, var count) => $"Apply {count:N0} changes"
+    };
 
     /// <summary>Acknowledged deletions turn Apply red: this run destroys data.</summary>
     public bool IsDestructiveApply => HasDeletes && DeleteAcknowledged;
@@ -514,8 +519,8 @@ public sealed class ReconcileViewModel : ObservableObject
     {
         if (!Permission.Allowed || rows.Count == 0) return;
 
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
 
         IsRunning = true;
 
@@ -575,6 +580,9 @@ public sealed class ReconcileViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
+
             IsRunning = false;
             HasRun = true;
             OnPropertyChanged(nameof(HasFailures));
@@ -679,10 +687,11 @@ public sealed class ReconcileViewModel : ObservableObject
             _hasUndone = true;
             AnyWritesSucceeded = true;
 
+            var more = failed.Count > 3 ? " ..." : string.Empty;
             Status = failed.Count == 0
                 ? $"Undone - {steps.Count:N0} write(s) reversed in {TargetName}."
                 : $"Undo finished with problems - {failed.Count:N0} of {steps.Count:N0} could not be reversed: " +
-                  string.Join("; ", failed.Take(3)) + (failed.Count > 3 ? " ..." : string.Empty);
+                  string.Join("; ", failed.Take(3)) + more;
         }
         finally
         {
@@ -724,7 +733,7 @@ public sealed class ReconcileViewModel : ObservableObject
 
             // Straight to this window's file where there is one; otherwise the folder of past runs.
             var start = _log is not null && System.IO.File.Exists(_log.Path)
-                ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_log.Path}\"")
+                ? new System.Diagnostics.ProcessStartInfo(Auth.AppPaths.Explorer, $"/select,\"{_log.Path}\"")
                 : new System.Diagnostics.ProcessStartInfo { FileName = folder, UseShellExecute = true };
 
             System.Diagnostics.Process.Start(start)?.Dispose();

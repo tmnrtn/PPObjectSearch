@@ -52,7 +52,7 @@ public sealed class TableChild
     /// <summary>Cached after the first fetch - re-selecting a child should not re-query.</summary>
     public IReadOnlyList<ComponentProperty>? Properties { get; set; }
 
-    public string PrimaryLabel => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName!;
+    public string PrimaryLabel => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 
     public string ManagedLabel => IsManaged ? "Managed" : "Unmanaged";
 

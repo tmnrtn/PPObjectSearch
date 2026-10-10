@@ -80,7 +80,7 @@ public class ReferenceDataConfigTests
         var clone = new ReferenceEntityConfig { ExcludedColumns = new List<string>() }.Clone();
 
         Assert.NotNull(clone.ExcludedColumns);
-        Assert.Empty(clone.ExcludedColumns!);
+        Assert.Empty(clone.ExcludedColumns);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class ReferenceDataConfigTests
         Assert.Equal(250, clone.MaxRowsPerEntity);
         Assert.Single(clone.Entities!);
         Assert.NotSame(original.Entities, clone.Entities);
-        Assert.NotSame(original.Entities![0], clone.Entities![0]);
+        Assert.NotSame(original.Entities[0], clone.Entities![0]);
 
         clone.Name = "Other";
         clone.Entities.Add(new ReferenceEntityConfig { LogicalName = "new_other" });

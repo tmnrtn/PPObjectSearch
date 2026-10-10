@@ -24,7 +24,7 @@ public sealed partial class DataverseClient
     /// A client for the Power Automate API, signed in as this environment's account - for a cloud
     /// flow run step by step, which the flowrun table does not record.
     /// </summary>
-    public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth);
+    public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth, _handler);
 
     public async Task<IReadOnlyList<ProcessRun>> GetCloudFlowRunsAsync(
         Guid workflowId, CancellationToken ct = default, int top = MaxRunHistory)

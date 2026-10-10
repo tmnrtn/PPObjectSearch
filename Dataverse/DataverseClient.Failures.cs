@@ -208,7 +208,7 @@ public sealed partial class DataverseClient
                     ComponentKey = typeName,
                     ComponentName = typeName,
                     When = JsonHelper.GetDate(row, "createdon") ?? from,
-                    ErrorMessage = ExceptionMessage(exception!),
+                    ErrorMessage = ExceptionMessage(exception),
                     RunName = JsonHelper.GetString(row, "plugintracelogid"),
                     Context = string.IsNullOrWhiteSpace(table) || table == "none" ? message : $"{message} of {table}",
                     StepId = step

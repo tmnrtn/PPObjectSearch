@@ -370,6 +370,7 @@ public class EnvironmentSessionConnectTests
         Assert.Equal(title, session.Title);
         Assert.Equal(host, session.EnvironmentHost);
         Assert.Equal(host != "Not connected", session.CanAllowWrites);
+        Assert.False(session.IsWriteAllowlisted);
     }
 
     [Fact]
@@ -433,7 +434,7 @@ public class EnvironmentSessionConnectTests
 
         Assert.False(session.IsWriteAllowlisted);
         Assert.True(session.CanAllowWrites);
-        Assert.Empty(settings.AllowProductionWrites!);
+        Assert.Empty(settings.AllowProductionWrites);
         Assert.Equal(1, changed);
         Assert.Equal($"Writes to {env.Host} are blocked again.", session.Status);
         Assert.False((await session.EvaluateWritePermissionAsync()).Allowed);

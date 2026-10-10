@@ -22,7 +22,7 @@ public sealed class DependencyRef
     /// <summary>Name from the loaded solution, where the component is one we know about.</summary>
     public string? ResolvedName { get; set; }
 
-    public string DisplayName => string.IsNullOrWhiteSpace(ResolvedName) ? ObjectId.ToString() : ResolvedName!;
+    public string DisplayName => string.IsNullOrWhiteSpace(ResolvedName) ? ObjectId.ToString() : ResolvedName;
 
     public string DirectionLabel => Direction == DependencyDirection.Dependent ? "Depends on this" : "Required by this";
 }

@@ -487,7 +487,7 @@ public sealed class ReferenceDataWriter
                 "so the reference cannot be written.");
         }
 
-        if (!_targetEntities.TryGetValue(targetTable!, out var related))
+        if (!_targetEntities.TryGetValue(targetTable, out var related))
         {
             throw new DataverseException(
                 $"Lookup '{column.LogicalName}' points at '{targetTable}', which is not in the target environment.");
@@ -518,7 +518,7 @@ public sealed class ReferenceDataWriter
                 "target cannot be identified.");
         }
 
-        var id = await ResolveAsync(related, label!, ct).ConfigureAwait(false);
+        var id = await ResolveAsync(related, label, ct).ConfigureAwait(false);
 
         if (id is null)
         {
@@ -576,13 +576,10 @@ public sealed class ReferenceDataWriter
         {
             if (item.Row.Source is not { } source) continue;
 
-            foreach (var target in source.LookupTargets.Values)
+            foreach (var target in source.LookupTargets.Values.OfType<string>().Where(target =>
+                         dependsOn.ContainsKey(target) && !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)))
             {
-                if (target is not null && dependsOn.ContainsKey(target) &&
-                    !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase))
-                {
-                    dependsOn[item.Table].Add(target);
-                }
+                dependsOn[item.Table].Add(target);
             }
         }
 

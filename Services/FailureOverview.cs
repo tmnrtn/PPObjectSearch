@@ -141,11 +141,17 @@ public static partial class FailureOverview
                 width,
                 Math.Max(2, Math.Round(b.Failures * TrendHeight / max)),
                 b.Failures == 0 ? 0.25 : 1,
-                hourly
-                    ? b.Start.Hour % 6 == 0 ? b.Start.ToString("HH") : string.Empty
-                    : buckets.Count <= 10 ? b.Start.ToString("ddd")[..1] : string.Empty,
+                TickLabel(b.Start, hourly, buckets.Count),
                 $"{b.Label}: {b.Failures:N0} failure{(b.Failures == 1 ? string.Empty : "s")}"))
             .ToList();
+    }
+
+    /// <summary>Every sixth hour of an hourly trend; each day's initial while there are few enough days to read.</summary>
+    private static string TickLabel(DateTimeOffset start, bool hourly, int bars)
+    {
+        if (hourly) return start.Hour % 6 == 0 ? start.ToString("HH") : string.Empty;
+
+        return bars <= 10 ? start.ToString("ddd")[..1] : string.Empty;
     }
 
     /// <summary>The same read with only some sources' failures - what the source pills show.</summary>

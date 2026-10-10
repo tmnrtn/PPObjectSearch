@@ -46,7 +46,7 @@ public sealed partial class DataverseClient
                     if (string.IsNullOrWhiteSpace(entitySetName)) continue;
 
                     results.Add(new EntitySummary(
-                        logicalName!,
+                        logicalName,
                         ReadLabel(row, "DisplayName"),
                         entitySetName,
                         JsonHelper.GetString(row, "PrimaryIdAttribute") ?? logicalName + "id",
@@ -108,12 +108,12 @@ public sealed partial class DataverseClient
 
                     var typeName = ReadNested(row, "AttributeTypeName", "Value");
                     if (string.IsNullOrWhiteSpace(typeName)) continue;
-                    if (UncomparableColumnTypes.Contains(typeName!)) continue;
+                    if (UncomparableColumnTypes.Contains(typeName)) continue;
 
                     results.Add(new EntityColumn(
-                        name!,
+                        name,
                         ReadLabel(row, "DisplayName"),
-                        typeName!,
+                        typeName,
                         JsonHelper.GetBool(row, "IsPrimaryId") ?? false,
                         JsonHelper.GetBool(row, "IsPrimaryName") ?? false)
                     {
@@ -166,11 +166,10 @@ public sealed partial class DataverseClient
 
                     if (attributes.Count == 0) continue;
 
-                    results.Add(new AlternateKeyInfo(name!, ReadLabel(row, "DisplayName"), attributes));
+                    results.Add(new AlternateKeyInfo(name, ReadLabel(row, "DisplayName"), attributes));
                 }
             }
         }
-        catch (OperationCanceledException) { throw; }
         catch (DataverseException)
         {
             // A table that does not support keys answers with an error rather than an empty list.

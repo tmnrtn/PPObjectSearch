@@ -39,9 +39,19 @@ public sealed class DependencyTreeNode : ObservableObject
     public DependencyTreeNode? Parent { get; }
 
     public bool IsGroup => Reference is null && Item is null;
-    public string Where => IsGroup ? string.Empty : Item is null ? "Outside this solution" : "In this solution";
+    public string Where => (IsGroup, Item) switch
+    {
+        (true, _) => string.Empty,
+        (_, null) => "Outside this solution",
+        _ => "In this solution"
+    };
     public bool IsOutside => !IsGroup && Item is null;
-    public string ManagedLabel => Item is null ? string.Empty : Item.IsManaged ? "managed" : "unmanaged";
+    public string ManagedLabel => Item switch
+    {
+        null => string.Empty,
+        { IsManaged: true } => "managed",
+        _ => "unmanaged"
+    };
 
     public ObservableCollection<DependencyTreeNode> Children { get; } = new();
 
@@ -181,13 +191,19 @@ public sealed class DependencyExplorerViewModel : ObservableObject
     public string ImpactCountLabel => IsImpactWalked ? $"{Impact.Count:N0} affected" : string.Empty;
 
     /// <summary>Why the impact list is empty - walking, not walked yet, or nothing depends on this.</summary>
-    public string EmptyHeading => IsBusy ? "Walking the dependents" : IsImpactWalked ? "Nothing depends on this" : "Not walked yet";
+    public string EmptyHeading => (IsBusy, IsImpactWalked) switch
+    {
+        (true, _) => "Walking the dependents",
+        (_, true) => "Nothing depends on this",
+        _ => "Not walked yet"
+    };
 
-    public string EmptyText => IsBusy
-        ? "The list fills in when the walk is done - the count so far is in the status bar."
-        : IsImpactWalked
-            ? "Removing it breaks nothing that Dataverse tracks."
-            : $"Press What breaks if I remove this? to follow what depends on it, and what depends on those, up to {DependencyWalker.DefaultMaxDepth} levels.";
+    public string EmptyText => (IsBusy, IsImpactWalked) switch
+    {
+        (true, _) => "The list fills in when the walk is done - the count so far is in the status bar.",
+        (_, true) => "Removing it breaks nothing that Dataverse tracks.",
+        _ => $"Press What breaks if I remove this? to follow what depends on it, and what depends on those, up to {DependencyWalker.DefaultMaxDepth} levels."
+    };
 
     private void ShowImpact()
     {
@@ -203,7 +219,7 @@ public sealed class DependencyExplorerViewModel : ObservableObject
 
     private async Task<IReadOnlyList<DependencyTreeNode>> ChildrenAsync(DependencyTreeNode parent, Guid objectId, int componentType)
     {
-        var references = await _client.GetDependenciesAsync(objectId, componentType, parent.Direction);
+        var references = await _client.GetDependenciesAsync(objectId, componentType, parent.Direction, CancellationToken.None);
         var ancestors = new HashSet<Guid> { _item.ObjectId };
         for (var p = parent; p is not null; p = p.Parent) if (p.Reference is { } r) ancestors.Add(r.ObjectId);
 
@@ -230,7 +246,7 @@ public sealed class DependencyExplorerViewModel : ObservableObject
 
     private async Task ImpactAsync()
     {
-        _cts = new CancellationTokenSource();
+        var cts = _cts = new CancellationTokenSource();
         IsBusy = true;
         Impact.Clear();
         _impactGraph = null; // so a walk that is stopped or fails does not read as "nothing depends on this"
@@ -245,7 +261,7 @@ public sealed class DependencyExplorerViewModel : ObservableObject
                 _item, DependencyDirection.Dependent,
                 id => _known.TryGetValue(id, out var match) ? match : null,
                 progress: new Progress<int>(count => Status = $"Walking dependents... {count:N0} component(s) so far"),
-                ct: _cts.Token);
+                ct: cts.Token);
 
             _impactGraph = graph;
 
@@ -278,6 +294,8 @@ public sealed class DependencyExplorerViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsBusy = false;
         }
     }

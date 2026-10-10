@@ -51,7 +51,7 @@ public class EnvironmentSessionLoadTests
     {
         var env = new FakeEnvironment();
         var fallback = env.AddSolution("Default Solution", "Default");
-        var core = env.AddSolution("ECT Core", "ect_core");
+        env.AddSolution("ECT Core", "ect_core");
         env.AddComponent(fallback, 1, "account", "Account");
         env.AddComponent(fallback, 1, "contact", "Contact");
         var session = await env.ConnectedAsync();
@@ -66,6 +66,7 @@ public class EnvironmentSessionLoadTests
         Assert.StartsWith("Showing 2 objects cached at ", session.Status);
         Assert.Equal(["Account", "Contact"], session.Items.Select(i => i.PrimaryLabel));
         Assert.True(session.IsBusy);
+        Assert.False(session.IsSolutionPickerEnabled);
 
         gate.SetResult();
         await EnvironmentSessionThread.Until(() => !session.IsBusy, "the refresh");

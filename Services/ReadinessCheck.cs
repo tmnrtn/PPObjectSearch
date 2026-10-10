@@ -102,7 +102,6 @@ public sealed class ReadinessCheck
     /// <summary>Layers are one request per component; past this the rest are left unchecked, and the report says so.</summary>
     public const int MaxLayerChecks = 400;
 
-    private const int ProcessType = 29;
     private const int PluginAssemblyType = 91;
     private const int EnvironmentVariableType = 380;
 
@@ -277,7 +276,7 @@ public sealed class ReadinessCheck
         {
             try
             {
-                connections = await _targetFlows.GetConnectionsAsync(_targetEnvironmentId!, ct).ConfigureAwait(false);
+                connections = await _targetFlows.GetConnectionsAsync(_targetEnvironmentId, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

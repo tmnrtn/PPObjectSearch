@@ -227,11 +227,12 @@ public sealed class FailuresViewModel : ObservableObject
     /// <summary>Why the list is empty and what to change - shown in its place.</summary>
     public string EmptyHeading => Sources().Count == 0 ? "No sources included" : "No failures";
 
-    public string EmptyText => Sources().Count == 0
-        ? "Include flow runs, workflow jobs or plug-ins above."
-        : SolutionOnly && HasSolution
-            ? $"Nothing in {_session.SelectedSolution?.DisplayLabel} failed in this period. Try a longer period, or the whole environment."
-            : "Nothing failed in this period. Try a longer period, or include more sources.";
+    public string EmptyText => (Sources().Count == 0, SolutionOnly && HasSolution) switch
+    {
+        (true, _) => "Include flow runs, workflow jobs or plug-ins above.",
+        (_, true) => $"Nothing in {_session.SelectedSolution?.DisplayLabel} failed in this period. Try a longer period, or the whole environment.",
+        _ => "Nothing failed in this period. Try a longer period, or include more sources."
+    };
 
     private string _readSummary = string.Empty;
     /// <summary>"Read 1,284 flow runs, 96 system jobs and 0 trace logs in 6.1 s".</summary>
@@ -284,10 +285,17 @@ public sealed class FailuresViewModel : ObservableObject
     public bool HasSelection => SelectedComponent is not null;
 
     /// <summary>"18 of 212 runs failed · first 2026-09-30 08:02" - or the failures alone where runs are not counted.</summary>
-    public string SelectedRunsLabel => SelectedComponent is not { } c
-        ? string.Empty
-        : (c.Runs is { } runs ? $"{c.Failures:N0} of {runs:N0} runs failed" : $"{c.Failures:N0} failure{(c.Failures == 1 ? string.Empty : "s")}") +
-          $" · first {c.First.ToLocalTime():yyyy-MM-dd HH:mm}";
+    public string SelectedRunsLabel => SelectedComponent is { } c
+        ? $"{FailureCount(c)} · first {c.First.ToLocalTime():yyyy-MM-dd HH:mm}"
+        : string.Empty;
+
+    /// <summary>"18 of 212 runs failed", or "3 failures" where runs are not counted.</summary>
+    private static string FailureCount(FailureSummaryRow component)
+    {
+        if (component.Runs is { } runs) return $"{component.Failures:N0} of {runs:N0} runs failed";
+
+        return component.Failures == 1 ? "1 failure" : $"{component.Failures:N0} failures";
+    }
 
     public string SelectedErrorsHeading => $"Grouped by error · {SelectedErrors.Count:N0}";
 
@@ -320,7 +328,7 @@ public sealed class FailuresViewModel : ObservableObject
         var kind = failure.Source == FailureSource.CloudFlow ? SwitchableKind.CloudFlow : SwitchableKind.Process;
         try
         {
-            var states = await client.GetSwitchStatesAsync(kind, [id]);
+            var states = await client.GetSwitchStatesAsync(kind, [id], CancellationToken.None);
             if (request != _stateRequest || !states.TryGetValue(id, out var on)) return;
 
             IsSelectedOn = on;
@@ -374,8 +382,9 @@ public sealed class FailuresViewModel : ObservableObject
     {
         if (_session.Client is not { } client) return;
 
-        _cts?.Cancel();
+        var superseded = _cts;
         var cts = _cts = new CancellationTokenSource();
+        if (superseded is not null) await superseded.CancelAsync();
         IsBusy = true;
 
         var (from, to) = Range(Period, CustomFrom, CustomTo, DateTimeOffset.Now);

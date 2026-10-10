@@ -299,7 +299,7 @@ public class DataverseClientCoreTests
     public async Task Current_organization_propagates_cancellation()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
         var auth = new EnvironmentAuthContext((_, ct) => { ct.ThrowIfCancellationRequested(); return Task.FromResult<string?>("t"); });
         using var client = new DataverseClient(auth, Fakes.EnvironmentUrl, new FakeHttpHandler());
 

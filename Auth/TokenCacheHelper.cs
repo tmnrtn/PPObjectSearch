@@ -16,10 +16,9 @@ namespace PPObjectSearch.Auth;
 /// </summary>
 internal static class TokenCacheHelper
 {
-    private static readonly string CacheFile =
-        Path.Combine(AppPaths.DataDirectory, "msal.cache");
+    private static string CacheFile => Path.Combine(AppPaths.DataDirectory, "msal.cache");
 
-    private static readonly string LockFile = CacheFile + ".lock";
+    private static string LockFile => CacheFile + ".lock";
 
     /// <summary>Held from MSAL's before-access to its after-access notification.</summary>
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -41,7 +40,9 @@ internal static class TokenCacheHelper
 
     private static void OnBeforeAccess(TokenCacheNotificationArgs args)
     {
-        Gate.Wait();
+        // Never abandoned for args.CancellationToken: the after-access notification releases the
+        // gate unconditionally, so it must have been taken.
+        Gate.Wait(CancellationToken.None);
 
         _readIncomplete = false;
         _crossProcessLock = AcquireFileLock();
@@ -160,4 +161,9 @@ internal static class AppPaths
     public static string DataDirectory { get; internal set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PPObjectSearch");
+
+    /// <summary>Explorer by its full path, so nothing of the same name earlier on the PATH runs instead.</summary>
+    public static string Explorer { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+        "explorer.exe");
 }

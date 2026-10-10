@@ -45,7 +45,7 @@ public sealed partial class DataverseClient
                     if (string.IsNullOrWhiteSpace(entity) || string.IsNullOrWhiteSpace(attribute)) continue;
                     if (delete is not ("Cascade" or "Restrict" or "RemoveLink")) continue;
 
-                    results.Add(new DeleteBehaviour(entity!, attribute!, delete));
+                    results.Add(new DeleteBehaviour(entity, attribute, delete));
                 }
             }
 

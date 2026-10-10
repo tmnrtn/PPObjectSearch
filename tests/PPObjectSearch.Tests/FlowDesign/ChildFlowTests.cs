@@ -49,7 +49,7 @@ public class ChildFlowTests
     {
         var d = new FlowDiagramViewModel(FlowDesignParser.Parse(Sample));
 
-        Assert.Equal([Escalate, Gone], d.ChildFlowIds.OrderBy(g => g.ToString()));
+        Assert.Equal([Escalate, Gone], d.ChildFlowIds().OrderBy(g => g.ToString()));
     }
 
     [Fact]

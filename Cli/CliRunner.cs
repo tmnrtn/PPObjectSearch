@@ -102,7 +102,7 @@ public sealed class CliRunner
         return Usage;
     }
 
-    private sealed class UsageException(string message) : Exception(message);
+    public sealed class UsageException(string message) : Exception(message);
 
     /// <summary>"--name value" pairs. Every option takes a value.</summary>
     internal static bool TryParse(string[] args, out Dictionary<string, string> options, out string problem)
@@ -110,7 +110,7 @@ public sealed class CliRunner
         options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         problem = string.Empty;
 
-        for (var i = 0; i < args.Length; i++)
+        for (var i = 0; i < args.Length; i += 2)
         {
             if (!args[i].StartsWith("--", StringComparison.Ordinal) || args[i].Length < 3)
             {
@@ -124,7 +124,7 @@ public sealed class CliRunner
                 return false;
             }
 
-            options[args[i][2..]] = args[++i];
+            options[args[i][2..]] = args[i + 1];
         }
 
         return true;
@@ -135,7 +135,7 @@ public sealed class CliRunner
             ? value
             : throw new UsageException($"--{name} is required. Run 'ppos help' for the commands.");
 
-    private async Task<SolutionInfo> FindSolutionAsync(DataverseClient client, string name, CancellationToken ct) =>
+    private static async Task<SolutionInfo> FindSolutionAsync(DataverseClient client, string name, CancellationToken ct) =>
         (await client.GetSolutionsAsync(ct)).FirstOrDefault(s =>
             string.Equals(s.UniqueName, name, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(s.FriendlyName, name, StringComparison.OrdinalIgnoreCase))

@@ -36,11 +36,13 @@ public sealed record FlowActionResult(
 /// <summary>How run times read: "340 ms", "1.2 s", "3m 05s", "2h 10m".</summary>
 public static class FlowRunFormat
 {
-    public static string Duration(TimeSpan d) =>
-        d.TotalSeconds < 1 ? $"{d.TotalMilliseconds:N0} ms"
-        : d.TotalMinutes < 1 ? $"{d.TotalSeconds:0.#} s"
-        : d.TotalHours < 1 ? $"{(int)d.TotalMinutes}m {d.Seconds:00}s"
-        : $"{(int)d.TotalHours}h {d.Minutes:00}m";
+    public static string Duration(TimeSpan d) => d switch
+    {
+        { TotalSeconds: < 1 } => $"{d.TotalMilliseconds:N0} ms",
+        { TotalMinutes: < 1 } => $"{d.TotalSeconds:0.#} s",
+        { TotalHours: < 1 } => $"{(int)d.TotalMinutes}m {d.Seconds:00}s",
+        _ => $"{(int)d.TotalHours}h {d.Minutes:00}m"
+    };
 }
 
 /// <summary>One iteration of a step inside a loop.</summary>

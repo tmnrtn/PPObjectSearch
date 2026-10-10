@@ -59,10 +59,13 @@ public sealed class ReferenceEntityViewModel : ObservableObject
     }
 
     /// <summary>Drives the colour of <see cref="ResultLabel"/>: "Differences", "Match", "Off" or "None".</summary>
-    public string Result => !IsEnabled ? "Off"
-        : DifferenceCount is null ? "None"
-        : DifferenceCount == 0 ? "Match"
-        : "Differences";
+    public string Result => (IsEnabled, DifferenceCount) switch
+    {
+        (false, _) => "Off",
+        (_, null) => "None",
+        (_, 0) => "Match",
+        _ => "Differences"
+    };
 
     /// <summary>"8 diff", "Match" or "Off", at the right of the table list.</summary>
     public string ResultLabel => Result switch
@@ -148,7 +151,6 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
     /// <summary>Whether the target may be written to, re-asked whenever the target changes.</summary>
     private WritePermission? _permission;
-    private DataverseClient? _permissionFrom;
 
     public ReferenceDataCompareViewModel(IEnumerable<EnvironmentSessionViewModel> sessions, AppSettings settings)
     {
@@ -192,7 +194,31 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         _target = Sessions.Skip(1).FirstOrDefault();
 
         if (Configurations.Count > 0) SelectedConfiguration = Configurations[0];
+
+        AskName = (title, prompt, initial) => Views.NamePromptWindow.Ask(OwnerWindow(), title, prompt, initial);
+        ShowReconcile = viewModel =>
+            new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() }.ShowDialog();
+        PickEntities = picker =>
+            new Views.EntityPickerWindow { DataContext = picker, Owner = OwnerWindow() }.ShowDialog() == true;
+        EditSettings = settings =>
+            new Views.ReferenceEntitySettingsWindow { DataContext = settings, Owner = OwnerWindow() }.ShowDialog() == true;
     }
+
+    // The dialogs this window opens. Tests answer them in place of a window.
+    internal Func<string, string, string, string?> AskName { get; set; }
+    internal Action<ReconcileViewModel> ShowReconcile { get; set; }
+    internal Func<EntityPickerViewModel, bool> PickEntities { get; set; }
+    internal Func<ReferenceEntitySettingsViewModel, bool> EditSettings { get; set; }
+
+    internal Func<string, bool> Confirm { get; set; } = message =>
+        MessageBox.Show(message, "PPObjectSearch", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+
+    /// <summary>Where to export to, given a suggested file name; null when the user cancels.</summary>
+    internal Func<string, string?> PickExportPath { get; set; } = fileName =>
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV file (*.csv)|*.csv", FileName = fileName };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    };
 
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; }
     public ObservableCollection<ReferenceEntityViewModel> Entities { get; } = new();
@@ -276,7 +302,6 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             _targetEntities = null;
             _targetEntitiesFrom = null;
             _permission = null;
-            _permissionFrom = null;
 
             OnPropertyChanged(nameof(TargetHeader));
             OnPropertyChanged(nameof(WriteStatus));
@@ -544,9 +569,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         if (Source?.Client is not { } sourceClient || Target?.Client is not { } targetClient) return;
 
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var superseded = _cts;
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
+        if (superseded is not null) await superseded.CancelAsync();
 
         IsBusy = true;
         _all.Clear();
@@ -635,6 +661,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         {
             IsBusy = false;
             ExportCommand.RaiseCanExecuteChanged();
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
         }
     }
 
@@ -815,10 +843,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             actionable, SourceHeader, TargetHeader, targetClient, targetEntities, permission,
             Source?.EnvironmentSku ?? EnvironmentSku.Unknown, Target?.AccountName);
 
-        var window = new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() };
         // Read from the view model rather than the dialog result: closing with the title bar's X
         // after a run reports no result, yet the rows on screen are just as out of date.
-        window.ShowDialog();
+        ShowReconcile(viewModel);
         var wrote = viewModel.AnyWritesSucceeded;
 
         Status = permission.Allowed
@@ -835,10 +862,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     private async Task<WritePermission> EnsurePermissionAsync(DataverseClient targetClient)
     {
         var environmentId = _settings.GetEnvironmentId(targetClient.EnvironmentUrl);
-        var type = await targetClient.GetEnvironmentTypeAsync(environmentId);
+        var type = await targetClient.GetEnvironmentTypeAsync(environmentId, CancellationToken.None);
 
         _permission = WriteGuard.Evaluate(_settings, targetClient.EnvironmentUrl, type);
-        _permissionFrom = targetClient;
 
         return _permission;
     }
@@ -851,7 +877,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
             return _targetEntities;
         }
 
-        var entities = await targetClient.GetEntitiesAsync();
+        var entities = await targetClient.GetEntitiesAsync(CancellationToken.None);
 
         _targetEntities = entities.ToDictionary(e => e.LogicalName, StringComparer.OrdinalIgnoreCase);
         _targetEntitiesFrom = targetClient;
@@ -912,7 +938,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(ConfigurationName))
         {
-            var asked = Views.NamePromptWindow.Ask(OwnerWindow(), "Save configuration",
+            var asked = AskName("Save configuration",
                 "Name this set of tables so it can be picked again.", string.Empty);
             if (asked is null) return;
 
@@ -957,7 +983,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         if (SelectedConfiguration is not { } config) return;
 
-        var name = Views.NamePromptWindow.Ask(OwnerWindow(), "Rename configuration",
+        var name = AskName("Rename configuration",
             "The tables and settings stay as they are.", config.Name ?? string.Empty);
 
         if (name is null || string.Equals(name, config.Name, StringComparison.Ordinal)) return;
@@ -986,11 +1012,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     {
         if (SelectedConfiguration is not { } config) return;
 
-        var confirm = MessageBox.Show(
-            $"Delete the saved configuration '{config.Name}'?",
-            "PPObjectSearch", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.OK) return;
+        if (!Confirm($"Delete the saved configuration '{config.Name}'?")) return;
 
         Configurations.Remove(config);
         _selectedConfiguration = null;
@@ -1019,7 +1041,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 IsBusy = true;
                 Status = $"Reading the table list from {SourceHeader}...";
 
-                _sourceEntities = await client.GetEntitiesAsync();
+                _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;
             }
         }
@@ -1035,10 +1057,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
         var picker = new EntityPickerViewModel(_sourceEntities, Entities.Select(e => e.LogicalName));
 
-        var window = new Views.EntityPickerWindow { DataContext = picker, Owner = OwnerWindow() };
-        if (window.ShowDialog() != true) return;
+        if (!PickEntities(picker)) return;
 
-        foreach (var entity in picker.SelectedEntities)
+        var chosen = picker.SelectedEntities();
+        foreach (var entity in chosen)
         {
             Add(new ReferenceEntityViewModel(
                 new ReferenceEntityConfig
@@ -1050,7 +1072,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         }
 
         Status = $"{Entities.Count} table(s) configured.";
-        if (picker.SelectedEntities.Any()) IsDirty = true;
+        if (chosen.Count > 0) IsDirty = true;
         RaiseCommandStates();
     }
 
@@ -1069,11 +1091,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         entity.Entity = summary;
 
         var settings = new ReferenceEntitySettingsViewModel(entity.Config, summary, client);
-        var window = new Views.ReferenceEntitySettingsWindow { DataContext = settings, Owner = OwnerWindow() };
+        _ = settings.LoadAsync(CancellationToken.None);
 
-        _ = settings.LoadAsync();
-
-        if (window.ShowDialog() != true) return;
+        if (!EditSettings(settings)) return;
 
         entity.Refresh();
         IsDirty = true;
@@ -1088,7 +1108,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 IsBusy = true;
                 Status = $"Reading the table list from {SourceHeader}...";
 
-                _sourceEntities = await client.GetEntitiesAsync();
+                _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;
             }
 
@@ -1152,13 +1172,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     /// </summary>
     private void Export()
     {
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Filter = "CSV file (*.csv)|*.csv",
-            FileName = $"reference-data-{SourceHeader}-{TargetHeader}.csv".Replace(' ', '-')
-        };
-
-        if (dialog.ShowDialog() != true) return;
+        var path = PickExportPath($"reference-data-{SourceHeader}-{TargetHeader}.csv".Replace(' ', '-'));
+        if (path is null) return;
 
         try
         {
@@ -1180,8 +1195,8 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
                 foreach (var difference in row.Differences) lines.Add(Line(row, difference));
             }
 
-            CsvExporter.WriteLines(dialog.FileName, lines);
-            Status = $"Exported {lines.Count - 1:N0} line(s) to {dialog.FileName}.";
+            CsvExporter.WriteLines(path, lines);
+            Status = $"Exported {lines.Count - 1:N0} line(s) to {path}.";
         }
         catch (Exception ex)
         {

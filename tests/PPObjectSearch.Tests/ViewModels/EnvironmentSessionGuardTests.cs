@@ -112,18 +112,20 @@ public class EnvironmentSessionGuardTests
         var (env, session) = await EnvironmentSessionFilterTests.ConnectedAsync();
         var row = session.AllItems[0];
         session.SelectedItem = row;
+        var (type, subType, state, layer, solution) = (session.SelectedTypeFilter, session.SelectedSubTypeFilter,
+            session.SelectedStateFilter, session.SelectedLayerFilter, session.SelectedSolution);
         var changed = new List<string?>();
         session.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
         session.SelectedItem = row;
-        session.SearchText = session.SearchText;
+        session.SearchText = string.Empty;
         session.EnvironmentUrl = env.Url;
         session.FavouritesOnly = false;
-        session.SelectedTypeFilter = session.SelectedTypeFilter;
-        session.SelectedSubTypeFilter = session.SelectedSubTypeFilter;
-        session.SelectedStateFilter = session.SelectedStateFilter;
-        session.SelectedLayerFilter = session.SelectedLayerFilter;
-        session.SelectedSolution = session.SelectedSolution;
+        session.SelectedTypeFilter = type;
+        session.SelectedSubTypeFilter = subType;
+        session.SelectedStateFilter = state;
+        session.SelectedLayerFilter = layer;
+        session.SelectedSolution = solution;
         session.TypeFilterSearchText = string.Empty;
 
         Assert.Empty(changed);

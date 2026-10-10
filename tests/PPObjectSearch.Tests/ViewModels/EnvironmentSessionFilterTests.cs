@@ -122,10 +122,10 @@ public class EnvironmentSessionFilterTests
 
         session.ClearFiltersCommand.Execute(null);
 
-        Assert.True(session.SelectedTypeFilter!.IsAll);
-        Assert.True(session.SelectedSubTypeFilter!.IsAll);
-        Assert.True(session.SelectedStateFilter!.IsAll);
-        Assert.True(session.SelectedLayerFilter!.IsAll);
+        Assert.True(session.SelectedTypeFilter?.IsAll);
+        Assert.True(session.SelectedSubTypeFilter?.IsAll);
+        Assert.True(session.SelectedStateFilter?.IsAll);
+        Assert.True(session.SelectedLayerFilter?.IsAll);
         Assert.False(session.FavouritesOnly);
         Assert.Equal(string.Empty, session.SearchText);
         Assert.False(session.HasActiveFilters);
@@ -147,7 +147,7 @@ public class EnvironmentSessionFilterTests
         session.TypeFilterSearchText = "web";
 
         Assert.Equal(["All types (5)", "Web Resource (1)"], session.TypeFiltersView.Cast<TypeFilterOption>().Select(f => f.Label));
-        Assert.True(session.SelectedTypeFilter!.IsAll);
+        Assert.True(session.SelectedTypeFilter?.IsAll);
         Assert.Equal(5, Shown(session).Count);
 
         session.TypeFilterSearchText = string.Empty;
@@ -333,7 +333,7 @@ public class EnvironmentSessionFilterTests
 
         session.ApplySavedSearchCommand.Execute(new SavedSearch { Name = "Old", Type = "Plug-in step", FavouritesOnly = true });
 
-        Assert.True(session.SelectedTypeFilter!.IsAll);
+        Assert.True(session.SelectedTypeFilter?.IsAll);
         Assert.True(session.FavouritesOnly);
         Assert.Empty(Shown(session));
     });
