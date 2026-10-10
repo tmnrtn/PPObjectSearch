@@ -133,6 +133,20 @@ public class EnvironmentSessionFilterTests
     });
 
     [Fact]
+    public Task Clearing_the_filters_lets_go_of_a_chosen_sub_type_too() => EnvironmentSessionThread.Run(async () =>
+    {
+        var (_, session) = await ConnectedAsync();
+        session.SelectedTypeFilter = session.TypeFilters.Single(f => f.Name == "Process");
+        session.SelectedSubTypeFilter = session.SubTypeFilters.Single(f => f.Name == "Cloud Flow");
+
+        session.ClearFiltersCommand.Execute(null);
+
+        Assert.True(session.SelectedSubTypeFilter?.IsAll);
+        Assert.False(session.HasActiveFilters);
+        Assert.Equal("5 objects", session.ResultSummary);
+    });
+
+    [Fact]
     public Task Typing_in_the_type_filter_narrows_its_list_and_lets_go_of_the_chosen_type() => EnvironmentSessionThread.Run(async () =>
     {
         var (_, session) = await ConnectedAsync();

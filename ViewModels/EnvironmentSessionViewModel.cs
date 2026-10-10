@@ -1207,19 +1207,28 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
             await LoadSolutionComponentsAsync();
         }
-        catch (OperationCanceledException)
-        {
-            Status = "Cancelled.";
-        }
         catch (Exception ex)
         {
-            IsConnected = false;
-            Status = "Connection failed: " + ex.Message;
+            // A connect that a newer connect or a reset replaced reports nothing: the tab is theirs
+            // now, and its client was disposed under this one.
+            if (ReferenceEquals(cts, _loadCts)) ReportConnectFailure(ex);
         }
         finally
         {
-            IsBusy = false;
+            if (ReferenceEquals(cts, _loadCts)) IsBusy = false;
         }
+    }
+
+    private void ReportConnectFailure(Exception ex)
+    {
+        if (ex is OperationCanceledException)
+        {
+            Status = "Cancelled.";
+            return;
+        }
+
+        IsConnected = false;
+        Status = "Connection failed: " + ex.Message;
     }
 
     /// <summary>
@@ -1273,6 +1282,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     public void Reset(string status)
     {
         CancelBackgroundWork();
+        // Whatever was running is no longer this tab's: it must not report over the status below.
+        _loadCts = null;
         _layerChecks.Clear();
         SearchDropdownOpen = false;
         CloseToolWindows();
@@ -1294,6 +1305,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         OnPropertyChanged(nameof(SelectedSolution));
 
         IsConnected = false;
+        IsBusy = false;
         ResultSummary = string.Empty;
         Title = DeriveTitle(EnvironmentUrl);
         Status = status;
@@ -1560,6 +1572,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         OnPropertyChanged(nameof(SelectedStateFilter));
         OnPropertyChanged(nameof(SelectedLayerFilter));
 
+        // The rebuild keeps the sub type chosen before it; clearing has to forget that first.
+        _selectedSubTypeFilter = null;
         RebuildSubTypeFilters();
         _searchText = string.Empty;
         OnPropertyChanged(nameof(SearchText));
@@ -1833,7 +1847,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     private void ShowDetails(SolutionComponentItem? item, DetailsShortcut? openOn = null)
     {
-        if (item is null || _client is null) return;
+        // A failed sign-in leaves its client behind, so being signed in is checked as well.
+        if (item is null || _client is null || !IsConnected) return;
 
         var viewModel = new ObjectDetailsViewModel(_client, item, KnownItems(), _linkBuilder?.EnvironmentId, OpenUrl, this, openOn);
         var window = Track(new Views.ObjectDetailsWindow
@@ -1875,7 +1890,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     /// <summary>The selected object's dependency tree, from the palette rather than its details window.</summary>
     public RelayCommand ExploreDependenciesCommand => _exploreDependenciesCommand ??= new RelayCommand(_ =>
     {
-        if (SelectedItem is not { } item || _client is null) return;
+        if (SelectedItem is not { } item || _client is null || !IsConnected) return;
 
         new Views.DependencyExplorerWindow
         {
