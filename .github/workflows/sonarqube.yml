@@ -1,0 +1,43 @@
+name: SonarQube
+
+# Analyses main on the self-hosted SonarQube server: the build, the tests and their coverage.
+# The work is tools/sonar.ps1, the same script a developer runs locally; it needs the repository
+# secrets SONAR_HOST_URL and SONAR_TOKEN (copies of the values sonar.env points to in 1Password).
+# Pull requests are not analysed - the server is Community Edition, which analyses one branch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One analysis at a time; a newer push supersedes one still running.
+concurrency:
+  group: sonarqube
+  cancel-in-progress: true
+
+jobs:
+  analyse:
+    # Forks have neither the secrets nor a project on the server.
+    if: github.repository == 'tmnrtn/PPObjectSearch'
+    runs-on: windows-latest
+
+    steps:
+      # Full history, so the server can attribute issues to commits and track new code.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      - name: Analyse
+        shell: pwsh
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./tools/sonar.ps1

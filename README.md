@@ -119,6 +119,22 @@ too: every resource a view uses must be defined, and the light and dark themes m
 same keys. CI reports line and branch coverage on each run's summary page. The release
 workflow runs them before publishing.
 
+Each push to main is also analysed on the self-hosted SonarQube server
+(`.github/workflows/sonarqube.yml`), with test results and coverage. The workflow runs
+`tools/sonar.ps1`, which can be run locally too, taking the server's address and token from
+`sonar.env`, with the token read from 1Password:
+
+```powershell
+op run --env-file sonar.env -- pwsh tools/sonar.ps1
+```
+
+CI needs the same two values as the repository secrets `SONAR_HOST_URL` and `SONAR_TOKEN`:
+
+```powershell
+gh secret set SONAR_HOST_URL --body https://sq.tmnrtn.com
+op read "op://Homelab/sonarqube/api key" | gh secret set SONAR_TOKEN
+```
+
 ## Command line (ppos)
 
 `ppos.exe`, released beside the app, runs the read-only checks a pipeline wants before promoting a
