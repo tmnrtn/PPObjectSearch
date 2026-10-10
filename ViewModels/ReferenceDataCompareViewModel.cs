@@ -840,8 +840,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
         OnPropertyChanged(nameof(WriteStatus));
 
         var viewModel = new ReconcileViewModel(
-            actionable, SourceHeader, TargetHeader, targetClient, targetEntities, permission,
-            Source?.EnvironmentSku ?? EnvironmentSku.Unknown, Target?.AccountName);
+            actionable, SourceHeader,
+            new ReconcileTarget(TargetHeader, targetClient, targetEntities, Target?.AccountName),
+            permission, Source?.EnvironmentSku ?? EnvironmentSku.Unknown);
 
         // Read from the view model rather than the dialog result: closing with the title bar's X
         // after a run reports no result, yet the rows on screen are just as out of date.

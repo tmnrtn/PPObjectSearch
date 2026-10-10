@@ -54,11 +54,11 @@ public class DependencyGraphTests
     [Fact]
     public async Task The_walk_stops_at_its_limits_and_says_so()
     {
-        var shallow = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Dependent, _ => null, maxDepth: 1);
+        var shallow = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Dependent, _ => null, limits: new(MaxDepth: 1));
         Assert.Equal(3, shallow.Nodes.Count);
         Assert.True(shallow.IsTruncated);
 
-        var small = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Dependent, _ => null, maxNodes: 2);
+        var small = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Dependent, _ => null, limits: new(MaxNodes: 2));
         Assert.Equal(2, small.Nodes.Count);
         Assert.True(small.IsTruncated);
     }
@@ -66,7 +66,7 @@ public class DependencyGraphTests
     [Fact]
     public async Task Requirements_point_the_other_way()
     {
-        var graph = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Required, _ => null, maxDepth: 1);
+        var graph = await DependencyWalker.WalkAsync(Fetch, Item(Column, "c"), DependencyDirection.Required, _ => null, limits: new(MaxDepth: 1));
 
         Assert.Contains(new DependencyEdge(Column, Form), graph.Edges);
     }
@@ -76,7 +76,7 @@ public class DependencyGraphTests
     {
         var known = new Dictionary<Guid, SolutionComponentItem> { [Form] = Item(Form, "Main \"form\" <v2>", 60) };
         var graph = await DependencyWalker.WalkAsync(Fetch, Item(Column, "new_status"), DependencyDirection.Dependent,
-            id => known.GetValueOrDefault(id), maxDepth: 1);
+            id => known.GetValueOrDefault(id), limits: new(MaxDepth: 1));
 
         var mermaid = graph.ToMermaid("new_status");
 

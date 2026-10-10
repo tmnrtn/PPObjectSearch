@@ -605,21 +605,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
         var triggerName = Design.Triggers.Count == 1 ? Design.Triggers[0].Name : null;
 
-        foreach (var card in _cards)
-        {
-            FlowActionResult? result;
-            if (card.Kind == FlowNodeKind.Trigger)
-            {
-                // The run names its trigger; a flow has one, whatever it is called now.
-                result = run.Trigger is { } t && (t.Name == card.Node.Name || card.Node.Name == triggerName) ? t : null;
-            }
-            else
-            {
-                result = run.Actions.TryGetValue(card.Node.Name, out var r) ? r : null;
-            }
-
-            card.SetResult(inRun: true, result);
-        }
+        foreach (var card in _cards) card.SetResult(inRun: true, ResultFor(card, run, triggerName));
 
         var drawn = _cards.Select(c => c.Node.Name).ToHashSet(StringComparer.Ordinal);
         var missing = run.Actions.Keys.Where(name => !drawn.Contains(name)).OrderBy(n => n, StringComparer.Ordinal).ToList();
@@ -633,8 +619,17 @@ public sealed class FlowDiagramViewModel : ObservableObject
         if (FailedCards.Any()) JumpToFailure();
     }
 
+    /// <summary>What the run says about one card's step; null where it has nothing on it.</summary>
+    private static FlowActionResult? ResultFor(FlowCardViewModel card, FlowRunDetail run, string? triggerName)
+    {
+        if (card.Kind != FlowNodeKind.Trigger) return run.Actions.TryGetValue(card.Node.Name, out var r) ? r : null;
+
+        // The run names its trigger; a flow has one, whatever it is called now.
+        return run.Trigger is { } t && (t.Name == card.Node.Name || card.Node.Name == triggerName) ? t : null;
+    }
+
     /// <summary>Steps of the run the diagram no longer has - renamed or removed since it ran.</summary>
-    private static string MismatchNote(IReadOnlyList<string> missing)
+    private static string MismatchNote(List<string> missing)
     {
         var steps = missing.Count == 1 ? "1 step in this run is" : $"{missing.Count} steps in this run are";
         var them = missing.Count == 1 ? "it" : "them";
@@ -699,56 +694,64 @@ public sealed class FlowDiagramViewModel : ObservableObject
         foreach (var loop in _cards.Where(c => c.Kind is FlowNodeKind.ForEach or FlowNodeKind.Until &&
                                                c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun)))
         {
-            // Every step that runs once per pass of this loop - including a nested loop or scope,
-            // which list their passes the same way. A plain step is the cheapest to ask.
-            var inside = _cards.Where(c =>
-                    !ReferenceEquals(c, loop) && NearestLoop(c) == loop &&
-                    c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun))
-                .OrderBy(c => c.IsContainer)
-                .ToList();
-
-            if (inside.Count == 0) continue;
-
-            try
-            {
-                var repetitions = await RepetitionsAsync(inside[0].Node.Name);
-                if (!ReferenceEquals(run, _run)) return;
-
-                // Which passes failed is a question for the steps that failed, not the one asked
-                // for the count: a Compose that never fails would report a clean loop beside a
-                // failing HTTP step. Each failing step's failed passes are gathered, once each.
-                var failedPasses = repetitions
-                    .Where(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut)
-                    .Select(r => r.Label)
-                    .ToHashSet(StringComparer.Ordinal);
-
-                foreach (var step in inside.Skip(1).Where(c => !c.IsContainer && IsFailed(c)))
-                {
-                    var passes = await RepetitionsAsync(step.Node.Name);
-                    if (!ReferenceEquals(run, _run)) return;
-
-                    foreach (var pass in passes.Where(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut))
-                    {
-                        failedPasses.Add(pass.Label);
-                    }
-                }
-
-                var failed = (failedPasses.Count, IsFailed(loop)) switch
-                {
-                    ( > 0, _) => $" · {failedPasses.Count:N0} failed",
-                    (_, true) => " · failed",
-                    _ => string.Empty
-                };
-
-                loop.IterationLabel = CountLabel(repetitions) + failed;
-            }
-            catch (Exception ex)
-            {
-                Services.Log.Warn("Loop iterations could not be counted", ex);
-                // A count is a nicety; the diagram stands without it.
-            }
+            if (!await CountLoopAsync(run, loop)) return;
         }
     }
+
+    /// <summary>Labels one loop with its passes. False once another run is on show, so counting stops.</summary>
+    private async Task<bool> CountLoopAsync(FlowRunDetail? run, FlowCardViewModel loop)
+    {
+        // Every step that runs once per pass of this loop - including a nested loop or scope,
+        // which list their passes the same way. A plain step is the cheapest to ask.
+        var inside = _cards.Where(c =>
+                !ReferenceEquals(c, loop) && NearestLoop(c) == loop &&
+                c.RunOutcome is not (FlowStepOutcome.Skipped or FlowStepOutcome.NotRun))
+            .OrderBy(c => c.IsContainer)
+            .ToList();
+
+        if (inside.Count == 0) return true;
+
+        try
+        {
+            var repetitions = await RepetitionsAsync(inside[0].Node.Name);
+            if (!ReferenceEquals(run, _run)) return false;
+
+            // Which passes failed is a question for the steps that failed, not the one asked
+            // for the count: a Compose that never fails would report a clean loop beside a
+            // failing HTTP step. Each failing step's failed passes are gathered, once each.
+            var failedPasses = FailedPasses(repetitions);
+
+            foreach (var step in inside.Skip(1).Where(c => !c.IsContainer && IsFailed(c)))
+            {
+                var passes = await RepetitionsAsync(step.Node.Name);
+                if (!ReferenceEquals(run, _run)) return false;
+
+                failedPasses.UnionWith(FailedPasses(passes));
+            }
+
+            var failed = (failedPasses.Count, IsFailed(loop)) switch
+            {
+                ( > 0, _) => $" · {failedPasses.Count:N0} failed",
+                (_, true) => " · failed",
+                _ => string.Empty
+            };
+
+            loop.IterationLabel = CountLabel(repetitions) + failed;
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warn("Loop iterations could not be counted", ex);
+            // A count is a nicety; the diagram stands without it.
+        }
+
+        return true;
+    }
+
+    private static HashSet<string> FailedPasses(FlowRepetitions repetitions) =>
+        repetitions
+            .Where(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut)
+            .Select(r => r.Label)
+            .ToHashSet(StringComparer.Ordinal);
 
     private static FlowCardViewModel? NearestLoop(FlowCardViewModel card)
     {
@@ -1211,7 +1214,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
 
     // ---------------------------------------------------------------- building
 
-    private IReadOnlyList<FlowStepViewModel> Build(FlowSequence sequence, FlowCardViewModel? parent, bool firstIsFirst)
+    private List<FlowStepViewModel> Build(FlowSequence sequence, FlowCardViewModel? parent, bool firstIsFirst)
     {
         var steps = new List<FlowStepViewModel>();
 

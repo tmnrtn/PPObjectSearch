@@ -14,6 +14,9 @@ namespace PPObjectSearch.ViewModels;
 /// </summary>
 public sealed class ChangesViewModel : ObservableObject
 {
+    /// <summary>The type filter's first choice, which filters nothing.</summary>
+    private const string AllTypes = "All types";
+
     private readonly EnvironmentSessionViewModel _session;
     private CancellationTokenSource? _cts;
 
@@ -23,7 +26,7 @@ public sealed class ChangesViewModel : ObservableObject
         EntriesView = (ListCollectionView)CollectionViewSource.GetDefaultView(Entries);
         EntriesView.Filter = o => o is ChangeEntry e &&
                                   (!UnmanagedOnly || (!e.IsSolutionOperation && !e.IsManaged)) &&
-                                  (SelectedType is null or "All types" || e.Type.StartsWith(SelectedType, StringComparison.Ordinal));
+                                  (SelectedType is null or AllTypes || e.Type.StartsWith(SelectedType, StringComparison.Ordinal));
 
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
         CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsBusy);
@@ -39,7 +42,7 @@ public sealed class ChangesViewModel : ObservableObject
 
     public ObservableCollection<ChangeEntry> Entries { get; } = new();
     public ListCollectionView EntriesView { get; }
-    public ObservableCollection<string> Types { get; } = new() { "All types" };
+    public ObservableCollection<string> Types { get; } = new() { AllTypes };
 
     public AsyncRelayCommand RefreshCommand { get; }
     public RelayCommand CancelCommand { get; }
@@ -66,7 +69,7 @@ public sealed class ChangesViewModel : ObservableObject
         _ => TimeSpan.FromDays(7)
     };
 
-    private string? _selectedType = "All types";
+    private string? _selectedType = AllTypes;
     public string? SelectedType
     {
         get => _selectedType;
@@ -195,34 +198,14 @@ public sealed class ChangesViewModel : ObservableObject
             Status = $"Reading who changed {changed.Count:N0} component(s)...";
             var by = await client.GetModifiedByAsync(changed, cts.Token);
 
-            IReadOnlyList<SolutionHistoryEntry> history;
-            try
-            {
-                history = await client.GetSolutionHistoryAsync(cts.Token);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                history = Array.Empty<SolutionHistoryEntry>();
-                Log.Warn("Solution history could not be read for the timeline", ex);
-                notes.Add("Solution history could not be read, so imports, upgrades and uninstalls are missing from the timeline - " + ex.Message);
-            }
+            var history = await ReadHistoryAsync(client, notes, cts.Token);
 
             if (cts.IsCancellationRequested) return;
 
             Entries.Clear();
             foreach (var entry in ChangeTimeline.Build(changed, by, history, _since)) Entries.Add(entry);
 
-            var previous = SelectedType;
-            Types.Clear();
-            Types.Add("All types");
-            foreach (var type in Entries.Select(e => e.IsSolutionOperation ? e.Type : e.Item!.ComponentTypeName)
-                         .Distinct().OrderBy(t => t, StringComparer.CurrentCultureIgnoreCase))
-            {
-                Types.Add(type);
-            }
-            _selectedType = Types.Contains(previous ?? string.Empty) ? previous : "All types";
-            OnPropertyChanged(nameof(SelectedType));
-
+            ListTypes();
             Refresh();
 
             if (changed.IsTruncated)
@@ -253,6 +236,37 @@ public sealed class ChangesViewModel : ObservableObject
             ExportCsvCommand.RaiseCanExecuteChanged();
             ExportMarkdownCommand.RaiseCanExecuteChanged();
         }
+    }
+
+    /// <summary>Solution history, or none - with a note why - where it cannot be read; the component changes still show.</summary>
+    private static async Task<IReadOnlyList<SolutionHistoryEntry>> ReadHistoryAsync(
+        Dataverse.DataverseClient client, List<string> notes, CancellationToken ct)
+    {
+        try
+        {
+            return await client.GetSolutionHistoryAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn("Solution history could not be read for the timeline", ex);
+            notes.Add("Solution history could not be read, so imports, upgrades and uninstalls are missing from the timeline - " + ex.Message);
+            return Array.Empty<SolutionHistoryEntry>();
+        }
+    }
+
+    /// <summary>The types the entries have, keeping the chosen one where it is still among them.</summary>
+    private void ListTypes()
+    {
+        var previous = SelectedType;
+        Types.Clear();
+        Types.Add(AllTypes);
+        foreach (var type in Entries.Select(e => e.IsSolutionOperation ? e.Type : e.Item!.ComponentTypeName)
+                     .Distinct().OrderBy(t => t, StringComparer.CurrentCultureIgnoreCase))
+        {
+            Types.Add(type);
+        }
+        _selectedType = Types.Contains(previous ?? string.Empty) ? previous : AllTypes;
+        OnPropertyChanged(nameof(SelectedType));
     }
 
     private void Refresh()

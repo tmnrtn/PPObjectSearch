@@ -55,6 +55,9 @@ public static class DetailsTabs
     private const int ProcessType = 29;
     private const int WebResourceType = 61;
 
+    // Most kinds without a richer view offer their layers; the shortcut is immutable, so one serves them all.
+    private static readonly DetailsShortcut LayersShortcut = new("Layers", DetailsTab.Layers);
+
     // The category code is what to go by; the labels cover items loaded from a cache written
     // before the code was kept. Dataverse labels category 5 "Modern Flow" and 0 "Workflow".
     public static ObjectKind KindOf(SolutionComponentItem item) => item.ComponentType switch
@@ -126,9 +129,9 @@ public static class DetailsTabs
             new("Run history", DetailsTab.Runs),
             new("Definition", DetailsTab.Source)
         ],
-        ObjectKind.ClassicWorkflow => [new("System jobs", DetailsTab.Runs), new("Layers", DetailsTab.Layers)],
-        ObjectKind.Plugin => [new("Trace log", DetailsTab.TraceLog), new("Layers", DetailsTab.Layers)],
-        ObjectKind.WebResource => [new("Source", DetailsTab.Source), new("Layers", DetailsTab.Layers)],
+        ObjectKind.ClassicWorkflow => [new("System jobs", DetailsTab.Runs), LayersShortcut],
+        ObjectKind.Plugin => [new("Trace log", DetailsTab.TraceLog), LayersShortcut],
+        ObjectKind.WebResource => [new("Source", DetailsTab.Source), LayersShortcut],
         ObjectKind.EnvironmentVariable => [new("Value", DetailsTab.Value)],
         ObjectKind.ConnectionReference => [new("Connection", DetailsTab.Connections), new("Used by", DetailsTab.Dependencies)],
         var kind when HasOverview(kind) => [new("Overview", DetailsTab.Overview), new("Dependencies", DetailsTab.Dependencies)],
@@ -139,6 +142,6 @@ public static class DetailsTabs
             new("Forms", DetailsTab.Components, TableChildKind.Form),
             new("Views", DetailsTab.Components, TableChildKind.View)
         ],
-        _ => [new("Layers", DetailsTab.Layers), new("Dependencies", DetailsTab.Dependencies)]
+        _ => [LayersShortcut, new("Dependencies", DetailsTab.Dependencies)]
     };
 }

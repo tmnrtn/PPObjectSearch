@@ -86,9 +86,10 @@ public sealed class ReconcileViewModelDetailTests : IDisposable
     }
 
     private ReconcileViewModel Window(FakeHttpHandler handler, WritePermission? permission = null, bool sourceTruncated = false) =>
-        new(Rows(sourceTruncated), "Dev", "Test", Fakes.Dataverse(handler),
-            new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase) { [Table] = Entity() },
-            permission ?? Permission(EnvironmentSku.Sandbox), EnvironmentSku.Developer, "maria@contoso.com", _logFolder)
+        new(Rows(sourceTruncated), "Dev",
+            new ReconcileTarget("Test", Fakes.Dataverse(handler),
+                new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase) { [Table] = Entity() }, "maria@contoso.com"),
+            permission ?? Permission(EnvironmentSku.Sandbox), EnvironmentSku.Developer, _logFolder)
         {
             Confirm = _ => true
         };

@@ -17,6 +17,13 @@ namespace PPObjectSearch.Services;
 /// </summary>
 public static partial class FlowDesignParser
 {
+    // The property a definition, a condition's branches, a switch's cases and a scope keep their steps in.
+    private const string ActionsProperty = "actions";
+
+    // Loop types, lower-cased as the type switches below compare them.
+    private const string ForEachType = "foreach";
+    private const string UntilType = "until";
+
     /// <summary>The definition under "properties" (a solution export), else under "definition", else the root itself.</summary>
     private static JsonElement DefinitionOf(JsonElement root)
     {
@@ -39,7 +46,7 @@ public static partial class FlowDesignParser
         var definition = DefinitionOf(root);
 
         if (definition.ValueKind != JsonValueKind.Object ||
-            (!definition.TryGetProperty("triggers", out _) && !definition.TryGetProperty("actions", out _)))
+            (!definition.TryGetProperty("triggers", out _) && !definition.TryGetProperty(ActionsProperty, out _)))
         {
             throw new FormatException("The flow's definition has no triggers or actions.");
         }
@@ -57,7 +64,7 @@ public static partial class FlowDesignParser
             }
         }
 
-        var actions = definition.TryGetProperty("actions", out var actionObject)
+        var actions = definition.TryGetProperty(ActionsProperty, out var actionObject)
             ? ReadContainer(actionObject, "the flow", context)
             : FlowSequence.Empty;
 
@@ -246,8 +253,8 @@ public static partial class FlowDesignParser
     {
         "if" => FlowNodeKind.Condition,
         "switch" => FlowNodeKind.Switch,
-        "foreach" => FlowNodeKind.ForEach,
-        "until" => FlowNodeKind.Until,
+        ForEachType => FlowNodeKind.ForEach,
+        UntilType => FlowNodeKind.Until,
         "scope" => FlowNodeKind.Scope,
         _ => FlowNodeKind.Action
     };
@@ -274,8 +281,8 @@ public static partial class FlowDesignParser
     {
         "if" => "Condition",
         "switch" => "Switch",
-        "foreach" => "Apply to each",
-        "until" => "Do until",
+        ForEachType => "Apply to each",
+        UntilType => "Do until",
         "scope" => "Scope",
         "compose" => "Compose",
         "parsejson" => "Parse JSON",
@@ -321,66 +328,62 @@ public static partial class FlowDesignParser
     }
 
     /// <summary>A short particular worth seeing on the card itself.</summary>
-    private static string? DetailOf(string type, JsonElement element, JsonElement inputs)
+    private static string? DetailOf(string type, JsonElement element, JsonElement inputs) => type.ToLowerInvariant() switch
     {
-        switch (type.ToLowerInvariant())
+        ForEachType => element.TryGetProperty("foreach", out var each) ? Short(each) : null,
+        UntilType => element.TryGetProperty("expression", out var until) ? Short(until) : null,
+        "initializevariable" => InitializedVariableOf(inputs),
+        "setvariable" or "incrementvariable" or "decrementvariable"
+            or "appendtoarrayvariable" or "appendtostringvariable" => Str(inputs, "name"),
+        "terminate" => Str(inputs, "runStatus"),
+        "recurrence" => RecurrenceOf(element),
+        "wait" => DelayOf(inputs),
+        "workflow" => ChildFlowReferenceOf(inputs),
+        _ => null
+    };
+
+    /// <summary>"name (type)" of the first variable an Initialize variable step declares.</summary>
+    private static string? InitializedVariableOf(JsonElement inputs)
+    {
+        if (inputs.ValueKind != JsonValueKind.Object ||
+            !inputs.TryGetProperty("variables", out var variables) ||
+            variables.ValueKind != JsonValueKind.Array ||
+            variables.GetArrayLength() == 0)
         {
-            case "foreach":
-                return element.TryGetProperty("foreach", out var each) ? Short(each) : null;
-
-            case "until":
-                return element.TryGetProperty("expression", out var until) ? Short(until) : null;
-
-            case "initializevariable":
-                if (inputs.ValueKind == JsonValueKind.Object &&
-                    inputs.TryGetProperty("variables", out var variables) &&
-                    variables.ValueKind == JsonValueKind.Array &&
-                    variables.GetArrayLength() > 0)
-                {
-                    var v = variables[0];
-                    return Str(v, "type") is { } t ? $"{Str(v, "name")} ({t})" : Str(v, "name");
-                }
-
-                return null;
-
-            case "setvariable" or "incrementvariable" or "decrementvariable"
-                or "appendtoarrayvariable" or "appendtostringvariable":
-                return Str(inputs, "name");
-
-            case "terminate":
-                return Str(inputs, "runStatus");
-
-            case "recurrence":
-                if (element.TryGetProperty("recurrence", out var recurrence))
-                {
-                    var interval = recurrence.TryGetProperty("interval", out var n) ? n.ToString() : "1";
-                    if (Str(recurrence, "frequency") is not { } frequency) return null;
-
-                    var plural = interval == "1" ? "" : "s";
-                    return $"Every {interval} {frequency.ToLowerInvariant()}{plural}";
-                }
-
-                return null;
-
-            case "wait":
-                if (inputs.ValueKind == JsonValueKind.Object && inputs.TryGetProperty("interval", out var wait))
-                {
-                    return $"{(wait.TryGetProperty("count", out var c) ? c.ToString() : "?")} {Str(wait, "unit")?.ToLowerInvariant()}";
-                }
-
-                return null;
-
-            case "workflow":
-                return inputs.ValueKind == JsonValueKind.Object &&
-                       inputs.TryGetProperty("host", out var host) &&
-                       host.TryGetProperty("workflowReferenceName", out var child)
-                    ? child.GetString()
-                    : null;
-
-            default:
-                return null;
+            return null;
         }
+
+        var v = variables[0];
+        return Str(v, "type") is { } t ? $"{Str(v, "name")} ({t})" : Str(v, "name");
     }
+
+    /// <summary>"Every 15 minutes" - null without a frequency.</summary>
+    private static string? RecurrenceOf(JsonElement element)
+    {
+        if (!element.TryGetProperty("recurrence", out var recurrence)) return null;
+
+        var interval = recurrence.TryGetProperty("interval", out var n) ? n.ToString() : "1";
+        if (Str(recurrence, "frequency") is not { } frequency) return null;
+
+        var plural = interval == "1" ? "" : "s";
+        return $"Every {interval} {frequency.ToLowerInvariant()}{plural}";
+    }
+
+    /// <summary>A Delay step's "5 minute".</summary>
+    private static string? DelayOf(JsonElement inputs)
+    {
+        if (inputs.ValueKind != JsonValueKind.Object || !inputs.TryGetProperty("interval", out var wait)) return null;
+
+        return $"{(wait.TryGetProperty("count", out var c) ? c.ToString() : "?")} {Str(wait, "unit")?.ToLowerInvariant()}";
+    }
+
+    /// <summary>The workflowReferenceName a child flow call names its flow by.</summary>
+    private static string? ChildFlowReferenceOf(JsonElement inputs) =>
+        inputs.ValueKind == JsonValueKind.Object &&
+        inputs.TryGetProperty("host", out var host) &&
+        host.TryGetProperty("workflowReferenceName", out var child)
+            ? child.GetString()
+            : null;
 
     private static IReadOnlyList<FlowRunAfter> ReadRunAfter(JsonElement element)
     {
@@ -402,50 +405,55 @@ public static partial class FlowDesignParser
     {
         var where = $"'{name.Replace('_', ' ')}'";
 
-        FlowSequence Actions(JsonElement container) =>
-            container.ValueKind == JsonValueKind.Object && container.TryGetProperty("actions", out var a)
-                ? ReadContainer(a, where, context)
-                : FlowSequence.Empty;
-
         switch (kind)
         {
             case FlowNodeKind.Condition:
                 return new[]
                 {
-                    new FlowBranch("Yes", Actions(element)),
-                    new FlowBranch("No", element.TryGetProperty("else", out var otherwise) ? Actions(otherwise) : FlowSequence.Empty)
+                    new FlowBranch("Yes", ActionsIn(element, where, context)),
+                    new FlowBranch("No", element.TryGetProperty("else", out var otherwise) ? ActionsIn(otherwise, where, context) : FlowSequence.Empty)
                 };
 
             case FlowNodeKind.Switch:
-            {
-                var branches = new List<FlowBranch>();
-
-                if (element.TryGetProperty("cases", out var cases) && cases.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var c in cases.EnumerateObject())
-                    {
-                        var value = c.Value.TryGetProperty("case", out var v) ? Short(v) : c.Name;
-                        branches.Add(new FlowBranch($"Case: {value}", Actions(c.Value)));
-                    }
-                }
-
-                branches.Add(new FlowBranch("Default",
-                    element.TryGetProperty("default", out var fallback) ? Actions(fallback) : FlowSequence.Empty));
-                return branches;
-            }
+                return SwitchBranches(element, where, context);
 
             case FlowNodeKind.ForEach or FlowNodeKind.Until or FlowNodeKind.Scope:
-                return new[] { new FlowBranch(string.Empty, Actions(element)) };
+                return new[] { new FlowBranch(string.Empty, ActionsIn(element, where, context)) };
 
             default:
                 return Array.Empty<FlowBranch>();
         }
     }
 
+    /// <summary>A switch's cases in definition order, then its default.</summary>
+    private static List<FlowBranch> SwitchBranches(JsonElement element, string where, Context context)
+    {
+        var branches = new List<FlowBranch>();
+
+        if (element.TryGetProperty("cases", out var cases) && cases.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var c in cases.EnumerateObject())
+            {
+                var value = c.Value.TryGetProperty("case", out var v) ? Short(v) : c.Name;
+                branches.Add(new FlowBranch($"Case: {value}", ActionsIn(c.Value, where, context)));
+            }
+        }
+
+        branches.Add(new FlowBranch("Default",
+            element.TryGetProperty("default", out var fallback) ? ActionsIn(fallback, where, context) : FlowSequence.Empty));
+        return branches;
+    }
+
+    /// <summary>The steps a branch, case or loop holds under "actions".</summary>
+    private static FlowSequence ActionsIn(JsonElement container, string where, Context context) =>
+        container.ValueKind == JsonValueKind.Object && container.TryGetProperty(ActionsProperty, out var a)
+            ? ReadContainer(a, where, context)
+            : FlowSequence.Empty;
+
     // ---------------------------------------------------------------- connectors
 
     /// <summary>Connection reference name to the connector's API name - "shared_commondataserviceforapps".</summary>
-    private static IReadOnlyDictionary<string, string> ReadConnectionReferences(JsonElement scope)
+    private static Dictionary<string, string> ReadConnectionReferences(JsonElement scope)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -626,9 +634,9 @@ public static partial class FlowDesignParser
             foreach (var property in value.EnumerateObject())
             {
                 // "actions" at the top, and inside else/default/cases, are steps of their own.
-                if (property.NameEquals("actions") && depth <= 2)
+                if (property.NameEquals(ActionsProperty) && depth <= 2)
                 {
-                    writer.WriteString("actions", $"({property.Value.EnumerateObject().Count()} step(s), shown in the diagram)");
+                    writer.WriteString(ActionsProperty, $"({property.Value.EnumerateObject().Count()} step(s), shown in the diagram)");
                     continue;
                 }
 

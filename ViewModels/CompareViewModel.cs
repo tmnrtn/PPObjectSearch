@@ -161,14 +161,8 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
         var viewModel = new EnvironmentDiffViewModel(
             row.Name,
             row.ComponentTypeName,
-            LeftHeader,
-            RightHeader,
-            leftClient,
-            rightClient,
-            leftItem,
-            rightItem,
-            Left.EnvironmentSku,
-            Right.EnvironmentSku);
+            new EnvironmentDiffSide(LeftHeader, leftClient, leftItem, Left.EnvironmentSku),
+            new EnvironmentDiffSide(RightHeader, rightClient, rightItem, Right.EnvironmentSku));
 
         var window = new Views.EnvironmentDiffWindow
         {

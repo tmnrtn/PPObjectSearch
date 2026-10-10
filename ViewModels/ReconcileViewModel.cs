@@ -84,6 +84,13 @@ public sealed class ReconcileColumnOption : ObservableObject
     }
 }
 
+/// <summary>The environment a reconcile writes to, and the account it writes as.</summary>
+public sealed record ReconcileTarget(
+    string Name,
+    DataverseClient Client,
+    IReadOnlyDictionary<string, EntitySummary> Entities,
+    string? Account = null);
+
 /// <summary>
 /// The confirmation and the run, in one window. Nothing is written until Apply is pressed, and
 /// Apply is unavailable until the write guard has cleared the target environment - and, where the
@@ -104,22 +111,19 @@ public sealed class ReconcileViewModel : ObservableObject
     public ReconcileViewModel(
         IReadOnlyList<RecordComparison> selected,
         string sourceName,
-        string targetName,
-        DataverseClient targetClient,
-        IReadOnlyDictionary<string, EntitySummary> targetEntities,
+        ReconcileTarget target,
         WritePermission permission,
         EnvironmentSku sourceSku = EnvironmentSku.Unknown,
-        string? account = null,
         string? writeLogFolder = null)
     {
         _selected = selected;
-        _account = account;
+        _account = target.Account;
         _writeLogFolder = writeLogFolder;
-        _targetClient = targetClient;
-        _targetEntities = targetEntities;
+        _targetClient = target.Client;
+        _targetEntities = target.Entities;
 
         SourceName = sourceName;
-        TargetName = targetName;
+        TargetName = target.Name;
         SourceSku = sourceSku;
         Permission = permission;
 
@@ -192,7 +196,7 @@ public sealed class ReconcileViewModel : ObservableObject
 
     public bool HasColumns => Columns.Count > 0;
 
-    private IReadOnlySet<string> ExcludedColumns =>
+    private HashSet<string> ExcludedColumns =>
         Columns.Where(c => !c.IsIncluded).Select(c => c.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public string ColumnsSummary
@@ -515,7 +519,7 @@ public sealed class ReconcileViewModel : ObservableObject
         await RunAsync(Rows.Where(r => r.IsIncluded && !r.IsBlocked && options.Allows(r.Action)).ToList());
     }
 
-    private async Task RunAsync(IReadOnlyList<ReconcileRow> rows)
+    private async Task RunAsync(List<ReconcileRow> rows)
     {
         if (!Permission.Allowed || rows.Count == 0) return;
 

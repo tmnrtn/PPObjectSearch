@@ -156,11 +156,17 @@ public sealed record MailboxInfo(
         _ => "Not tested"
     };
 
+    /// <summary>The <see cref="OwnerKind"/> of a user's mailbox.</summary>
+    public const string UserOwner = "User";
+
+    /// <summary>The <see cref="OwnerKind"/> of a queue's mailbox.</summary>
+    public const string QueueOwner = "Queue";
+
     /// <summary>"User", "Queue", or the logical name of whatever else owns it.</summary>
     public string OwnerKind => RegardingType switch
     {
-        "systemuser" => "User",
-        "queue" => "Queue",
+        "systemuser" => UserOwner,
+        "queue" => QueueOwner,
         null or "" => "None",
         var other => other
     };

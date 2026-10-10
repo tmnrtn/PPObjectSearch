@@ -38,6 +38,9 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 {
     private const string AllKey = "\0all";
 
+    /// <summary>The title of the message boxes this tab shows.</summary>
+    private const string MessageCaption = "PPObjectSearch";
+
     private readonly AppSettings _settings;
     private readonly AuthenticationService _auth;
     private readonly DispatcherTimer _searchDebounce;
@@ -371,7 +374,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         var rows = _selection.ToList();
         if (rows.Count > 10 &&
-            MessageBox.Show($"Open {rows.Count:N0} details windows?", "PPObjectSearch",
+            MessageBox.Show($"Open {rows.Count:N0} details windows?", MessageCaption,
                 MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
         {
             return;
@@ -721,6 +724,9 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     public string? AccountName => _authContext.AccountName;
 
+    // What separates the first name from the last in an account's local part.
+    private static readonly char[] AccountNameSeparators = ['.', '_', '-', ' '];
+
     /// <summary>Two letters for the account avatar: "maria.lopez@contoso.com" is "ML".</summary>
     public string AccountInitials
     {
@@ -730,7 +736,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             if (string.IsNullOrWhiteSpace(name)) return "?";
 
             var local = name.Split('@')[0];
-            var parts = local.Split(new[] { '.', '_', '-', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var parts = local.Split(AccountNameSeparators, StringSplitOptions.RemoveEmptyEntries);
 
             return parts.Length switch
             {
@@ -1332,44 +1338,14 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
             if (!ReferenceEquals(cts, _loadCts)) return;
 
-            if (cached is not null)
-            {
-                Populate(cached.Items, solution);
-                Status = $"Showing {cached.Items.Count:N0} objects cached at {cached.LoadedAt:g} - refreshing...";
-            }
-            else
-            {
-                Items.Clear();
-                _allItems.Clear();
-                TypeFilters.Clear();
-                SubTypeFilters.Clear();
-                StateFilters.Clear();
-                LayerFilters.Clear();
-                ResultSummary = string.Empty;
-                Status = $"Loading objects in '{solution.FriendlyName}'...";
-            }
+            ShowCachedOrClear(cached, solution);
 
             var verb = cached is not null ? "Refreshing" : "Loading";
             var progress = new Progress<int>(count => Status = $"{verb} '{solution.FriendlyName}'... {count:N0}");
 
             var timer = Stopwatch.StartNew();
-            IReadOnlyList<SolutionComponentItem> components;
-
-            try
-            {
-                components = await _client.GetSolutionComponentsAsync(solution.SolutionId, progress, cts.Token);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && cached is not null)
-            {
-                // The cached rows are still on screen and still useful - keep them and say so. Unless
-                // a newer load has taken over, whose status this would overwrite.
-                if (ReferenceEquals(cts, _loadCts))
-                {
-                    Status = $"Showing objects cached at {cached.LoadedAt:g}. Refresh failed: {ex.Message}";
-                }
-
-                return;
-            }
+            var components = await ReadComponentsAsync(solution, cached, progress, cts);
+            if (components is null) return;
 
             timer.Stop();
             if (cts.IsCancellationRequested) return;
@@ -1380,19 +1356,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             // hold the window up after the list is already on screen.
             _ = Task.Run(() => ComponentCache.Save(environmentUrl, solution.SolutionId, components), CancellationToken.None);
 
-            var elapsed = $"{timer.Elapsed.TotalSeconds:0.0}s";
-            if (components is ComponentList { IsTruncated: true })
-            {
-                Status = $"Loaded the first {_allItems.Count:N0} objects from '{solution.FriendlyName}' - it has more " +
-                         "than this tool reads, so an object not listed may still be in the solution.";
-                return;
-            }
-
-            Status = LinksAvailable
-                ? $"Loaded {_allItems.Count:N0} objects from '{solution.FriendlyName}' in {elapsed}."
-                : $"Loaded {_allItems.Count:N0} objects from '{solution.FriendlyName}' in {elapsed}. Maker portal " +
-                  "links are unavailable - the environment id could not be resolved (add it to \"EnvironmentIds\" " +
-                  "in settings.json).";
+            Status = LoadedStatus(components, solution, timer.Elapsed);
         }
         catch (OperationCanceledException)
         {
@@ -1406,6 +1370,66 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         {
             if (ReferenceEquals(cts, _loadCts)) IsBusy = false;
         }
+    }
+
+    /// <summary>The cached rows while the fresh read runs, or an empty list where there is no cache.</summary>
+    private void ShowCachedOrClear(CachedComponents? cached, SolutionInfo solution)
+    {
+        if (cached is not null)
+        {
+            Populate(cached.Items, solution);
+            Status = $"Showing {cached.Items.Count:N0} objects cached at {cached.LoadedAt:g} - refreshing...";
+            return;
+        }
+
+        Items.Clear();
+        _allItems.Clear();
+        TypeFilters.Clear();
+        SubTypeFilters.Clear();
+        StateFilters.Clear();
+        LayerFilters.Clear();
+        ResultSummary = string.Empty;
+        Status = $"Loading objects in '{solution.FriendlyName}'...";
+    }
+
+    /// <summary>
+    /// The solution's components, read afresh. Null where the read failed with cached rows on
+    /// screen; without a cache, the failure is the caller's to report.
+    /// </summary>
+    private async Task<IReadOnlyList<SolutionComponentItem>?> ReadComponentsAsync(
+        SolutionInfo solution, CachedComponents? cached, IProgress<int> progress, CancellationTokenSource cts)
+    {
+        try
+        {
+            return await _client!.GetSolutionComponentsAsync(solution.SolutionId, progress, cts.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && cached is not null)
+        {
+            // The cached rows are still on screen and still useful - keep them and say so. Unless
+            // a newer load has taken over, whose status this would overwrite.
+            if (ReferenceEquals(cts, _loadCts))
+            {
+                Status = $"Showing objects cached at {cached.LoadedAt:g}. Refresh failed: {ex.Message}";
+            }
+
+            return null;
+        }
+    }
+
+    private string LoadedStatus(IReadOnlyList<SolutionComponentItem> components, SolutionInfo solution, TimeSpan took)
+    {
+        if (components is ComponentList { IsTruncated: true })
+        {
+            return $"Loaded the first {_allItems.Count:N0} objects from '{solution.FriendlyName}' - it has more " +
+                   "than this tool reads, so an object not listed may still be in the solution.";
+        }
+
+        var elapsed = $"{took.TotalSeconds:0.0}s";
+        return LinksAvailable
+            ? $"Loaded {_allItems.Count:N0} objects from '{solution.FriendlyName}' in {elapsed}."
+            : $"Loaded {_allItems.Count:N0} objects from '{solution.FriendlyName}' in {elapsed}. Maker portal " +
+              "links are unavailable - the environment id could not be resolved (add it to \"EnvironmentIds\" " +
+              "in settings.json).";
     }
 
     /// <summary>Swaps in a result set, preserving the user's current filter selections.</summary>
@@ -1676,15 +1700,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             return;
         }
 
-        if (targets.Count > UnmanagedLayerCheckWarningThreshold)
-        {
-            var proceed = MessageBox.Show(
-                $"This checks {targets.Count:N0} objects individually against Dataverse - one request each. " +
-                "Narrowing the filters first is faster and gentler on the environment. Continue anyway?",
-                "PPObjectSearch", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-            if (proceed != MessageBoxResult.Yes) return;
-        }
+        if (!ConfirmLayerCheck(targets.Count)) return;
 
         var superseded = _layerCts;
         var cts = _layerCts = new CancellationTokenSource();
@@ -1701,24 +1717,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
             if (cts.IsCancellationRequested) return;
 
-            var unsupported = 0;
-            var failed = 0;
-            foreach (var item in targets)
-            {
-                if (!layers.TryGetValue(item.ObjectId, out var componentLayers))
-                {
-                    failed++;
-                    continue;
-                }
-
-                if (componentLayers is null)
-                {
-                    unsupported++;
-                    continue;
-                }
-
-                item.HasUnmanagedLayer = _layerChecks[item.ObjectId] = componentLayers.Any(l => l.IsUnmanagedLayer);
-            }
+            var (unsupported, failed) = RecordLayerChecks(targets, layers);
 
             RebuildFilters();
             ApplyFilter();
@@ -1743,6 +1742,48 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         {
             if (ReferenceEquals(cts, _layerCts)) IsCheckingLayers = false;
         }
+    }
+
+    /// <summary>Past the warning threshold, asks before sending one request per object.</summary>
+    private static bool ConfirmLayerCheck(int count)
+    {
+        if (count <= UnmanagedLayerCheckWarningThreshold) return true;
+
+        var proceed = MessageBox.Show(
+            $"This checks {count:N0} objects individually against Dataverse - one request each. " +
+            "Narrowing the filters first is faster and gentler on the environment. Continue anyway?",
+            MessageCaption, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        return proceed == MessageBoxResult.Yes;
+    }
+
+    /// <summary>
+    /// Marks each checked object with whether it has an unmanaged layer, and counts those of a type
+    /// the layers check does not support and those whose layers could not be read.
+    /// </summary>
+    private (int Unsupported, int Failed) RecordLayerChecks(
+        List<SolutionComponentItem> targets, IReadOnlyDictionary<Guid, IReadOnlyList<ComponentLayer>?> layers)
+    {
+        var unsupported = 0;
+        var failed = 0;
+        foreach (var item in targets)
+        {
+            if (!layers.TryGetValue(item.ObjectId, out var componentLayers))
+            {
+                failed++;
+                continue;
+            }
+
+            if (componentLayers is null)
+            {
+                unsupported++;
+                continue;
+            }
+
+            item.HasUnmanagedLayer = _layerChecks[item.ObjectId] = componentLayers.Any(l => l.IsUnmanagedLayer);
+        }
+
+        return (unsupported, failed);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -1786,7 +1827,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(ex.Message, MessageCaption, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1906,7 +1947,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         catch (Exception ex)
         {
             MessageBox.Show($"Could not open the link:\n{url}\n\n{ex.Message}",
-                "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageCaption, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

@@ -90,7 +90,6 @@ public static class WriteUndo
         Func<string, string?> entitySetOf)
     {
         var body = new JsonObject { [primaryIdAttribute] = id.ToString() };
-        JsonObject? then = null;
 
         foreach (var column in columns)
         {
@@ -98,15 +97,7 @@ public static class WriteUndo
 
             if (column.IsLookup)
             {
-                var property = column.SelectName;
-                if (before[property] is null) continue;
-
-                // The annotation names the navigation property, which for a lookup that can point
-                // at several tables is specific to the one this row points at.
-                var navigation = before[property + Navigation]?.GetValue<string>();
-                if (string.IsNullOrWhiteSpace(navigation)) continue;
-
-                if (BindOf(before, property, entitySetOf) is { } bind) body[navigation + Bind] = bind;
+                AddBind(body, before, column.SelectName, entitySetOf);
                 continue;
             }
 
@@ -114,24 +105,49 @@ public static class WriteUndo
             body[column.LogicalName] = value.DeepClone();
         }
 
-        // A row is created in its default state, and a status belonging to any other is refused.
+        var then = DeferState(body, columns);
+        return new UndoStep(UndoMethod.Create, entitySet, id, body, then);
+    }
+
+    /// <summary>Binds a lookup in a create body to the row it pointed at; nothing where it was empty.</summary>
+    private static void AddBind(JsonObject body, JsonObject before, string property, Func<string, string?> entitySetOf)
+    {
+        if (before[property] is null) return;
+
+        // The annotation names the navigation property, which for a lookup that can point
+        // at several tables is specific to the one this row points at.
+        var navigation = before[property + Navigation]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(navigation)) return;
+
+        if (BindOf(before, property, entitySetOf) is { } bind) body[navigation + Bind] = bind;
+    }
+
+    /// <summary>
+    /// A row is created in its default state, and a status belonging to any other is refused. So a
+    /// row that was in another state is created without its state and status, and these are
+    /// returned to be written once it exists. Null when the create can carry them.
+    /// </summary>
+    private static JsonObject? DeferState(JsonObject body, IEnumerable<EntityColumn> columns)
+    {
         var state = columns.FirstOrDefault(c => c.TypeName == "StateType")?.LogicalName;
         var status = columns.FirstOrDefault(c => c.TypeName == "StatusType")?.LogicalName;
 
-        if (state is not null && body[state] is JsonValue stateValue &&
-            stateValue.TryGetValue<long>(out var code) && code != 0)
+        if (state is null || body[state] is not JsonValue stateValue ||
+            !stateValue.TryGetValue<long>(out var code) || code == 0)
         {
-            then = new JsonObject { [state] = code };
-            body.Remove(state);
-
-            if (status is not null && body[status] is { } statusValue)
-            {
-                then[status] = statusValue.DeepClone();
-                body.Remove(status);
-            }
+            return null;
         }
 
-        return new UndoStep(UndoMethod.Create, entitySet, id, body, then);
+        var then = new JsonObject { [state] = code };
+        body.Remove(state);
+
+        if (status is not null && body[status] is { } statusValue)
+        {
+            then[status] = statusValue.DeepClone();
+            body.Remove(status);
+        }
+
+        return then;
     }
 
     /// <summary>Makes the reversing write. A create carries the original id, so it cannot land twice.</summary>
@@ -180,7 +196,7 @@ public static class WriteUndo
         return null;
     }
 
-    private static JsonNode? BindOf(JsonObject row, string? property, Func<string, string?> entitySetOf)
+    private static JsonValue? BindOf(JsonObject row, string? property, Func<string, string?> entitySetOf)
     {
         if (property is null || row[property] is not JsonValue value || !value.TryGetValue<string>(out var raw) ||
             !Guid.TryParse(raw, out var id))

@@ -573,29 +573,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 }
             }
 
-            // Their status is Power Automate's to tell; without it a bound reference reads as bound.
-            IReadOnlyList<ConnectionInfo>? connections = null;
-            string? connectionProblem = null;
-
-            if (references.Any(r => r.HasConnection))
-            {
-                if (string.IsNullOrWhiteSpace(_environmentId))
-                {
-                    connectionProblem = "the environment id is not known, so connection status was not read";
-                }
-                else
-                {
-                    try
-                    {
-                        _powerAutomate ??= _client.CreatePowerAutomateClient();
-                        connections = await _powerAutomate.GetConnectionsAsync(_environmentId, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        connectionProblem = "connection status could not be read - " + ex.Message;
-                    }
-                }
-            }
+            var (connections, connectionProblem) = await ReadConnectionsAsync(references);
 
             foreach (var reference in references.OrderBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase))
             {
@@ -625,6 +603,32 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(ConnectionsTabCount));
+    }
+
+    /// <summary>
+    /// The environment's connections, for the status of those the references are bound to - or
+    /// why they were not read. Their status is Power Automate's to tell; without it a bound
+    /// reference reads as bound.
+    /// </summary>
+    private async Task<(IReadOnlyList<ConnectionInfo>? Connections, string? Problem)> ReadConnectionsAsync(
+        IReadOnlyList<ConnectionReferenceInfo> references)
+    {
+        if (!references.Any(r => r.HasConnection)) return (null, null);
+
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            return (null, "the environment id is not known, so connection status was not read");
+        }
+
+        try
+        {
+            _powerAutomate ??= _client.CreatePowerAutomateClient();
+            return (await _powerAutomate.GetConnectionsAsync(_environmentId, CancellationToken.None), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, "connection status could not be read - " + ex.Message);
+        }
     }
 
     /// <summary>What a broken reference means for this object, ending the sentence that counts them.</summary>
@@ -954,13 +958,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count stopped";
-            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) + " The exact count was stopped." : null;
+            ShowStoredCount("Count stopped", " The exact count was stopped.");
         }
         catch (Exception ex)
         {
-            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count failed";
-            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) : null;
+            ShowStoredCount("Count failed", string.Empty);
             RowCountWarning = "The exact count failed: " + ex.Message;
         }
         finally
@@ -969,6 +971,16 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             cts.Dispose();
             if (ReferenceEquals(_countCts, cts)) _countCts = null;
         }
+    }
+
+    /// <summary>
+    /// Back to the stored count after an exact count that did not finish - or, without one,
+    /// <paramref name="withoutSnapshot"/>. <paramref name="note"/> follows the stored count's description.
+    /// </summary>
+    private void ShowStoredCount(string withoutSnapshot, string note)
+    {
+        RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : withoutSnapshot;
+        RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) + note : null;
     }
 
     // ---------------------------------------------------------------- run history and trace log
@@ -1420,18 +1432,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             ClearChildComponents();
 
             // Each is useful on its own, so one failing must not hide the others.
-            try
-            {
-                foreach (var solution in await _client.GetContainingSolutionsAsync(Item.ObjectId, CancellationToken.None))
-                {
-                    Solutions.Add(solution);
-                }
-            }
-            catch (Exception ex)
-            {
-                problems.Add("solutions: " + ex.Message);
-            }
-
+            await LoadSolutionsAsync(problems);
             await LoadDependenciesAsync(DependencyDirection.Dependent, Dependents, problems);
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
 
@@ -1440,31 +1441,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (IsTable) await LoadRowCountSnapshotAsync();
             if (IsTable) await LoadChildComponentsAsync(problems);
             if (_detached) return;
-            if (HasRunHistory) await LoadRunsAsync(problems);
-            if (HasTraceLog) await LoadTraceLogAsync(problems);
-            if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
-            if (HasSource) await LoadSourceAsync(problems);
-            if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
-            if (HasConnections) await LoadConnectionsAsync(problems);
-            if (HasOverview) await LoadOverviewAsync(problems);
+            await LoadKindTabsAsync(problems);
 
             if (_detached) return;
-            try
-            {
-                var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType, CancellationToken.None);
-                LayersSupported = layers is not null;
-
-                if (layers is not null)
-                {
-                    foreach (var layer in layers) Layers.Add(layer);
-                }
-
-                HasUnmanagedLayer = Layers.Any(l => l.IsUnmanagedLayer);
-            }
-            catch (Exception ex)
-            {
-                problems.Add("layers: " + ex.Message);
-            }
+            await LoadLayersAsync(problems);
 
             var summary = $"{Solutions.Count} solution(s), {Dependents.Count} dependent, {Required.Count} required";
             if (IsTable) summary += $", {ChildGroups.Sum(g => g.Count)} child component(s)";
@@ -1482,6 +1462,53 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>The tabs only some kinds of object have, each read where this one has it.</summary>
+    private async Task LoadKindTabsAsync(List<string> problems)
+    {
+        if (HasRunHistory) await LoadRunsAsync(problems);
+        if (HasTraceLog) await LoadTraceLogAsync(problems);
+        if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
+        if (HasSource) await LoadSourceAsync(problems);
+        if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
+        if (HasConnections) await LoadConnectionsAsync(problems);
+        if (HasOverview) await LoadOverviewAsync(problems);
+    }
+
+    private async Task LoadSolutionsAsync(List<string> problems)
+    {
+        try
+        {
+            foreach (var solution in await _client.GetContainingSolutionsAsync(Item.ObjectId, CancellationToken.None))
+            {
+                Solutions.Add(solution);
+            }
+        }
+        catch (Exception ex)
+        {
+            problems.Add("solutions: " + ex.Message);
+        }
+    }
+
+    private async Task LoadLayersAsync(List<string> problems)
+    {
+        try
+        {
+            var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType, CancellationToken.None);
+            LayersSupported = layers is not null;
+
+            if (layers is not null)
+            {
+                foreach (var layer in layers) Layers.Add(layer);
+            }
+
+            HasUnmanagedLayer = Layers.Any(l => l.IsUnmanagedLayer);
+        }
+        catch (Exception ex)
+        {
+            problems.Add("layers: " + ex.Message);
         }
     }
 

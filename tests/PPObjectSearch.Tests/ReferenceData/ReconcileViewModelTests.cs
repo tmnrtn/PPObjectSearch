@@ -64,8 +64,9 @@ public class ReconcileViewModelTests
         .OnStatus(HttpMethod.Delete, "new_things(", HttpStatusCode.NoContent);
 
     private static ReconcileViewModel Window(FakeHttpHandler handler, WritePermission? permission = null, bool sourceTruncated = false) =>
-        new(Rows(sourceTruncated), "Dev", "Test", Fakes.Dataverse(handler),
-            new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase) { [Table] = Entity() },
+        new(Rows(sourceTruncated), "Dev",
+            new ReconcileTarget("Test", Fakes.Dataverse(handler),
+                new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase) { [Table] = Entity() }),
             permission ?? Allowed, writeLogFolder: LogFolder)
         {
             Confirm = _ => true
@@ -331,12 +332,13 @@ public class ReconcileViewModelTests
             """;
         var handler = Accepting(relationships)
             .OnJson(HttpMethod.Get, "new_children?", """{"@odata.count":7,"value":[]}""");
-        var vm = new ReconcileViewModel(Rows(), "Dev", "Test", Fakes.Dataverse(handler),
-            new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase)
-            {
-                [Table] = Entity(),
-                ["new_child"] = Entity("new_child", "new_children", "new_childid")
-            },
+        var vm = new ReconcileViewModel(Rows(), "Dev",
+            new ReconcileTarget("Test", Fakes.Dataverse(handler),
+                new Dictionary<string, EntitySummary>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [Table] = Entity(),
+                    ["new_child"] = Entity("new_child", "new_children", "new_childid")
+                }),
             Allowed, writeLogFolder: LogFolder);
 
         vm.Delete = true;

@@ -116,6 +116,9 @@ public sealed class ComponentLayer
 
     public bool HasDefinition => !string.IsNullOrWhiteSpace(ComponentJson);
 
+    // The delimiters msdyn_changes uses when it is not a JSON array.
+    private static readonly char[] ChangeSeparators = [',', ';', '\n', '\r'];
+
     private IReadOnlyList<string>? _changedProperties;
 
     /// <summary>The properties named in msdyn_changes, which arrives either as a JSON array or as
@@ -164,7 +167,7 @@ public sealed class ComponentLayer
         }
 
         return trimmed
-            .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(ChangeSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

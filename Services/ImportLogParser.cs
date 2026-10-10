@@ -95,25 +95,32 @@ public static class ImportLogParser
             if (component is null || component == root) continue;
 
             var at = Ticks((string?)result.Attribute("datetimeticks")) ?? Date((string?)result.Attribute("datetime"));
-            var id = (string?)component.Attribute("id");
-
-            log.Rows.Add(new ImportLogRow
-            {
-                Section = component.Parent?.Name.LocalName ?? component.Name.LocalName,
-                Name = (string?)component.Attribute("LocalizedName") ?? (string?)component.Attribute("name")
-                       ?? (string?)component.Attribute("OriginalName") ?? id ?? component.Name.LocalName,
-                Id = Guid.TryParse(id?.Trim('{', '}'), out var guid) ? guid : null,
-                Result = (string?)result.Attribute("result") ?? "success",
-                ErrorCode = (string?)result.Attribute("errorcode") is { Length: > 0 } code && code != "0" ? code : null,
-                ErrorText = (string?)result.Attribute("errortext") is { Length: > 0 } text ? text : null,
-                At = at,
-                Duration = at is { } now && previous is { } before && now >= before ? now - before : null
-            });
+            log.Rows.Add(RowFor(component, result, at, previous));
 
             if (at is not null) previous = at;
         }
 
         return log;
+    }
+
+    /// <param name="at">When the component finished, if the log says.</param>
+    /// <param name="previous">When the one before it finished - or the import started - for its duration.</param>
+    private static ImportLogRow RowFor(XElement component, XElement result, DateTimeOffset? at, DateTimeOffset? previous)
+    {
+        var id = (string?)component.Attribute("id");
+
+        return new ImportLogRow
+        {
+            Section = component.Parent?.Name.LocalName ?? component.Name.LocalName,
+            Name = (string?)component.Attribute("LocalizedName") ?? (string?)component.Attribute("name")
+                   ?? (string?)component.Attribute("OriginalName") ?? id ?? component.Name.LocalName,
+            Id = Guid.TryParse(id?.Trim('{', '}'), out var guid) ? guid : null,
+            Result = (string?)result.Attribute("result") ?? "success",
+            ErrorCode = (string?)result.Attribute("errorcode") is { Length: > 0 } code && code != "0" ? code : null,
+            ErrorText = (string?)result.Attribute("errortext") is { Length: > 0 } text ? text : null,
+            At = at,
+            Duration = at is { } now && previous is { } before && now >= before ? now - before : null
+        };
     }
 
     private static DateTimeOffset? Ticks(string? value) =>

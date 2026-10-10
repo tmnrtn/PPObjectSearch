@@ -11,7 +11,7 @@ public sealed partial class EnvironmentSessionViewModel
     private bool _isSwitching;
 
     /// <summary>The selected rows that can be switched on or off.</summary>
-    private IReadOnlyList<(SolutionComponentItem Item, SwitchableKind Kind)> SwitchableSelection() =>
+    private List<(SolutionComponentItem Item, SwitchableKind Kind)> SwitchableSelection() =>
         Targets(null)
         .Select(i => (Item: i, Kind: Switchable.KindOf(i)))
         .Where(x => x.Kind is not null)

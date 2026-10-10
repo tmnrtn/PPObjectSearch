@@ -145,7 +145,7 @@ public sealed class SolutionDocumenter
 
     private static string Summary(
         SolutionInfo solution, IReadOnlyList<SolutionComponentItem> items, string environment,
-        string? dependencies, IReadOnlyList<string> problems)
+        string? dependencies, List<string> problems)
     {
         var md = new StringBuilder()
             .AppendLine($"# {solution.FriendlyName}")
@@ -244,7 +244,7 @@ public sealed class SolutionDocumenter
             }
 
             var design = FlowDesignParser.Parse(flow.Definition);
-            var trigger = design.Triggers.FirstOrDefault();
+            var trigger = design.Triggers.Count > 0 ? design.Triggers[0] : null;
             md.AppendLine($"**Trigger:** {Cell(trigger?.Summary ?? "none")}").AppendLine();
 
             var connectors = Nodes(design).Select(n => n.Connector).Where(c => !string.IsNullOrWhiteSpace(c))
@@ -272,17 +272,11 @@ public sealed class SolutionDocumenter
             {
                 case FlowActionStep action:
                     yield return action.Node;
-                    foreach (var branch in action.Node.Branches)
-                    {
-                        foreach (var inner in Nodes(branch.Steps)) yield return inner;
-                    }
+                    foreach (var inner in action.Node.Branches.SelectMany(branch => Nodes(branch.Steps))) yield return inner;
                     break;
 
                 case FlowParallelStep parallel:
-                    foreach (var branch in parallel.Branches)
-                    {
-                        foreach (var inner in Nodes(branch)) yield return inner;
-                    }
+                    foreach (var inner in parallel.Branches.SelectMany(Nodes)) yield return inner;
                     break;
             }
         }

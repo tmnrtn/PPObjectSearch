@@ -167,7 +167,7 @@ public sealed class FailuresViewModel : ObservableObject
 
     private int Count(FailureSource source) => _data?.Events.Count(e => e.Source == source) ?? 0;
 
-    private IReadOnlySet<FailureSource> Sources()
+    private HashSet<FailureSource> Sources()
     {
         var sources = new HashSet<FailureSource>();
         if (IncludeFlows) sources.Add(FailureSource.CloudFlow);

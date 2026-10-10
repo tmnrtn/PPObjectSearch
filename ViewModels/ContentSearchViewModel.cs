@@ -17,7 +17,7 @@ public sealed class ContentSearchViewModel : ObservableObject
     private readonly EnvironmentSessionViewModel _session;
     private readonly DataverseClient _client;
     private readonly DefinitionBodyCache _cache;
-    private readonly IReadOnlyList<SolutionComponentItem> _scope;
+    private readonly List<SolutionComponentItem> _scope;
     private CancellationTokenSource? _cts;
 
     public ContentSearchViewModel(

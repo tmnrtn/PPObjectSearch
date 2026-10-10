@@ -157,36 +157,38 @@ public sealed class ReadinessCheck
 
     private async Task CheckVersionAsync(SolutionInfo solution, ReadinessReport report, CancellationToken ct)
     {
+        const string area = "Version";
+
         var installed = (await _target.GetSolutionsAsync(ct).ConfigureAwait(false))
             .FirstOrDefault(s => string.Equals(s.UniqueName, solution.UniqueName, StringComparison.OrdinalIgnoreCase));
 
         if (installed is null)
         {
-            report.Findings.Add(Finding(ReadinessSeverity.Info, "Version", solution.UniqueName,
+            report.Findings.Add(Finding(ReadinessSeverity.Info, area, solution.UniqueName,
                 $"Not in the target yet - this would be its first install (version {solution.Version ?? "unknown"})."));
             return;
         }
 
         if (!installed.IsManaged)
         {
-            report.Findings.Add(Finding(ReadinessSeverity.Warning, "Version", solution.UniqueName,
+            report.Findings.Add(Finding(ReadinessSeverity.Warning, area, solution.UniqueName,
                 "The target has this solution unmanaged - a managed import of it is refused. Import it unmanaged, or remove it first."));
         }
 
         var compared = CompareVersions(solution.Version, installed.Version);
         if (compared < 0)
         {
-            report.Findings.Add(Finding(ReadinessSeverity.Blocker, "Version", solution.UniqueName,
+            report.Findings.Add(Finding(ReadinessSeverity.Blocker, area, solution.UniqueName,
                 $"The target already has version {installed.Version}, newer than {solution.Version}. Importing an older version is refused."));
         }
         else if (compared == 0)
         {
-            report.Findings.Add(Finding(ReadinessSeverity.Info, "Version", solution.UniqueName,
+            report.Findings.Add(Finding(ReadinessSeverity.Info, area, solution.UniqueName,
                 $"The target already has version {installed.Version} - the same version."));
         }
         else
         {
-            report.Findings.Add(Finding(ReadinessSeverity.Info, "Version", solution.UniqueName,
+            report.Findings.Add(Finding(ReadinessSeverity.Info, area, solution.UniqueName,
                 $"Upgrades the target from {installed.Version} to {solution.Version}."));
         }
     }
@@ -198,7 +200,7 @@ public sealed class ReadinessCheck
             : string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
 
     private async Task CheckDependenciesAsync(
-        SolutionInfo solution, IReadOnlyDictionary<Guid, SolutionComponentItem> byId, ReadinessReport report, CancellationToken ct)
+        SolutionInfo solution, Dictionary<Guid, SolutionComponentItem> byId, ReadinessReport report, CancellationToken ct)
     {
         var missing = await _source.GetMissingDependenciesAsync(solution.UniqueName, ct).ConfigureAwait(false);
         if (missing.Count == 0) return;

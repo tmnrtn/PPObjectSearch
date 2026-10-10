@@ -104,18 +104,21 @@ public sealed class CommandPaletteViewModel : ObservableObject
 
     internal static IReadOnlyList<PaletteItem> BuildItems(ShellViewModel shell, EnvironmentSessionViewModel? session)
     {
+        const string across = "Across environments";
+        const string settings = "Settings";
+
         var items = new List<PaletteItem>
         {
-            new() { Title = "Search all environments", Group = "Across environments", Shortcut = "Ctrl+Shift+F", Command = shell.GlobalSearchCommand },
-            new() { Title = "Compare objects", Group = "Across environments", Shortcut = "Ctrl+D", Command = shell.CompareCommand },
-            new() { Title = "Compare data", Group = "Across environments", Shortcut = "Ctrl+Shift+D", Command = shell.CompareDataCommand },
-            new() { Title = "Readiness check", Group = "Across environments", Shortcut = "Ctrl+Shift+R", Command = shell.ReadinessCommand },
+            new() { Title = "Search all environments", Group = across, Shortcut = "Ctrl+Shift+F", Command = shell.GlobalSearchCommand },
+            new() { Title = "Compare objects", Group = across, Shortcut = "Ctrl+D", Command = shell.CompareCommand },
+            new() { Title = "Compare data", Group = across, Shortcut = "Ctrl+Shift+D", Command = shell.CompareDataCommand },
+            new() { Title = "Readiness check", Group = across, Shortcut = "Ctrl+Shift+R", Command = shell.ReadinessCommand },
             new() { Title = "Close all details windows", Group = "Window", Shortcut = "Ctrl+Shift+W", Command = shell.CloseAllDetailsCommand },
             new() { Title = "New tab", Group = "Window", Shortcut = "Ctrl+T", Command = shell.AddTabCommand },
-            new() { Title = "Theme: light", Group = "Settings", Command = shell.SetThemeCommand, Parameter = "Light" },
-            new() { Title = "Theme: dark", Group = "Settings", Command = shell.SetThemeCommand, Parameter = "Dark" },
-            new() { Title = "Theme: follow Windows", Group = "Settings", Command = shell.SetThemeCommand, Parameter = "System" },
-            new() { Title = "Open log folder", Group = "Settings", Command = shell.OpenLogFolderCommand }
+            new() { Title = "Theme: light", Group = settings, Command = shell.SetThemeCommand, Parameter = "Light" },
+            new() { Title = "Theme: dark", Group = settings, Command = shell.SetThemeCommand, Parameter = "Dark" },
+            new() { Title = "Theme: follow Windows", Group = settings, Command = shell.SetThemeCommand, Parameter = "System" },
+            new() { Title = "Open log folder", Group = settings, Command = shell.OpenLogFolderCommand }
         };
 
         foreach (var other in shell.Sessions.Where(s => !ReferenceEquals(s, shell.SelectedSession)))
@@ -130,6 +133,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
         if (session is null) return items;
 
         var env = session.Title;
+        var admin = env + " admin";
         items.AddRange(
         [
             new() { Title = "Refresh", Group = env, Shortcut = "F5", Command = session.RefreshCommand },
@@ -139,11 +143,11 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Import log…", Group = env, Detail = "choose an import in Solution history", Command = session.SolutionHistoryCommand },
             new() { Title = "Recent changes", Group = env, Command = session.RecentChangesCommand },
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
-            new() { Title = "Users", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Users" },
-            new() { Title = "Security roles", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
-            new() { Title = "Mailboxes", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },
-            new() { Title = "Queues", Group = env + " admin", Command = session.EnvironmentAdminCommand, Parameter = "Queues" },
-            new() { Title = "Security lookup", Group = env + " admin", Command = session.SecurityLookupCommand },
+            new() { Title = "Users", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Users" },
+            new() { Title = "Security roles", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
+            new() { Title = "Mailboxes", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },
+            new() { Title = "Queues", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Queues" },
+            new() { Title = "Security lookup", Group = admin, Command = session.SecurityLookupCommand },
             new() { Title = "Entra team sync", Group = env, Detail = "writes", Command = session.EntraTeamSyncCommand },
             new() { Title = "Queue membership sync", Group = env, Detail = "writes", Command = session.QueueSyncCommand },
             new() { Title = "Deployment settings…", Group = env, Detail = "settings file for pac solution import", Command = session.ExportDeploymentSettingsCommand },

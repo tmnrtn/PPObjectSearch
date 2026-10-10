@@ -30,8 +30,9 @@ public class EnvironmentDiffViewModelTests
 
     private static EnvironmentDiffViewModel Diff(FakeHttpHandler left, FakeHttpHandler right, SolutionComponentItem? leftItem = null,
         SolutionComponentItem? rightItem = null, string type = "Web Resource") =>
-        new("new_script.js", type, "dev", "prod", Fakes.Dataverse(left), Fakes.Dataverse(right, ProdUrl),
-            leftItem ?? Item(), rightItem ?? Item(), EnvironmentSku.Sandbox, EnvironmentSku.Production);
+        new("new_script.js", type,
+            new EnvironmentDiffSide("dev", Fakes.Dataverse(left), leftItem ?? Item(), EnvironmentSku.Sandbox),
+            new EnvironmentDiffSide("prod", Fakes.Dataverse(right, ProdUrl), rightItem ?? Item(), EnvironmentSku.Production));
 
     [Fact]
     public void The_window_names_the_component_both_environments_and_how_they_were_paired()

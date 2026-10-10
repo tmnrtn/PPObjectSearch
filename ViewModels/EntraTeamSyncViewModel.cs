@@ -700,33 +700,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         try
         {
             permission = await EnsurePermissionAsync();
-
-            var groupOnly = Rows.Where(r => r.Status == EntraMatchStatus.EntraOnly).ToList();
-            var existing = await _client.GetUsersByAadObjectIdsAsync(groupOnly.Select(r => r.Row.Entra!.Id), CancellationToken.None);
-            var byObjectId = existing
-                .Where(u => u.AadObjectId is not null)
-                .GroupBy(u => u.AadObjectId!.Value.ToString())
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-            changes = new List<MembershipChange>();
-
-            foreach (var row in groupOnly)
-            {
-                if (!byObjectId.TryGetValue(row.Row.Entra!.Id, out var user)) continue;
-
-                changes.Add(new MembershipChange(MembershipChangeKind.Add, user.SystemUserId, row.Name, row.Upn,
-                    user.IsDisabled == true
-                        ? "In the group; has a Dataverse user, but it is disabled."
-                        : "In the group, and has a Dataverse user."));
-            }
-
-            cannotAdd = groupOnly.Count - changes.Count;
-
-            foreach (var row in Rows.Where(r => r.Status == EntraMatchStatus.DataverseOnly))
-            {
-                changes.Add(new MembershipChange(MembershipChangeKind.Remove, row.Row.Dataverse!.SystemUserId, row.Name, row.Upn,
-                    row.Diagnosis is { } d ? $"{d.Label}: {d.Detail}" : "In the team, not in the Entra group."));
-            }
+            (changes, cannotAdd) = await SyncChangesAsync();
         }
         catch (Exception ex)
         {
@@ -738,6 +712,66 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             IsBusy = false;
         }
 
+        var notes = SyncNotes(team, cannotAdd);
+
+        await ConfirmAsync(new MembershipApplyRequest
+        {
+            Operation = "Sync team from Entra group",
+            TargetKind = "team",
+            TargetName = team.Name,
+            SourceKind = "Entra group",
+            SourceName = group.DisplayName ?? group.Id,
+            EnvironmentName = Session.Title,
+            EnvironmentHost = Session.EnvironmentHost,
+            Account = Session.AccountName,
+            WriteLogFolder = WriteLogFolder,
+            Permission = permission,
+            Changes = changes,
+            ApplyAll = ct => _client.SyncGroupMembersToTeamAsync(team.TeamId, ct),
+            ReadMemberIds = ct => ReadTeamMemberIdsAsync(team.TeamId, ct),
+            Note = notes.Count == 0 ? null : string.Join(" ", notes)
+        });
+    }
+
+    /// <summary>
+    /// What the sync is expected to do: add the 'group only' users who have a Dataverse user, and
+    /// remove the 'team only' ones. CannotAdd counts the group members it has no user to add for.
+    /// </summary>
+    private async Task<(List<MembershipChange> Changes, int CannotAdd)> SyncChangesAsync()
+    {
+        var groupOnly = Rows.Where(r => r.Status == EntraMatchStatus.EntraOnly).ToList();
+        var existing = await _client.GetUsersByAadObjectIdsAsync(groupOnly.Select(r => r.Row.Entra!.Id), CancellationToken.None);
+        var byObjectId = existing
+            .Where(u => u.AadObjectId is not null)
+            .GroupBy(u => u.AadObjectId!.Value.ToString())
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var changes = new List<MembershipChange>();
+
+        foreach (var row in groupOnly)
+        {
+            if (!byObjectId.TryGetValue(row.Row.Entra!.Id, out var user)) continue;
+
+            changes.Add(new MembershipChange(MembershipChangeKind.Add, user.SystemUserId, row.Name, row.Upn,
+                user.IsDisabled == true
+                    ? "In the group; has a Dataverse user, but it is disabled."
+                    : "In the group, and has a Dataverse user."));
+        }
+
+        var cannotAdd = groupOnly.Count - changes.Count;
+
+        foreach (var row in Rows.Where(r => r.Status == EntraMatchStatus.DataverseOnly))
+        {
+            changes.Add(new MembershipChange(MembershipChangeKind.Remove, row.Row.Dataverse!.SystemUserId, row.Name, row.Upn,
+                row.Diagnosis is { } d ? $"{d.Label}: {d.Detail}" : "In the team, not in the Entra group."));
+        }
+
+        return (changes, cannotAdd);
+    }
+
+    /// <summary>What the sync preview should warn about: who it cannot add, and where its forecast may be off.</summary>
+    private List<string> SyncNotes(TeamInfo team, int cannotAdd)
+    {
         var notes = new List<string>();
         if (cannotAdd > 0)
         {
@@ -757,23 +791,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
                       "Run Diagnose afterwards, and remove those by hand.");
         }
 
-        await ConfirmAsync(new MembershipApplyRequest
-        {
-            Operation = "Sync team from Entra group",
-            TargetKind = "team",
-            TargetName = team.Name,
-            SourceKind = "Entra group",
-            SourceName = group.DisplayName ?? group.Id,
-            EnvironmentName = Session.Title,
-            EnvironmentHost = Session.EnvironmentHost,
-            Account = Session.AccountName,
-            WriteLogFolder = WriteLogFolder,
-            Permission = permission,
-            Changes = changes,
-            ApplyAll = ct => _client.SyncGroupMembersToTeamAsync(team.TeamId, ct),
-            ReadMemberIds = ct => ReadTeamMemberIdsAsync(team.TeamId, ct),
-            Note = notes.Count == 0 ? null : string.Join(" ", notes)
-        });
+        return notes;
     }
 
     /// <summary>
@@ -994,10 +1012,13 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     // ---------------------------------------------------------------- button hints
 
+    /// <summary>Why every comparison button is disabled before a team is compared.</summary>
+    private const string PickTeamFirst = "Pick a team to compare first.";
+
     /// <summary>What each footer button does - or, while it is disabled, why.</summary>
     public string DiagnoseHint => (HasComparison, CountDataverseOnly + CountEntraOnly) switch
     {
-        (false, _) => "Pick a team to compare first.",
+        (false, _) => PickTeamFirst,
         (_, 0) => "Nothing to diagnose: the team and the group match.",
         _ => "Say why each 'team only' user is still in the team (asks Entra) and why each 'group only' user is not " +
              "(looks up their Dataverse user). Read-only."
@@ -1005,14 +1026,14 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     public string RemoveLeftoversHint => (HasComparison, CountDataverseOnly) switch
     {
-        (false, _) => "Pick a team to compare first.",
+        (false, _) => PickTeamFirst,
         (_, 0) => "Nothing to remove: nobody is in the team without being in the Entra group.",
         _ => "Preview removing the 'team only' users the sync leaves behind. Nothing changes until you confirm."
     };
 
     public string PullInHint => (HasComparison, Group, CountEntraOnly) switch
     {
-        (false, _, _) => "Pick a team to compare first.",
+        (false, _, _) => PickTeamFirst,
         (_, null, _) => "Unavailable: the Entra group was not found.",
         (_, _, 0) => "Nobody to pull in: every group member is already in the team.",
         _ => "Preview provisioning 'group only' users who have no Dataverse user, or a disabled one, with a WhoAmI made as " +
@@ -1025,7 +1046,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     public string SyncHint => (HasComparison, Group) switch
     {
-        (false, _) => "Pick a team to compare first.",
+        (false, _) => PickTeamFirst,
         (_, null) => "Unavailable: the Entra group was not found, and syncing against a missing group could empty the team.",
         _ => "Preview Dataverse's SyncGroupMembersToTeam for this team. It can only add group members who already " +
              "have a Dataverse user. Nothing changes until you confirm."

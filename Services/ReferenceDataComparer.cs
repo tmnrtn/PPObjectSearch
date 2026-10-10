@@ -281,26 +281,7 @@ public static class ReferenceDataComparer
             if (!onlyInTarget.Remove(source.Id, out var other) || other.Target is not { } target) continue;
 
             var differences = CompareColumns(plan, source, target).Where(c => c.IsDifferent).ToList();
-
-            foreach (var key in plan.KeyColumns)
-            {
-                if (key.IsPrimaryId || differences.Any(d => d.Column.SelectName.Equals(key.SelectName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                var sourceValue = Comparable(source, key, plan.MatchLookupsByName);
-                var targetValue = Comparable(target, key, plan.MatchLookupsByName);
-                if (string.Equals(sourceValue, targetValue, StringComparison.Ordinal)) continue;
-
-                differences.Add(new ColumnComparison
-                {
-                    Column = key,
-                    SourceValue = source.Display(key.SelectName),
-                    TargetValue = target.Display(key.SelectName),
-                    IsDifferent = true
-                });
-            }
+            AddChangedKeys(plan, source, target, differences);
 
             rows[i] = new RecordComparison
             {
@@ -319,6 +300,31 @@ public static class ReferenceDataComparer
         }
 
         rows.RemoveAll(joined.Contains);
+    }
+
+    /// <summary>The key columns that changed, so the joined update writes the new key too.</summary>
+    private static void AddChangedKeys(
+        EntityComparePlan plan, DataRecord source, DataRecord target, List<ColumnComparison> differences)
+    {
+        foreach (var key in plan.KeyColumns)
+        {
+            if (key.IsPrimaryId || differences.Any(d => d.Column.SelectName.Equals(key.SelectName, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var sourceValue = Comparable(source, key, plan.MatchLookupsByName);
+            var targetValue = Comparable(target, key, plan.MatchLookupsByName);
+            if (string.Equals(sourceValue, targetValue, StringComparison.Ordinal)) continue;
+
+            differences.Add(new ColumnComparison
+            {
+                Column = key,
+                SourceValue = source.Display(key.SelectName),
+                TargetValue = target.Display(key.SelectName),
+                IsDifferent = true
+            });
+        }
     }
 
     /// <summary>
@@ -431,15 +437,7 @@ public static class ReferenceDataComparer
             return number.ToString("0.############################", CultureInfo.InvariantCulture);
         }
 
-        if (column.IsBoolean)
-        {
-            return value switch
-            {
-                "1" or "true" or "True" => "true",
-                "0" or "false" or "False" => "false",
-                _ => value
-            };
-        }
+        if (column.IsBoolean) return NormalisedBoolean(value);
 
         if (column.IsDateTime && DateTimeOffset.TryParse(
                 value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var moment))
@@ -454,6 +452,13 @@ public static class ReferenceDataComparer
 
         return IsText(column) ? raw : value;
     }
+
+    private static string NormalisedBoolean(string value) => value switch
+    {
+        "1" or "true" or "True" => "true",
+        "0" or "false" or "False" => "false",
+        _ => value
+    };
 
     /// <summary>Columns whose value is free text, where whitespace is part of the value.</summary>
     internal static bool IsText(EntityColumn column) =>
