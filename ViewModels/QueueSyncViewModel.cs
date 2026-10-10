@@ -70,10 +70,21 @@ public sealed class QueueSyncViewModel : ObservableObject
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync());
         PreviewCommand = new AsyncRelayCommand(_ => PreviewAsync(), _ => CanPreview);
         ApplyCommand = new AsyncRelayCommand(_ => ConfirmAsync(), _ => HasPlan && CountAdd + CountRemove > 0 && !IsBusy);
+        ShowConfirmation = viewModel =>
+        {
+            new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() }.ShowDialog();
+            return Task.CompletedTask;
+        };
     }
 
     public EnvironmentSessionViewModel Session { get; }
     public string Title => $"Queue membership sync — {Session.Title}";
+
+    /// <summary>Shows the confirmation window and returns once it is closed. Replaced in tests.</summary>
+    internal Func<MembershipApplyViewModel, Task> ShowConfirmation { get; set; }
+
+    /// <summary>Where the confirmation window records its writes; the default folder unless a test says otherwise.</summary>
+    internal string? WriteLogFolder { get; set; }
 
     public ObservableCollection<TeamInfo> Teams { get; } = new();
     public ListCollectionView TeamsView { get; }
@@ -364,6 +375,7 @@ public sealed class QueueSyncViewModel : ObservableObject
             EnvironmentName = Session.Title,
             EnvironmentHost = Session.EnvironmentHost,
             Account = Session.AccountName,
+            WriteLogFolder = WriteLogFolder,
             Permission = permission,
             Changes = changes,
             ApplyEach = (change, ct) => change.Kind == MembershipChangeKind.Add
@@ -381,8 +393,7 @@ public sealed class QueueSyncViewModel : ObservableObject
             }.Where(n => n is not null)) is { Length: > 0 } note ? note : null
         });
 
-        var window = new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() };
-        window.ShowDialog();
+        await ShowConfirmation(viewModel);
         var changed = viewModel.AnyWritesAttempted;
 
         if (!changed)

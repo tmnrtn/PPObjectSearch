@@ -125,12 +125,18 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _loadCts;
     private IReadOnlyList<MemberUser> _teamMembers = Array.Empty<MemberUser>();
     private IReadOnlyList<EntraUser> _groupUsers = Array.Empty<EntraUser>();
+    private readonly object _reportGate = new();
 
-    public EntraTeamSyncViewModel(EnvironmentSessionViewModel session, DataverseClient client)
+    public EntraTeamSyncViewModel(EnvironmentSessionViewModel session, DataverseClient client, GraphClient? graph = null)
     {
         Session = session;
         _client = client;
-        _graph = session.CreateGraphClient();
+        _graph = graph ?? session.CreateGraphClient();
+        ShowConfirmation = viewModel =>
+        {
+            new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() }.ShowDialog();
+            return Task.CompletedTask;
+        };
 
         TeamsView = (ListCollectionView)CollectionViewSource.GetDefaultView(Teams);
         TeamsView.Filter = o => o is TeamInfo t && Matches(t.SearchText, TeamSearchText);
@@ -149,6 +155,12 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     public EnvironmentSessionViewModel Session { get; }
     public string Title => $"Entra team sync — {Session.Title}";
+
+    /// <summary>Shows the confirmation window and returns once it is closed. Replaced in tests.</summary>
+    internal Func<MembershipApplyViewModel, Task> ShowConfirmation { get; set; }
+
+    /// <summary>Where the confirmation window records its writes; the default folder unless a test says otherwise.</summary>
+    internal string? WriteLogFolder { get; set; }
 
     public ObservableCollection<TeamInfo> Teams { get; } = new();
     public ListCollectionView TeamsView { get; }
@@ -554,11 +566,15 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
                 var diagnosis = MembershipPlanner.Diagnose(dv, byId, byUpn, saysMember);
 
-                Application.Current.Dispatcher.Invoke(() =>
+                void Report()
                 {
                     row.Diagnosis = diagnosis;
                     Status = $"Checking 'team only' users in Entra... {++done}/{targets.Count}";
-                });
+                }
+
+                // Tests have no application; there, a lock does the dispatcher's job of one at a time.
+                if (Application.Current?.Dispatcher is { } dispatcher) dispatcher.Invoke(Report);
+                else lock (_reportGate) Report();
             });
 
             IsDiagnosed = true;
@@ -747,6 +763,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             EnvironmentName = Session.Title,
             EnvironmentHost = Session.EnvironmentHost,
             Account = Session.AccountName,
+            WriteLogFolder = WriteLogFolder,
             Permission = permission,
             Changes = changes,
             ApplyAll = ct => _client.SyncGroupMembersToTeamAsync(team.TeamId, ct),
@@ -812,6 +829,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             EnvironmentName = Session.Title,
             EnvironmentHost = Session.EnvironmentHost,
             Account = Session.AccountName,
+            WriteLogFolder = WriteLogFolder,
             Permission = permission,
             Changes = changes,
             ApplyEach = (change, ct) => _client.RemoveTeamMemberAsync(team.TeamId, change.SystemUserId, ct),
@@ -903,6 +921,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
             EnvironmentName = Session.Title,
             EnvironmentHost = Session.EnvironmentHost,
             Account = Session.AccountName,
+            WriteLogFolder = WriteLogFolder,
             Permission = permission,
             Changes = changes,
             AddVerb = "Pull in",
@@ -931,8 +950,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     private async Task<bool> ConfirmAsync(MembershipApplyRequest request)
     {
         var viewModel = new MembershipApplyViewModel(request);
-        var window = new Views.MembershipApplyWindow { DataContext = viewModel, Owner = OwnerWindow() };
-        window.ShowDialog();
+        await ShowConfirmation(viewModel);
         var changed = viewModel.AnyWritesAttempted;
 
         if (!changed)
