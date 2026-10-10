@@ -467,7 +467,7 @@ public class FailuresWindowTests
     }
 
     [Fact]
-    public async Task Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab()
+    public void Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab() => AdminUiThread.Run(async () =>
     {
         var gate = new TaskCompletionSource();
         var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?", async _ =>
@@ -493,7 +493,7 @@ public class FailuresWindowTests
         Assert.Empty(vm.Components);
         Assert.Empty(raised);
         Assert.False(vm.IsBusy);
-    }
+    });
 
     [Fact]
     public async Task Narrowing_without_a_solution_on_screen_reads_the_whole_environment()
