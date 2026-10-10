@@ -34,9 +34,9 @@ public sealed class ShellViewModelTests : IDisposable
         return shell;
     }
 
-    private static string?[] Urls(ShellViewModel shell) => shell.Sessions.Select(s => s.EnvironmentUrl).ToArray();
+    private static string[] Urls(ShellViewModel shell) => shell.Sessions.Select(s => s.EnvironmentUrl).ToArray();
 
-    private static string?[] SavedUrls(TestShell test) => test.Saved().Tabs!.Select(t => t.EnvironmentUrl).ToArray();
+    private static string[] SavedUrls(TestShell test) => test.Saved().Tabs!.Select(t => t.EnvironmentUrl ?? string.Empty).ToArray();
 
     // ---------------------------------------------------------------- tabs
 
