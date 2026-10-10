@@ -274,7 +274,7 @@ public class ReferenceDataPlannerTests
         var result = await env.Planner().BuildAsync(Config(), true);
 
         Assert.NotNull(result.Plan);
-        Assert.Empty(result.Plan!.ValueColumns);
+        Assert.Empty(result.Plan.ValueColumns);
         Assert.Equal(new[] { "new_thing: every column is excluded, so only presence is compared." }, result.Warnings);
     }
 

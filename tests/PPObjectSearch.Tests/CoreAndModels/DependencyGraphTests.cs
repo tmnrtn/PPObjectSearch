@@ -18,11 +18,15 @@ public class DependencyGraphTests
 
     /// <summary>Column ← Form, View; Form ← App; App ← Form (a cycle).</summary>
     private static Task<IReadOnlyList<DependencyRef>> Fetch(Guid id, int type, DependencyDirection direction, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<DependencyRef>>(
-            id == Column ? [Ref(Form, "System Form"), Ref(View, "Saved Query")]
-            : id == Form ? [Ref(App, "Model-driven App")]
-            : id == App ? [Ref(Form, "System Form")]
-            : []);
+        Task.FromResult(Dependents(id));
+
+    private static IReadOnlyList<DependencyRef> Dependents(Guid id)
+    {
+        if (id == Column) return [Ref(Form, "System Form"), Ref(View, "Saved Query")];
+        if (id == Form) return [Ref(App, "Model-driven App")];
+        if (id == App) return [Ref(Form, "System Form")];
+        return [];
+    }
 
     [Fact]
     public async Task Dependents_are_walked_level_by_level_without_looping()

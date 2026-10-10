@@ -504,7 +504,7 @@ public class EnvironmentAdminTests
         Assert.False(admin.CanGoForward);
         Assert.Equal("Back (Alt+Left) — to Mailboxes: Bob Jones", admin.BackToolTip);
 
-        admin.BackCommand.Execute(null);
+        await admin.BackCommand.ExecuteAsync(null);
         await Settle(admin);
 
         Assert.Equal(AdminTab.Mailboxes, admin.SelectedTab);
@@ -512,7 +512,7 @@ public class EnvironmentAdminTests
         Assert.True(admin.CanGoForward);
         Assert.Equal("Forward (Alt+Right) — to Users: Bob Jones", admin.ForwardToolTip);
 
-        admin.ForwardCommand.Execute(null);
+        await admin.ForwardCommand.ExecuteAsync(null);
         await Settle(admin);
 
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
@@ -541,7 +541,7 @@ public class EnvironmentAdminTests
         admin.Mailboxes.SelectedMailbox = admin.Mailboxes.Items[0];
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
         await Settle(admin);
-        admin.BackCommand.Execute(null);
+        await admin.BackCommand.ExecuteAsync(null);
         await Settle(admin);
         Assert.True(admin.CanGoForward);
 

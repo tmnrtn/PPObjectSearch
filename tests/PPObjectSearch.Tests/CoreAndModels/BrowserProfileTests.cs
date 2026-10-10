@@ -157,7 +157,7 @@ public class BrowserProfileTests
 
         var options = BrowserProfileOption.Build(BrowserProfiles.ParseLocalState(BrowserKind.Edge, LocalState), current);
 
-        var missing = options.Last();
+        var missing = options[^1];
         Assert.True(missing.IsSelected);
         Assert.Contains("not found", missing.Label);
     }

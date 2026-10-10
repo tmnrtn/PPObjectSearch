@@ -8,7 +8,6 @@ namespace PPObjectSearch.Tests.Dataverse;
 
 public class DataverseClientRunsTests
 {
-    private const string Api = Fakes.ApiRoot;
     private const string Formatted = "@OData.Community.Display.V1.FormattedValue";
 
     private static string Page(string rows) => "{\"value\":[" + rows + "]}";
@@ -271,7 +270,7 @@ public class DataverseClientRunsTests
         var entries = await client.GetPluginTraceLogAsync(Guid.NewGuid(), 90);
 
         Assert.NotNull(entries);
-        Assert.Empty(entries!);
+        Assert.Empty(entries);
         Assert.Single(handler.Requests);
     }
 
