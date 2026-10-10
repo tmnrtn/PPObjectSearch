@@ -285,6 +285,30 @@ public class ChangesViewModelTests
     }
 
     [Fact]
+    public async Task Closing_the_window_stops_a_read_still_running()
+    {
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource();
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "msdyn_solutioncomponentsummaries", async _ =>
+        {
+            reading.TrySetResult();
+            await gate.Task;
+            return FakeHttpHandler.Json(Changed());
+        });
+        var vm = Window(handler);
+        var load = vm.LoadAsync();
+        await reading.Task;
+
+        vm.Dispose();
+        gate.SetResult();
+        await load;
+
+        Assert.Equal("Stopped.", vm.Status);
+        Assert.Empty(vm.Entries);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task Without_the_default_solution_the_changes_cannot_be_read()
     {
         var handler = new FakeHttpHandler();

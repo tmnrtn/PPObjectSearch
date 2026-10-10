@@ -444,6 +444,34 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         Assert.DoesNotContain(source.Requests, r => r.Url.Contains("LogicalName='new_other'"));
     }
 
+    [Fact]
+    public void Closing_the_window_stops_a_comparison_before_the_next_table() => AdminUiThread.Run(async () =>
+    {
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, EntityList, EntitiesJson(Table, "new_other"))
+            .OnJson(HttpMethod.Get, Attributes, ColumnsJson)
+            .OnAsync(HttpMethod.Get, RowsUrl, async _ =>
+            {
+                reading.TrySetResult();
+                await gate.Task;
+                return FakeHttpHandler.Json(SourceRows);
+            });
+        var vm = Window(source, Side(TargetRows), Config("Two", Thing(), Thing(c => c.LogicalName = "new_other")));
+        var compare = vm.CompareCommand.ExecuteAsync(null);
+        await reading.Task;
+
+        vm.Dispose();
+        gate.SetResult();
+        await compare;
+
+        Assert.Equal("Cancelled - showing what had been read.", vm.Status);
+        Assert.DoesNotContain(source.Requests, r => r.Url.Contains("LogicalName='new_other'"));
+        Assert.False(vm.IsBusy);
+        Assert.False(vm.CancelCommand.CanExecute(null));
+    });
+
     // ---------------------------------------------------------------- selecting and reconciling
 
     [Fact]

@@ -467,6 +467,34 @@ public class FailuresWindowTests
     }
 
     [Fact]
+    public async Task Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab()
+    {
+        var gate = new TaskCompletionSource();
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?", async _ =>
+        {
+            await gate.Task;
+            return FakeHttpHandler.Json($$"""
+                {"value":[{"name":"run1","status":"Failed","starttime":"{{Ago(2)}}","errormessage":"Boom","_workflow_value":"{{FlowA}}"}]}
+                """);
+        }).OnJson(HttpMethod.Get, "", """{"value":[]}""");
+        var session = TestSessions.Connected(handler);
+        var vm = Open(session);
+        var load = vm.LoadAsync();
+
+        vm.Dispose();
+        gate.SetResult();
+        await load;
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        session.UseLoadedSolution(Core, []);
+
+        Assert.Equal("Stopped.", vm.Status);
+        Assert.Equal(0, vm.TotalFailures);
+        Assert.Empty(vm.Components);
+        Assert.Empty(raised);
+    }
+
+    [Fact]
     public async Task Narrowing_without_a_solution_on_screen_reads_the_whole_environment()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "", """{"value":[]}""");

@@ -177,6 +177,28 @@ public class ContentSearchViewModelTests
     }
 
     [Fact]
+    public async Task Closing_the_window_stops_a_search_still_reading()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "workflows?", async _ =>
+        {
+            await release.Task;
+            return FakeHttpHandler.Json($$"""{"value":[{"workflowid":"{{FlowId}}","clientdata":"{\"x\":\"new_status\"}","xaml":null}]}""");
+        });
+        var search = Search(handler, scope: [Flow], term: "new_status");
+        var running = search.SearchCommand.ExecuteAsync(null);
+
+        search.Dispose();
+        release.SetResult();
+        await running;
+
+        Assert.Equal("Stopped. Definitions read so far are kept for the next search.", search.Status);
+        Assert.Empty(search.Hits);
+        Assert.False(search.IsSearching);
+        Assert.False(search.CancelCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task A_hit_can_be_opened_once_one_is_chosen()
     {
         var session = TestSessions.Disconnected();

@@ -379,6 +379,23 @@ public partial class ObjectDetailsTableTests
     }
 
     [Fact]
+    public async Task A_count_still_running_when_the_window_is_disposed_is_stopped()
+    {
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        var details = Account(Table(h => h.OnAsync(HttpMethod.Get, "aggregate='true'", _ => slow.Task)));
+        await details.LoadAsync();
+        var count = StartInOrder(() => details.CountRowsCommand.ExecuteAsync(null));
+
+        details.Dispose();
+        slow.SetResult(FakeHttpHandler.Json("""{"value":[{"rowcount":7}]}"""));
+        await count;
+
+        Assert.False(details.IsCounting);
+        Assert.Equal("~42 rows", details.RowCountText);
+        Assert.Equal("Dataverse's stored count, refreshed about daily. The exact count was stopped.", details.RowCountDetail);
+    }
+
+    [Fact]
     public async Task A_count_stopped_without_a_stored_one_says_it_stopped()
     {
         var slow = new TaskCompletionSource<HttpResponseMessage>();

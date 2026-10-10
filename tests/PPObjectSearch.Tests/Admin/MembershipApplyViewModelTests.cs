@@ -317,6 +317,36 @@ public class MembershipApplyViewModelTests
     }
 
     [Fact]
+    public async Task Closing_the_window_lets_the_change_in_flight_finish_and_writes_no_more()
+    {
+        var written = new List<Guid>();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var vm = PerRow(Allowed, async (change, _) =>
+        {
+            written.Add(change.SystemUserId);
+            started.TrySetResult();
+            await release.Task;
+        });
+        vm.RemoveAcknowledged = true;
+        var run = vm.ApplyCommand.ExecuteAsync(null);
+        await started.Task;
+
+        vm.Dispose();
+        release.SetResult();
+        await run;
+
+        Assert.Equal([A], written);
+        Assert.Equal("Added", Row(vm, A).Result);
+        Assert.Null(Row(vm, B).Succeeded);
+        Assert.Equal("Pending", Row(vm, B).Result);
+        Assert.StartsWith("Stopped. Changes already made have not been undone.", vm.Status);
+        Assert.False(vm.IsRunning);
+        Assert.True(vm.HasRun);
+        Assert.False(vm.CancelRunCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task A_request_can_name_its_add_verb_and_success_label()
     {
         var vm = new MembershipApplyViewModel(new MembershipApplyRequest

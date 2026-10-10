@@ -161,4 +161,31 @@ public sealed class DocumentationViewModelTests : IDisposable
         Assert.Equal("Stopped.", documentation.Status);
         Assert.False(documentation.CancelCommand.CanExecute(null));
     }
+
+    [Fact]
+    public async Task Closing_the_dialog_stops_an_export_and_writes_nothing()
+    {
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "", async _ =>
+        {
+            reading.TrySetResult();
+            await release.Task;
+            return FakeHttpHandler.Json("""{"value":[]}""");
+        });
+        var path = Path.Combine(_folder, "contoso.md");
+        var documentation = Documentation(handler, path);
+        var export = documentation.ExportCommand.ExecuteAsync(null);
+        await reading.Task;
+
+        documentation.Dispose();
+        release.SetResult();
+        await export;
+
+        Assert.Equal("Stopped.", documentation.Status);
+        Assert.False(File.Exists(path));
+        Assert.Single(handler.Requests);
+        Assert.False(documentation.IsBusy);
+        Assert.False(documentation.CancelCommand.CanExecute(null));
+    }
 }

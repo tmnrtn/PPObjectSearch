@@ -367,6 +367,26 @@ public class FlowDiagramStepDetailsTests
         Assert.False(d.IsContentLoading);
     }
 
+    [Fact]
+    public async Task Content_still_arriving_when_the_diagram_is_disposed_is_dropped()
+    {
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "https://x/in/Step", _ => slow.Task);
+        var d = Diagram();
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult> { ["Step"] = Result("Step", FlowStepOutcome.Succeeded) }), Client(handler));
+        d.Selected = Card(d, "Step");
+        d.IsInputsShown = true;
+
+        d.Dispose();
+        slow.SetResult(FakeHttpHandler.Json("""{"late":true}"""));
+        await d.Work.WhenIdleAsync();
+
+        Assert.False(d.HasContent);
+        Assert.False(d.HasContentError);
+        Assert.False(d.IsContentLoading);
+        Assert.DoesNotContain("late", d.DetailCode);
+    }
+
     // ---------------------------------------------------------------- loops
 
     [Fact]
