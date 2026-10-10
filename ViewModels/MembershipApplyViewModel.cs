@@ -174,11 +174,19 @@ public sealed class MembershipApplyRequest
 /// written; nothing is written until Apply; Apply is unavailable while the write guard refuses the
 /// environment, and while any removal in the run has not been acknowledged separately.
 /// </summary>
-public sealed class MembershipApplyViewModel : ObservableObject
+public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
 {
     private readonly MembershipApplyRequest _request;
     private WriteLog? _log;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a run still in progress when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     public MembershipApplyViewModel(MembershipApplyRequest request)
     {

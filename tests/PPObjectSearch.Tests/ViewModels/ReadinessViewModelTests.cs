@@ -378,6 +378,34 @@ public class ReadinessViewModelTests
         Assert.Null(vm.Report);
     }
 
+    [Fact]
+    public async Task Closing_the_window_stops_a_check_before_it_reaches_the_target()
+    {
+        var gate = new TaskCompletionSource();
+        var source = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "msdyn_componenttype ge 0", HttpStatusCode.BadRequest, "no ranges")
+            .OnAsync(HttpMethod.Get, "msdyn_solutioncomponentsummaries", async _ =>
+            {
+                await gate.Task;
+                return FakeHttpHandler.Json($$"""{"value":[{"msdyn_componenttype":29,"msdyn_name":"Notify","msdyn_objectid":"{{Flow}}"}]}""");
+            });
+        var target = Target();
+        var (dev, prod) = Pair(source, target);
+        var vm = Open([dev, prod], dev);
+        var run = vm.RunCommand.ExecuteAsync(null);
+
+        vm.Dispose();
+        gate.SetResult();
+        await run;
+
+        Assert.Equal("Stopped.", vm.Status);
+        Assert.Null(vm.Report);
+        Assert.Empty(vm.Findings);
+        Assert.Empty(target.Requests);
+        Assert.False(vm.IsRunning);
+        Assert.False(vm.CancelCommand.CanExecute(null));
+    }
+
     // ---------------------------------------------------------------- wording
 
     [Fact]

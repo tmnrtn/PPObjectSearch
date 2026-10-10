@@ -1,5 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Windows;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
@@ -14,7 +13,7 @@ namespace PPObjectSearch.ViewModels;
 /// (the question worth asking before deleting anything), and - for a table - what it owns,
 /// down to the properties of each column, relationship, key, form, view, chart and dashboard.
 /// </summary>
-public sealed class ObjectDetailsViewModel : ObservableObject
+public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 {
     /// <summary>solutioncomponent type code for a table.</summary>
     private const int TableComponentType = 1;
@@ -1380,6 +1379,15 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         FlowDiagram?.Detach();
     }
 
+    /// <summary>Detaches, and lets go of the row count's source and the flow diagram's.</summary>
+    public void Dispose()
+    {
+        Detach();
+        _countCts?.Dispose();
+        _countCts = null;
+        FlowDiagram?.Dispose();
+    }
+
     private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(EnvironmentSessionViewModel.Title)) OnPropertyChanged(nameof(Title));
@@ -1438,8 +1446,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             // The stored count is one quick request, so it shows before the child components load.
             if (_detached) return;
-            if (IsTable) await LoadRowCountSnapshotAsync();
-            if (IsTable) await LoadChildComponentsAsync(problems);
+            if (IsTable)
+            {
+                await LoadRowCountSnapshotAsync();
+                await LoadChildComponentsAsync(problems);
+            }
             if (_detached) return;
             await LoadKindTabsAsync(problems);
 
@@ -1655,7 +1666,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         var terms = ChildFilter.ToLowerInvariant()
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var child in children.Where(c => terms.All(t => c.FilterIndex.Contains(t, StringComparison.Ordinal))))
+        foreach (var child in children.Where(c => Array.TrueForAll(terms, t => c.FilterIndex.Contains(t, StringComparison.Ordinal))))
         {
             Children.Add(child);
         }

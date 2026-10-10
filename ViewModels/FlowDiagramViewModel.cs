@@ -310,7 +310,7 @@ public sealed class FlowCardViewModel : FlowStepViewModel
 /// A cloud flow drawn as the designer draws it: trigger, then steps top to bottom, branches side
 /// by side. Read-only - selecting a step shows its JSON, nothing here can change the flow.
 /// </summary>
-public sealed class FlowDiagramViewModel : ObservableObject
+public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 {
     public const double MinZoom = 0.4;
     public const double MaxZoom = 1.5;
@@ -806,14 +806,17 @@ public sealed class FlowDiagramViewModel : ObservableObject
     /// <summary>Stops everything still being read for the run - the window is closing.</summary>
     public void Detach() => CancelRunReads();
 
+    public void Dispose() => CancelRunReads();
+
     /// <summary>
     /// Cancels the reads for the run that was on show. Its source can go with it: the reads hold the
     /// token, which still answers once disposed, and new ones take theirs from the field.
     /// </summary>
     private void CancelRunReads()
     {
-        _runCts?.Cancel();
-        _runCts?.Dispose();
+        var cts = _runCts;
+        cts?.Cancel();
+        cts?.Dispose();
         _runCts = null;
     }
 
@@ -1194,7 +1197,7 @@ public sealed class FlowDiagramViewModel : ObservableObject
         foreach (var card in _cards)
         {
             var match = terms.Length > 0 &&
-                        terms.All(t => card.SearchText.Contains(t, StringComparison.CurrentCultureIgnoreCase));
+                        Array.TrueForAll(terms, t => card.SearchText.Contains(t, StringComparison.CurrentCultureIgnoreCase));
             card.IsMatch = match;
 
             if (!match) continue;

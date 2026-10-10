@@ -281,7 +281,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         if (recent is null) return;
 
-        var item = _allItems.FirstOrDefault(i => i.ObjectId == recent.ObjectId);
+        var item = _allItems.Find(i => i.ObjectId == recent.ObjectId);
         if (item is null)
         {
             Status = $"{recent.Label} is not in the solution on show - pick a solution that holds it (the default solution holds everything).";
@@ -1413,7 +1413,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         try
         {
-            return await _client!.GetSolutionComponentsAsync(solution.SolutionId, progress, cts.Token);
+            var client = _client!;
+            return await client.GetSolutionComponentsAsync(solution.SolutionId, progress, cts.Token);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && cached is not null)
         {
@@ -1639,7 +1640,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             if (!matches) return false;
         }
 
-        return _searchTerms.All(term => item.SearchIndex.Contains(term, StringComparison.Ordinal));
+        return Array.TrueForAll(_searchTerms, term => item.SearchIndex.Contains(term, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1662,9 +1663,9 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         var haystack = $"{solution.FriendlyName} {solution.UniqueName} {solution.PublisherName} {solution.Version}";
 
-        return text
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .All(term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
+        return Array.TrueForAll(
+            text.Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
     }
 
     private bool FilterTypeOption(object obj)

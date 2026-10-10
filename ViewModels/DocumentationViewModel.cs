@@ -6,10 +6,18 @@ using PPObjectSearch.Services;
 namespace PPObjectSearch.ViewModels;
 
 /// <summary>The solution documentation export: which sections, one file or a file per component, and where.</summary>
-public sealed class DocumentationViewModel : ObservableObject
+public sealed class DocumentationViewModel : ObservableObject, IDisposable
 {
     private readonly EnvironmentSessionViewModel _session;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops documenting still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     public DocumentationViewModel(EnvironmentSessionViewModel session)
     {

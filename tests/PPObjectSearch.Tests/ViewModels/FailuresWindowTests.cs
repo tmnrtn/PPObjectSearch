@@ -163,7 +163,7 @@ public class FailuresWindowTests
         var handler = Handler(stateFails: true);
         var vm = await Loaded(handler);
 
-        await TestSessions.Until(() => handler.Requests.Any(r => r.Url.Contains("statecode")));
+        await TestSessions.Until(() => handler.Requests.Exists(r => r.Url.Contains("statecode")));
 
         Assert.Null(vm.SelectedStateLabel);
         Assert.Equal("Sync orders", vm.SelectedComponent!.ComponentName);
@@ -175,7 +175,7 @@ public class FailuresWindowTests
         var handler = Handler(stateMissing: true);
         var vm = await Loaded(handler);
 
-        await TestSessions.Until(() => handler.Requests.Any(r => r.Url.Contains("statecode")));
+        await TestSessions.Until(() => handler.Requests.Exists(r => r.Url.Contains("statecode")));
 
         Assert.Null(vm.SelectedStateLabel);
         Assert.False(vm.IsSelectedOn);
@@ -464,6 +464,37 @@ public class FailuresWindowTests
 
         Assert.Equal("Stopped.", vm.Status);
         Assert.Equal(0, vm.TotalFailures);
+    }
+
+    [Fact]
+    public async Task Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab()
+    {
+        var gate = new TaskCompletionSource();
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?", async _ =>
+        {
+            await gate.Task;
+            return FakeHttpHandler.Json($$"""
+                {"value":[{"name":"run1","status":"Failed","starttime":"{{Ago(2)}}","errormessage":"Boom","_workflow_value":"{{FlowA}}"}]}
+                """);
+        }).OnJson(HttpMethod.Get, "", """{"value":[]}""");
+        var session = TestSessions.Connected(handler);
+        var vm = Open(session);
+        var load = vm.LoadAsync();
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.Dispose();
+        // Changed on this thread, before the read resumes elsewhere, as the tab's own list requires.
+        session.UseLoadedSolution(Core, []);
+        gate.SetResult();
+        await load;
+
+        Assert.Equal("Stopped.", vm.Status);
+        Assert.Equal(0, vm.TotalFailures);
+        Assert.Empty(vm.Components);
+        Assert.DoesNotContain(nameof(FailuresViewModel.HasSolution), raised);
+        Assert.DoesNotContain(nameof(FailuresViewModel.SolutionLabel), raised);
+        Assert.False(vm.IsBusy);
     }
 
     [Fact]

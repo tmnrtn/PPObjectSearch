@@ -12,6 +12,6 @@ public partial class FailuresWindow : Window
         {
             if (DataContext is FailuresViewModel viewModel) await viewModel.LoadAsync();
         };
-        Closed += (_, _) => (DataContext as FailuresViewModel)?.Detach();
+        Closed += (_, _) => (DataContext as FailuresViewModel)?.Dispose();
     }
 }

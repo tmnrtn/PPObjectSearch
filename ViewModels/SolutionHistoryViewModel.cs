@@ -194,8 +194,9 @@ public sealed class SolutionHistoryViewModel : ObservableObject
         };
 
     private bool MatchesSearch(SolutionHistoryEntry entry) =>
-        SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .All(term => entry.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase));
+        Array.TrueForAll(
+            SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            term => entry.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private void Export()
     {

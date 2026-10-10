@@ -304,6 +304,30 @@ public class DependencyExplorerViewModelTests
     }
 
     [Fact]
+    public async Task Closing_the_window_stops_a_walk_still_running()
+    {
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        var calls = 0;
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "RetrieveDependentComponents(", _ =>
+            Interlocked.Increment(ref calls) == 1 ? Task.FromResult(FakeHttpHandler.Json("""{"value":[]}""")) : slow.Task);
+        var explorer = Explorer(handler);
+        await Until(() => handler.Requests.Count == 1);
+        var walk = explorer.ImpactCommand.ExecuteAsync(null);
+        await Until(() => handler.Requests.Count == 2);
+
+        explorer.Dispose();
+        slow.SetResult(FakeHttpHandler.Json(Dependents((Form, "System Form"), (View, "Saved Query"))));
+        await walk;
+
+        Assert.Equal("Stopped.", explorer.Status);
+        Assert.Empty(explorer.Impact);
+        Assert.False(explorer.IsImpactWalked);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.False(explorer.IsBusy);
+        Assert.False(explorer.CancelCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task What_is_copied_before_a_walk_is_the_tree_as_expanded()
     {
         var explorer = Explorer(Graph());

@@ -267,7 +267,7 @@ public sealed class ReferenceDataWriter
 
         // Rows matched on another key can still carry different primary ids. An update
         // cannot change a row's id, so that difference is reported rather than written.
-        var idDiffers = columns.Any(c => c.IsPrimaryId);
+        var idDiffers = columns.Exists(c => c.IsPrimaryId);
 
         if (body.Count == 0) return Fail(item, NothingWritable(plan, idDiffers, skipped));
 
@@ -451,18 +451,18 @@ public sealed class ReferenceDataWriter
 
     private async Task AddLookupAsync(
         Dictionary<string, object?> body,
-        DataRecord source,
-        DataRecord? target,
+        DataRecord sourceRow,
+        DataRecord? targetRow,
         EntityColumn column,
         bool isCreate,
         bool matchLookupsByName,
         CancellationToken ct)
     {
-        var raw = source.Raw(column.SelectName);
+        var raw = sourceRow.Raw(column.SelectName);
 
         // Dataverse only annotates a lookup that has a value, so a source that is empty here says
         // nothing about how to bind it. The target row, which does have a value to clear, does.
-        var navigation = NavigationOf(source, column) ?? NavigationOf(target, column);
+        var navigation = NavigationOf(sourceRow, column) ?? NavigationOf(targetRow, column);
 
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -487,7 +487,7 @@ public sealed class ReferenceDataWriter
                 "so the reference cannot be written.");
         }
 
-        var targetTable = source.LookupTargets.TryGetValue(column.SelectName, out var t) ? t : null;
+        var targetTable = sourceRow.LookupTargets.TryGetValue(column.SelectName, out var t) ? t : null;
 
         if (string.IsNullOrWhiteSpace(targetTable))
         {
@@ -518,7 +518,7 @@ public sealed class ReferenceDataWriter
             return;
         }
 
-        var label = source.Label(column.SelectName);
+        var label = sourceRow.Label(column.SelectName);
 
         if (string.IsNullOrWhiteSpace(label))
         {

@@ -4,7 +4,6 @@ using System.Net.Http;
 using System.Text.Json;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
-using PPObjectSearch.Services;
 using PPObjectSearch.Tests.Infrastructure;
 using PPObjectSearch.ViewModels;
 
@@ -296,6 +295,37 @@ public sealed class QueueSyncViewModelTests : IDisposable
         Assert.False(sync.HasPlan);
         Assert.False(sync.IsBusy);
     }
+
+    [Fact]
+    public void Closing_the_window_stops_a_preview_still_reading_and_leaves_no_plan() => AdminUiThread.Run(async () =>
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeHttpHandler()
+            .OnAsync(HttpMethod.Get, "queuemembership_association", async _ =>
+            {
+                await gate.Task;
+                return FakeHttpHandler.Json(Rows(User(Bob, "Bob"), User(Carl, "Carl")));
+            })
+            .OnJson(HttpMethod.Get, "/teams?", Rows(Team(DeskTeam, "Service Desk")))
+            .OnJson(HttpMethod.Get, "/queues?", Rows(Queue(Support, "Support")))
+            .OnJson(HttpMethod.Get, "teammembership_association", Rows(User(Alice, "Alice"), User(Bob, "Bob")));
+        var sync = Sync(handler);
+        await sync.LoadAsync();
+        sync.SelectedTeam = sync.Teams.Single();
+        sync.SelectedQueue = sync.Queues.Single();
+        var preview = sync.PreviewCommand.ExecuteAsync(null);
+
+        sync.Dispose();
+        gate.SetResult();
+        await preview;
+
+        Assert.False(sync.HasPlan);
+        Assert.Empty(sync.Rows);
+        Assert.Equal(0, sync.CountAll);
+        Assert.DoesNotContain("Previewed at", sync.Status);
+        Assert.False(sync.ApplyCommand.CanExecute(null));
+        Assert.False(sync.IsBusy);
+    });
 
     // ---------------------------------------------------------------- confirm and apply
 

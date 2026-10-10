@@ -192,7 +192,7 @@ public sealed class AppSettings
 
             try
             {
-                var copy = $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}";
+                var copy = $"{path}.bad-{DateTimeOffset.Now:yyyyMMdd-HHmmss}";
                 File.Copy(path, copy, overwrite: true);
                 return BackedUp[path] = copy;
             }

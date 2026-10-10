@@ -89,7 +89,7 @@ public class EnvironmentSessionInsightTests
         EnvironmentSessionThread.Elapse(session, InsightDebounce);
         session.SelectedItem = Row(session, "Other flow");
         runs.SetResult();
-        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Any(r => r.Url.Contains("workflows?$select=workflowid,statecode", StringComparison.Ordinal)),
+        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Exists(r => r.Url.Contains("workflows?$select=workflowid,statecode", StringComparison.Ordinal)),
             "the slow flow's state to be read");
         await Task.Delay(50);
 
@@ -198,7 +198,7 @@ public class EnvironmentSessionInsightTests
 
         session.SelectedItem = Row(session, "Notify owner");
         EnvironmentSessionThread.Elapse(session, InsightDebounce);
-        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Any(r => r.Url.Contains("flowruns?", StringComparison.Ordinal)), "the runs to be asked for");
+        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Exists(r => r.Url.Contains("flowruns?", StringComparison.Ordinal)), "the runs to be asked for");
         await Task.Delay(50);
 
         Assert.Null(session.LatestRun);

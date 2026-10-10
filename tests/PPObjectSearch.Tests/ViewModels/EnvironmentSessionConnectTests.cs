@@ -431,7 +431,7 @@ public class EnvironmentSessionConnectTests
             return FakeHttpHandler.Json("{\"value\":[]}");
         });
         var session = await env.ConnectedAsync();
-        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Any(r => r.Url.Contains(BapList, StringComparison.Ordinal)),
+        await EnvironmentSessionThread.Until(() => env.Handler.Requests.Exists(r => r.Url.Contains(BapList, StringComparison.Ordinal)),
             "the environment type to be asked");
 
         session.Reset("Signed out.");

@@ -264,7 +264,7 @@ public sealed partial class DataverseClient
 
             if (at > 0)
             {
-                var into = annotations.FirstOrDefault(a => property.Name.EndsWith(a.Suffix, StringComparison.Ordinal)).Into;
+                var into = Array.Find(annotations, a => property.Name.EndsWith(a.Suffix, StringComparison.Ordinal)).Into;
                 if (into is not null) into[property.Name[..at]] = property.Value.GetString();
                 continue;
             }

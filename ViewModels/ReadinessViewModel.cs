@@ -11,9 +11,17 @@ namespace PPObjectSearch.ViewModels;
 /// The readiness check window: pick a solution in the source and a target, and see what would
 /// stop the import or stop it working afterwards. It only reads - nothing is written anywhere.
 /// </summary>
-public sealed class ReadinessViewModel : ObservableObject
+public sealed class ReadinessViewModel : ObservableObject, IDisposable
 {
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a check still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     /// <param name="source">The environment to start from - the tab it was opened from - when there is one.</param>
     public ReadinessViewModel(IEnumerable<EnvironmentSessionViewModel> sessions, EnvironmentSessionViewModel? source = null)
@@ -228,10 +236,11 @@ public sealed class ReadinessViewModel : ObservableObject
         {
             Status = $"Reading {solution.DisplayLabel} in {source.Title}...";
             var clock = Stopwatch.StartNew();
-            var components = await source.Client!.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
+            var sourceClient = source.Client!;
+            var components = await sourceClient.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
 
             var check = new ReadinessCheck(
-                source.Client, target.Client!,
+                source.Client!, target.Client!,
                 target.Client!.CreatePowerAutomateClient(), target.EnvironmentId);
 
             var report = await check.RunAsync(solution, components, source.Title, target.Title,

@@ -130,7 +130,7 @@ public enum RecordStatusFilter
 /// metadata and their rows are all read when Compare runs. Which tables to read, keyed on what,
 /// is a configuration that can be saved and picked again.
 /// </summary>
-public sealed class ReferenceDataCompareViewModel : ObservableObject
+public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposable
 {
     private readonly AppSettings _settings;
     private readonly List<RecordComparison> _all = new();
@@ -143,6 +143,14 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
     private IReadOnlyList<EntitySummary>? _sourceEntities;
     private DataverseClient? _sourceEntitiesFrom;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a comparison still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     /// <summary>The target's tables, needed to write to it - to name its entity sets, and to
     /// resolve a lookup label to a row that actually exists there.</summary>
@@ -690,7 +698,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject
 
         foreach (var entity in Entities)
         {
-            var compared = _fetched.Any(f => string.Equals(
+            var compared = _fetched.Exists(f => string.Equals(
                 f.Plan.Entity.LogicalName, entity.LogicalName, StringComparison.OrdinalIgnoreCase));
 
             entity.DifferenceCount = compared

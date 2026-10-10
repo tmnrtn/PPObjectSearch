@@ -89,13 +89,21 @@ public sealed class DependencyTreeNode : ObservableObject
 /// and the removal impact - everything that depends on it, transitively, with what lies outside
 /// the solution called out.
 /// </summary>
-public sealed class DependencyExplorerViewModel : ObservableObject
+public sealed class DependencyExplorerViewModel : ObservableObject, IDisposable
 {
     private readonly DataverseClient _client;
     private readonly SolutionComponentItem _item;
     private readonly IReadOnlyDictionary<Guid, SolutionComponentItem> _known;
     private readonly Action<SolutionComponentItem>? _open;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a walk still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     public DependencyExplorerViewModel(
         DataverseClient client,

@@ -308,7 +308,7 @@ public static class ReferenceDataComparer
     {
         foreach (var key in plan.KeyColumns)
         {
-            if (key.IsPrimaryId || differences.Any(d => d.Column.SelectName.Equals(key.SelectName, StringComparison.OrdinalIgnoreCase)))
+            if (key.IsPrimaryId || differences.Exists(d => d.Column.SelectName.Equals(key.SelectName, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
@@ -402,7 +402,7 @@ public static class ReferenceDataComparer
             .ToList();
 
         // A key of only whitespace identifies nothing, so it is as good as no key.
-        return parts.All(string.IsNullOrWhiteSpace)
+        return parts.TrueForAll(string.IsNullOrWhiteSpace)
             ? $"{NoKeyMarker} {record.Id}"
             : string.Join(" | ", parts);
     }

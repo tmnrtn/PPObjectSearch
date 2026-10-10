@@ -13,4 +13,10 @@ public partial class ChangesWindow : Window
             if (DataContext is ChangesViewModel viewModel) await viewModel.LoadAsync();
         };
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        (DataContext as IDisposable)?.Dispose();
+        base.OnClosed(e);
+    }
 }

@@ -12,13 +12,21 @@ namespace PPObjectSearch.ViewModels;
 /// tab: flows, scripts, forms, views, plug-in steps, classic workflows and sitemaps. Bodies are read
 /// once and kept for the tab, so searching again is instant.
 /// </summary>
-public sealed class ContentSearchViewModel : ObservableObject
+public sealed class ContentSearchViewModel : ObservableObject, IDisposable
 {
     private readonly EnvironmentSessionViewModel _session;
     private readonly DataverseClient _client;
     private readonly DefinitionBodyCache _cache;
     private readonly List<SolutionComponentItem> _scope;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Stops a search still running when the window closes; nobody is left to read the answer.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 
     public ContentSearchViewModel(
         EnvironmentSessionViewModel session,

@@ -84,20 +84,20 @@ public sealed partial class DataverseClient
     /// single row is a reason to abandon the write, not to pick one.
     /// </summary>
     public async Task<Guid?> ResolveByNameAsync(
-        EntitySummary entity,
+        EntitySummary table,
         string label,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(entity.PrimaryNameAttribute))
+        if (string.IsNullOrWhiteSpace(table.PrimaryNameAttribute))
         {
             throw new DataverseException(
-                $"{entity.LogicalName} has no primary name column, so '{label}' cannot be resolved by name.");
+                $"{table.LogicalName} has no primary name column, so '{label}' cannot be resolved by name.");
         }
 
-        if (string.IsNullOrWhiteSpace(entity.EntitySetName))
+        if (string.IsNullOrWhiteSpace(table.EntitySetName))
         {
             throw new DataverseException(
-                $"{entity.LogicalName} has no entity set name, so its rows cannot be queried.");
+                $"{table.LogicalName} has no entity set name, so its rows cannot be queried.");
         }
 
         // Three would already be too many; the third is only fetched to say "several" honestly.
@@ -107,9 +107,9 @@ public sealed partial class DataverseClient
         // It is not trimmed: a label with surrounding spaces has to match itself.
         var literal = Escape(label);
 
-        var url = EnvironmentUrl + ApiPath + entity.EntitySetName +
-                  $"?$select={entity.PrimaryIdAttribute}&$top=3" +
-                  $"&$filter={entity.PrimaryNameAttribute} eq '{literal}'";
+        var url = EnvironmentUrl + ApiPath + table.EntitySetName +
+                  $"?$select={table.PrimaryIdAttribute}&$top=3" +
+                  $"&$filter={table.PrimaryNameAttribute} eq '{literal}'";
 
         using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
 
@@ -119,7 +119,7 @@ public sealed partial class DataverseClient
 
         foreach (var row in value.EnumerateArray())
         {
-            if (Guid.TryParse(JsonHelper.GetString(row, entity.PrimaryIdAttribute), out var id)) matches.Add(id);
+            if (Guid.TryParse(JsonHelper.GetString(row, table.PrimaryIdAttribute), out var id)) matches.Add(id);
         }
 
         if (matches.Count > 1)
@@ -127,27 +127,27 @@ public sealed partial class DataverseClient
             // An inactive row that shares the name is usually a retired copy; if exactly one active
             // row carries it, that is the one meant. Not every table has statecode, so a query that
             // fails here simply leaves the name ambiguous.
-            if (await ResolveActiveByNameAsync(entity, literal, ct).ConfigureAwait(false) is { } active) return active;
+            if (await ResolveActiveByNameAsync(table, literal, ct).ConfigureAwait(false) is { } active) return active;
 
             throw new DataverseException(
-                $"'{label}' matches {matches.Count} rows of {entity.LogicalName}, so the reference is ambiguous.");
+                $"'{label}' matches {matches.Count} rows of {table.LogicalName}, so the reference is ambiguous.");
         }
 
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    private async Task<Guid?> ResolveActiveByNameAsync(EntitySummary entity, string literal, CancellationToken ct)
+    private async Task<Guid?> ResolveActiveByNameAsync(EntitySummary table, string literal, CancellationToken ct)
     {
-        var url = EnvironmentUrl + ApiPath + entity.EntitySetName +
-                  $"?$select={entity.PrimaryIdAttribute}&$top=2" +
-                  $"&$filter={entity.PrimaryNameAttribute} eq '{literal}' and statecode eq 0";
+        var url = EnvironmentUrl + ApiPath + table.EntitySetName +
+                  $"?$select={table.PrimaryIdAttribute}&$top=2" +
+                  $"&$filter={table.PrimaryNameAttribute} eq '{literal}' and statecode eq 0";
 
         try
         {
             using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
             if (!doc.RootElement.TryGetProperty("value", out var value) || value.GetArrayLength() != 1) return null;
 
-            return Guid.TryParse(JsonHelper.GetString(value[0], entity.PrimaryIdAttribute), out var id) ? id : null;
+            return Guid.TryParse(JsonHelper.GetString(value[0], table.PrimaryIdAttribute), out var id) ? id : null;
         }
         catch (DataverseException)
         {
@@ -156,18 +156,18 @@ public sealed partial class DataverseClient
     }
 
     /// <summary>Whether a row with this id exists in the table - for binding a lookup by id.</summary>
-    public async Task<bool> RecordExistsAsync(EntitySummary entity, Guid id, CancellationToken ct = default)
+    public async Task<bool> RecordExistsAsync(EntitySummary table, Guid id, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(entity.EntitySetName))
+        if (string.IsNullOrWhiteSpace(table.EntitySetName))
         {
             throw new DataverseException(
-                $"{entity.LogicalName} has no entity set name, so its rows cannot be queried.");
+                $"{table.LogicalName} has no entity set name, so its rows cannot be queried.");
         }
 
         try
         {
             using var doc = await GetJsonAsync(
-                EnvironmentUrl + ApiPath + $"{entity.EntitySetName}({id})?$select={entity.PrimaryIdAttribute}", ct)
+                EnvironmentUrl + ApiPath + $"{table.EntitySetName}({id})?$select={table.PrimaryIdAttribute}", ct)
                 .ConfigureAwait(false);
             return true;
         }

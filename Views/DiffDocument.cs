@@ -2,7 +2,6 @@ using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Media;
 using PPObjectSearch.Core;
 
 namespace PPObjectSearch.Views;

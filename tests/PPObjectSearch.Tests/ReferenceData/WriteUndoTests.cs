@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json.Nodes;
-using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 using static PPObjectSearch.Tests.ReferenceData.RefData;
 

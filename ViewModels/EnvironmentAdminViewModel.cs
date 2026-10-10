@@ -255,8 +255,9 @@ public abstract class AdminPaneViewModel : ObservableObject
 
     internal static bool Matches(string haystack, string search) =>
         string.IsNullOrWhiteSpace(search) ||
-        search.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .All(term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
+        Array.TrueForAll(
+            search.Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            term => haystack.Contains(term, StringComparison.CurrentCultureIgnoreCase));
 
     /// <summary>"All business units" first, then each value present, A to Z.</summary>
     internal static IReadOnlyList<string> Options(string all, IEnumerable<string?> values) =>

@@ -300,6 +300,38 @@ public class ObjectDetailsFlowTests
     }
 
     [Fact]
+    public async Task Disposing_the_window_drops_a_step_s_content_still_arriving_and_stops_following_the_tab()
+    {
+        var run = $"/environments/{EnvironmentId}/flows/{FlowId}/runs/run-1";
+        var slow = new TaskCompletionSource<HttpResponseMessage>();
+        var handler = Flow(first: h => h
+            .OnAsync(HttpMethod.Get, "https://x/in/Send", _ => slow.Task)
+            .OnJson(HttpMethod.Get, "flowruns?", DataverseRuns)
+            .OnJson(HttpMethod.Get, run + "/actions",
+                """{"value":[{"name":"Send","properties":{"status":"Succeeded","inputsLink":{"uri":"https://x/in/Send"}}}]}""")
+            .OnJson(HttpMethod.Get, run, """{"name":"run-1","properties":{"status":"Succeeded","trigger":{"name":"manual","status":"Succeeded"}}}"""));
+        var session = Session();
+        var details = Details(handler, CloudFlow(), EnvironmentId, session);
+        await details.LoadAsync();
+        await details.ShowRunOnDiagramCommand.ExecuteAsync(details.Runs.Single(r => r.Name == "run-1"));
+        var diagram = details.FlowDiagram!;
+        diagram.Selected = diagram.Cards.Single(c => c.Title == "Send");
+        diagram.IsInputsShown = true;
+        var raised = 0;
+        details.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ObjectDetailsViewModel.Title)) raised++; };
+
+        details.Dispose();
+        slow.SetResult(FakeHttpHandler.Json("""{"late":true}"""));
+        await diagram.Work.WhenIdleAsync();
+        session.EnvironmentUrl = "https://contoso-uat.crm11.dynamics.com";
+
+        Assert.False(diagram.HasContent);
+        Assert.False(diagram.IsContentLoading);
+        Assert.False(diagram.HasContentError);
+        Assert.Equal(0, raised);
+    }
+
+    [Fact]
     public async Task A_run_that_cannot_be_read_says_why_on_the_diagram()
     {
         var details = Details(Flow(first: h => h

@@ -186,6 +186,28 @@ public class ReconcileViewModelTests
     }
 
     [Fact]
+    public async Task Closing_the_window_ends_the_run_after_the_row_being_written()
+    {
+        var release = new TaskCompletionSource<HttpResponseMessage>();
+        var handler = new FakeHttpHandler()
+            .OnAsync(HttpMethod.Post, "new_things", _ => release.Task)
+            .OnStatus(HttpMethod.Patch, "new_things(", HttpStatusCode.NoContent);
+        var vm = Window(handler);
+        var run = vm.ApplyCommand.ExecuteAsync(null);
+
+        vm.Dispose();
+        release.SetResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+        await run;
+
+        Assert.Equal(HttpMethod.Post, Assert.Single(handler.Requests).Method);
+        Assert.StartsWith("Stopped after 1 row(s). Nothing already written has been undone.", vm.Status);
+        Assert.Equal("Pending", vm.Rows.Single(r => r.Action == ReconcileAction.Update).Result);
+        Assert.False(vm.IsRunning);
+        Assert.True(vm.HasRun);
+        Assert.False(vm.CancelRunCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task Failed_rows_can_be_retried_and_only_they_are_sent_again()
     {
         var patches = 0;

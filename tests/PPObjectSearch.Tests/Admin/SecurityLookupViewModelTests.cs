@@ -304,6 +304,26 @@ public class SecurityLookupViewModelTests
     });
 
     [Fact]
+    public void Closing_the_window_stops_a_lookup_still_running() => AdminUiThread.Run(async () =>
+    {
+        var gate = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "EntityDefinitions", _ => gate.Task);
+        var lookup = Lookup(handler);
+        lookup.TableName = "account";
+        var running = lookup.RunCommand.ExecuteAsync(null);
+
+        lookup.Dispose();
+        gate.SetResult(FakeHttpHandler.Json($$"""{"Privileges":[{"PrivilegeId":"{{DeleteAccount}}","Name":"prvDeleteAccount","PrivilegeType":"Delete"}]}"""));
+        await running;
+
+        Assert.Equal("Stopped.", lookup.Status);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("roleprivileges_association"));
+        Assert.False(lookup.HasResults);
+        Assert.False(lookup.IsBusy);
+        Assert.False(lookup.CancelCommand.CanExecute(null));
+    });
+
+    [Fact]
     public void Switching_tabs_shows_each_tab_s_own_results() => AdminUiThread.Run(async () =>
     {
         var lookup = Lookup(Handler());
