@@ -122,7 +122,7 @@ workflow runs them before publishing.
 Each push to main is also analysed on the self-hosted SonarQube server
 (`.github/workflows/sonarqube.yml`), with test results and coverage. The workflow runs
 `tools/sonar.ps1`, which can be run locally too, taking the server's address and token from
-1Password through the references in `sonar.env`:
+`sonar.env`, with the token read from 1Password:
 
 ```powershell
 op run --env-file sonar.env -- pwsh tools/sonar.ps1
@@ -131,8 +131,8 @@ op run --env-file sonar.env -- pwsh tools/sonar.ps1
 CI needs the same two values as the repository secrets `SONAR_HOST_URL` and `SONAR_TOKEN`:
 
 ```powershell
-op read op://Homelab/sonarqube/SONAR_HOST_URL | gh secret set SONAR_HOST_URL
-op read op://Homelab/sonarqube/SONAR_TOKEN | gh secret set SONAR_TOKEN
+gh secret set SONAR_HOST_URL --body https://sq.tmnrtn.com
+op read "op://Homelab/sonarqube/api key" | gh secret set SONAR_TOKEN
 ```
 
 ## Command line (ppos)
