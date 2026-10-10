@@ -56,6 +56,9 @@ public sealed partial class DataverseClient : IDisposable
     private readonly HttpClient _http;
     private readonly EnvironmentAuthContext _auth;
 
+    /// <summary>The test handler, if any, which the clients this one creates use too.</summary>
+    private readonly HttpMessageHandler? _handler;
+
     /// <summary>The cloud the environment is in - by its host, or as sign-in found it for a custom domain.</summary>
     public Core.Cloud Cloud => Core.Clouds.ForEnvironment(EnvironmentUrl) ?? _auth.Cloud;
 
@@ -68,6 +71,7 @@ public sealed partial class DataverseClient : IDisposable
     internal DataverseClient(EnvironmentAuthContext auth, string environmentUrl, HttpMessageHandler? handler)
     {
         _auth = auth;
+        _handler = handler;
         EnvironmentUrl = NormalizeEnvironmentUrl(environmentUrl);
         // The shared pipeline retries throttled and transient failures; tests pass their own.
         _http = handler is null ? new HttpClient(Core.RetryHandler.Shared, disposeHandler: false) : new HttpClient(handler);
