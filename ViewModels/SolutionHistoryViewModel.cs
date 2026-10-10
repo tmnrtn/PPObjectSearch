@@ -38,6 +38,16 @@ public sealed class SolutionHistoryViewModel : ObservableObject
         ImportLogCommand = new RelayCommand(_ => OpenImportLog(), _ => SelectedEntry is not null);
     }
 
+    /// <summary>
+    /// Where to save the export, from the suggested file name - null when the user cancels. Asks
+    /// with a dialog; replaced in tests.
+    /// </summary>
+    internal Func<string, string?> ChooseExportFile { get; set; } = suggested =>
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV file (*.csv)|*.csv", FileName = suggested };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    };
+
     /// <summary>The selected operation's import log - every component's result, error and timing.</summary>
     public RelayCommand ImportLogCommand { get; }
 
@@ -195,13 +205,7 @@ public sealed class SolutionHistoryViewModel : ObservableObject
 
     private void Export()
     {
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Filter = "CSV file (*.csv)|*.csv",
-            FileName = $"solution-history-{Session.Title}.csv".Replace(' ', '-')
-        };
-
-        if (dialog.ShowDialog() != true) return;
+        if (ChooseExportFile($"solution-history-{Session.Title}.csv".Replace(' ', '-')) is not { } path) return;
 
         try
         {
@@ -216,8 +220,8 @@ public sealed class SolutionHistoryViewModel : ObservableObject
                 e.StartTime?.ToString("yyyy-MM-dd HH:mm:ss", invariant), e.EndTime?.ToString("yyyy-MM-dd HH:mm:ss", invariant),
                 e.TotalSeconds?.ToString(invariant), e.ErrorCode, e.ExceptionMessage)));
 
-            Services.CsvExporter.WriteLines(dialog.FileName, lines);
-            Status = $"Exported {lines.Count - 1:N0} operation(s) to {dialog.FileName}.";
+            Services.CsvExporter.WriteLines(path, lines);
+            Status = $"Exported {lines.Count - 1:N0} operation(s) to {path}.";
         }
         catch (Exception ex)
         {
