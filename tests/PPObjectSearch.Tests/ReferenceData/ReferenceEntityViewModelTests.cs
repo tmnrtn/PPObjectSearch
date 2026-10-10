@@ -49,6 +49,8 @@ public class ReferenceEntityViewModelTests
         Assert.Equal("Key: primary id · filter: statecode eq 0", entity.Detail);
     }
 
+    private static readonly string[] SwitchedOffChanges = ["IsEnabled", "ResultLabel", "Result"];
+
     [Fact]
     public void Switching_a_table_off_is_reported_once_and_shows_as_off()
     {
@@ -64,12 +66,14 @@ public class ReferenceEntityViewModelTests
         entity.IsEnabled = false;
         Assert.False(entity.Config.IsEnabled);
         Assert.Equal("Off", entity.Result);
-        Assert.Equal(new[] { "IsEnabled", "ResultLabel", "Result" }, changed);
+        Assert.Equal(SwitchedOffChanges, changed);
 
         changed.Clear();
         entity.DifferenceCount = 8;
         Assert.Empty(changed);
     }
+
+    private static readonly string[] DescriptionChanges = ["Label", "KeyDescription", "Detail"];
 
     [Fact]
     public void Refresh_announces_the_descriptions_that_follow_the_configuration()
@@ -80,6 +84,6 @@ public class ReferenceEntityViewModelTests
 
         entity.Refresh();
 
-        Assert.Equal(new[] { "Label", "KeyDescription", "Detail" }, changed);
+        Assert.Equal(DescriptionChanges, changed);
     }
 }

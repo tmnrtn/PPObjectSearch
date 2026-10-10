@@ -68,6 +68,8 @@ public class TextDiffTests
         Assert.Equal((Lines(before), Lines(after)), Rebuild(rows));
     }
 
+    private static readonly string[] IdenticalLines = ["a", "b", "c"];
+
     [Fact]
     public void Compare_identical_text_marks_every_row_unchanged()
     {
@@ -75,8 +77,8 @@ public class TextDiffTests
 
         Assert.Equal(3, rows.Count);
         Assert.All(rows, r => Assert.Equal(DiffKind.Unchanged, r.Kind));
-        Assert.Equal(new[] { "a", "b", "c" }, rows.Select(r => Text(r.Left)));
-        Assert.Equal(new[] { "a", "b", "c" }, rows.Select(r => Text(r.Right)));
+        Assert.Equal(IdenticalLines, rows.Select(r => Text(r.Left)));
+        Assert.Equal(IdenticalLines, rows.Select(r => Text(r.Right)));
         Assert.All(rows, r => Assert.All(r.Left!.Concat(r.Right!), run => Assert.False(run.Changed)));
     }
 
@@ -88,6 +90,8 @@ public class TextDiffTests
     {
         Assert.Empty(TextDiff.Compare(before, after));
     }
+
+    private static readonly string[] AddedLines = ["x", "y"];
 
     [Fact]
     public void Compare_from_nothing_marks_every_line_added_with_no_left_side()
@@ -101,7 +105,7 @@ public class TextDiffTests
             Assert.Null(r.Left);
             Assert.True(Assert.Single(r.Right!).Changed);
         });
-        Assert.Equal(new[] { "x", "y" }, rows.Select(r => Text(r.Right)));
+        Assert.Equal(AddedLines, rows.Select(r => Text(r.Right)));
     }
 
     [Fact]
@@ -169,6 +173,8 @@ public class TextDiffTests
         Assert.Equal(new[] { new DiffRun("xyz", true) }, row.Right);
     }
 
+    private static readonly string[] ExcessRemovedLines = ["b", "c"];
+
     [Fact]
     public void Compare_pairs_removed_and_added_runs_into_modified_rows_and_leaves_the_excess_removed()
     {
@@ -177,7 +183,7 @@ public class TextDiffTests
         Assert.Equal(new[] { DiffKind.Modified, DiffKind.Removed, DiffKind.Removed }, rows.Select(r => r.Kind));
         Assert.Equal("a", Text(rows[0].Left));
         Assert.Equal("x", Text(rows[0].Right));
-        Assert.Equal(new[] { "b", "c" }, rows.Skip(1).Select(r => Text(r.Left)));
+        Assert.Equal(ExcessRemovedLines, rows.Skip(1).Select(r => Text(r.Left)));
     }
 
     [Fact]
@@ -226,7 +232,7 @@ public class TextDiffTests
     public void Compare_above_the_alignment_limit_still_realigns_after_an_insertion()
     {
         var left = Enumerable.Range(0, 1300).Select(i => $"line {i}").ToList();
-        var right = new[] { "inserted" }.Concat(left).ToList();
+        var right = left.Prepend("inserted").ToList();
 
         var rows = TextDiff.Compare(string.Join("\n", left), string.Join("\n", right));
 

@@ -126,7 +126,7 @@ public sealed class RetryHandler : DelegatingHandler
         return clone;
     }
 
-    private static HttpContent Copy(HttpContent original, byte[] body)
+    private static ByteArrayContent Copy(HttpContent original, byte[] body)
     {
         var content = new ByteArrayContent(body);
         foreach (var header in original.Headers) content.Headers.TryAddWithoutValidation(header.Key, header.Value);

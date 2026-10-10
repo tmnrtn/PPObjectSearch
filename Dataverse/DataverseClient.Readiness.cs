@@ -33,7 +33,7 @@ public sealed partial class DataverseClient
         foreach (var row in rows.EnumerateArray())
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, "requiredcomponentobjectid"), out var required)) continue;
-            Guid.TryParse(JsonHelper.GetString(row, "dependentcomponentobjectid"), out var dependent);
+            var dependent = Guid.TryParse(JsonHelper.GetString(row, "dependentcomponentobjectid"), out var parsed) ? parsed : Guid.Empty;
 
             results.Add(new MissingDependency(
                 required,
@@ -71,20 +71,10 @@ public sealed partial class DataverseClient
             var url = EnvironmentUrl + ApiPath + "solutioncomponents?$select=objectid&$filter=" +
                       InFilter("objectid", chunk.Select(id => id.ToString()));
 
-            while (url.Length > 0)
+            await ForEachRowAsync(url, null, row =>
             {
-                using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-                if (doc.RootElement.TryGetProperty("value", out var value))
-                {
-                    foreach (var row in value.EnumerateArray())
-                    {
-                        if (Guid.TryParse(JsonHelper.GetString(row, "objectid"), out var id)) found.Add(id);
-                    }
-                }
-
-                url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-            }
+                if (Guid.TryParse(JsonHelper.GetString(row, "objectid"), out var id)) found.Add(id);
+            }, ct).ConfigureAwait(false);
         }
 
         return found;
@@ -99,8 +89,9 @@ public sealed partial class DataverseClient
             $"environmentvariabledefinitions?$select=environmentvariabledefinitionid&$filter=schemaname eq '{Escape(schemaName)}'",
             ct).ConfigureAwait(false);
 
-        if (!doc.RootElement.TryGetProperty("value", out var value) || value.GetArrayLength() == 0) return null;
-        if (!Guid.TryParse(JsonHelper.GetString(value[0], "environmentvariabledefinitionid"), out var id)) return null;
+        // No row at all reads as an undefined element, which has no id either.
+        var first = JsonHelper.Rows(doc.RootElement).FirstOrDefault();
+        if (!Guid.TryParse(JsonHelper.GetString(first, "environmentvariabledefinitionid"), out var id)) return null;
 
         return await GetEnvironmentVariableAsync(id, isValueRecord: false, ct).ConfigureAwait(false);
     }
@@ -118,9 +109,8 @@ public sealed partial class DataverseClient
                       InFilter("workflowid", chunk.Select(id => id.ToString()));
 
             using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-            if (!doc.RootElement.TryGetProperty("value", out var value)) continue;
 
-            foreach (var row in value.EnumerateArray())
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
                 if (!Guid.TryParse(JsonHelper.GetString(row, "workflowid"), out var id)) continue;
 
@@ -147,9 +137,8 @@ public sealed partial class DataverseClient
                       InFilter("pluginassemblyid", chunk.Select(id => id.ToString()));
 
             using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-            if (!doc.RootElement.TryGetProperty("value", out var value)) continue;
 
-            foreach (var row in value.EnumerateArray())
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
                 if (!Guid.TryParse(JsonHelper.GetString(row, "pluginassemblyid"), out var id)) continue;
                 results[id] = (JsonHelper.GetString(row, "name") ?? id.ToString(), JsonHelper.GetString(row, "version"));

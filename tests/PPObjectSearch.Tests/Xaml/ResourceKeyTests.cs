@@ -9,10 +9,12 @@ namespace PPObjectSearch.Tests.Xaml;
 /// colour defined in one theme and not the other, otherwise only shows up as a runtime error or a
 /// control drawn in the wrong colour after a theme switch.
 /// </summary>
-public class ResourceKeyTests
+public partial class ResourceKeyTests
 {
     private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";
-    private static readonly Regex ResourceUse = new(@"\{(?:Dynamic|Static)Resource\s+(?<key>[A-Za-z_][\w.]*)\s*\}", RegexOptions.Compiled);
+
+    [GeneratedRegex(@"\{(?:Dynamic|Static)Resource\s+(?<key>[A-Za-z_][\w.]*)\s*\}")]
+    private static partial Regex ResourceUse();
 
     private static string Root => FindRoot();
 
@@ -67,7 +69,7 @@ public class ResourceKeyTests
             var local = KeysIn(file);
             var text = File.ReadAllText(file);
 
-            foreach (Match match in ResourceUse.Matches(text))
+            foreach (Match match in ResourceUse().Matches(text))
             {
                 var key = match.Groups["key"].Value;
                 if (!shared.Contains(key) && !local.Contains(key))

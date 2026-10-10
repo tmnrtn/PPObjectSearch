@@ -41,6 +41,8 @@ public class DataverseClientRunsTests
         Assert.EndsWith("&$orderby=starttime desc", url);
     }
 
+    private static readonly string[] NewestRunFirst = ["new", "mid", "old"];
+
     [Fact]
     public async Task Cloud_flow_runs_retry_without_orderby_when_it_is_refused_and_sort_locally()
     {
@@ -54,7 +56,7 @@ public class DataverseClientRunsTests
 
         var runs = await client.GetCloudFlowRunsAsync(Guid.NewGuid());
 
-        Assert.Equal(new[] { "new", "mid", "old" }, runs.Select(r => r.Name));
+        Assert.Equal(NewestRunFirst, runs.Select(r => r.Name));
         Assert.Equal("E1", runs[2].ErrorCode);
         Assert.Equal("bad", runs[2].ErrorMessage);
         Assert.Equal(2, handler.Requests.Count);

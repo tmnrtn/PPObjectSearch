@@ -62,6 +62,8 @@ public class DataverseClientSolutionHistoryTests
         Assert.Equal("corr", e.CorrelationId);
     }
 
+    private static readonly string[] NewestEntryFirst = ["newest", "middle", "old"];
+
     [Fact]
     public async Task Refused_orderby_is_retried_without_it_and_sorted_newest_first_locally()
     {
@@ -75,7 +77,7 @@ public class DataverseClientSolutionHistoryTests
 
         var entries = await client.GetSolutionHistoryAsync();
 
-        Assert.Equal(new[] { "newest", "middle", "old" }, entries.Select(e => e.SolutionName));
+        Assert.Equal(NewestEntryFirst, entries.Select(e => e.SolutionName));
         Assert.Equal(2, handler.Requests.Count);
         Assert.DoesNotContain("$orderby", handler.Requests[1].Url);
         Assert.Contains("$top=500", handler.Requests[1].Url);

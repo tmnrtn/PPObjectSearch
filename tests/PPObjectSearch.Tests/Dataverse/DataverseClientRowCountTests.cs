@@ -7,13 +7,17 @@ using PPObjectSearch.Tests.Infrastructure;
 
 namespace PPObjectSearch.Tests.Dataverse;
 
-public class DataverseClientRowCountTests
+public partial class DataverseClientRowCountTests
 {
     private const int PageSize = 5000;
     private static readonly Guid MetadataId = Guid.Parse("12345678-0000-0000-0000-000000000001");
 
     private const string AccountDefinition =
         "{\"LogicalName\":\"account\",\"EntitySetName\":\"accounts\",\"PrimaryIdAttribute\":\"accountid\",\"ObjectTypeCode\":1}";
+
+    /// <summary>The page number a FetchXML page probe asks for.</summary>
+    [GeneratedRegex(@"page='(\d+)'")]
+    private static partial Regex PageNumber();
 
     private static FakeHttpHandler WithDefinition(string definition = AccountDefinition) =>
         new FakeHttpHandler().OnJson(HttpMethod.Get, $"EntityDefinitions({MetadataId})", definition);
@@ -22,7 +26,7 @@ public class DataverseClientRowCountTests
     private static FakeHttpHandler SimulatePages(FakeHttpHandler handler, long total, bool ignorePageNumber = false) =>
         handler.On(HttpMethod.Get, "<fetch page=", request =>
         {
-            var page = int.Parse(Regex.Match(request.Url, "page='(\\d+)'").Groups[1].Value);
+            var page = int.Parse(PageNumber().Match(request.Url).Groups[1].Value);
             if (ignorePageNumber) page = 1;
 
             var before = (long)(page - 1) * PageSize;
@@ -114,6 +118,8 @@ public class DataverseClientRowCountTests
         Assert.Null(probe.Header("Prefer"));
     }
 
+    private static readonly int[] DoublingThenHalving = [1, 2, 4, 8, 6];
+
     [Fact]
     public async Task Page_search_uses_doubling_then_halving()
     {
@@ -124,8 +130,8 @@ public class DataverseClientRowCountTests
 
         var pages = handler.Requests
             .Where(r => r.Url.Contains("<fetch page="))
-            .Select(r => int.Parse(Regex.Match(r.Url, "page='(\\d+)'").Groups[1].Value));
-        Assert.Equal(new[] { 1, 2, 4, 8, 6 }, pages);
+            .Select(r => int.Parse(PageNumber().Match(r.Url).Groups[1].Value));
+        Assert.Equal(DoublingThenHalving, pages);
     }
 
     [Fact]

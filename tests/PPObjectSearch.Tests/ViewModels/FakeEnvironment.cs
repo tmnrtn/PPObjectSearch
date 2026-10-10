@@ -53,14 +53,14 @@ internal sealed class FakeEnvironment
     }
 
     public Guid AddComponent(Guid solutionId, int type, string name, string? displayName = null, bool managed = false,
-        string? subType = null, string? logicalName = null, int? workflowCategory = null, Guid? id = null)
+        int? workflowCategory = null)
     {
-        var objectId = id ?? Guid.NewGuid();
+        var objectId = Guid.NewGuid();
         _components[solutionId].Add(new Dictionary<string, object?>
         {
             ["msdyn_componenttype"] = type, ["msdyn_name"] = name, ["msdyn_displayname"] = displayName,
-            ["msdyn_objectid"] = objectId, ["msdyn_ismanaged"] = managed, ["msdyn_subtypename"] = subType,
-            ["msdyn_componentlogicalname"] = logicalName
+            ["msdyn_objectid"] = objectId, ["msdyn_ismanaged"] = managed, ["msdyn_subtypename"] = null,
+            ["msdyn_componentlogicalname"] = null
         });
 
         if (workflowCategory is { } category)

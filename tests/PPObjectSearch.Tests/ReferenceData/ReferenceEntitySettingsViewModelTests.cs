@@ -30,6 +30,12 @@ public class ReferenceEntitySettingsViewModelTests
         ]}
         """;
 
+    // What the fixture's keys and default column choices come to; several tests land on them.
+    private static readonly string[] DefaultComparedColumns = ["new_code", "new_name", "new_region"];
+    private static readonly string[] PrimaryKeyColumns = ["new_thingid"];
+    private static readonly string[] PairKeyColumns = ["new_code", "new_region"];
+    private static readonly string[] CodeKeyColumns = ["new_code"];
+
     private static FakeHttpHandler Metadata(string keys = KeysJson) => new FakeHttpHandler()
         .OnJson(HttpMethod.Get, Attributes, ColumnsJson)
         .OnJson(HttpMethod.Get, Keys, keys);
@@ -47,6 +53,14 @@ public class ReferenceEntitySettingsViewModelTests
     private static string[] Compared(ReferenceEntitySettingsViewModel vm) =>
         vm.Columns.Where(c => c.IsCompared).Select(c => c.LogicalName).ToArray();
 
+    private static readonly string[] EveryKeyOption =
+    [
+        "Primary key - new_thingid",
+        "Alternate key - Code key (new_code)",
+        "Alternate key - new_pairkey (new_code, new_region)",
+        "Columns I pick"
+    ];
+
     [Fact]
     public async Task Loading_lists_the_columns_and_every_way_a_row_can_be_identified()
     {
@@ -61,19 +75,17 @@ public class ReferenceEntitySettingsViewModelTests
 
         Assert.False(vm.IsBusy);
         Assert.Equal("5 comparable columns, 2 alternate key(s).", vm.Status);
-        Assert.Equal(
-            new[] { "Primary key - new_thingid", "Alternate key - Code key (new_code)", "Alternate key - new_pairkey (new_code, new_region)", "Columns I pick" },
-            vm.KeyOptions.Select(k => k.ToString()));
+        Assert.Equal(EveryKeyOption, vm.KeyOptions.Select(k => k.ToString()));
         Assert.Equal("Code key", vm.KeyOptions[1].Title);
         Assert.Equal("Alternate key", vm.KeyOptions[2].Title);
         Assert.Equal("Columns: new_code, new_region", vm.KeyOptions[2].Hint);
 
         // The primary id and the housekeeping columns start excluded.
-        Assert.Equal(new[] { "new_code", "new_name", "new_region" }, Compared(vm));
+        Assert.Equal(DefaultComparedColumns, Compared(vm));
         Assert.Equal("3 of 5 columns compared", vm.CompareSummary);
         Assert.Same(vm.KeyOptions[0], vm.SelectedKey);
         Assert.False(vm.IsCustomKey);
-        Assert.Equal(new[] { "new_thingid" }, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Equal(PrimaryKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
         Assert.True(vm.CompareAllCommand.CanExecute(null));
 
         var code = Choice(vm, "new_code");
@@ -102,7 +114,7 @@ public class ReferenceEntitySettingsViewModelTests
         });
 
         Assert.Equal("new_pairkey", vm.SelectedKey!.AlternateKeyName);
-        Assert.Equal(new[] { "new_code", "new_region" }, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Equal(PairKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
     }
 
     [Fact]
@@ -116,7 +128,7 @@ public class ReferenceEntitySettingsViewModelTests
         });
 
         Assert.Equal(RecordKeySource.PrimaryId, vm.SelectedKey!.Source);
-        Assert.Equal(new[] { "new_thingid" }, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Equal(PrimaryKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
     }
 
     [Fact]
@@ -130,17 +142,19 @@ public class ReferenceEntitySettingsViewModelTests
         });
 
         Assert.True(vm.IsCustomKey);
-        Assert.Equal(new[] { "new_code", "new_region" }, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Equal(PairKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
 
         vm.SelectedKey = vm.KeyOptions[1];
         Assert.False(vm.IsCustomKey);
-        Assert.Equal(new[] { "new_code" }, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
+        Assert.Equal(CodeKeyColumns, vm.Columns.Where(c => c.IsKey).Select(c => c.LogicalName));
 
         var fresh = await Loaded(new ReferenceEntityConfig { LogicalName = Table });
         fresh.SelectedKey = fresh.KeyOptions[^1];
         Assert.True(fresh.IsCustomKey);
-        Assert.Empty(fresh.Columns.Where(c => c.IsKey));
+        Assert.DoesNotContain(fresh.Columns, c => c.IsKey);
     }
+
+    private static readonly string[] RestoredChoices = ["createdon", "new_code"];
 
     [Fact]
     public async Task Saved_column_choices_are_restored_and_a_column_added_since_starts_unticked()
@@ -152,12 +166,16 @@ public class ReferenceEntitySettingsViewModelTests
             ComparedColumns = new List<string> { "new_code", "createdon" }
         });
 
-        Assert.Equal(new[] { "createdon", "new_code" }, Compared(vm));
+        Assert.Equal(RestoredChoices, Compared(vm));
 
         vm.ResetDefaultsCommand.Execute(null);
 
-        Assert.Equal(new[] { "new_code", "new_name", "new_region" }, Compared(vm));
+        Assert.Equal(DefaultComparedColumns, Compared(vm));
     }
+
+    private static readonly string[] NameSearchMatches = ["new_name"];
+    private static readonly string[] ComparedOutsideTheSearch = ["new_code", "new_region"];
+    private static readonly string[] CodeSearchMatches = ["new_code"];
 
     [Fact]
     public async Task Ticking_all_or_none_applies_to_the_columns_the_search_shows()
@@ -167,14 +185,14 @@ public class ReferenceEntitySettingsViewModelTests
         vm.PropertyChanged += (_, e) => summaries.Add(e.PropertyName);
 
         vm.ColumnSearch = "NAME";
-        Assert.Equal(new[] { "new_name" }, vm.ColumnsView.Cast<ColumnChoice>().Select(c => c.LogicalName));
+        Assert.Equal(NameSearchMatches, vm.ColumnsView.Cast<ColumnChoice>().Select(c => c.LogicalName));
 
         vm.CompareNoneCommand.Execute(null);
-        Assert.Equal(new[] { "new_code", "new_region" }, Compared(vm));
+        Assert.Equal(ComparedOutsideTheSearch, Compared(vm));
         Assert.Contains(nameof(vm.CompareSummary), summaries);
 
         vm.ColumnSearch = "code";
-        Assert.Equal(new[] { "new_code" }, vm.ColumnsView.Cast<ColumnChoice>().Select(c => c.LogicalName));
+        Assert.Equal(CodeSearchMatches, vm.ColumnsView.Cast<ColumnChoice>().Select(c => c.LogicalName));
 
         vm.ColumnSearch = string.Empty;
         vm.CompareAllCommand.Execute(null);
@@ -218,6 +236,9 @@ public class ReferenceEntitySettingsViewModelTests
         Assert.Equal("Tick at least one column to use as the key.", error);
     }
 
+    private static readonly string[] ExcludedOnApply = ["createdon", "new_region", "new_thingid"];
+    private static readonly string[] ComparedOnApply = ["new_code", "new_name"];
+
     [Fact]
     public async Task Applying_hand_picked_columns_writes_them_and_the_column_choices_back()
     {
@@ -232,11 +253,11 @@ public class ReferenceEntitySettingsViewModelTests
 
         Assert.Null(error);
         Assert.Equal(RecordKeySource.Columns, config.KeySource);
-        Assert.Equal(new[] { "new_code" }, config.KeyColumns);
+        Assert.Equal(CodeKeyColumns, config.KeyColumns);
         Assert.Null(config.AlternateKeyName);
         Assert.Equal("statecode eq 0", config.Filter);
-        Assert.Equal(new[] { "createdon", "new_region", "new_thingid" }, config.ExcludedColumns!.OrderBy(c => c));
-        Assert.Equal(new[] { "new_code", "new_name" }, config.ComparedColumns);
+        Assert.Equal(ExcludedOnApply, config.ExcludedColumns!.OrderBy(c => c));
+        Assert.Equal(ComparedOnApply, config.ComparedColumns);
     }
 
     [Fact]
@@ -252,7 +273,7 @@ public class ReferenceEntitySettingsViewModelTests
 
         Assert.Equal(RecordKeySource.AlternateKey, config.KeySource);
         Assert.Equal("new_pairkey", config.AlternateKeyName);
-        Assert.Equal(new[] { "new_code", "new_region" }, config.KeyColumns);
+        Assert.Equal(PairKeyColumns, config.KeyColumns);
         Assert.Null(config.Filter);
 
         vm.SelectedKey = vm.KeyOptions[0];

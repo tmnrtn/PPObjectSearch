@@ -50,30 +50,37 @@ public sealed partial class DataverseClient
                 var url = EnvironmentUrl + ApiPath + $"{source.EntitySet}?$select={select}&$filter=" +
                           InFilter(source.IdColumn, chunk.Select(id => id.ToString()));
 
-                using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-                if (doc.RootElement.TryGetProperty("value", out var value))
-                {
-                    foreach (var row in value.EnumerateArray())
-                    {
-                        if (!Guid.TryParse(JsonHelper.GetString(row, source.IdColumn), out var id) ||
-                            !byId.TryGetValue(id, out var item))
-                        {
-                            continue;
-                        }
-
-                        foreach (var column in source.Columns)
-                        {
-                            if (BodyText(row, column, group.Key) is { Length: > 0 } text)
-                            {
-                                bodies.Add(new DefinitionBody(item, column, text));
-                            }
-                        }
-                    }
-                }
+                bodies.AddRange(await ReadBodiesAsync(url, source, byId, ct).ConfigureAwait(false));
 
                 done += chunk.Length;
                 progress?.Report(done);
+            }
+        }
+
+        return bodies;
+    }
+
+    /// <summary>One request's rows, as a body for each of their columns that holds text.</summary>
+    private async Task<List<DefinitionBody>> ReadBodiesAsync(
+        string url, BodySource source, Dictionary<Guid, SolutionComponentItem> byId, CancellationToken ct)
+    {
+        using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+        var bodies = new List<DefinitionBody>();
+
+        foreach (var row in JsonHelper.Rows(doc.RootElement))
+        {
+            if (!Guid.TryParse(JsonHelper.GetString(row, source.IdColumn), out var id) ||
+                !byId.TryGetValue(id, out var item))
+            {
+                continue;
+            }
+
+            foreach (var column in source.Columns)
+            {
+                if (BodyText(row, column, item.ComponentType) is { Length: > 0 } text)
+                {
+                    bodies.Add(new DefinitionBody(item, column, text));
+                }
             }
         }
 

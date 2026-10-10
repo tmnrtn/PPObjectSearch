@@ -43,6 +43,9 @@ public class ReferenceDataRunTests
         }
     };
 
+    private static readonly string[] MissingTableSkipped = ["new_missing: skipped - Not in the source environment."];
+    private static readonly string[] ProgressPerStep = ["new_thing: reading metadata...", "new_thing: reading rows...", "new_missing: reading metadata..."];
+
     [Fact]
     public async Task Each_enabled_table_is_planned_read_and_compared()
     {
@@ -55,8 +58,8 @@ public class ReferenceDataRunTests
         Assert.Equal(1, result.Tables);
         Assert.Equal(3, result.Rows.Count);
         Assert.Equal(3, result.Differences.Count());
-        Assert.Equal(new[] { "new_missing: skipped - Not in the source environment." }, result.Warnings);
-        Assert.Equal(new[] { "new_thing: reading metadata...", "new_thing: reading rows...", "new_missing: reading metadata..." }, progress);
+        Assert.Equal(MissingTableSkipped, result.Warnings);
+        Assert.Equal(ProgressPerStep, progress);
         Assert.DoesNotContain(source.Requests, r => r.Url.Contains("switchedoff"));
     }
 

@@ -123,6 +123,8 @@ public class WriteUndoTests
             WriteUndo.ForDelete("new_things", G(3), "new_thingid", before, new[] { Lookup("new_xid") }, Sets));
     }
 
+    private static readonly string[] UpdatedColumns = ["new_name"];
+
     [Fact]
     public void A_run_log_reads_back_what_was_appended()
     {
@@ -141,7 +143,7 @@ public class WriteUndoTests
             Table = "new_thing",
             Id = G(2),
             Action = "Update",
-            Columns = new[] { "new_name" },
+            Columns = UpdatedColumns,
             Before = Row("""{"new_name":"old"}"""),
             After = Row("""{"new_name":"new"}"""),
             Succeeded = true,

@@ -167,21 +167,22 @@ public class ConvertersTests
         Assert.Equal(expected, Convert(new YesNoConverter(), value));
     }
 
-    public static IEnumerable<object[]> OneWayConverters() => new[]
+    public static TheoryData<IValueConverter> OneWayConverters() => new()
     {
-        new object[] { new CountToVisibilityConverter() },
-        new object[] { new NotBoolToVisibilityConverter() },
-        new object[] { new IsFalseConverter() },
-        new object[] { new EmptyToCollapsedConverter() },
-        new object[] { new EnvironmentSkuToBadgeConverter() },
-        new object[] { new PrefixConverter() },
-        new object[] { new EmptyToDashConverter() },
-        new object[] { new PatchLabelConverter() },
-        new object[] { new YesNoConverter() }
+        new CountToVisibilityConverter(),
+        new NotBoolToVisibilityConverter(),
+        new IsFalseConverter(),
+        new EmptyToCollapsedConverter(),
+        new EnvironmentSkuToBadgeConverter(),
+        new PrefixConverter(),
+        new EmptyToDashConverter(),
+        new PatchLabelConverter(),
+        new YesNoConverter()
     };
 
     [Theory]
-    [MemberData(nameof(OneWayConverters))]
+    // Converters aren't serializable, so the rows can't be listed one by one at discovery.
+    [MemberData(nameof(OneWayConverters), DisableDiscoveryEnumeration = true)]
     public void One_way_converters_do_nothing_on_ConvertBack(IValueConverter converter)
     {
         Assert.Same(Binding.DoNothing, converter.ConvertBack("anything", typeof(object), null!, Culture));

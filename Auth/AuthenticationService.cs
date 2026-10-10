@@ -80,9 +80,9 @@ public sealed class AuthenticationService
         string? tenantId,
         string? preferredAccountId,
         bool forceAccountPicker = false,
-        CancellationToken ct = default,
         Func<Uri, Task>? openBrowser = null,
-        string? authority = null)
+        string? authority = null,
+        CancellationToken ct = default)
     {
         var app = GetApp(tenantId, authority);
         var scopes = new[] { $"{resource.TrimEnd('/')}/.default" };
@@ -157,8 +157,8 @@ public sealed class AuthenticationService
         string resource,
         string? tenantId,
         string? preferredAccountId,
-        CancellationToken ct = default,
-        string? authority = null)
+        string? authority = null,
+        CancellationToken ct = default)
     {
         try
         {
@@ -291,7 +291,7 @@ public sealed class EnvironmentAuthContext
     {
         if (_tokenSource is not null) return await _tokenSource(resource, ct).ConfigureAwait(false);
 
-        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct, Cloud.Authority).ConfigureAwait(false);
+        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, Cloud.Authority, ct).ConfigureAwait(false);
         return token?.AccessToken;
     }
 
@@ -306,7 +306,7 @@ public sealed class EnvironmentAuthContext
         var force = ForceAccountPicker;
         ForceAccountPicker = false;
 
-        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct, OpenBrowser, Cloud.Authority).ConfigureAwait(false);
+        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, OpenBrowser, Cloud.Authority, ct).ConfigureAwait(false);
 
         AccountId = string.IsNullOrEmpty(token.AccountId) ? AccountId : token.AccountId;
         AccountName = token.AccountName;

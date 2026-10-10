@@ -3,10 +3,10 @@ using System.Text.RegularExpressions;
 
 namespace PPObjectSearch.Tests.Xaml;
 
-public class AccessibilityTests
+public partial class AccessibilityTests
 {
-    private static readonly Regex GlyphButton =
-        new(@"<Button\b[^>]*?Content=""&#x[0-9A-Fa-f]+;""[^>]*?/?>", RegexOptions.Compiled | RegexOptions.Singleline);
+    [GeneratedRegex(@"<Button\b[^>]*?Content=""&#x[0-9A-Fa-f]+;""[^>]*?/?>", RegexOptions.Singleline)]
+    private static partial Regex GlyphButton();
 
     private static string FindRoot([System.Runtime.CompilerServices.CallerFilePath] string here = "")
     {
@@ -28,7 +28,7 @@ public class AccessibilityTests
         var root = FindRoot();
         var unnamed = Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories)
             .Where(f => !f.Contains("bin") && !f.Contains("obj") && !f.Contains($"{Path.DirectorySeparatorChar}tests{Path.DirectorySeparatorChar}"))
-            .SelectMany(f => GlyphButton.Matches(File.ReadAllText(f))
+            .SelectMany(f => GlyphButton().Matches(File.ReadAllText(f))
                 .Where(m => !m.Value.Contains("AutomationProperties.Name"))
                 .Select(m => $"{Path.GetRelativePath(root, f)}: {m.Value[..Math.Min(80, m.Value.Length)]}"))
             .ToList();
