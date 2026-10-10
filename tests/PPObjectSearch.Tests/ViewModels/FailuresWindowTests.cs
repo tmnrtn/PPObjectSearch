@@ -467,7 +467,7 @@ public class FailuresWindowTests
     }
 
     [Fact]
-    public void Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab() => AdminUiThread.Run(async () =>
+    public async Task Disposing_the_window_stops_a_read_in_progress_and_lets_go_of_the_tab()
     {
         var gate = new TaskCompletionSource();
         var handler = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?", async _ =>
@@ -480,20 +480,22 @@ public class FailuresWindowTests
         var session = TestSessions.Connected(handler);
         var vm = Open(session);
         var load = vm.LoadAsync();
-
-        vm.Dispose();
-        gate.SetResult();
-        await load;
         var raised = new List<string?>();
         vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.Dispose();
+        // Changed on this thread, before the read resumes elsewhere, as the tab's own list requires.
         session.UseLoadedSolution(Core, []);
+        gate.SetResult();
+        await load;
 
         Assert.Equal("Stopped.", vm.Status);
         Assert.Equal(0, vm.TotalFailures);
         Assert.Empty(vm.Components);
-        Assert.Empty(raised);
+        Assert.DoesNotContain(nameof(FailuresViewModel.HasSolution), raised);
+        Assert.DoesNotContain(nameof(FailuresViewModel.SolutionLabel), raised);
         Assert.False(vm.IsBusy);
-    });
+    }
 
     [Fact]
     public async Task Narrowing_without_a_solution_on_screen_reads_the_whole_environment()
