@@ -14,11 +14,20 @@ namespace PPObjectSearch.ViewModels;
 public sealed class ShellViewModel : ObservableObject
 {
     private readonly AppSettings _settings;
+    private readonly string _settingsPath;
+    private readonly System.Net.Http.HttpMessageHandler _updateHandler;
     private readonly AuthenticationService _auth;
 
-    public ShellViewModel()
+    public ShellViewModel() : this(AppSettings.FilePath, Core.RetryHandler.Shared)
     {
-        _settings = AppSettings.Load();
+    }
+
+    /// <summary>Settings read from and saved to the given file, and the update check sent through the given handler.</summary>
+    internal ShellViewModel(string settingsPath, System.Net.Http.HttpMessageHandler updateHandler)
+    {
+        _settingsPath = settingsPath;
+        _updateHandler = updateHandler;
+        _settings = AppSettings.Load(settingsPath);
         _auth = new AuthenticationService(_settings.ClientId);
 
         AddTabCommand = new RelayCommand(_ => AddTab());
@@ -80,7 +89,7 @@ public sealed class ShellViewModel : ObservableObject
         if (!_settings.CheckForUpdates) return;
         if (_settings.LastUpdateCheck is { } last && DateTimeOffset.Now - last < UpdateCheck.Interval) return;
 
-        using var http = new System.Net.Http.HttpClient(Core.RetryHandler.Shared, disposeHandler: false)
+        using var http = new System.Net.Http.HttpClient(_updateHandler, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(20)
         };
@@ -88,7 +97,7 @@ public sealed class ShellViewModel : ObservableObject
         Update = await UpdateCheck.CheckAsync(Core.AppVersion.Version, http);
 
         _settings.LastUpdateCheck = DateTimeOffset.Now;
-        _settings.Save();
+        _settings.Save(_settingsPath);
     }
 
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; } = new();
@@ -152,8 +161,8 @@ public sealed class ShellViewModel : ObservableObject
             if (_settings.Theme == value) return;
 
             _settings.Theme = value;
-            _settings.Save();
-            ThemeManager.Apply(value);
+            _settings.Save(_settingsPath);
+            ApplyTheme(value);
 
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsSystemTheme));
@@ -161,6 +170,13 @@ public sealed class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(IsDarkTheme));
         }
     }
+
+    /// <summary>Puts a theme on screen; replaced in tests, which have no application to theme.</summary>
+    internal Action<AppTheme> ApplyTheme { get; set; } = ThemeManager.Apply;
+
+    /// <summary>Shows a message and returns the button pressed; replaced in tests.</summary>
+    internal Func<string, MessageBoxButton, MessageBoxImage, MessageBoxResult> ShowMessage { get; set; } =
+        (message, buttons, image) => MessageBox.Show(message, "PPObjectSearch", buttons, image);
 
     public bool IsSystemTheme => Theme == AppTheme.System;
     public bool IsLightTheme => Theme == AppTheme.Light;
@@ -220,7 +236,7 @@ public sealed class ShellViewModel : ObservableObject
     {
         if (Sessions.Count(s => s.IsConnected) >= minimum) return true;
 
-        MessageBox.Show(message, "PPObjectSearch", MessageBoxButton.OK, MessageBoxImage.Information);
+        ShowMessage(message, MessageBoxButton.OK, MessageBoxImage.Information);
         return false;
     }
 
@@ -316,9 +332,9 @@ public sealed class ShellViewModel : ObservableObject
 
     private async Task SignOutAllAsync()
     {
-        var confirm = MessageBox.Show(
+        var confirm = ShowMessage(
             "Sign out of every account and clear all tabs' data?",
-            "PPObjectSearch", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+            MessageBoxButton.OKCancel, MessageBoxImage.Question);
 
         if (confirm != MessageBoxResult.OK) return;
 
@@ -338,7 +354,7 @@ public sealed class ShellViewModel : ObservableObject
             .Where(s => !string.IsNullOrWhiteSpace(s.EnvironmentUrl))
             .ToList();
 
-        _settings.Save();
+        _settings.Save(_settingsPath);
     }
 
     public void Shutdown()

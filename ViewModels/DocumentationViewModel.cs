@@ -18,6 +18,20 @@ public sealed class DocumentationViewModel : ObservableObject
         CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsBusy);
     }
 
+    /// <summary>Asks for the folder to write a file per component under; null when cancelled. Replaced in tests.</summary>
+    internal Func<string?> PickFolder { get; set; } = () =>
+    {
+        var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the documentation" };
+        return folder.ShowDialog() == true ? folder.FolderName : null;
+    };
+
+    /// <summary>Asks where to save the one file, suggesting a name; null when cancelled. Replaced in tests.</summary>
+    internal Func<string, string?> PickFile { get; set; } = suggested =>
+    {
+        var file = new Microsoft.Win32.SaveFileDialog { Filter = "Markdown (*.md)|*.md", FileName = suggested };
+        return file.ShowDialog() == true ? file.FileName : null;
+    };
+
     public string Title => $"Document {_session.SelectedSolution?.FriendlyName ?? "solution"}";
 
     /// <summary>The tab the dialog was opened from, for its environment line.</summary>
@@ -53,23 +67,17 @@ public sealed class DocumentationViewModel : ObservableObject
     {
         if (_session.Client is not { } client || _session.SelectedSolution is not { } solution) return;
 
-        string target;
+        string? target;
         if (Options.FilePerComponent)
         {
-            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the documentation" };
-            if (folder.ShowDialog() != true) return;
-            target = Path.Combine(folder.FolderName, DocPage.Slug(solution.UniqueName));
+            target = PickFolder() is { } folder ? Path.Combine(folder, DocPage.Slug(solution.UniqueName)) : null;
         }
         else
         {
-            var file = new Microsoft.Win32.SaveFileDialog
-            {
-                Filter = "Markdown (*.md)|*.md",
-                FileName = $"{solution.UniqueName}-{solution.Version}.md"
-            };
-            if (file.ShowDialog() != true) return;
-            target = file.FileName;
+            target = PickFile($"{solution.UniqueName}-{solution.Version}.md");
         }
+
+        if (target is null) return;
 
         _cts = new CancellationTokenSource();
         IsBusy = true;
