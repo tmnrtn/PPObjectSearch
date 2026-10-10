@@ -132,7 +132,7 @@ public static class MembershipPlanner
     public static Diagnosis Diagnose(MemberUser dv, EntraUser? byId, EntraUser? byUpn, bool? entraSaysMember)
     {
         var entra = byId ?? byUpn;
-        var foundBy = byId is not null ? "Object id" : byUpn is not null ? "UPN" : "Not found";
+        var foundBy = FoundBy(byId is not null, byUpn is not null);
 
         var (category, detail) = (dv.AadObjectId, byId, byUpn, entraSaysMember) switch
         {
@@ -159,6 +159,14 @@ public static class MembershipPlanner
         return new Diagnosis(category, detail, foundBy, entra, entraSaysMember);
     }
 
+    /// <summary>How the user was found: by object id first, else by UPN.</summary>
+    private static string FoundBy(bool byObjectId, bool byUpn) => (byObjectId, byUpn) switch
+    {
+        (true, _) => "Object id",
+        (_, true) => "UPN",
+        _ => "Not found"
+    };
+
     /// <summary>Categories the sync leaves behind that are safe to remove by hand - ticked by default.</summary>
     public static bool IsRemovableByDefault(DiagnosisCategory category) =>
         category is DiagnosisCategory.EntraDisabled or DiagnosisCategory.EntraNotFound or DiagnosisCategory.StaleObjectId;
@@ -169,6 +177,49 @@ public static class MembershipPlanner
     /// </summary>
     public static bool CanRemove(DiagnosisCategory category) =>
         category is not (DiagnosisCategory.EntraSaysMember or DiagnosisCategory.CheckFailed);
+
+    /// <summary>
+    /// Why the sync has not added a 'group only' user, from the user record Dataverse holds for
+    /// them - found by Entra object id, else by UPN - and the team's membership type
+    /// (0 members and guests, 1 members, 2 owners, 3 guests).
+    /// </summary>
+    public static GroupOnlyDiagnosis DiagnoseGroupOnly(EntraUser entra, MemberUser? byObjectId, MemberUser? byUpn, int? membershipType)
+    {
+        var user = byObjectId ?? byUpn;
+        var foundBy = FoundBy(byObjectId is not null, byUpn is not null);
+        var isGuest = string.Equals(entra.UserType, "Guest", StringComparison.OrdinalIgnoreCase);
+
+        var (category, detail) = (membershipType, isGuest, user) switch
+        {
+            _ when entra.AccountEnabled == false => (GroupOnlyCategory.EntraDisabled,
+                "Disabled in Entra - will not be provisioned or synced."),
+            (1, true, _) => (GroupOnlyCategory.MembershipTypeExcluded,
+                "A guest, but the team's membership type is 'Members' - guests are not synced."),
+            (3, false, _) => (GroupOnlyCategory.MembershipTypeExcluded,
+                "A member, but the team's membership type is 'Guests' - only guests are synced."),
+            (2, _, _) => (GroupOnlyCategory.MembershipTypeExcluded,
+                "The team's membership type is 'Owners' - only group owners are synced. Check whether this user owns the group."),
+            (_, _, null) => (GroupOnlyCategory.NotProvisioned,
+                "No user record in Dataverse, and the sync only adds existing users. Pull them in, or have them sign in to the environment."),
+            (_, _, { } found) when byObjectId is null => (GroupOnlyCategory.ObjectIdMismatch,
+                $"The user record '{found.DomainName}' is linked to Entra object id {found.AadObjectId?.ToString() ?? "(none)"}, not {entra.Id}. " +
+                "The sync matches on object id, so it cannot add them - recreated in Entra? Re-add them in the admin center."),
+            (_, _, { IsDisabled: true }) => (GroupOnlyCategory.DataverseDisabled,
+                "The user record is disabled - usually no licence or not in the environment's security group. The sync will not add disabled users; pulling them in re-evaluates them."),
+            _ => (GroupOnlyCategory.ShouldBeAdded,
+                "The user record exists, is enabled and is linked by object id - the sync should add them. Re-read in a few minutes.")
+        };
+
+        return new GroupOnlyDiagnosis(category, detail, foundBy, user);
+    }
+
+    /// <summary>Categories an impersonated WhoAmI (just-in-time user sync) can fix.</summary>
+    public static bool CanPullIn(GroupOnlyCategory category) =>
+        category is GroupOnlyCategory.NotProvisioned or GroupOnlyCategory.DataverseDisabled;
+
+    /// <summary>Categories fixed by provisioning the user into the environment, by any means.</summary>
+    public static bool NeedsUserSync(GroupOnlyCategory category) =>
+        category is GroupOnlyCategory.NotProvisioned or GroupOnlyCategory.DataverseDisabled or GroupOnlyCategory.ObjectIdMismatch;
 
     public static string Describe(DiagnosisCategory category) => category switch
     {
@@ -182,47 +233,6 @@ public static class MembershipPlanner
         DiagnosisCategory.LiveNonMember => "Live, not in group",
         _ => category.ToString()
     };
-
-    /// <summary>
-    /// Why the sync has not added a 'group only' user, from the user record Dataverse holds for
-    /// them - found by Entra object id, else by UPN - and the team's membership type
-    /// (0 members and guests, 1 members, 2 owners, 3 guests).
-    /// </summary>
-    public static GroupOnlyDiagnosis DiagnoseGroupOnly(EntraUser entra, MemberUser? byObjectId, MemberUser? byUpn, int? membershipType)
-    {
-        var user = byObjectId ?? byUpn;
-        var foundBy = byObjectId is not null ? "Object id" : byUpn is not null ? "UPN" : "Not found";
-        var isGuest = string.Equals(entra.UserType, "Guest", StringComparison.OrdinalIgnoreCase);
-
-        var (category, detail) =
-            entra.AccountEnabled == false
-                ? (GroupOnlyCategory.EntraDisabled, "Disabled in Entra - will not be provisioned or synced.")
-            : membershipType == 1 && isGuest
-                ? (GroupOnlyCategory.MembershipTypeExcluded, "A guest, but the team's membership type is 'Members' - guests are not synced.")
-            : membershipType == 3 && !isGuest
-                ? (GroupOnlyCategory.MembershipTypeExcluded, "A member, but the team's membership type is 'Guests' - only guests are synced.")
-            : membershipType == 2
-                ? (GroupOnlyCategory.MembershipTypeExcluded, "The team's membership type is 'Owners' - only group owners are synced. Check whether this user owns the group.")
-            : user is null
-                ? (GroupOnlyCategory.NotProvisioned, "No user record in Dataverse, and the sync only adds existing users. Pull them in, or have them sign in to the environment.")
-            : byObjectId is null
-                ? (GroupOnlyCategory.ObjectIdMismatch,
-                   $"The user record '{user.DomainName}' is linked to Entra object id {user.AadObjectId?.ToString() ?? "(none)"}, not {entra.Id}. " +
-                   "The sync matches on object id, so it cannot add them - recreated in Entra? Re-add them in the admin center.")
-            : user.IsDisabled == true
-                ? (GroupOnlyCategory.DataverseDisabled, "The user record is disabled - usually no licence or not in the environment's security group. The sync will not add disabled users; pulling them in re-evaluates them.")
-            : (GroupOnlyCategory.ShouldBeAdded, "The user record exists, is enabled and is linked by object id - the sync should add them. Re-read in a few minutes.");
-
-        return new GroupOnlyDiagnosis(category, detail, foundBy, user);
-    }
-
-    /// <summary>Categories an impersonated WhoAmI (just-in-time user sync) can fix.</summary>
-    public static bool CanPullIn(GroupOnlyCategory category) =>
-        category is GroupOnlyCategory.NotProvisioned or GroupOnlyCategory.DataverseDisabled;
-
-    /// <summary>Categories fixed by provisioning the user into the environment, by any means.</summary>
-    public static bool NeedsUserSync(GroupOnlyCategory category) =>
-        category is GroupOnlyCategory.NotProvisioned or GroupOnlyCategory.DataverseDisabled or GroupOnlyCategory.ObjectIdMismatch;
 
     public static string Describe(GroupOnlyCategory category) => category switch
     {
@@ -292,12 +302,16 @@ public static class MembershipPlanner
                 continue;
             }
 
-            rows.Add(user.IsApplicationUser
-                ? new QueuePlanRow(user, QueuePlanStatus.Remove,
+            if (user.IsApplicationUser)
+            {
+                rows.Add(new QueuePlanRow(user, QueuePlanStatus.Remove,
                     "Application user in the queue but not the team - unticked, as it may be there for automation.")
-                  { IncludedByDefault = false }
-                : new QueuePlanRow(user, QueuePlanStatus.Remove,
-                    user.IsDisabled == true ? "Disabled user, in the queue but not the team." : "In the queue, not in the team."));
+                    { IncludedByDefault = false });
+                continue;
+            }
+
+            rows.Add(new QueuePlanRow(user, QueuePlanStatus.Remove,
+                user.IsDisabled == true ? "Disabled user, in the queue but not the team." : "In the queue, not in the team."));
         }
 
         return rows

@@ -198,7 +198,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             _powerAutomate ??= _client.CreatePowerAutomateClient();
-            var detail = await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name);
+            var detail = await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name, CancellationToken.None);
             diagram.ShowRun(detail, _powerAutomate);
         }
         catch (Exception ex)
@@ -307,15 +307,16 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            var design = await Task.Run(() => FlowDesignParser.Parse(definition));
+            var design = await Task.Run(() => FlowDesignParser.Parse(definition), CancellationToken.None);
             var diagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
             FlowDiagram = diagram;
 
-            if (diagram.ChildFlowIds.Count > 0)
+            var childFlowIds = diagram.ChildFlowIds();
+            if (childFlowIds.Count > 0)
             {
                 try
                 {
-                    diagram.SetChildFlowNames(await _client.GetWorkflowNamesAsync(diagram.ChildFlowIds));
+                    diagram.SetChildFlowNames(await _client.GetWorkflowNamesAsync(childFlowIds, CancellationToken.None));
                 }
                 catch (Exception ex)
                 {
@@ -338,7 +339,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         {
             if (IsCloudFlow)
             {
-                var flow = await _client.GetCloudFlowAsync(Item.ObjectId);
+                var flow = await _client.GetCloudFlowAsync(Item.ObjectId, CancellationToken.None);
                 var definition = flow.Definition;
                 _flowClientData = definition;
                 IsFlowOn = flow.IsOn;
@@ -353,12 +354,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 return;
             }
 
-            var content = await _client.GetWebResourceContentAsync(Item.ObjectId);
+            var content = await _client.GetWebResourceContentAsync(Item.ObjectId, CancellationToken.None);
             SourceLanguage = LanguageFor(content.Type);
             SourceText = content.Text;
 
             // "new_/scripts/account.js" saves as "account.js".
-            var leaf = content.Name.Split('/', '\\').LastOrDefault(s => s.Length > 0) ?? content.Name;
+            var leaf = content.Name.Split(PathSeparators).LastOrDefault(s => s.Length > 0) ?? content.Name;
             _sourceFileName = SafeFileName(System.IO.Path.HasExtension(leaf) ? leaf : leaf + content.FileExtension);
 
             SourceStatus = content.Text is null
@@ -372,6 +373,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             problems.Add(SourceTabHeader.ToLowerInvariant() + ": " + ex.Message);
         }
     }
+
+    /// <summary>A web resource's name is a path, split by either.</summary>
+    private static readonly char[] PathSeparators = ['/', '\\'];
 
     private static string SafeFileName(string name)
     {
@@ -406,7 +410,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         try
         {
-            EnvironmentVariable = await _client.GetEnvironmentVariableAsync(Item.ObjectId, Item.ComponentType == 381);
+            EnvironmentVariable = await _client.GetEnvironmentVariableAsync(Item.ObjectId, Item.ComponentType == 381, CancellationToken.None);
             EnvironmentValueInput = EnvironmentVariable.CurrentValue ?? string.Empty;
             EnvironmentVariableStatus = EnvironmentVariable.ValueRecordCount > 1
                 ? $"This definition has {EnvironmentVariable.ValueRecordCount} value records - there should be at most one. The first is shown."
@@ -446,7 +450,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            var overview = await _client.GetOverviewAsync(Item);
+            var overview = await _client.GetOverviewAsync(Item, CancellationToken.None);
 
             foreach (var property in overview.Properties) OverviewProperties.Add(property);
 
@@ -457,8 +461,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 {
                     // Column names must be unique and non-empty; the header is what is shown.
                     var name = string.IsNullOrWhiteSpace(table.Columns[i]) ? $"Column {i + 1}" : table.Columns[i];
-                    while (data.Columns.Contains(name)) name += " ";
-                    data.Columns.Add(name, typeof(string));
+                    data.Columns.Add(UniqueColumnName(data, name), typeof(string));
                 }
 
                 foreach (var row in table.Rows)
@@ -477,6 +480,14 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             OverviewStatus = "Could not read the overview - " + ex.Message;
             problems.Add("overview: " + ex.Message);
         }
+    }
+
+    /// <summary>The name with as few trailing spaces as make it unique; the header still reads the same.</summary>
+    private static string UniqueColumnName(System.Data.DataTable data, string name)
+    {
+        var padding = 0;
+        while (data.Columns.Contains(name + new string(' ', padding))) padding++;
+        return name + new string(' ', padding);
     }
 
     // ---------------------------------------------------------------- dependency graph
@@ -539,12 +550,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             if (Kind == ObjectKind.ConnectionReference)
             {
-                references = await _client.GetConnectionReferencesAsync(new[] { Item.ObjectId });
+                references = await _client.GetConnectionReferencesAsync(new[] { Item.ObjectId }, CancellationToken.None);
             }
             else
             {
                 // The definition was read for the Definition tab; a flow opened elsewhere reads it now.
-                _flowClientData ??= (await _client.GetCloudFlowAsync(Item.ObjectId)).Definition;
+                _flowClientData ??= (await _client.GetCloudFlowAsync(Item.ObjectId, CancellationToken.None)).Definition;
                 var names = DataverseClient.ConnectionReferenceNames(_flowClientData);
 
                 if (names.Count == 0)
@@ -554,7 +565,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                     return;
                 }
 
-                references = await _client.GetConnectionReferencesByNameAsync(names);
+                references = await _client.GetConnectionReferencesByNameAsync(names, CancellationToken.None);
                 var missing = names.Where(n => !references.Any(r => string.Equals(r.LogicalName, n, StringComparison.OrdinalIgnoreCase))).ToList();
                 if (missing.Count > 0)
                 {
@@ -562,29 +573,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 }
             }
 
-            // Their status is Power Automate's to tell; without it a bound reference reads as bound.
-            IReadOnlyList<ConnectionInfo>? connections = null;
-            string? connectionProblem = null;
-
-            if (references.Any(r => r.HasConnection))
-            {
-                if (string.IsNullOrWhiteSpace(_environmentId))
-                {
-                    connectionProblem = "the environment id is not known, so connection status was not read";
-                }
-                else
-                {
-                    try
-                    {
-                        _powerAutomate ??= _client.CreatePowerAutomateClient();
-                        connections = await _powerAutomate.GetConnectionsAsync(_environmentId);
-                    }
-                    catch (Exception ex)
-                    {
-                        connectionProblem = "connection status could not be read - " + ex.Message;
-                    }
-                }
-            }
+            var (connections, connectionProblem) = await ReadConnectionsAsync(references);
 
             foreach (var reference in references.OrderBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase))
             {
@@ -604,10 +593,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
                 (broken == 0
                     ? $"{ConnectionRows.Count:N0} connection reference(s)."
                     : $"{broken:N0} of {ConnectionRows.Count:N0} connection reference(s) have no working connection" +
-                      (IsCloudFlow ? IsFlowOn == false
-                          ? " - which is why this flow is off, or will not stay on. Bind them in the solution, then turn it on."
-                          : " - the flow fails when it reaches a step that uses them."
-                        : ".")) +
+                      BrokenConnectionConsequence()) +
                 (connectionProblem is null ? string.Empty : $" ({connectionProblem}.)");
         }
         catch (Exception ex)
@@ -617,6 +603,42 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(ConnectionsTabCount));
+    }
+
+    /// <summary>
+    /// The environment's connections, for the status of those the references are bound to - or
+    /// why they were not read. Their status is Power Automate's to tell; without it a bound
+    /// reference reads as bound.
+    /// </summary>
+    private async Task<(IReadOnlyList<ConnectionInfo>? Connections, string? Problem)> ReadConnectionsAsync(
+        IReadOnlyList<ConnectionReferenceInfo> references)
+    {
+        if (!references.Any(r => r.HasConnection)) return (null, null);
+
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            return (null, "the environment id is not known, so connection status was not read");
+        }
+
+        try
+        {
+            _powerAutomate ??= _client.CreatePowerAutomateClient();
+            return (await _powerAutomate.GetConnectionsAsync(_environmentId, CancellationToken.None), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, "connection status could not be read - " + ex.Message);
+        }
+    }
+
+    /// <summary>What a broken reference means for this object, ending the sentence that counts them.</summary>
+    private string BrokenConnectionConsequence()
+    {
+        if (!IsCloudFlow) return ".";
+
+        return IsFlowOn == false
+            ? " - which is why this flow is off, or will not stay on. Bind them in the solution, then turn it on."
+            : " - the flow fails when it reaches a step that uses them.";
     }
 
     // ---------------------------------------------------------------- quick actions
@@ -651,16 +673,22 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         ? WriteConfirmation.ToolTip(EnvironmentSessionViewModel.Describe(kind, IsSwitchedOn != true), session.Title)
         : null;
 
-    public string? SwitchStateLabel => SwitchKind is { } kind && IsSwitchedOn is { } on
-        ? on ? Switchable.States(kind).On : Switchable.States(kind).Off
-        : null;
+    public string? SwitchStateLabel => (SwitchKind, IsSwitchedOn) switch
+    {
+        ({ } kind, true) => Switchable.States(kind).On,
+        ({ } kind, false) => Switchable.States(kind).Off,
+        _ => null
+    };
 
     /// <summary>The state chip for anything but a cloud flow, which has its own.</summary>
     public string? OtherSwitchStateLabel => IsCloudFlow ? null : SwitchStateLabel;
 
-    public string SwitchButtonLabel => SwitchKind is { } kind
-        ? IsSwitchedOn == true ? Switchable.Verbs(kind).Off : Switchable.Verbs(kind).On
-        : string.Empty;
+    public string SwitchButtonLabel => (SwitchKind, IsSwitchedOn) switch
+    {
+        ({ } kind, true) => Switchable.Verbs(kind).Off,
+        ({ } kind, _) => Switchable.Verbs(kind).On,
+        _ => string.Empty
+    };
 
     private AsyncRelayCommand? _toggleSwitchCommand;
     public AsyncRelayCommand ToggleSwitchCommand => _toggleSwitchCommand ??= new AsyncRelayCommand(
@@ -675,7 +703,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         try
         {
-            var states = await _client.GetSwitchStatesAsync(SwitchKind!.Value, new[] { Item.ObjectId });
+            var states = await _client.GetSwitchStatesAsync(SwitchKind!.Value, new[] { Item.ObjectId }, CancellationToken.None);
             IsSwitchedOn = states.TryGetValue(Item.ObjectId, out var on) ? on : null;
             if (IsCloudFlow && IsSwitchedOn is { } flowOn) IsFlowOn = flowOn;
         }
@@ -699,7 +727,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            await Actions.SetStateAsync(Item, kind, !on);
+            await Actions.SetStateAsync(Item, kind, !on, CancellationToken.None);
             IsSwitchedOn = !on;
             if (IsCloudFlow) IsFlowOn = !on;
             Status = $"{verb} - done. {SwitchStateLabel} now.";
@@ -773,7 +801,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            await Actions.SetEnvironmentValueAsync(variable, value);
+            await Actions.SetEnvironmentValueAsync(variable, value, CancellationToken.None);
             var problems = new List<string>();
             await LoadEnvironmentVariableAsync(problems);
             Status = value is null ? "Value removed - the default now applies." : "Value set.";
@@ -840,9 +868,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     };
 
     /// <summary>"rows" under a count; nothing under "Counting..." or "Count failed".</summary>
-    public string RowCountUnit => RowCountText.EndsWith(" rows", StringComparison.Ordinal) ? "rows"
-        : RowCountText.EndsWith(" row", StringComparison.Ordinal) ? "row"
-        : string.Empty;
+    public string RowCountUnit => RowCountText switch
+    {
+        var t when t.EndsWith(" rows", StringComparison.Ordinal) => "rows",
+        var t when t.EndsWith(" row", StringComparison.Ordinal) => "row",
+        _ => string.Empty
+    };
 
     private string? _rowCountDetail;
     /// <summary>How the count was reached, and the daily snapshot beside it.</summary>
@@ -873,7 +904,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         try
         {
-            _snapshot = await _client.GetRowCountSnapshotAsync(Item.ObjectId);
+            _snapshot = await _client.GetRowCountSnapshotAsync(Item.ObjectId, CancellationToken.None);
         }
         catch
         {
@@ -899,7 +930,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         if (IsCounting)
         {
-            _countCts?.Cancel();
+            if (_countCts is { } running) await running.CancelAsync();
             return;
         }
 
@@ -927,13 +958,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count stopped";
-            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) + " The exact count was stopped." : null;
+            ShowStoredCount("Count stopped", " The exact count was stopped.");
         }
         catch (Exception ex)
         {
-            RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : "Count failed";
-            RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) : null;
+            ShowStoredCount("Count failed", string.Empty);
             RowCountWarning = "The exact count failed: " + ex.Message;
         }
         finally
@@ -944,9 +973,17 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
-    // ---------------------------------------------------------------- run history and trace log
+    /// <summary>
+    /// Back to the stored count after an exact count that did not finish - or, without one,
+    /// <paramref name="withoutSnapshot"/>. <paramref name="note"/> follows the stored count's description.
+    /// </summary>
+    private void ShowStoredCount(string withoutSnapshot, string note)
+    {
+        RowCountText = _snapshot is { } s ? $"~{s.Rows:N0} rows" : withoutSnapshot;
+        RowCountDetail = _snapshot is { } t ? StoredCountDescription(t) + note : null;
+    }
 
-    private const int ProcessComponentType = 29;
+    // ---------------------------------------------------------------- run history and trace log
 
     // The category code is what to go by; the labels cover items loaded from a cache written
     // before the code was kept. Dataverse labels category 5 "Modern Flow" and 0 "Workflow".
@@ -1030,8 +1067,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             var runs = IsCloudFlow
-                ? await _client.GetCloudFlowRunsAsync(Item.ObjectId)
-                : await _client.GetClassicWorkflowRunsAsync(Item.ObjectId);
+                ? await _client.GetCloudFlowRunsAsync(Item.ObjectId, ct: CancellationToken.None)
+                : await _client.GetClassicWorkflowRunsAsync(Item.ObjectId, CancellationToken.None);
 
             foreach (var run in runs)
             {
@@ -1051,12 +1088,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             SelectedRun = Runs.FirstOrDefault(r => r.Outcome == RunOutcome.Failed) ?? Runs.FirstOrDefault();
 
             var failed = Runs.Count(r => r.Outcome == RunOutcome.Failed);
-            RunsStatus = Runs.Count == 0
-                ? IsCloudFlow
-                    ? "No runs recorded in Dataverse. Cloud flow run history is kept for 28 days by default, " +
-                      "and only while flow run history in Dataverse is turned on for the environment."
-                    : "No system jobs found for this workflow. Completed jobs may have been cleaned up."
-                : $"Latest {Runs.Count} run(s), {failed} failed.";
+            RunsStatus = Runs.Count == 0 ? NoRunsStatus() : $"Latest {Runs.Count} run(s), {failed} failed.";
         }
         catch (Exception ex)
         {
@@ -1073,6 +1105,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         // have just finished or been cancelled, come from Power Automate's live list.
         if (IsCloudFlow) await MergeLiveRunsAsync(dataverseFailed);
     }
+
+    private string NoRunsStatus() => IsCloudFlow
+        ? "No runs recorded in Dataverse. Cloud flow run history is kept for 28 days by default, " +
+          "and only while flow run history in Dataverse is turned on for the environment."
+        : "No system jobs found for this workflow. Completed jobs may have been cleaned up.";
 
     private async Task MergeLiveRunsAsync(bool dataverseFailed)
     {
@@ -1091,7 +1128,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         try
         {
             _powerAutomate ??= _client.CreatePowerAutomateClient();
-            var live = await _powerAutomate.GetRunsAsync(_environmentId, flowId);
+            var live = await _powerAutomate.GetRunsAsync(_environmentId, flowId, ct: CancellationToken.None);
 
             var merged = RunHistoryMerge.Merge(Runs.ToList(), live);
             var selectedName = SelectedRun?.Name;
@@ -1121,7 +1158,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     }
 
     /// <summary>"Latest 50 runs, 2 failed. 1 running and 1 cancelled run are not in Dataverse yet - shown live."</summary>
-    private string LiveRunsSummary(RunHistoryMerge.Result merged, bool dataverseFailed)
+    private static string LiveRunsSummary(RunHistoryMerge.Result merged, bool dataverseFailed)
     {
         if (merged.Runs.Count == 0)
         {
@@ -1157,7 +1194,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         PluginTraceSetting? setting = null;
         try
         {
-            setting = await _client.GetPluginTraceSettingAsync();
+            setting = await _client.GetPluginTraceSettingAsync(CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -1169,7 +1206,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            foreach (var entry in await _client.GetPluginTraceLogAsync(Item.ObjectId, Item.ComponentType)
+            foreach (var entry in await _client.GetPluginTraceLogAsync(Item.ObjectId, Item.ComponentType, CancellationToken.None)
                                   ?? Array.Empty<PluginTraceEntry>())
             {
                 TraceEntries.Add(entry);
@@ -1187,9 +1224,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             };
 
             var exceptions = TraceEntries.Count(t => t.HasException);
+            var entries = TraceEntries.Count == 1 ? "entry" : "entries";
             var found = TraceEntries.Count == 0
                 ? "No trace log entries for this plug-in."
-                : $"Latest {TraceEntries.Count} entr{(TraceEntries.Count == 1 ? "y" : "ies")}, {exceptions} with an exception.";
+                : $"Latest {TraceEntries.Count} {entries}, {exceptions} with an exception.";
 
             TraceStatus = settingNote is null ? found : $"{found} {settingNote}";
         }
@@ -1394,18 +1432,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             ClearChildComponents();
 
             // Each is useful on its own, so one failing must not hide the others.
-            try
-            {
-                foreach (var solution in await _client.GetContainingSolutionsAsync(Item.ObjectId))
-                {
-                    Solutions.Add(solution);
-                }
-            }
-            catch (Exception ex)
-            {
-                problems.Add("solutions: " + ex.Message);
-            }
-
+            await LoadSolutionsAsync(problems);
             await LoadDependenciesAsync(DependencyDirection.Dependent, Dependents, problems);
             await LoadDependenciesAsync(DependencyDirection.Required, Required, problems);
 
@@ -1414,31 +1441,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             if (IsTable) await LoadRowCountSnapshotAsync();
             if (IsTable) await LoadChildComponentsAsync(problems);
             if (_detached) return;
-            if (HasRunHistory) await LoadRunsAsync(problems);
-            if (HasTraceLog) await LoadTraceLogAsync(problems);
-            if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
-            if (HasSource) await LoadSourceAsync(problems);
-            if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
-            if (HasConnections) await LoadConnectionsAsync(problems);
-            if (HasOverview) await LoadOverviewAsync(problems);
+            await LoadKindTabsAsync(problems);
 
             if (_detached) return;
-            try
-            {
-                var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType);
-                LayersSupported = layers is not null;
-
-                if (layers is not null)
-                {
-                    foreach (var layer in layers) Layers.Add(layer);
-                }
-
-                HasUnmanagedLayer = Layers.Any(l => l.IsUnmanagedLayer);
-            }
-            catch (Exception ex)
-            {
-                problems.Add("layers: " + ex.Message);
-            }
+            await LoadLayersAsync(problems);
 
             var summary = $"{Solutions.Count} solution(s), {Dependents.Count} dependent, {Required.Count} required";
             if (IsTable) summary += $", {ChildGroups.Sum(g => g.Count)} child component(s)";
@@ -1459,6 +1465,53 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The tabs only some kinds of object have, each read where this one has it.</summary>
+    private async Task LoadKindTabsAsync(List<string> problems)
+    {
+        if (HasRunHistory) await LoadRunsAsync(problems);
+        if (HasTraceLog) await LoadTraceLogAsync(problems);
+        if (IsEnvironmentVariable) await LoadEnvironmentVariableAsync(problems);
+        if (HasSource) await LoadSourceAsync(problems);
+        if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
+        if (HasConnections) await LoadConnectionsAsync(problems);
+        if (HasOverview) await LoadOverviewAsync(problems);
+    }
+
+    private async Task LoadSolutionsAsync(List<string> problems)
+    {
+        try
+        {
+            foreach (var solution in await _client.GetContainingSolutionsAsync(Item.ObjectId, CancellationToken.None))
+            {
+                Solutions.Add(solution);
+            }
+        }
+        catch (Exception ex)
+        {
+            problems.Add("solutions: " + ex.Message);
+        }
+    }
+
+    private async Task LoadLayersAsync(List<string> problems)
+    {
+        try
+        {
+            var layers = await _client.GetComponentLayersAsync(Item.ObjectId, Item.ComponentType, CancellationToken.None);
+            LayersSupported = layers is not null;
+
+            if (layers is not null)
+            {
+                foreach (var layer in layers) Layers.Add(layer);
+            }
+
+            HasUnmanagedLayer = Layers.Any(l => l.IsUnmanagedLayer);
+        }
+        catch (Exception ex)
+        {
+            problems.Add("layers: " + ex.Message);
+        }
+    }
+
     private async Task LoadDependenciesAsync(
         DependencyDirection direction,
         ObservableCollection<DependencyRef> target,
@@ -1466,7 +1519,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
     {
         try
         {
-            foreach (var dependency in await _client.GetDependenciesAsync(Item.ObjectId, Item.ComponentType, direction))
+            foreach (var dependency in await _client.GetDependenciesAsync(Item.ObjectId, Item.ComponentType, direction, CancellationToken.None))
             {
                 // Most dependencies point at something already loaded, so a name is usually free.
                 if (_known.TryGetValue(dependency.ObjectId, out var match))
@@ -1494,7 +1547,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
         try
         {
-            table = await _client.GetTableIdentityAsync(Item.ObjectId, Item.Name);
+            table = await _client.GetTableIdentityAsync(Item.ObjectId, Item.Name, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -1508,12 +1561,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject
             return;
         }
 
-        var columns = _client.GetTableColumnsAsync(table);
-        var relationships = _client.GetTableRelationshipsAsync(table);
-        var keys = _client.GetTableKeysAsync(table);
-        var forms = _client.GetTableFormsAsync(table);
-        var views = _client.GetTableViewsAsync(table);
-        var charts = _client.GetTableChartsAsync(table);
+        var columns = _client.GetTableColumnsAsync(table, CancellationToken.None);
+        var relationships = _client.GetTableRelationshipsAsync(table, CancellationToken.None);
+        var keys = _client.GetTableKeysAsync(table, CancellationToken.None);
+        var forms = _client.GetTableFormsAsync(table, CancellationToken.None);
+        var views = _client.GetTableViewsAsync(table, CancellationToken.None);
+        var charts = _client.GetTableChartsAsync(table, CancellationToken.None);
 
         var all = new List<TableChild>();
         all.AddRange(await GatherAsync(columns, "columns", problems));
@@ -1602,16 +1655,15 @@ public sealed class ObjectDetailsViewModel : ObservableObject
         var terms = ChildFilter.ToLowerInvariant()
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var child in children)
+        foreach (var child in children.Where(c => terms.All(t => c.FilterIndex.Contains(t, StringComparison.Ordinal))))
         {
-            if (terms.All(t => child.FilterIndex.Contains(t, StringComparison.Ordinal))) Children.Add(child);
+            Children.Add(child);
         }
 
         // Typing in the filter box should not throw away what is already on screen, but a
         // selection the filter has just excluded - or one from another group - has to go.
-        SelectedChild = previous is not null && Children.Contains(previous)
-            ? previous
-            : Children.Count == 1 ? Children[0] : null;
+        if (previous is not null && Children.Contains(previous)) SelectedChild = previous;
+        else SelectedChild = Children.Count == 1 ? Children[0] : null;
     }
 
     /// <summary>
@@ -1638,7 +1690,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject
 
             try
             {
-                child.Properties = await _client.GetChildPropertiesAsync(child);
+                child.Properties = await _client.GetChildPropertiesAsync(child, CancellationToken.None);
             }
             catch (Exception ex)
             {

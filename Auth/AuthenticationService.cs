@@ -24,12 +24,23 @@ public sealed class AuthenticationService
 {
     public const string DefaultClientId = "51f81489-12ee-4a9e-aaae-a2591f45987d";
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S1075:URIs should not be hardcoded",
+        Justification = "MSAL's loopback redirect, which the public client above is registered with.")]
+    private const string LoopbackRedirectUri = "http://localhost";
+
     private readonly string _clientId;
+    private readonly IMsalHttpClientFactory? _httpClientFactory;
     private readonly ConcurrentDictionary<string, IPublicClientApplication> _apps = new(StringComparer.OrdinalIgnoreCase);
 
     public AuthenticationService(string? clientId = null)
     {
         _clientId = string.IsNullOrWhiteSpace(clientId) ? DefaultClientId : clientId.Trim();
+    }
+
+    /// <summary>For tests: MSAL's requests to the sign-in service go through <paramref name="httpClientFactory"/>.</summary>
+    internal AuthenticationService(string? clientId, IMsalHttpClientFactory httpClientFactory) : this(clientId)
+    {
+        _httpClientFactory = httpClientFactory;
     }
 
     private IPublicClientApplication GetApp(string? tenantId, string? authority = null)
@@ -42,13 +53,16 @@ public sealed class AuthenticationService
 
         return _apps.GetOrAdd($"{host}/{tenant}", key =>
         {
-            var app = PublicClientApplicationBuilder
+            var builder = PublicClientApplicationBuilder
                 .Create(_clientId)
                 .WithAuthority(key, validateAuthority: false)
                 // Loopback redirect: MSAL runs a temporary listener and uses the system browser,
                 // so existing SSO / MFA sessions are reused.
-                .WithRedirectUri("http://localhost")
-                .Build();
+                .WithRedirectUri(LoopbackRedirectUri);
+
+            if (_httpClientFactory is not null) builder = builder.WithHttpClientFactory(_httpClientFactory);
+
+            var app = builder.Build();
 
             TokenCacheHelper.Bind(app.UserTokenCache);
             return app;
@@ -66,9 +80,9 @@ public sealed class AuthenticationService
         string? tenantId,
         string? preferredAccountId,
         bool forceAccountPicker = false,
-        CancellationToken ct = default,
         Func<Uri, Task>? openBrowser = null,
-        string? authority = null)
+        string? authority = null,
+        CancellationToken ct = default)
     {
         var app = GetApp(tenantId, authority);
         var scopes = new[] { $"{resource.TrimEnd('/')}/.default" };
@@ -143,8 +157,8 @@ public sealed class AuthenticationService
         string resource,
         string? tenantId,
         string? preferredAccountId,
-        CancellationToken ct = default,
-        string? authority = null)
+        string? authority = null,
+        CancellationToken ct = default)
     {
         try
         {
@@ -228,10 +242,11 @@ public sealed class EnvironmentAuthContext
     /// MSAL. A null token means none is to be had - silently it reads as "no token", and an
     /// interactive request fails.
     /// </summary>
-    internal EnvironmentAuthContext(Func<string, CancellationToken, Task<string?>> tokenSource)
+    internal EnvironmentAuthContext(Func<string, CancellationToken, Task<string?>> tokenSource, string? tenantId = null)
     {
         _auth = new AuthenticationService();
         _tokenSource = tokenSource;
+        TenantId = tenantId;
     }
 
     /// <summary>
@@ -276,7 +291,7 @@ public sealed class EnvironmentAuthContext
     {
         if (_tokenSource is not null) return await _tokenSource(resource, ct).ConfigureAwait(false);
 
-        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, ct, Cloud.Authority).ConfigureAwait(false);
+        var token = await _auth.TryAcquireTokenSilentAsync(resource, TenantId, AccountId, Cloud.Authority, ct).ConfigureAwait(false);
         return token?.AccessToken;
     }
 
@@ -291,7 +306,7 @@ public sealed class EnvironmentAuthContext
         var force = ForceAccountPicker;
         ForceAccountPicker = false;
 
-        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, ct, OpenBrowser, Cloud.Authority).ConfigureAwait(false);
+        var token = await _auth.AcquireTokenAsync(resource, TenantId, AccountId, force, OpenBrowser, Cloud.Authority, ct).ConfigureAwait(false);
 
         AccountId = string.IsNullOrEmpty(token.AccountId) ? AccountId : token.AccountId;
         AccountName = token.AccountName;

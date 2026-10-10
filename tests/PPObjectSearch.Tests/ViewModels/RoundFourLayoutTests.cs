@@ -188,7 +188,7 @@ public class RoundFourLayoutTests
     public void A_week_of_days_is_a_bar_each_the_tallest_full_height_and_empty_days_faint()
     {
         var buckets = Enumerable.Range(0, 7)
-            .Select(d => new FailureBucket(Monday.AddDays(d), $"Day {d}", d == 5 ? 22 : d == 3 ? 0 : 11, 0))
+            .Select(d => new FailureBucket(Monday.AddDays(d), $"Day {d}", d switch { 5 => 22, 3 => 0, _ => 11 }, 0))
             .ToList();
 
         var bars = FailureOverview.Bars(buckets);

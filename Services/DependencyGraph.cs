@@ -19,7 +19,12 @@ public sealed class DependencyNode
 
     public bool InSolution => Item is not null;
     public string Where => InSolution ? "In this solution" : "Outside this solution";
-    public string ManagedLabel => Item is null ? string.Empty : Item.IsManaged ? "Managed" : "Unmanaged";
+    public string ManagedLabel => Item switch
+    {
+        null => string.Empty,
+        { IsManaged: true } => "Managed",
+        _ => "Unmanaged"
+    };
 }
 
 /// <summary>"A depends on B": removing B breaks A.</summary>
@@ -39,7 +44,7 @@ public sealed class DependencyGraph
         var ids = Nodes.Keys.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => $"n{x.i}");
         var md = new StringBuilder();
 
-        if (!string.IsNullOrWhiteSpace(title)) md.AppendLine("---").AppendLine($"title: {Text(title!)}").AppendLine("---");
+        if (!string.IsNullOrWhiteSpace(title)) md.AppendLine("---").AppendLine($"title: {Text(title)}").AppendLine("---");
         md.AppendLine("flowchart LR");
 
         foreach (var node in Nodes.Values.OrderBy(n => n.Level).ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase))
@@ -68,6 +73,12 @@ public sealed class DependencyGraph
         value.Replace("\"", "#quot;").Replace("<", "#lt;").Replace(">", "#gt;").Replace("\r", " ").Replace("\n", " ");
 }
 
+/// <summary>How far a dependency walk goes: levels from the start, and components in all.</summary>
+public sealed record WalkLimits(int MaxDepth = DependencyWalker.DefaultMaxDepth, int MaxNodes = DependencyWalker.DefaultMaxNodes)
+{
+    public static readonly WalkLimits Default = new();
+}
+
 /// <summary>Walks dependencies breadth first, a bounded number of levels and components.</summary>
 public static class DependencyWalker
 {
@@ -80,16 +91,18 @@ public static class DependencyWalker
     /// Dependent: what would break if the start were removed, and what would break if those were.
     /// Required: what the start needs, and what that needs.
     /// </param>
+    /// <param name="limits">How far to go; <see cref="WalkLimits.Default"/> when null.</param>
     public static async Task<DependencyGraph> WalkAsync(
         Fetch fetch,
         SolutionComponentItem start,
         DependencyDirection direction,
         Func<Guid, SolutionComponentItem?> known,
-        int maxDepth = DefaultMaxDepth,
-        int maxNodes = DefaultMaxNodes,
+        WalkLimits? limits = null,
         IProgress<int>? progress = null,
         CancellationToken ct = default)
     {
+        limits ??= WalkLimits.Default;
+
         var graph = new DependencyGraph();
         graph.Nodes[start.ObjectId] = new DependencyNode
         {
@@ -99,7 +112,7 @@ public static class DependencyWalker
 
         var frontier = new List<DependencyNode> { graph.Nodes[start.ObjectId] };
 
-        for (var level = 1; level <= maxDepth && frontier.Count > 0; level++)
+        for (var level = 1; level <= limits.MaxDepth && frontier.Count > 0; level++)
         {
             var next = new List<DependencyNode>();
 
@@ -109,31 +122,9 @@ public static class DependencyWalker
 
                 foreach (var dependency in await fetch(node.ObjectId, node.ComponentType, direction, ct).ConfigureAwait(false))
                 {
-                    graph.Edges.Add(direction == DependencyDirection.Dependent
-                        ? new DependencyEdge(dependency.ObjectId, node.ObjectId)
-                        : new DependencyEdge(node.ObjectId, dependency.ObjectId));
+                    graph.Edges.Add(EdgeFor(direction, node, dependency));
 
-                    if (graph.Nodes.ContainsKey(dependency.ObjectId)) continue;
-
-                    if (graph.Nodes.Count >= maxNodes)
-                    {
-                        graph.IsTruncated = true;
-                        continue;
-                    }
-
-                    var item = known(dependency.ObjectId);
-                    var added = new DependencyNode
-                    {
-                        ObjectId = dependency.ObjectId,
-                        ComponentType = dependency.ComponentType,
-                        TypeName = dependency.ComponentTypeName,
-                        Name = item?.PrimaryLabel ?? dependency.ResolvedName ?? $"{dependency.ComponentTypeName} {dependency.ObjectId.ToString()[..8]}",
-                        Level = level,
-                        Item = item
-                    };
-
-                    graph.Nodes[added.ObjectId] = added;
-                    next.Add(added);
+                    if (TryAddNode(graph, dependency, level, known, limits.MaxNodes) is { } added) next.Add(added);
                 }
 
                 progress?.Report(graph.Nodes.Count);
@@ -144,5 +135,41 @@ public static class DependencyWalker
 
         if (frontier.Count > 0) graph.IsTruncated = true;
         return graph;
+    }
+
+    /// <summary>Each arrow reads "depends on", whichever way the walk is going.</summary>
+    private static DependencyEdge EdgeFor(DependencyDirection direction, DependencyNode node, DependencyRef dependency) =>
+        direction == DependencyDirection.Dependent
+            ? new DependencyEdge(dependency.ObjectId, node.ObjectId)
+            : new DependencyEdge(node.ObjectId, dependency.ObjectId);
+
+    /// <summary>
+    /// Adds a component reached for the first time, and returns it so the next level walks on from it.
+    /// Null when it was already in the graph, or the graph is full - which marks the graph truncated.
+    /// </summary>
+    private static DependencyNode? TryAddNode(
+        DependencyGraph graph, DependencyRef dependency, int level, Func<Guid, SolutionComponentItem?> known, int maxNodes)
+    {
+        if (graph.Nodes.ContainsKey(dependency.ObjectId)) return null;
+
+        if (graph.Nodes.Count >= maxNodes)
+        {
+            graph.IsTruncated = true;
+            return null;
+        }
+
+        var item = known(dependency.ObjectId);
+        var added = new DependencyNode
+        {
+            ObjectId = dependency.ObjectId,
+            ComponentType = dependency.ComponentType,
+            TypeName = dependency.ComponentTypeName,
+            Name = item?.PrimaryLabel ?? dependency.ResolvedName ?? $"{dependency.ComponentTypeName} {dependency.ObjectId.ToString()[..8]}",
+            Level = level,
+            Item = item
+        };
+
+        graph.Nodes[added.ObjectId] = added;
+        return added;
     }
 }

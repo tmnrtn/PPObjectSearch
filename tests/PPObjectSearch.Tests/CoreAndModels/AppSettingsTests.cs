@@ -12,7 +12,7 @@ public sealed class AppSettingsTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
+        try { Directory.Delete(_dir, recursive: true); } catch (IOException) { /* best effort: a temp folder left behind is harmless */ }
     }
 
     [Fact]
@@ -23,6 +23,8 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Null(settings.LoadProblem);
         Assert.Null(settings.Tabs);
     }
+
+    private static readonly string[] ReadmeProductionWrites = ["https://contoso.crm11.dynamics.com"];
 
     [Fact]
     public void Comments_and_trailing_commas_are_accepted_as_in_the_readme()
@@ -42,7 +44,7 @@ public sealed class AppSettingsTests : IDisposable
 
         Assert.Null(settings.LoadProblem);
         Assert.Equal("abc", settings.ClientId);
-        Assert.Equal(new[] { "https://contoso.crm11.dynamics.com" }, settings.AllowProductionWrites);
+        Assert.Equal(ReadmeProductionWrites, settings.AllowProductionWrites);
     }
 
     [Fact]

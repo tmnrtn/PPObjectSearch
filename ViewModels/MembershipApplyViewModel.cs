@@ -288,16 +288,22 @@ public sealed class MembershipApplyViewModel : ObservableObject
         ? $"Yes, let Dataverse change the membership of {TargetName} - it is expected to remove {RemoveCount:N0} user(s)."
         : $"Yes, remove {RemoveCount:N0} user(s) from {TargetName}.";
 
-    public string ApplyLabel =>
-        HasRemoves && !RemoveAcknowledged ? "Confirm removals to apply"
-        : IsForecast ? "Run sync"
-        : (AddCount, RemoveCount) switch
+    public string ApplyLabel
+    {
+        get
         {
-            (0, 0) => "Nothing to apply",
-            (var a, 0) => $"{AddVerb} {a:N0}",
-            (0, var r) => $"Remove {r:N0}",
-            var (a, r) => $"{AddVerb} {a:N0} · remove {r:N0}"
-        };
+            if (HasRemoves && !RemoveAcknowledged) return "Confirm removals to apply";
+            if (IsForecast) return "Run sync";
+
+            return (AddCount, RemoveCount) switch
+            {
+                (0, 0) => "Nothing to apply",
+                (var a, 0) => $"{AddVerb} {a:N0}",
+                (0, var r) => $"Remove {r:N0}",
+                var (a, r) => $"{AddVerb} {a:N0} · remove {r:N0}"
+            };
+        }
+    }
 
     public bool IsDestructiveApply => HasRemoves && RemoveAcknowledged;
 
@@ -402,8 +408,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
     {
         if (!Permission.Allowed) return;
 
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
+        var cts = _cts = new CancellationTokenSource();
+        var ct = cts.Token;
         IsRunning = true;
 
         _log ??= WriteLog.Start("membership", _request.WriteLogFolder);
@@ -430,6 +436,9 @@ public sealed class MembershipApplyViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
+
             IsRunning = false;
             HasRun = true;
             if (_log?.Problem is { } problem) Status += " " + problem;
@@ -504,7 +513,7 @@ public sealed class MembershipApplyViewModel : ObservableObject
             System.IO.Directory.CreateDirectory(folder);
 
             var start = _log is not null && System.IO.File.Exists(_log.Path)
-                ? new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{_log.Path}\"")
+                ? new System.Diagnostics.ProcessStartInfo(Auth.AppPaths.Explorer, $"/select,\"{_log.Path}\"")
                 : new System.Diagnostics.ProcessStartInfo { FileName = folder, UseShellExecute = true };
 
             System.Diagnostics.Process.Start(start)?.Dispose();
@@ -528,24 +537,8 @@ public sealed class MembershipApplyViewModel : ObservableObject
             Status = $"({done}/{toWrite.Count}) {(row.IsRemove ? "removing" : "adding")} {row.Name}...";
             AnyWritesAttempted = true;
 
-            try
-            {
-                // Stop takes effect between users; the change in flight is allowed to finish, so
-                // its row says what actually happened.
-                await applyEach(row.Change, CancellationToken.None);
-                row.Succeeded = true;
-                row.Result = row.IsRemove ? "Removed" : _request.AddedResult;
-                succeeded++;
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                row.Succeeded = false;
-                row.Result = ex.Message;
-                failed++;
-            }
-
-            Record(row.IsRemove ? "Remove" : "Add", row, row.Succeeded == true, row.Result);
+            if (await ApplyOneAsync(row, applyEach)) succeeded++;
+            else failed++;
         }
 
         var outcome = failed == 0
@@ -554,22 +547,50 @@ public sealed class MembershipApplyViewModel : ObservableObject
 
         if (succeeded > 0 && _request.AfterAll is { } afterAll)
         {
-            Status = $"Running {_request.AfterAllLabel}...";
-            try
-            {
-                await afterAll(ct);
-                outcome += $" Then {_request.AfterAllLabel} succeeded.";
-                Record(_request.AfterAllLabel, null, true, "Succeeded.");
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                outcome += $" Then {_request.AfterAllLabel} failed - {ex.Message}";
-                Record(_request.AfterAllLabel, null, false, ex.Message);
-            }
+            outcome += await RunAfterAllAsync(afterAll, ct);
         }
 
         Status = outcome;
+    }
+
+    /// <summary>Makes one user's change and records on its row how it went; true when it was made.</summary>
+    private async Task<bool> ApplyOneAsync(MembershipChangeRow row, Func<MembershipChange, CancellationToken, Task> applyEach)
+    {
+        try
+        {
+            // Stop takes effect between users; the change in flight is allowed to finish, so
+            // its row says what actually happened.
+            await applyEach(row.Change, CancellationToken.None);
+            row.Succeeded = true;
+            row.Result = row.IsRemove ? "Removed" : _request.AddedResult;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            row.Succeeded = false;
+            row.Result = ex.Message;
+        }
+
+        Record(row.IsRemove ? "Remove" : "Add", row, row.Succeeded == true, row.Result);
+        return row.Succeeded == true;
+    }
+
+    /// <summary>The request's follow-up, run once after the changes; returns what to add to the outcome.</summary>
+    private async Task<string> RunAfterAllAsync(Func<CancellationToken, Task> afterAll, CancellationToken ct)
+    {
+        Status = $"Running {_request.AfterAllLabel}...";
+        try
+        {
+            await afterAll(ct);
+            Record(_request.AfterAllLabel, null, true, "Succeeded.");
+            return $" Then {_request.AfterAllLabel} succeeded.";
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Record(_request.AfterAllLabel, null, false, ex.Message);
+            return $" Then {_request.AfterAllLabel} failed - {ex.Message}";
+        }
     }
 
     private async Task RunForecastAsync(Func<CancellationToken, Task> applyAll, CancellationToken ct)
@@ -594,6 +615,24 @@ public sealed class MembershipApplyViewModel : ObservableObject
         Status = "Sync requested. Reading the team's membership again...";
         var after = await _request.ReadMemberIds(ct);
 
+        var pending = RecordSyncOutcomes(after);
+
+        var added = after.Count(id => !before.Contains(id));
+        var removed = before.Count(id => !after.Contains(id));
+
+        Status = $"Sync ran: {before.Count:N0} → {after.Count:N0} members ({added:N0} added, {removed:N0} removed). " +
+                 (pending == 0
+                     ? "Every expected change has landed."
+                     : $"{pending:N0} expected change(s) have not landed - the sync can finish later, so re-read in a few minutes, " +
+                       "and use Diagnose for anyone it leaves behind.");
+    }
+
+    /// <summary>
+    /// Marks each row by whether the sync made its change, judged by the members after it, and
+    /// returns how many it has not made yet.
+    /// </summary>
+    private int RecordSyncOutcomes(IReadOnlySet<Guid> after)
+    {
         var pending = 0;
         foreach (var row in Rows)
         {
@@ -615,13 +654,6 @@ public sealed class MembershipApplyViewModel : ObservableObject
             Record(row.IsRemove ? "Remove (by sync)" : "Add (by sync)", row, happened, row.Result);
         }
 
-        var added = after.Count(id => !before.Contains(id));
-        var removed = before.Count(id => !after.Contains(id));
-
-        Status = $"Sync ran: {before.Count:N0} → {after.Count:N0} members ({added:N0} added, {removed:N0} removed). " +
-                 (pending == 0
-                     ? "Every expected change has landed."
-                     : $"{pending:N0} expected change(s) have not landed - the sync can finish later, so re-read in a few minutes, " +
-                       "and use Diagnose for anyone it leaves behind.");
+        return pending;
     }
 }

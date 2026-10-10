@@ -67,6 +67,8 @@ public class RetryHandlerTests
         Assert.Equal(3, inner.Requests.Count);
     }
 
+    private static readonly string[] SameBodyBothTimes = ["{\"a\":1}", "{\"a\":1}"];
+
     [Fact]
     public async Task A_throttled_write_is_retried_with_its_body()
     {
@@ -75,7 +77,7 @@ public class RetryHandlerTests
         using var response = await Client(inner).PostAsync("https://x.test/rows", new StringContent("{\"a\":1}"));
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(new[] { "{\"a\":1}", "{\"a\":1}" }, inner.Requests.Select(r => r.Body));
+        Assert.Equal(SameBodyBothTimes, inner.Requests.Select(r => r.Body));
     }
 
     [Fact]

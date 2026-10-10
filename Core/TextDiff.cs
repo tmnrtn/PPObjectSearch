@@ -32,7 +32,7 @@ public sealed class DiffRow
 /// values are frequently one long JSON or XML string, so callers are expected to run values
 /// through <see cref="Prettify"/> first - a diff of two 4000-character lines tells you nothing.
 /// </summary>
-public static class TextDiff
+public static partial class TextDiff
 {
     /// <summary>The line-alignment table is O(n*m), so past this size (after the lines the two
     /// sides share at either end are set aside) the Myers diff below is used instead.</summary>
@@ -54,7 +54,8 @@ public static class TextDiff
     /// is what keeps a changed value from dragging its surrounding quotes, colons and commas into
     /// the highlight - in JSON and XML values that is most of the line.
     /// </summary>
-    private static readonly Regex Tokenizer = new(@"\s+|\w+|[^\w\s]", RegexOptions.Compiled);
+    [GeneratedRegex(@"\s+|\w+|[^\w\s]")]
+    private static partial Regex Tokenizer();
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     public static IReadOnlyList<DiffRow> Compare(string? before, string? after)
@@ -157,7 +158,7 @@ public static class TextDiff
         };
 
     /// <summary>Fallback for values too large to align properly - lines are matched by position.</summary>
-    private static IReadOnlyList<DiffRow> PairByIndex(string[] left, string[] right)
+    private static List<DiffRow> PairByIndex(string[] left, string[] right)
     {
         var rows = new List<DiffRow>(Math.Max(left.Length, right.Length));
 
@@ -172,28 +173,10 @@ public static class TextDiff
         return rows;
     }
 
-    private static IReadOnlyList<DiffRow> Align(string[] left, string[] right)
+    private static List<DiffRow> Align(string[] left, string[] right)
     {
         var lcs = BuildLcsTable(left, right);
-        var rows = new List<DiffRow>();
-
-        // Removals and insertions are buffered so that a run of each can be paired up into
-        // Modified rows - that pairing is what makes a word-level diff possible at all.
-        var removed = new List<string>();
-        var added = new List<string>();
-
-        void Flush()
-        {
-            for (var i = 0; i < Math.Max(removed.Count, added.Count); i++)
-            {
-                if (i >= removed.Count) rows.Add(AddedRow(added[i]));
-                else if (i >= added.Count) rows.Add(RemovedRow(removed[i]));
-                else rows.Add(ModifiedRow(removed[i], added[i]));
-            }
-
-            removed.Clear();
-            added.Clear();
-        }
+        var rows = new RowBuilder();
 
         int x = 0, y = 0;
 
@@ -201,84 +184,146 @@ public static class TextDiff
         {
             if (string.Equals(left[x], right[y], StringComparison.Ordinal))
             {
-                Flush();
-                rows.Add(UnchangedRow(left[x]));
+                rows.Unchanged(left[x]);
                 x++;
                 y++;
             }
             else if (lcs[x + 1, y] >= lcs[x, y + 1])
             {
-                removed.Add(left[x]);
+                rows.Removed(left[x]);
                 x++;
             }
             else
             {
-                added.Add(right[y]);
+                rows.Added(right[y]);
                 y++;
             }
         }
 
-        while (x < left.Length) removed.Add(left[x++]);
-        while (y < right.Length) added.Add(right[y++]);
-        Flush();
+        while (x < left.Length) rows.Removed(left[x++]);
+        while (y < right.Length) rows.Added(right[y++]);
 
-        return rows;
+        return rows.Finish();
     }
 
     /// <summary>
     /// Myers' O(ND) diff over lines interned to numbers, for texts too large for the O(n·m) table.
     /// Null when they differ in more than <see cref="MaxEditsForMyers"/> lines.
     /// </summary>
-    private static IReadOnlyList<DiffRow>? Myers(string[] left, string[] right)
+    private static List<DiffRow>? Myers(string[] left, string[] right)
     {
         var ids = new Dictionary<string, int>(StringComparer.Ordinal);
-        int Id(string line) => ids.TryGetValue(line, out var id) ? id : ids[line] = ids.Count;
+        int Id(string line)
+        {
+            if (ids.TryGetValue(line, out var id)) return id;
+
+            id = ids.Count;
+            ids[line] = id;
+            return id;
+        }
 
         var a = left.Select(Id).ToArray();
         var b = right.Select(Id).ToArray();
-        int n = a.Length, m = b.Length;
 
-        // trace[d][k + d] is the furthest x reached on diagonal k after d edits.
-        var trace = new List<int[]>();
-        var v = new int[2 * (n + m) + 3];
-        var offset = n + m + 1;
-        var found = -1;
-
-        for (var d = 0; d <= Math.Min(n + m, MaxEditsForMyers) && found < 0; d++)
-        {
-            for (var k = -d; k <= d; k += 2)
-            {
-                var x = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1])
-                    ? v[offset + k + 1]
-                    : v[offset + k - 1] + 1;
-                var y = x - k;
-
-                while (x < n && y < m && a[x] == b[y])
-                {
-                    x++;
-                    y++;
-                }
-
-                v[offset + k] = x;
-
-                if (x >= n && y >= m)
-                {
-                    found = d;
-                    break;
-                }
-            }
-
-            trace.Add(v[(offset - d)..(offset + d + 1)]);
-        }
-
-        if (found < 0) return null;
+        var trace = MyersTrace(a, b);
+        if (trace is null) return null;
 
         // Walk back from the end, then replay forwards with the same buffering as Align, so runs
         // of removals and insertions still pair up into Modified rows.
+        var steps = MyersSteps(trace, a.Length, b.Length);
+        var rows = new RowBuilder(steps.Count);
+
+        foreach (var (op, x, y) in steps)
+        {
+            switch (op)
+            {
+                case '=':
+                    rows.Unchanged(left[x]);
+                    break;
+                case '-':
+                    rows.Removed(left[x]);
+                    break;
+                default:
+                    rows.Added(right[y]);
+                    break;
+            }
+        }
+
+        return rows.Finish();
+    }
+
+    /// <summary>
+    /// The forward pass: trace[d][k + d] is the furthest x reached on diagonal k after d edits,
+    /// up to the d that reaches the end of both texts. Null when that takes more than
+    /// <see cref="MaxEditsForMyers"/> edits.
+    /// </summary>
+    private static List<int[]>? MyersTrace(int[] a, int[] b)
+    {
+        int n = a.Length, m = b.Length;
+        var trace = new List<int[]>();
+        var v = new int[2 * (n + m) + 3];
+        var offset = n + m + 1;
+
+        for (var d = 0; d <= Math.Min(n + m, MaxEditsForMyers); d++)
+        {
+            var reachedEnd = false;
+
+            for (var k = -d; k <= d && !reachedEnd; k += 2)
+            {
+                var x = FollowEqualLines(a, b, StartOnDiagonal(v, offset + k, k, d), k);
+                v[offset + k] = x;
+                reachedEnd = x >= n && x - k >= m;
+            }
+
+            trace.Add(v[(offset - d)..(offset + d + 1)]);
+            if (reachedEnd) return trace;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Where diagonal k starts after d edits: one line down from diagonal k + 1 (an insertion) or
+    /// one across from k - 1 (a removal), whichever had got further. <paramref name="at"/> is k's
+    /// slot in the furthest-x array.
+    /// </summary>
+    private static int StartOnDiagonal(int[] v, int at, int k, int d)
+        => k == -d || (k != d && v[at - 1] < v[at + 1]) ? v[at + 1] : v[at - 1] + 1;
+
+    /// <summary>Follows diagonal k from x while the lines on both sides match, and returns where it stops.</summary>
+    private static int FollowEqualLines(int[] a, int[] b, int x, int k)
+    {
+        var y = x - k;
+
+        while (x < a.Length && y < b.Length && a[x] == b[y])
+        {
+            x++;
+            y++;
+        }
+
+        return x;
+    }
+
+    /// <summary>
+    /// The way back through the trace from the end of both texts, as steps in forward order:
+    /// '=' for a line both share, '-' for one removed from the left, '+' for one added on the right.
+    /// </summary>
+    private static List<(char Op, int X, int Y)> MyersSteps(List<int[]> trace, int n, int m)
+    {
         var steps = new List<(char Op, int X, int Y)>();
         int cx = n, cy = m;
 
-        for (var d = found; d > 0; d--)
+        void Unchanged(int toX, int toY)
+        {
+            while (cx > toX && cy > toY)
+            {
+                steps.Add(('=', cx - 1, cy - 1));
+                cx--;
+                cy--;
+            }
+        }
+
+        for (var d = trace.Count - 1; d > 0; d--)
         {
             var previous = trace[d - 1];
             int At(int k) => previous[k + d - 1];
@@ -288,63 +333,57 @@ public static class TextDiff
             var prevX = At(prevK);
             var prevY = prevX - prevK;
 
-            while (cx > prevX && cy > prevY)
-            {
-                steps.Add(('=', cx - 1, cy - 1));
-                cx--;
-                cy--;
-            }
+            Unchanged(prevX, prevY);
 
             steps.Add(cx == prevX ? ('+', cx, cy - 1) : ('-', cx - 1, cy));
             cx = prevX;
             cy = prevY;
         }
 
-        while (cx > 0 && cy > 0)
-        {
-            steps.Add(('=', cx - 1, cy - 1));
-            cx--;
-            cy--;
-        }
+        Unchanged(0, 0);
 
         steps.Reverse();
+        return steps;
+    }
 
-        var rows = new List<DiffRow>(steps.Count);
-        var removed = new List<string>();
-        var added = new List<string>();
+    /// <summary>
+    /// Collects aligned rows. Removals and insertions are buffered so that a run of each can be
+    /// paired up into Modified rows - that pairing is what makes a word-level diff possible at all.
+    /// </summary>
+    private sealed class RowBuilder(int capacity = 0)
+    {
+        private readonly List<DiffRow> _rows = new(capacity);
+        private readonly List<string> _removed = new();
+        private readonly List<string> _added = new();
 
-        void Flush()
+        public void Unchanged(string line)
         {
-            for (var i = 0; i < Math.Max(removed.Count, added.Count); i++)
-            {
-                if (i >= removed.Count) rows.Add(AddedRow(added[i]));
-                else if (i >= added.Count) rows.Add(RemovedRow(removed[i]));
-                else rows.Add(ModifiedRow(removed[i], added[i]));
-            }
-
-            removed.Clear();
-            added.Clear();
+            Flush();
+            _rows.Add(UnchangedRow(line));
         }
 
-        foreach (var (op, x, y) in steps)
+        public void Removed(string line) => _removed.Add(line);
+
+        public void Added(string line) => _added.Add(line);
+
+        public List<DiffRow> Finish()
         {
-            switch (op)
-            {
-                case '=':
-                    Flush();
-                    rows.Add(UnchangedRow(left[x]));
-                    break;
-                case '-':
-                    removed.Add(left[x]);
-                    break;
-                default:
-                    added.Add(right[y]);
-                    break;
-            }
+            Flush();
+            return _rows;
         }
 
-        Flush();
-        return rows;
+        private void Flush()
+        {
+            for (var i = 0; i < Math.Max(_removed.Count, _added.Count); i++)
+            {
+                if (i >= _removed.Count) _rows.Add(AddedRow(_added[i]));
+                else if (i >= _added.Count) _rows.Add(RemovedRow(_removed[i]));
+                else _rows.Add(ModifiedRow(_removed[i], _added[i]));
+            }
+
+            _removed.Clear();
+            _added.Clear();
+        }
     }
 
     /// <summary>Longest-common-subsequence lengths, filled from the end so it can be walked forwards.</summary>
@@ -419,7 +458,7 @@ public static class TextDiff
     }
 
     private static string[] Tokenize(string line)
-        => Tokenizer.Matches(line).Select(m => m.Value).ToArray();
+        => Tokenizer().Matches(line).Select(m => m.Value).ToArray();
 
     /// <summary>Collapses neighbouring runs that share a flag, so the view draws a handful of
     /// spans rather than one per word.</summary>

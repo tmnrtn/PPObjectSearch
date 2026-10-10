@@ -27,7 +27,7 @@ public sealed class TabState
 /// </summary>
 public sealed class AppSettings
 {
-    private static readonly string FilePath = Path.Combine(AppPaths.DataDirectory, "settings.json");
+    internal static readonly string FilePath = Path.Combine(AppPaths.DataDirectory, "settings.json");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

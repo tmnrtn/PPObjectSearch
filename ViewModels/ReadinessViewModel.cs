@@ -164,9 +164,12 @@ public sealed class ReadinessViewModel : ObservableObject
     public string FindingCountLabel => $"{Findings.Count:N0} finding{(Findings.Count == 1 ? string.Empty : "s")}";
 
     /// <summary>Why the list is empty and what to change - shown in its place.</summary>
-    public string EmptyHeading => Report is not null
-        ? "Nothing found"
-        : string.IsNullOrEmpty(Status) ? "Nothing checked yet" : "The check did not finish";
+    public string EmptyHeading => (Report, string.IsNullOrEmpty(Status)) switch
+    {
+        (not null, _) => "Nothing found",
+        (_, true) => "Nothing checked yet",
+        _ => "The check did not finish"
+    };
 
     public string EmptyText
     {
@@ -216,7 +219,7 @@ public sealed class ReadinessViewModel : ObservableObject
         var target = Target!;
         var solution = Solution!;
 
-        _cts = new CancellationTokenSource();
+        var cts = _cts = new CancellationTokenSource();
         IsRunning = true;
         Findings.Clear();
         Report = null;
@@ -225,14 +228,14 @@ public sealed class ReadinessViewModel : ObservableObject
         {
             Status = $"Reading {solution.DisplayLabel} in {source.Title}...";
             var clock = Stopwatch.StartNew();
-            var components = await source.Client!.GetSolutionComponentsAsync(solution.SolutionId, ct: _cts.Token);
+            var components = await source.Client!.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
 
             var check = new ReadinessCheck(
-                source.Client!, target.Client!,
+                source.Client, target.Client!,
                 target.Client!.CreatePowerAutomateClient(), target.EnvironmentId);
 
             var report = await check.RunAsync(solution, components, source.Title, target.Title,
-                new Progress<string>(message => Status = message), _cts.Token);
+                new Progress<string>(message => Status = message), cts.Token);
 
             foreach (var finding in report.Findings
                          .OrderBy(f => f.Severity)
@@ -256,6 +259,8 @@ public sealed class ReadinessViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsRunning = false;
         }
     }

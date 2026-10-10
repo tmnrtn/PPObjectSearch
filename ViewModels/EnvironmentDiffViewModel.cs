@@ -6,6 +6,13 @@ using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
+/// <summary>One side of an environment diff: the environment, its client, and the component as listed there.</summary>
+public sealed record EnvironmentDiffSide(
+    string Environment,
+    DataverseClient Client,
+    SolutionComponentItem Item,
+    EnvironmentSku Sku = EnvironmentSku.Unknown);
+
 /// <summary>
 /// The same component as it stands in two environments. Dataverse has no "give me this
 /// component's definition" call, so the definition is taken from the top of each environment's
@@ -22,27 +29,21 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
     public EnvironmentDiffViewModel(
         string componentLabel,
         string componentTypeName,
-        string leftEnvironment,
-        string rightEnvironment,
-        DataverseClient leftClient,
-        DataverseClient rightClient,
-        SolutionComponentItem leftItem,
-        SolutionComponentItem rightItem,
-        EnvironmentSku leftSku = EnvironmentSku.Unknown,
-        EnvironmentSku rightSku = EnvironmentSku.Unknown)
-        : base(leftEnvironment, rightEnvironment)
+        EnvironmentDiffSide left,
+        EnvironmentDiffSide right)
+        : base(left.Environment, right.Environment)
     {
         ComponentLabel = componentLabel;
         ComponentTypeName = componentTypeName;
-        LeftEnvironment = leftEnvironment;
-        RightEnvironment = rightEnvironment;
-        LeftSku = leftSku;
-        RightSku = rightSku;
+        LeftEnvironment = left.Environment;
+        RightEnvironment = right.Environment;
+        LeftSku = left.Sku;
+        RightSku = right.Sku;
 
-        _leftClient = leftClient;
-        _rightClient = rightClient;
-        _leftItem = leftItem;
-        _rightItem = rightItem;
+        _leftClient = left.Client;
+        _rightClient = right.Client;
+        _leftItem = left.Item;
+        _rightItem = right.Item;
 
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
     }

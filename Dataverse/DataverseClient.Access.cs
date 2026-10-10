@@ -11,6 +11,11 @@ public sealed partial class DataverseClient
 {
     private const string LookupType = "Microsoft.Dynamics.CRM.lookuplogicalname";
 
+    /// <summary>The business unit lookup that users, teams, roles and queues all carry.</summary>
+    private const string BusinessUnitColumn = "_businessunitid_value";
+
+    private const string Unnamed = "(unnamed)";
+
     // ---------------------------------------------------------------- users
 
     private const string UserSelect =
@@ -34,8 +39,8 @@ public sealed partial class DataverseClient
             JsonHelper.GetString(row, "fullname") ?? "(no name)",
             JsonHelper.GetString(row, "domainname"),
             JsonHelper.GetString(row, "internalemailaddress"),
-            ParseGuid(JsonHelper.GetString(row, "_businessunitid_value")),
-            Label(row, "_businessunitid_value"),
+            ParseGuid(JsonHelper.GetString(row, BusinessUnitColumn)),
+            Label(row, BusinessUnitColumn),
             JsonHelper.GetBool(row, "isdisabled") ?? false,
             JsonHelper.GetInt(row, "accessmode"),
             Label(row, "accessmode"),
@@ -60,10 +65,10 @@ public sealed partial class DataverseClient
 
         return new TeamInfo(
             id,
-            JsonHelper.GetString(row, "name") ?? "(unnamed)",
+            JsonHelper.GetString(row, "name") ?? Unnamed,
             JsonHelper.GetInt(row, "teamtype"),
             Label(row, "teamtype"),
-            Label(row, "_businessunitid_value"),
+            Label(row, BusinessUnitColumn),
             ParseGuid(JsonHelper.GetString(row, "azureactivedirectoryobjectid")),
             JsonHelper.GetInt(row, "membershiptype"),
             Label(row, "membershiptype"),
@@ -93,7 +98,7 @@ public sealed partial class DataverseClient
             id,
             ParseGuid(JsonHelper.GetString(row, "_parentrootroleid_value")),
             JsonHelper.GetString(row, "name") ?? "(unnamed role)",
-            Label(row, "_businessunitid_value"),
+            Label(row, BusinessUnitColumn),
             teamId,
             teamName);
     }
@@ -136,7 +141,7 @@ public sealed partial class DataverseClient
                 ? new SecurityRoleInfo(
                     id,
                     JsonHelper.GetString(row, "name") ?? "(unnamed role)",
-                    Label(row, "_businessunitid_value"),
+                    Label(row, BusinessUnitColumn),
                     JsonHelper.GetBool(row, "ismanaged") ?? false,
                     JsonHelper.GetDate(row, "modifiedon"))
                 : null, ct);
@@ -223,27 +228,10 @@ public sealed partial class DataverseClient
 
         await ReadRowsAsync(url, row =>
         {
-            var unit = Label(row, "_businessunitid_value");
+            var unit = Label(row, BusinessUnitColumn);
 
-            if (row.TryGetProperty("systemuserroles_association", out var users) && users.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var user in users.EnumerateArray())
-                {
-                    if (!Guid.TryParse(JsonHelper.GetString(user, "systemuserid"), out var id)) continue;
-                    var detail = JsonHelper.GetString(user, "domainname");
-                    if (JsonHelper.GetBool(user, "isdisabled") == true) detail = (detail is null ? "" : detail + " · ") + "disabled";
-                    holders.Add(new RoleHolder(id, JsonHelper.GetString(user, "fullname") ?? "(no name)", false, unit, detail));
-                }
-            }
-
-            if (row.TryGetProperty("teamroles_association", out var teams) && teams.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var team in teams.EnumerateArray())
-                {
-                    if (!Guid.TryParse(JsonHelper.GetString(team, "teamid"), out var id)) continue;
-                    holders.Add(new RoleHolder(id, JsonHelper.GetString(team, "name") ?? "(unnamed)", true, unit, Label(team, "teamtype")));
-                }
-            }
+            holders.AddRange(Expanded(row, "systemuserroles_association").Select(user => ReadUserHolder(user, unit)).OfType<RoleHolder>());
+            holders.AddRange(Expanded(row, "teamroles_association").Select(team => ReadTeamHolder(team, unit)).OfType<RoleHolder>());
 
             return (object?)null;
         }, ct).ConfigureAwait(false);
@@ -253,6 +241,27 @@ public sealed partial class DataverseClient
             .ThenBy(h => h.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }
+
+    private static RoleHolder? ReadUserHolder(JsonElement user, string? unit)
+    {
+        if (!Guid.TryParse(JsonHelper.GetString(user, "systemuserid"), out var id)) return null;
+
+        var detail = JsonHelper.GetString(user, "domainname");
+        if (JsonHelper.GetBool(user, "isdisabled") == true) detail = (detail is null ? "" : detail + " · ") + "disabled";
+
+        return new RoleHolder(id, JsonHelper.GetString(user, "fullname") ?? "(no name)", false, unit, detail);
+    }
+
+    private static RoleHolder? ReadTeamHolder(JsonElement team, string? unit) =>
+        Guid.TryParse(JsonHelper.GetString(team, "teamid"), out var id)
+            ? new RoleHolder(id, JsonHelper.GetString(team, "name") ?? Unnamed, true, unit, Label(team, "teamtype"))
+            : null;
+
+    /// <summary>The rows of an expanded collection on a row - none when it was not expanded.</summary>
+    private static IEnumerable<JsonElement> Expanded(JsonElement row, string navigation) =>
+        row.TryGetProperty(navigation, out var rows) && rows.ValueKind == JsonValueKind.Array
+            ? rows.EnumerateArray()
+            : Enumerable.Empty<JsonElement>();
 
     // ---------------------------------------------------------------- mailboxes
 
@@ -275,7 +284,7 @@ public sealed partial class DataverseClient
     {
         var rows = await ReadWithFallbackAsync("mailboxes", MailboxSelect, MailboxCoreSelect,
             $"&$filter=mailboxid eq {mailboxId}", ReadMailbox, ct, Annotations.All).ConfigureAwait(false);
-        return rows.FirstOrDefault();
+        return rows.Count > 0 ? rows[0] : null;
     }
 
     private static MailboxInfo? ReadMailbox(JsonElement row)
@@ -284,7 +293,7 @@ public sealed partial class DataverseClient
 
         return new MailboxInfo(
             id,
-            JsonHelper.GetString(row, "name") ?? "(unnamed)",
+            JsonHelper.GetString(row, "name") ?? Unnamed,
             JsonHelper.GetString(row, "emailaddress"),
             ParseGuid(JsonHelper.GetString(row, "_regardingobjectid_value")),
             Label(row, "_regardingobjectid_value"),
@@ -327,13 +336,13 @@ public sealed partial class DataverseClient
             Guid.TryParse(JsonHelper.GetString(row, "queueid"), out var id)
                 ? new QueueDetail(
                     id,
-                    JsonHelper.GetString(row, "name") ?? "(unnamed)",
+                    JsonHelper.GetString(row, "name") ?? Unnamed,
                     JsonHelper.GetString(row, "emailaddress"),
                     JsonHelper.GetInt(row, "queueviewtype"),
                     Label(row, "queueviewtype"),
                     Label(row, "_ownerid_value"),
                     OwnerTypeLabel(JsonHelper.GetString(row, "_ownerid_value@" + LookupType)),
-                    Label(row, "_businessunitid_value"),
+                    Label(row, BusinessUnitColumn),
                     ParseGuid(JsonHelper.GetString(row, "_defaultmailbox_value")),
                     Label(row, "_defaultmailbox_value"),
                     Label(row, "incomingemailfilteringmethod"),

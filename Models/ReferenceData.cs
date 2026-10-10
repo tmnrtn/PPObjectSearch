@@ -75,7 +75,7 @@ public sealed record AlternateKeyInfo(string LogicalName, string? DisplayName, I
     {
         get
         {
-            var name = string.IsNullOrWhiteSpace(DisplayName) ? LogicalName : DisplayName!;
+            var name = string.IsNullOrWhiteSpace(DisplayName) ? LogicalName : DisplayName;
             return KeyAttributes.Count == 0 ? name : $"{name} ({string.Join(", ", KeyAttributes)})";
         }
     }

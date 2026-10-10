@@ -71,17 +71,7 @@ public static class EnvironmentTypeProbe
         string? environmentId,
         CancellationToken ct = default)
     {
-        string? token;
-
-        try
-        {
-            token = await auth.TryGetTokenSilentAsync(Bap(auth, environmentUrl), ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) { throw; }
-        catch
-        {
-            token = null;
-        }
+        var token = await SilentTokenAsync(auth, environmentUrl, ct).ConfigureAwait(false);
 
         if (token is null)
         {
@@ -89,84 +79,26 @@ public static class EnvironmentTypeProbe
                 "No Power Platform API token for this account, so the environment type could not be read.");
         }
 
-        string? host = null;
-        try
-        {
-            host = new Uri(environmentUrl).Host;
-        }
-        catch (UriFormatException)
-        {
-            // Matching falls back to the environment id below.
-        }
+        var host = HostOf(environmentUrl);
 
         // What each endpoint said, so an Unknown can explain itself rather than just say "not found".
         var outcomes = new List<string>();
 
         foreach (var endpoint in Endpoints(Bap(auth, environmentUrl)))
         {
-            var scope = endpoint.Contains("/scopes/admin/", StringComparison.Ordinal) ? "admin list" : "user list";
-            var listed = 0;
-
             try
             {
-                // The list is paged: an environment past the first page is only reachable through
-                // nextLink, and missing it reads exactly like the environment not existing.
-                for (string? url = endpoint; url is not null;)
-                {
-                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var result = await SearchListAsync(http, token, endpoint, e => Matches(e, host, environmentId), ct)
+                    .ConfigureAwait(false);
 
-                    using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        outcomes.Add($"{scope}: HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
-                        break;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                    using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-
-                    if (!doc.RootElement.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.Array)
-                    {
-                        outcomes.Add($"{scope}: no environment list in the response");
-                        break;
-                    }
-
-                    foreach (var environment in value.EnumerateArray())
-                    {
-                        listed++;
-                        if (!Matches(environment, host, environmentId)) continue;
-
-                        var properties = environment.ValueKind == JsonValueKind.Object &&
-                                         environment.TryGetProperty("properties", out var p)
-                            ? p
-                            : default;
-
-                        var rawSku = JsonHelper.GetString(properties, "environmentSku");
-                        var sku = Parse(rawSku);
-
-                        return new EnvironmentTypeInfo(
-                            sku,
-                            JsonHelper.GetString(properties, "displayName"),
-                            sku != EnvironmentSku.Unknown ? null
-                            : string.IsNullOrWhiteSpace(rawSku)
-                                ? "The Power Platform API returned no environment type for this environment."
-                                : $"The Power Platform API reported an environment type this app does not know: '{rawSku}'.");
-                    }
-
-                    url = JsonHelper.GetString(doc.RootElement, "nextLink");
-                }
-
-                if (outcomes.Count == 0 || !outcomes[^1].StartsWith(scope, StringComparison.Ordinal))
-                {
-                    outcomes.Add($"{scope}: {listed} environment(s), none matching");
-                }
+                if (result.Found is { } found) return found;
+                outcomes.Add(result.Outcome);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 // Try the next endpoint; anything still unresolved stays Unknown.
-                outcomes.Add($"{scope}: {ex.Message}");
+                outcomes.Add($"{ScopeOf(endpoint)}: {ex.Message}");
             }
         }
 
@@ -174,6 +106,93 @@ public static class EnvironmentTypeProbe
         return new EnvironmentTypeInfo(EnvironmentSku.Unknown, null,
             $"This environment was not found in the Power Platform API (looked for {looked}; " +
             $"{string.Join("; ", outcomes)}), so its type could not be read.");
+    }
+
+    private static async Task<string?> SilentTokenAsync(Auth.EnvironmentAuthContext auth, string environmentUrl, CancellationToken ct)
+    {
+        try
+        {
+            return await auth.TryGetTokenSilentAsync(Bap(auth, environmentUrl), ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The URL's host; null when it does not parse, and matching falls back to the environment id.</summary>
+    private static string? HostOf(string environmentUrl)
+    {
+        try
+        {
+            return new Uri(environmentUrl).Host;
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    private static string ScopeOf(string endpoint) =>
+        endpoint.Contains("/scopes/admin/", StringComparison.Ordinal) ? "admin list" : "user list";
+
+    /// <summary>What one list endpoint said: the environment's type if it was listed, otherwise why not.</summary>
+    private sealed record ListResult(EnvironmentTypeInfo? Found, string Outcome);
+
+    private static async Task<ListResult> SearchListAsync(
+        HttpClient http, string token, string endpoint, Func<JsonElement, bool> isTarget, CancellationToken ct)
+    {
+        var scope = ScopeOf(endpoint);
+        var listed = 0;
+
+        // The list is paged: an environment past the first page is only reachable through
+        // nextLink, and missing it reads exactly like the environment not existing.
+        for (string? url = endpoint; url is not null;)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ListResult(null, $"{scope}: HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+            if (!doc.RootElement.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.Array)
+            {
+                return new ListResult(null, $"{scope}: no environment list in the response");
+            }
+
+            foreach (var environment in value.EnumerateArray())
+            {
+                listed++;
+                if (isTarget(environment)) return new ListResult(TypeOf(environment), string.Empty);
+            }
+
+            url = JsonHelper.GetString(doc.RootElement, "nextLink");
+        }
+
+        return new ListResult(null, $"{scope}: {listed} environment(s), none matching");
+    }
+
+    private static EnvironmentTypeInfo TypeOf(JsonElement environment)
+    {
+        var properties = environment.ValueKind == JsonValueKind.Object &&
+                         environment.TryGetProperty("properties", out var p)
+            ? p
+            : default;
+
+        var rawSku = JsonHelper.GetString(properties, "environmentSku");
+        var sku = Parse(rawSku);
+
+        return new EnvironmentTypeInfo(
+            sku,
+            JsonHelper.GetString(properties, "displayName"),
+            sku != EnvironmentSku.Unknown ? null : UnknownSkuNote(rawSku));
     }
 
     /// <summary>
@@ -216,6 +235,11 @@ public static class EnvironmentTypeProbe
 
         return hosts;
     }
+
+    /// <summary>Why the type is Unknown: the API gave none, or one this app does not know.</summary>
+    private static string UnknownSkuNote(string? rawSku) => string.IsNullOrWhiteSpace(rawSku)
+        ? "The Power Platform API returned no environment type for this environment."
+        : $"The Power Platform API reported an environment type this app does not know: '{rawSku}'.";
 
     /// <summary>
     /// Anything unrecognised stays Unknown rather than being guessed at, so a SKU this app has

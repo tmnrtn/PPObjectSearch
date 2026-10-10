@@ -30,6 +30,6 @@ public class BackgroundWorkTests
         _ = work.Track(Task.FromException(new InvalidOperationException("boom")));
         _ = work.Track(Task.Run(() => throw new InvalidOperationException("later")));
 
-        await work.WhenIdleAsync();
+        Assert.Null(await Record.ExceptionAsync(work.WhenIdleAsync));
     }
 }

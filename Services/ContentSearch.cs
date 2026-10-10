@@ -38,51 +38,51 @@ public static class ContentSearch
 
     public static IReadOnlyList<ContentHit> Search(IEnumerable<DefinitionBody> bodies, string term)
     {
-        var hits = new List<ContentHit>();
         term = term.Trim();
-        if (term.Length == 0) return hits;
+        if (term.Length == 0) return new List<ContentHit>();
 
-        foreach (var body in bodies)
+        return bodies.SelectMany(body => SearchBody(body, term)).ToList();
+    }
+
+    /// <summary>The hits in one body, up to <see cref="MaxHitsPerBody"/>.</summary>
+    private static IEnumerable<ContentHit> SearchBody(DefinitionBody body, string term)
+    {
+        var found = 0;
+        var line = 1;
+        var lineStart = 0;
+        var scanned = 0;
+        var text = body.Text;
+
+        for (var at = text.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+             at >= 0 && found < MaxHitsPerBody;
+             at = text.IndexOf(term, at + term.Length, StringComparison.OrdinalIgnoreCase))
         {
-            var found = 0;
-            var line = 1;
-            var lineStart = 0;
-            var scanned = 0;
-            var text = body.Text;
-
-            for (var at = text.IndexOf(term, StringComparison.OrdinalIgnoreCase);
-                 at >= 0 && found < MaxHitsPerBody;
-                 at = text.IndexOf(term, at + term.Length, StringComparison.OrdinalIgnoreCase))
+            // Count lines only as far as this match, carrying on from the last one.
+            for (; scanned < at; scanned++)
             {
-                // Count lines only as far as this match, carrying on from the last one.
-                for (; scanned < at; scanned++)
-                {
-                    if (text[scanned] != '\n') continue;
-                    line++;
-                    lineStart = scanned + 1;
-                }
-
-                var lineEnd = text.IndexOf('\n', at);
-                if (lineEnd < 0) lineEnd = text.Length;
-
-                var from = Math.Max(lineStart, at - Context);
-                var to = Math.Min(lineEnd, at + term.Length + Context);
-
-                hits.Add(new ContentHit
-                {
-                    Item = body.Item,
-                    Part = body.Part,
-                    Line = line,
-                    Before = (from > lineStart ? "…" : string.Empty) + text[from..at].TrimStart(),
-                    Match = text.Substring(at, term.Length),
-                    After = text[(at + term.Length)..to].TrimEnd('\r') + (to < lineEnd ? "…" : string.Empty)
-                });
-
-                found++;
+                if (text[scanned] != '\n') continue;
+                line++;
+                lineStart = scanned + 1;
             }
-        }
 
-        return hits;
+            var lineEnd = text.IndexOf('\n', at);
+            if (lineEnd < 0) lineEnd = text.Length;
+
+            var from = Math.Max(lineStart, at - Context);
+            var to = Math.Min(lineEnd, at + term.Length + Context);
+
+            yield return new ContentHit
+            {
+                Item = body.Item,
+                Part = body.Part,
+                Line = line,
+                Before = (from > lineStart ? "…" : string.Empty) + text[from..at].TrimStart(),
+                Match = text.Substring(at, term.Length),
+                After = text[(at + term.Length)..to].TrimEnd('\r') + (to < lineEnd ? "…" : string.Empty)
+            };
+
+            found++;
+        }
     }
 }
 

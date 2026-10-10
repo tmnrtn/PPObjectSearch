@@ -18,7 +18,12 @@ public sealed class ChangeEntry
     public SolutionComponentItem? Item { get; init; }
 
     public bool IsSolutionOperation => Item is null;
-    public string ManagedLabel => IsSolutionOperation ? string.Empty : IsManaged ? "Managed" : "Unmanaged";
+    public string ManagedLabel => (IsSolutionOperation, IsManaged) switch
+    {
+        (true, _) => string.Empty,
+        (_, true) => "Managed",
+        _ => "Unmanaged"
+    };
 }
 
 /// <summary>What changed in an environment and when: component edits and solution operations on one timeline.</summary>
@@ -28,15 +33,20 @@ public static class ChangeTimeline
         IEnumerable<SolutionComponentItem> changed,
         IReadOnlyDictionary<Guid, string> modifiedBy,
         IEnumerable<SolutionHistoryEntry> history,
-        DateTimeOffset since)
-    {
-        var entries = new List<ChangeEntry>();
+        DateTimeOffset since) =>
+        ComponentEntries(changed, modifiedBy, since)
+            .Concat(SolutionEntries(history, since))
+            .OrderByDescending(e => e.When)
+            .ToList();
 
+    private static IEnumerable<ChangeEntry> ComponentEntries(
+        IEnumerable<SolutionComponentItem> changed, IReadOnlyDictionary<Guid, string> modifiedBy, DateTimeOffset since)
+    {
         foreach (var item in changed)
         {
             if (item.ModifiedOn is not { } when || when < since) continue;
 
-            entries.Add(new ChangeEntry
+            yield return new ChangeEntry
             {
                 When = when,
                 Kind = "Component",
@@ -45,27 +55,40 @@ public static class ChangeTimeline
                 By = modifiedBy.TryGetValue(item.ObjectId, out var by) ? by : null,
                 IsManaged = item.IsManaged,
                 Item = item
-            });
+            };
         }
+    }
 
+    private static IEnumerable<ChangeEntry> SolutionEntries(IEnumerable<SolutionHistoryEntry> history, DateTimeOffset since)
+    {
         foreach (var operation in history)
         {
             if ((operation.StartTime ?? operation.EndTime) is not { } when || when < since) continue;
 
-            entries.Add(new ChangeEntry
+            yield return new ChangeEntry
             {
                 When = when,
                 Kind = "Solution",
                 What = operation.SolutionName,
                 Type = operation.OperationLabel,
-                Detail = $"{operation.ResultLabel}" +
-                         (operation.Version is { Length: > 0 } v ? $" · version {v}" : string.Empty) +
-                         (operation.IsManaged is { } managed ? managed ? " · managed" : " · unmanaged" : string.Empty) +
-                         (operation.ExceptionMessage is { Length: > 0 } error ? $" · {error}" : string.Empty)
-            });
+                Detail = OperationDetail(operation)
+            };
         }
+    }
 
-        return entries.OrderByDescending(e => e.When).ToList();
+    private static string OperationDetail(SolutionHistoryEntry operation)
+    {
+        var managed = operation.IsManaged switch
+        {
+            true => " · managed",
+            false => " · unmanaged",
+            null => string.Empty
+        };
+
+        return $"{operation.ResultLabel}" +
+               (operation.Version is { Length: > 0 } v ? $" · version {v}" : string.Empty) +
+               managed +
+               (operation.ExceptionMessage is { Length: > 0 } error ? $" · {error}" : string.Empty);
     }
 
     public static string ToMarkdown(IEnumerable<ChangeEntry> entries, string environment, DateTimeOffset since)

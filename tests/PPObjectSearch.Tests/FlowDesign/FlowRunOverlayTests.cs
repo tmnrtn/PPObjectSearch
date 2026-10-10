@@ -290,7 +290,7 @@ public class FlowRunOverlayTests
         Assert.Equal("Definition", d.DetailCodeTitle);
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("/in/Get_rows"));
 
-        d.ShowInputsCommand.Execute(null);
+        await d.ShowInputsCommand.ExecuteAsync(null);
         await Settle(d);
 
         Assert.Equal("Inputs", d.DetailCodeTitle);
@@ -311,7 +311,7 @@ public class FlowRunOverlayTests
         await Settle(d);
 
         d.SelectedIteration = d.SelectedIterations[1];
-        d.ShowInputsCommand.Execute(null);
+        await d.ShowInputsCommand.ExecuteAsync(null);
         await Settle(d);
 
         Assert.Equal("Inputs of iteration #2", d.DetailCodeTitle);

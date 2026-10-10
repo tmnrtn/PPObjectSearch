@@ -57,12 +57,12 @@ public class ReferenceDataPlannerTests
         public ReferenceDataPlanner Planner() => new(Fakes.Dataverse(Source), Fakes.Dataverse(Target));
     }
 
-    private static Env Standard(object[]? source = null, object[]? target = null, string[]? targetTables = null)
+    private static Env Standard(object[]? source = null, object[]? target = null)
     {
         var env = new Env();
 
         env.Source.OnJson(HttpMethod.Get, EntityListUrl, EntitiesJson("new_thing", "new_other"));
-        env.Target.OnJson(HttpMethod.Get, EntityListUrl, EntitiesJson(targetTables ?? new[] { "new_thing" }));
+        env.Target.OnJson(HttpMethod.Get, EntityListUrl, EntitiesJson("new_thing"));
 
         env.Source.OnJson(HttpMethod.Get, ThingAttributesUrl, AttributesJson(source ?? StandardSource));
         env.Target.OnJson(HttpMethod.Get, ThingAttributesUrl, AttributesJson(target ?? StandardSource));
@@ -179,6 +179,9 @@ public class ReferenceDataPlannerTests
         Assert.Equal("new_thing", result.Plan!.Entity.LogicalName);
     }
 
+    private static readonly string[] PrimaryIdKey = ["new_thingid"];
+    private static readonly string[] ValuesWithoutDefaultExclusions = ["new_amount", "new_code", "new_name"];
+
     [Fact]
     public async Task Build_keys_on_the_primary_id_and_applies_default_exclusions()
     {
@@ -192,12 +195,14 @@ public class ReferenceDataPlannerTests
         var plan = result.Plan!;
         Assert.Equal("new_thing", plan.Entity.LogicalName);
         Assert.Equal("new_things", plan.Entity.EntitySetName);
-        Assert.Equal(new[] { "new_thingid" }, plan.KeyColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(PrimaryIdKey, plan.KeyColumns.Select(c => c.LogicalName).ToArray());
         Assert.Equal("new_thingid", plan.KeyLabel);
-        Assert.Equal(new[] { "new_amount", "new_code", "new_name" }, plan.ValueColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(ValuesWithoutDefaultExclusions, plan.ValueColumns.Select(c => c.LogicalName).ToArray());
         Assert.Equal("statecode eq 0", plan.Filter);
         Assert.False(plan.MatchLookupsByName);
     }
+
+    private static readonly string[] EveryStandardColumn = ["createdon", "modifiedby", "new_amount", "new_code", "new_name", "new_thingid"];
 
     [Fact]
     public async Task Build_with_an_empty_exclusion_list_compares_every_column()
@@ -206,11 +211,11 @@ public class ReferenceDataPlannerTests
 
         var result = await env.Planner().BuildAsync(Config(c => c.ExcludedColumns = new List<string>()), true);
 
-        Assert.Equal(
-            new[] { "createdon", "modifiedby", "new_amount", "new_code", "new_name", "new_thingid" },
-            result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(EveryStandardColumn, result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
         Assert.True(result.Plan.MatchLookupsByName);
     }
+
+    private static readonly string[] ValuesWithoutConfiguredExclusions = ["modifiedby", "new_code", "new_name", "new_thingid"];
 
     [Fact]
     public async Task Build_applies_configured_exclusions_regardless_of_case()
@@ -219,10 +224,10 @@ public class ReferenceDataPlannerTests
 
         var result = await env.Planner().BuildAsync(Config(c => c.ExcludedColumns = new List<string> { "NEW_AMOUNT", "createdon" }), true);
 
-        Assert.Equal(
-            new[] { "modifiedby", "new_code", "new_name", "new_thingid" },
-            result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(ValuesWithoutConfiguredExclusions, result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
     }
+
+    private static readonly string[] ValuesInBoth = ["new_name", "new_thingid"];
 
     [Fact]
     public async Task Build_leaves_out_columns_the_target_lacks_and_warns()
@@ -239,7 +244,7 @@ public class ReferenceDataPlannerTests
         var result = await env.Planner().BuildAsync(Config(c => c.ExcludedColumns = new List<string>()), true);
 
         Assert.Null(result.Failure);
-        Assert.Equal(new[] { "new_name", "new_thingid" }, result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(ValuesInBoth, result.Plan!.ValueColumns.Select(c => c.LogicalName).ToArray());
 
         var warning = Assert.Single(result.Warnings);
         Assert.Equal(
@@ -264,6 +269,8 @@ public class ReferenceDataPlannerTests
             result.Warnings);
     }
 
+    private static readonly string[] OnlyPresenceWarning = ["new_thing: every column is excluded, so only presence is compared."];
+
     [Fact]
     public async Task Build_warns_when_every_column_is_excluded()
     {
@@ -274,8 +281,8 @@ public class ReferenceDataPlannerTests
         var result = await env.Planner().BuildAsync(Config(), true);
 
         Assert.NotNull(result.Plan);
-        Assert.Empty(result.Plan!.ValueColumns);
-        Assert.Equal(new[] { "new_thing: every column is excluded, so only presence is compared." }, result.Warnings);
+        Assert.Empty(result.Plan.ValueColumns);
+        Assert.Equal(OnlyPresenceWarning, result.Warnings);
     }
 
     [Fact]
@@ -291,6 +298,8 @@ public class ReferenceDataPlannerTests
             result.Failure);
     }
 
+    private static readonly string[] ChosenKeyColumns = ["new_code", "new_name"];
+
     [Fact]
     public async Task Build_keys_on_chosen_columns()
     {
@@ -303,7 +312,7 @@ public class ReferenceDataPlannerTests
         }), true);
 
         Assert.Null(result.Failure);
-        Assert.Equal(new[] { "new_code", "new_name" }, result.Plan!.KeyColumns.Select(c => c.LogicalName).ToArray());
+        Assert.Equal(ChosenKeyColumns, result.Plan!.KeyColumns.Select(c => c.LogicalName).ToArray());
         Assert.Equal("new_code + NEW_NAME", result.Plan.KeyLabel);
     }
 
@@ -388,6 +397,8 @@ public class ReferenceDataPlannerTests
         Assert.Equal(1, env.Target.Requests.Count(r => r.Url.Contains(ThingAttributesUrl)));
     }
 
+    private static readonly string[] CodeKeyColumns = ["new_code"];
+
     [Fact]
     public async Task Get_alternate_keys_asks_the_source()
     {
@@ -397,7 +408,7 @@ public class ReferenceDataPlannerTests
             {
                 value = new[]
                 {
-                    new { LogicalName = "new_codekey", KeyAttributes = new[] { "new_code" } }
+                    new { LogicalName = "new_codekey", KeyAttributes = CodeKeyColumns }
                 }
             }));
 
@@ -405,7 +416,7 @@ public class ReferenceDataPlannerTests
 
         var key = Assert.Single(keys);
         Assert.Equal("new_codekey", key.LogicalName);
-        Assert.Equal(new[] { "new_code" }, key.KeyAttributes);
+        Assert.Equal(CodeKeyColumns, key.KeyAttributes);
         Assert.Empty(env.Target.Requests);
     }
 }

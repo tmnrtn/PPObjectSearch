@@ -18,6 +18,20 @@ public sealed class DocumentationViewModel : ObservableObject
         CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsBusy);
     }
 
+    /// <summary>Asks for the folder to write a file per component under; null when cancelled. Replaced in tests.</summary>
+    internal Func<string?> PickFolder { get; set; } = () =>
+    {
+        var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the documentation" };
+        return folder.ShowDialog() == true ? folder.FolderName : null;
+    };
+
+    /// <summary>Asks where to save the one file, suggesting a name; null when cancelled. Replaced in tests.</summary>
+    internal Func<string, string?> PickFile { get; set; } = suggested =>
+    {
+        var file = new Microsoft.Win32.SaveFileDialog { Filter = "Markdown (*.md)|*.md", FileName = suggested };
+        return file.ShowDialog() == true ? file.FileName : null;
+    };
+
     public string Title => $"Document {_session.SelectedSolution?.FriendlyName ?? "solution"}";
 
     /// <summary>The tab the dialog was opened from, for its environment line.</summary>
@@ -53,33 +67,27 @@ public sealed class DocumentationViewModel : ObservableObject
     {
         if (_session.Client is not { } client || _session.SelectedSolution is not { } solution) return;
 
-        string target;
+        string? target;
         if (Options.FilePerComponent)
         {
-            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the documentation" };
-            if (folder.ShowDialog() != true) return;
-            target = Path.Combine(folder.FolderName, DocPage.Slug(solution.UniqueName));
+            target = PickFolder() is { } folder ? Path.Combine(folder, DocPage.Slug(solution.UniqueName)) : null;
         }
         else
         {
-            var file = new Microsoft.Win32.SaveFileDialog
-            {
-                Filter = "Markdown (*.md)|*.md",
-                FileName = $"{solution.UniqueName}-{solution.Version}.md"
-            };
-            if (file.ShowDialog() != true) return;
-            target = file.FileName;
+            target = PickFile($"{solution.UniqueName}-{solution.Version}.md");
         }
 
-        _cts = new CancellationTokenSource();
+        if (target is null) return;
+
+        var cts = _cts = new CancellationTokenSource();
         IsBusy = true;
         var clock = Stopwatch.StartNew();
 
         try
         {
-            var items = await client.GetSolutionComponentsAsync(solution.SolutionId, ct: _cts.Token);
+            var items = await client.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);
             var pages = await new SolutionDocumenter(client).BuildAsync(
-                solution, items, _session.Title, Options, new Progress<string>(m => Status = m), _cts.Token);
+                solution, items, _session.Title, Options, new Progress<string>(m => Status = m), cts.Token);
 
             var files = SolutionDocumenter.Render(pages, Options.FilePerComponent);
 
@@ -89,14 +97,14 @@ public sealed class DocumentationViewModel : ObservableObject
                 {
                     var path = Path.Combine(target, name.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                    await File.WriteAllTextAsync(path, content, _cts.Token);
+                    await File.WriteAllTextAsync(path, content, cts.Token);
                 }
 
                 Status = $"Wrote {files.Count:N0} file(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
             else
             {
-                await File.WriteAllTextAsync(target, files["README.md"], _cts.Token);
+                await File.WriteAllTextAsync(target, files["README.md"], cts.Token);
                 Status = $"Wrote {pages.Count - 1:N0} section page(s) to {target} in {clock.Elapsed.TotalSeconds:0.0} s.";
             }
         }
@@ -110,6 +118,8 @@ public sealed class DocumentationViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsBusy = false;
         }
     }

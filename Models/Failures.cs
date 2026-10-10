@@ -44,7 +44,7 @@ public sealed class FailureEvent
 
     public string ErrorLine => string.IsNullOrWhiteSpace(ErrorMessage)
         ? ErrorCode ?? "(no error text)"
-        : ErrorMessage!.Split('\n', 2)[0].Trim();
+        : ErrorMessage.Split('\n', 2)[0].Trim();
 
     /// <summary>
     /// Where it failed, as far as the source says: a plug-in's message and table, a flow run's error
@@ -52,8 +52,8 @@ public sealed class FailureEvent
     /// </summary>
     public string StepLabel => Source switch
     {
-        FailureSource.Plugin => string.IsNullOrWhiteSpace(Context) ? "Plug-in" : Context!,
-        FailureSource.CloudFlow => string.IsNullOrWhiteSpace(ErrorCode) ? "Flow run" : ErrorCode!,
+        FailureSource.Plugin => string.IsNullOrWhiteSpace(Context) ? "Plug-in" : Context,
+        FailureSource.CloudFlow => string.IsNullOrWhiteSpace(ErrorCode) ? "Flow run" : ErrorCode,
         _ => "System job"
     };
 }

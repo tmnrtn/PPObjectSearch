@@ -95,7 +95,7 @@ public sealed class SolutionDocumenter
                 .ConfigureAwait(false);
         }
 
-        pages.Insert(0, new DocPage("index", solution.FriendlyName, Summary(solution, items, environment, pages, dependencies, problems)));
+        pages.Insert(0, new DocPage("index", solution.FriendlyName, Summary(solution, items, environment, dependencies, problems)));
         return pages;
     }
 
@@ -123,7 +123,12 @@ public sealed class SolutionDocumenter
             foreach (var page in group)
             {
                 var name = page.FileName;
-                for (var n = 2; files.ContainsKey(name); n++) name = page.FileName[..^3] + $"-{n}.md";
+                var n = 2;
+                while (files.ContainsKey(name))
+                {
+                    name = page.FileName[..^3] + $"-{n}.md";
+                    n++;
+                }
 
                 files[name] = page.Markdown;
                 index.AppendLine($"- [{page.Title}]({name})");
@@ -140,7 +145,7 @@ public sealed class SolutionDocumenter
 
     private static string Summary(
         SolutionInfo solution, IReadOnlyList<SolutionComponentItem> items, string environment,
-        IReadOnlyList<DocPage> pages, string? dependencies, IReadOnlyList<string> problems)
+        string? dependencies, List<string> problems)
     {
         var md = new StringBuilder()
             .AppendLine($"# {solution.FriendlyName}")
@@ -223,7 +228,13 @@ public sealed class SolutionDocumenter
             var flow = await _client.GetCloudFlowAsync(item.ObjectId, ct).ConfigureAwait(false);
             var md = new StringBuilder().AppendLine($"# {item.PrimaryLabel}").AppendLine();
 
-            md.AppendLine($"State: {(flow.IsOn == true ? "on" : flow.IsOn == false ? "off" : "unknown")}").AppendLine();
+            var state = flow.IsOn switch
+            {
+                true => "on",
+                false => "off",
+                null => "unknown"
+            };
+            md.AppendLine($"State: {state}").AppendLine();
 
             if (string.IsNullOrWhiteSpace(flow.Definition))
             {
@@ -232,8 +243,8 @@ public sealed class SolutionDocumenter
                 continue;
             }
 
-            var design = FlowDesignParser.Parse(flow.Definition!);
-            var trigger = design.Triggers.FirstOrDefault();
+            var design = FlowDesignParser.Parse(flow.Definition);
+            var trigger = design.Triggers.Count > 0 ? design.Triggers[0] : null;
             md.AppendLine($"**Trigger:** {Cell(trigger?.Summary ?? "none")}").AppendLine();
 
             var connectors = Nodes(design).Select(n => n.Connector).Where(c => !string.IsNullOrWhiteSpace(c))
@@ -261,17 +272,11 @@ public sealed class SolutionDocumenter
             {
                 case FlowActionStep action:
                     yield return action.Node;
-                    foreach (var branch in action.Node.Branches)
-                    {
-                        foreach (var inner in Nodes(branch.Steps)) yield return inner;
-                    }
+                    foreach (var inner in action.Node.Branches.SelectMany(branch => Nodes(branch.Steps))) yield return inner;
                     break;
 
                 case FlowParallelStep parallel:
-                    foreach (var branch in parallel.Branches)
-                    {
-                        foreach (var inner in Nodes(branch)) yield return inner;
-                    }
+                    foreach (var inner in parallel.Branches.SelectMany(Nodes)) yield return inner;
                     break;
             }
         }

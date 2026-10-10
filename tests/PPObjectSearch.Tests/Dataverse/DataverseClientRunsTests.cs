@@ -8,7 +8,6 @@ namespace PPObjectSearch.Tests.Dataverse;
 
 public class DataverseClientRunsTests
 {
-    private const string Api = Fakes.ApiRoot;
     private const string Formatted = "@OData.Community.Display.V1.FormattedValue";
 
     private static string Page(string rows) => "{\"value\":[" + rows + "]}";
@@ -42,6 +41,8 @@ public class DataverseClientRunsTests
         Assert.EndsWith("&$orderby=starttime desc", url);
     }
 
+    private static readonly string[] NewestRunFirst = ["new", "mid", "old"];
+
     [Fact]
     public async Task Cloud_flow_runs_retry_without_orderby_when_it_is_refused_and_sort_locally()
     {
@@ -55,7 +56,7 @@ public class DataverseClientRunsTests
 
         var runs = await client.GetCloudFlowRunsAsync(Guid.NewGuid());
 
-        Assert.Equal(new[] { "new", "mid", "old" }, runs.Select(r => r.Name));
+        Assert.Equal(NewestRunFirst, runs.Select(r => r.Name));
         Assert.Equal("E1", runs[2].ErrorCode);
         Assert.Equal("bad", runs[2].ErrorMessage);
         Assert.Equal(2, handler.Requests.Count);
@@ -271,7 +272,7 @@ public class DataverseClientRunsTests
         var entries = await client.GetPluginTraceLogAsync(Guid.NewGuid(), 90);
 
         Assert.NotNull(entries);
-        Assert.Empty(entries!);
+        Assert.Empty(entries);
         Assert.Single(handler.Requests);
     }
 

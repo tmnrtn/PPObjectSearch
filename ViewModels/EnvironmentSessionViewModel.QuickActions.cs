@@ -11,14 +11,14 @@ public sealed partial class EnvironmentSessionViewModel
     private bool _isSwitching;
 
     /// <summary>The selected rows that can be switched on or off.</summary>
-    private IReadOnlyList<(SolutionComponentItem Item, SwitchableKind Kind)> SwitchableSelection =>
-        (Selection.Count > 0 ? Selection : SelectedItem is { } one ? new[] { one } : Array.Empty<SolutionComponentItem>())
+    private List<(SolutionComponentItem Item, SwitchableKind Kind)> SwitchableSelection() =>
+        Targets(null)
         .Select(i => (Item: i, Kind: Switchable.KindOf(i)))
         .Where(x => x.Kind is not null)
         .Select(x => (x.Item, x.Kind!.Value))
         .ToList();
 
-    public bool HasSwitchableSelection => SwitchableSelection.Count > 0;
+    public bool HasSwitchableSelection => SwitchableSelection().Count > 0;
 
     // ---------------------------------------------------------------- detail pane: Change · WRITES
 
@@ -62,23 +62,22 @@ public sealed partial class EnvironmentSessionViewModel
 
     private string SwitchToolTip(bool on)
     {
-        var selection = SwitchableSelection;
+        var selection = SwitchableSelection();
         if (selection.Count == 0) return string.Empty;
+        if (selection.Count == 1) return WriteConfirmation.ToolTip(Describe(selection[0].Kind, on), Title);
 
-        var what = selection.Count == 1
-            ? Describe(selection[0].Kind, on)
-            : $"{(on ? "Turns on" : "Turns off")} the {selection.Count:N0} selected";
-        return WriteConfirmation.ToolTip(what, Title);
+        var turns = on ? "Turns on" : "Turns off";
+        return WriteConfirmation.ToolTip($"{turns} the {selection.Count:N0} selected", Title);
     }
 
     private AsyncRelayCommand? _switchOnCommand;
     /// <summary>Turns on, activates or enables every selected flow, process and plug-in step.</summary>
     public AsyncRelayCommand SwitchOnCommand => _switchOnCommand ??= new AsyncRelayCommand(
-        _ => SwitchAsync(SwitchableSelection, true), _ => CanSwitch && HasSwitchableSelection);
+        _ => SwitchAsync(SwitchableSelection(), true), _ => CanSwitch && HasSwitchableSelection);
 
     private AsyncRelayCommand? _switchOffCommand;
     public AsyncRelayCommand SwitchOffCommand => _switchOffCommand ??= new AsyncRelayCommand(
-        _ => SwitchAsync(SwitchableSelection, false), _ => CanSwitch && HasSwitchableSelection);
+        _ => SwitchAsync(SwitchableSelection(), false), _ => CanSwitch && HasSwitchableSelection);
 
     private AsyncRelayCommand? _turnOnSolutionFlowsCommand;
     /// <summary>Every cloud flow in the solution shown that is off - the usual fix after an import.</summary>
@@ -104,16 +103,18 @@ public sealed partial class EnvironmentSessionViewModel
 
     private string SwitchHeader(bool on)
     {
-        var selection = SwitchableSelection;
-        if (selection.Count == 0) return on ? "Turn on" : "Turn off";
+        var turn = on ? "Turn on" : "Turn off";
+        var selection = SwitchableSelection();
+        if (selection.Count == 0) return turn;
 
         var kinds = selection.Select(s => s.Kind).Distinct().ToList();
-        var verb = kinds.Count == 1
-            ? on ? Switchable.Verbs(kinds[0]).On : Switchable.Verbs(kinds[0]).Off
-            : on ? "Turn on" : "Turn off";
+        var verb = kinds.Count == 1 ? VerbFor(kinds[0], on) : turn;
 
         return selection.Count == 1 ? verb : $"{verb} {selection.Count:N0} selected";
     }
+
+    /// <summary>The kind's own word for switching it on or off.</summary>
+    private static string VerbFor(SwitchableKind kind, bool on) => on ? Switchable.Verbs(kind).On : Switchable.Verbs(kind).Off;
 
     private void RaiseSwitchCommands()
     {
@@ -148,7 +149,7 @@ public sealed partial class EnvironmentSessionViewModel
         IReadOnlyDictionary<Guid, bool> states;
         try
         {
-            states = await _client!.GetSwitchStatesAsync(SwitchableKind.CloudFlow, flows.Select(f => f.ObjectId).ToList());
+            states = await _client!.GetSwitchStatesAsync(SwitchableKind.CloudFlow, flows.Select(f => f.ObjectId).ToList(), CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -173,9 +174,7 @@ public sealed partial class EnvironmentSessionViewModel
         var names = string.Join("\n", targets.Take(15).Select(t => "  " + (t.Item.DisplayName ?? t.Item.Name))) +
                     (targets.Count > 15 ? $"\n  ... and {targets.Count - 15:N0} more" : string.Empty);
         var verb = on ? "Turn on" : "Turn off";
-        var title = targets.Count == 1
-            ? on ? Switchable.Verbs(targets[0].Kind).On : Switchable.Verbs(targets[0].Kind).Off
-            : verb;
+        var title = targets.Count == 1 ? VerbFor(targets[0].Kind, on) : verb;
 
         if (!await WriteConfirmation.AskAsync(this, title, $"{title} {targets.Count:N0} component(s)?\n\n{names}")) return;
 
@@ -195,7 +194,7 @@ public sealed partial class EnvironmentSessionViewModel
 
                 try
                 {
-                    await actions.SetStateAsync(item, kind, on);
+                    await actions.SetStateAsync(item, kind, on, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -203,10 +202,11 @@ public sealed partial class EnvironmentSessionViewModel
                 }
             }
 
+            var more = failed.Count > 3 ? " ..." : string.Empty;
             Status = failed.Count == 0
                 ? $"{title} - {targets.Count:N0} done. Recorded in the run log."
                 : $"{title} - {targets.Count - failed.Count:N0} done, {failed.Count:N0} failed: " +
-                  string.Join("; ", failed.Take(3)) + (failed.Count > 3 ? " ..." : string.Empty);
+                  string.Join("; ", failed.Take(3)) + more;
         }
         finally
         {

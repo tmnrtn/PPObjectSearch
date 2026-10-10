@@ -141,9 +141,9 @@ public sealed record MailboxInfo(
             if (results.Count == 0) return MailboxTestStatus.NotRun;
 
             // incoming/outgoingemailstatus: 0 Not Run, 1 Success, 2 Failure.
-            if (results.Any(r => r == 2)) return MailboxTestStatus.Failed;
+            if (results.Contains(2)) return MailboxTestStatus.Failed;
             if (results.All(r => r == 1)) return MailboxTestStatus.Passed;
-            return results.Any(r => r == 1) ? MailboxTestStatus.Partial : MailboxTestStatus.NotRun;
+            return results.Contains(1) ? MailboxTestStatus.Partial : MailboxTestStatus.NotRun;
         }
     }
 
@@ -156,11 +156,17 @@ public sealed record MailboxInfo(
         _ => "Not tested"
     };
 
+    /// <summary>The <see cref="OwnerKind"/> of a user's mailbox.</summary>
+    public const string UserOwner = "User";
+
+    /// <summary>The <see cref="OwnerKind"/> of a queue's mailbox.</summary>
+    public const string QueueOwner = "Queue";
+
     /// <summary>"User", "Queue", or the logical name of whatever else owns it.</summary>
     public string OwnerKind => RegardingType switch
     {
-        "systemuser" => "User",
-        "queue" => "Queue",
+        "systemuser" => UserOwner,
+        "queue" => QueueOwner,
         null or "" => "None",
         var other => other
     };
@@ -206,7 +212,12 @@ public sealed record QueueDetail(
     public string TypeLabel => ViewTypeLabel ?? (IsPrivate ? "Private" : "Public");
 
     /// <summary>"Service Desk (Team)".</summary>
-    public string OwnerLabel => Owner is null ? "—" : OwnerType is { Length: > 0 } t ? $"{Owner} ({t})" : Owner;
+    public string OwnerLabel => (Owner, OwnerType) switch
+    {
+        ({ } owner, { Length: > 0 } type) => $"{owner} ({type})",
+        ({ } owner, _) => owner,
+        _ => "—"
+    };
 
     public string SearchText => $"{Name} {EmailAddress} {Owner} {BusinessUnit} {TypeLabel}";
 }

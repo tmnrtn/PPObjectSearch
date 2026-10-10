@@ -13,6 +13,8 @@ public sealed record AvailableUpdate(string Version, string Url);
 /// </summary>
 public static class UpdateCheck
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S1075:URIs should not be hardcoded",
+        Justification = "The app's own release feed: fixed by design, and named here once.")]
     public const string LatestReleaseUrl = "https://api.github.com/repos/tmnrtn/PPObjectSearch/releases/latest";
 
     /// <summary>At most this often, so starting the app many times a day costs one request.</summary>
@@ -52,7 +54,10 @@ public static class UpdateCheck
 
     /// <summary>"v1.13.0" against "1.12.2". A version that does not parse is never newer.</summary>
     internal static bool IsNewer(string tag, string running) =>
-        System.Version.TryParse(tag.TrimStart('v', 'V').Split('-', '+')[0], out var latest) &&
-        System.Version.TryParse(running.Split('-', '+')[0], out var current) &&
+        System.Version.TryParse(tag.TrimStart('v', 'V').Split(SuffixSeparators)[0], out var latest) &&
+        System.Version.TryParse(running.Split(SuffixSeparators)[0], out var current) &&
         latest > current;
+
+    /// <summary>Where a pre-release ("-beta.1") or build ("+abc123") suffix starts.</summary>
+    private static readonly char[] SuffixSeparators = ['-', '+'];
 }

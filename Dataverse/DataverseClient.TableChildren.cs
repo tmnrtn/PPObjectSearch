@@ -34,7 +34,7 @@ public sealed partial class DataverseClient
         if (metadataId != Guid.Empty) keys.Add($"EntityDefinitions({metadataId})");
         if (!string.IsNullOrWhiteSpace(logicalNameHint))
         {
-            keys.Add($"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalNameHint!.ToLowerInvariant())}')");
+            keys.Add($"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalNameHint.ToLowerInvariant())}')");
         }
 
         for (var i = 0; i < keys.Count; i++)
@@ -48,15 +48,14 @@ public sealed partial class DataverseClient
                 var logicalName = JsonHelper.GetString(row, "LogicalName");
                 if (string.IsNullOrWhiteSpace(logicalName)) continue;
 
-                Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
+                var id = MetadataIdOf(row);
 
                 return new TableIdentity(
                     id == Guid.Empty ? metadataId : id,
-                    logicalName!,
+                    logicalName,
                     JsonHelper.GetInt(row, "ObjectTypeCode"),
                     ReadLabel(row, "DisplayName"));
             }
-            catch (OperationCanceledException) { throw; }
             catch (DataverseException) when (i + 1 < keys.Count)
             {
                 // Try the next way of naming the table before giving up on it.
@@ -75,12 +74,12 @@ public sealed partial class DataverseClient
                   "?$select=MetadataId,LogicalName,SchemaName,DisplayName,AttributeType," +
                   "RequiredLevel,IsManaged,IsPrimaryId,IsPrimaryName";
 
-        return await ReadListAsync(url, ct, row =>
+        return await ReadListAsync(url, row =>
         {
             var logicalName = JsonHelper.GetString(row, "LogicalName");
             if (string.IsNullOrWhiteSpace(logicalName)) return null;
 
-            Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
+            var id = MetadataIdOf(row);
 
             var detail = JsonHelper.GetString(row, "AttributeType");
 
@@ -98,7 +97,7 @@ public sealed partial class DataverseClient
             return new TableChild
             {
                 Kind = TableChildKind.Column,
-                Name = logicalName!,
+                Name = logicalName,
                 DisplayName = ReadLabel(row, "DisplayName"),
                 Detail = detail,
                 IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
@@ -108,7 +107,7 @@ public sealed partial class DataverseClient
                 // the cast. GetChildPropertiesAsync drops back to the base type if it is refused.
                 PropertiesQuery = BuildColumnQuery(table.MetadataId, id, JsonHelper.GetString(row, "@odata.type"))
             };
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -130,15 +129,15 @@ public sealed partial class DataverseClient
 
         var root = EnvironmentUrl + ApiPath + $"EntityDefinitions({table.MetadataId})/";
 
-        results.AddRange(await ReadListAsync(root + "OneToManyRelationships" + oneToManySelect, ct,
+        results.AddRange(await ReadListAsync(root + "OneToManyRelationships" + oneToManySelect,
             row => ReadRelationship(row, "1:N", JsonHelper.GetString(row, "ReferencingEntity"),
-                "OneToManyRelationshipMetadata")).ConfigureAwait(false));
+                "OneToManyRelationshipMetadata"), ct).ConfigureAwait(false));
 
-        results.AddRange(await ReadListAsync(root + "ManyToOneRelationships" + oneToManySelect, ct,
+        results.AddRange(await ReadListAsync(root + "ManyToOneRelationships" + oneToManySelect,
             row => ReadRelationship(row, "N:1", JsonHelper.GetString(row, "ReferencedEntity"),
-                "OneToManyRelationshipMetadata")).ConfigureAwait(false));
+                "OneToManyRelationshipMetadata"), ct).ConfigureAwait(false));
 
-        results.AddRange(await ReadListAsync(root + "ManyToManyRelationships" + manyToManySelect, ct,
+        results.AddRange(await ReadListAsync(root + "ManyToManyRelationships" + manyToManySelect,
             row =>
             {
                 // Which of the two ends is "the other table" depends on which end this table is.
@@ -149,7 +148,7 @@ public sealed partial class DataverseClient
                     : first;
 
                 return ReadRelationship(row, "N:N", other, "ManyToManyRelationshipMetadata");
-            }).ConfigureAwait(false));
+            }, ct).ConfigureAwait(false));
 
         return results;
     }
@@ -162,12 +161,12 @@ public sealed partial class DataverseClient
         var url = EnvironmentUrl + ApiPath + $"EntityDefinitions({table.MetadataId})/Keys" +
                   "?$select=MetadataId,LogicalName,SchemaName,DisplayName,KeyAttributes,EntityKeyIndexStatus,IsManaged";
 
-        return await ReadListAsync(url, ct, row =>
+        return await ReadListAsync(url, row =>
         {
             var logicalName = JsonHelper.GetString(row, "LogicalName") ?? JsonHelper.GetString(row, "SchemaName");
             if (string.IsNullOrWhiteSpace(logicalName)) return null;
 
-            Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
+            var id = MetadataIdOf(row);
 
             var columns = row.TryGetProperty("KeyAttributes", out var attributes) &&
                           attributes.ValueKind == JsonValueKind.Array
@@ -177,14 +176,14 @@ public sealed partial class DataverseClient
             return new TableChild
             {
                 Kind = TableChildKind.Key,
-                Name = logicalName!,
+                Name = logicalName,
                 DisplayName = ReadLabel(row, "DisplayName"),
                 Detail = string.IsNullOrWhiteSpace(columns) ? JsonHelper.GetString(row, "EntityKeyIndexStatus") : columns,
                 IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
                 Id = id,
                 PropertiesQuery = $"EntityDefinitions({table.MetadataId})/Keys({id})"
             };
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -197,7 +196,7 @@ public sealed partial class DataverseClient
     {
         const string select = "systemforms?$select=formid,name,type,ismanaged&$filter=";
 
-        return await ReadRecordListAsync(select, "objecttypecode", table, ct, row =>
+        return await ReadRecordListAsync(select, "objecttypecode", table, row =>
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, "formid"), out var id)) return null;
 
@@ -212,7 +211,7 @@ public sealed partial class DataverseClient
                 Id = id,
                 PropertiesQuery = $"systemforms({id})"
             };
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>System views. Personal views belong to their owner, not to the table's solution.</summary>
@@ -222,7 +221,7 @@ public sealed partial class DataverseClient
     {
         const string select = "savedqueries?$select=savedqueryid,name,querytype,isdefault,ismanaged&$filter=";
 
-        return await ReadRecordListAsync(select, "returnedtypecode", table, ct, row =>
+        return await ReadRecordListAsync(select, "returnedtypecode", table, row =>
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, "savedqueryid"), out var id)) return null;
 
@@ -238,7 +237,7 @@ public sealed partial class DataverseClient
                 Id = id,
                 PropertiesQuery = $"savedqueries({id})"
             };
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>Charts owned by the table.</summary>
@@ -249,7 +248,7 @@ public sealed partial class DataverseClient
         const string select = "savedqueryvisualizations?$select=savedqueryvisualizationid,name,isdefault," +
                               "ismanaged&$filter=";
 
-        return await ReadRecordListAsync(select, "primaryentitytypecode", table, ct, row =>
+        return await ReadRecordListAsync(select, "primaryentitytypecode", table, row =>
         {
             if (!Guid.TryParse(JsonHelper.GetString(row, "savedqueryvisualizationid"), out var id)) return null;
 
@@ -262,7 +261,7 @@ public sealed partial class DataverseClient
                 Id = id,
                 PropertiesQuery = $"savedqueryvisualizations({id})"
             };
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -287,7 +286,6 @@ public sealed partial class DataverseClient
 
                 return RecordProperties.Flatten(doc.RootElement);
             }
-            catch (OperationCanceledException) { throw; }
             catch (DataverseException) when (i + 1 < queries.Count)
             {
                 // Fall back to the less specific query.
@@ -298,7 +296,7 @@ public sealed partial class DataverseClient
     }
 
     /// <summary>The same query with its expansion, then its type cast, taken off.</summary>
-    private static IReadOnlyList<string> Fallbacks(string query)
+    private static List<string> Fallbacks(string query)
     {
         var queries = new List<string> { query };
 
@@ -338,12 +336,12 @@ public sealed partial class DataverseClient
         var schemaName = JsonHelper.GetString(row, "SchemaName");
         if (string.IsNullOrWhiteSpace(schemaName)) return null;
 
-        Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id);
+        var id = MetadataIdOf(row);
 
         return new TableChild
         {
             Kind = TableChildKind.Relationship,
-            Name = schemaName!,
+            Name = schemaName,
             Detail = string.IsNullOrWhiteSpace(otherEntity) ? shape : $"{shape}  {otherEntity}",
             IsManaged = JsonHelper.GetBool(row, "IsManaged") ?? false,
             Id = id,
@@ -360,52 +358,45 @@ public sealed partial class DataverseClient
         string selectClause,
         string typeColumn,
         TableIdentity table,
-        CancellationToken ct,
-        Func<JsonElement, TableChild?> read)
+        Func<JsonElement, TableChild?> read,
+        CancellationToken ct)
     {
         var url = EnvironmentUrl + ApiPath + selectClause + $"{typeColumn} eq '{table.LogicalName}'";
 
         try
         {
-            return await ReadListAsync(url, ct, read, Annotations.Formatted).ConfigureAwait(false);
+            return await ReadListAsync(url, read, ct, Annotations.Formatted).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) { throw; }
         catch (DataverseException) when (table.ObjectTypeCode is not null)
         {
             var byCode = EnvironmentUrl + ApiPath + selectClause + $"{typeColumn} eq {table.ObjectTypeCode}";
-            return await ReadListAsync(byCode, ct, read, Annotations.Formatted).ConfigureAwait(false);
+            return await ReadListAsync(byCode, read, ct, Annotations.Formatted).ConfigureAwait(false);
         }
     }
 
     private async Task<IReadOnlyList<TableChild>> ReadListAsync(
         string url,
-        CancellationToken ct,
         Func<JsonElement, TableChild?> read,
+        CancellationToken ct,
         string? annotations = null)
     {
         var results = new List<TableChild>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, annotations, row =>
         {
-            using var doc = await GetJsonAsync(url, ct, annotations).ConfigureAwait(false);
+            var child = read(row);
+            if (child is null) return;
 
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var child = read(row);
-                    if (child is null) continue;
-
-                    child.BuildFilterIndex();
-                    results.Add(child);
-                }
-            }
-
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+            child.BuildFilterIndex();
+            results.Add(child);
+        }, ct).ConfigureAwait(false);
 
         return results;
     }
+
+    /// <summary>A metadata row's own id; empty when it has none.</summary>
+    private static Guid MetadataIdOf(JsonElement row) =>
+        Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id) ? id : Guid.Empty;
 
     /// <summary>The user-facing text of a metadata Label, whichever shape it arrives in.</summary>
     private static string? ReadLabel(JsonElement row, string property)
@@ -449,56 +440,64 @@ internal static class RecordProperties
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                // A wrapper carrying one fact is that fact, not a branch of the tree.
-                if (TryCollapse(element, out var collapsed))
-                {
-                    Add(rows, path, collapsed);
-                    break;
-                }
-
-                foreach (var property in element.EnumerateObject())
-                {
-                    // @odata.context and friends describe the response, not the component; the
-                    // formatted-value annotations are folded into their own property below.
-                    if (property.Name.Contains('@', StringComparison.Ordinal)) continue;
-
-                    var name = Combine(path, CleanName(property.Name));
-
-                    if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-                    {
-                        Flatten(property.Value, name, rows, depth + 1);
-                        continue;
-                    }
-
-                    var formatted = element.TryGetProperty(property.Name + FormattedSuffix, out var annotation)
-                        ? annotation.GetString()
-                        : null;
-
-                    Add(rows, name, Merge(formatted, Scalar(property.Value)));
-                }
-
+                FlattenObject(element, path, rows, depth);
                 break;
 
             case JsonValueKind.Array:
-                var items = element.EnumerateArray().ToList();
-
-                // A list of plain values reads better on one line than as ten indexed rows.
-                if (items.Count > 0 && items.All(i => i.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)))
-                {
-                    Add(rows, path, string.Join(", ", items.Select(Scalar).Where(v => v is not null)));
-                    break;
-                }
-
-                for (var i = 0; i < items.Count; i++)
-                {
-                    Flatten(items[i], ItemPath(path, i), rows, depth + 1);
-                }
-
+                FlattenArray(element, path, rows, depth);
                 break;
 
             default:
                 Add(rows, path, Scalar(element));
                 break;
+        }
+    }
+
+    private static void FlattenObject(JsonElement element, string? path, List<ComponentProperty> rows, int depth)
+    {
+        // A wrapper carrying one fact is that fact, not a branch of the tree.
+        if (TryCollapse(element, out var collapsed))
+        {
+            Add(rows, path, collapsed);
+            return;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            // @odata.context and friends describe the response, not the component; the
+            // formatted-value annotations are folded into their own property below.
+            if (property.Name.Contains('@', StringComparison.Ordinal)) continue;
+
+            var name = Combine(path, CleanName(property.Name));
+
+            if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+            {
+                Flatten(property.Value, name, rows, depth + 1);
+                continue;
+            }
+
+            var formatted = element.TryGetProperty(property.Name + FormattedSuffix, out var annotation)
+                ? annotation.GetString()
+                : null;
+
+            Add(rows, name, Merge(formatted, Scalar(property.Value)));
+        }
+    }
+
+    private static void FlattenArray(JsonElement element, string? path, List<ComponentProperty> rows, int depth)
+    {
+        var items = element.EnumerateArray().ToList();
+
+        // A list of plain values reads better on one line than as ten indexed rows.
+        if (items.Count > 0 && items.All(i => i.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)))
+        {
+            Add(rows, path, string.Join(", ", items.Select(Scalar).Where(v => v is not null)));
+            return;
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            Flatten(items[i], ItemPath(path, i), rows, depth + 1);
         }
     }
 
@@ -635,7 +634,7 @@ internal static class RecordProperties
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value)) return;
 
-        rows.Add(new ComponentProperty { Name = name!, Value = value! });
+        rows.Add(new ComponentProperty { Name = name, Value = value });
     }
 
     private static string Combine(string? path, string name) =>

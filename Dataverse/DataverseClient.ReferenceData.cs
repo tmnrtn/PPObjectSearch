@@ -28,39 +28,32 @@ public sealed partial class DataverseClient
 
         var results = new List<EntitySummary>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, null, row =>
         {
-            ct.ThrowIfCancellationRequested();
-
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var logicalName = JsonHelper.GetString(row, "LogicalName");
-                    if (string.IsNullOrWhiteSpace(logicalName)) continue;
-                    if (JsonHelper.GetBool(row, "IsPrivate") ?? false) continue;
-
-                    var entitySetName = JsonHelper.GetString(row, "EntitySetName");
-                    if (string.IsNullOrWhiteSpace(entitySetName)) continue;
-
-                    results.Add(new EntitySummary(
-                        logicalName!,
-                        ReadLabel(row, "DisplayName"),
-                        entitySetName,
-                        JsonHelper.GetString(row, "PrimaryIdAttribute") ?? logicalName + "id",
-                        JsonHelper.GetString(row, "PrimaryNameAttribute"),
-                        JsonHelper.GetBool(row, "IsManaged") ?? false,
-                        JsonHelper.GetBool(row, "IsActivity") ?? false));
-                }
-            }
-
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+            if (ReadEntitySummary(row) is { } entity) results.Add(entity);
+        }, ct).ConfigureAwait(false);
 
         results.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.CurrentCultureIgnoreCase));
         return results;
+    }
+
+    private static EntitySummary? ReadEntitySummary(JsonElement row)
+    {
+        var logicalName = JsonHelper.GetString(row, "LogicalName");
+        if (string.IsNullOrWhiteSpace(logicalName)) return null;
+        if (JsonHelper.GetBool(row, "IsPrivate") ?? false) return null;
+
+        var entitySetName = JsonHelper.GetString(row, "EntitySetName");
+        if (string.IsNullOrWhiteSpace(entitySetName)) return null;
+
+        return new EntitySummary(
+            logicalName,
+            ReadLabel(row, "DisplayName"),
+            entitySetName,
+            JsonHelper.GetString(row, "PrimaryIdAttribute") ?? logicalName + "id",
+            JsonHelper.GetString(row, "PrimaryNameAttribute"),
+            JsonHelper.GetBool(row, "IsManaged") ?? false,
+            JsonHelper.GetBool(row, "IsActivity") ?? false);
     }
 
     /// <summary>
@@ -90,44 +83,38 @@ public sealed partial class DataverseClient
 
         var results = new List<EntityColumn>();
 
-        while (url.Length > 0)
+        await ForEachRowAsync(url, null, row =>
         {
-            ct.ThrowIfCancellationRequested();
-
-            using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty("value", out var value))
-            {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var name = JsonHelper.GetString(row, "LogicalName");
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-
-                    if (!(JsonHelper.GetBool(row, "IsValidForRead") ?? true)) continue;
-                    if (!string.IsNullOrWhiteSpace(JsonHelper.GetString(row, "AttributeOf"))) continue;
-
-                    var typeName = ReadNested(row, "AttributeTypeName", "Value");
-                    if (string.IsNullOrWhiteSpace(typeName)) continue;
-                    if (UncomparableColumnTypes.Contains(typeName!)) continue;
-
-                    results.Add(new EntityColumn(
-                        name!,
-                        ReadLabel(row, "DisplayName"),
-                        typeName!,
-                        JsonHelper.GetBool(row, "IsPrimaryId") ?? false,
-                        JsonHelper.GetBool(row, "IsPrimaryName") ?? false)
-                    {
-                        IsValidForCreate = JsonHelper.GetBool(row, "IsValidForCreate") ?? true,
-                        IsValidForUpdate = JsonHelper.GetBool(row, "IsValidForUpdate") ?? true
-                    });
-                }
-            }
-
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
-        }
+            if (ReadComparableColumn(row) is { } column) results.Add(column);
+        }, ct).ConfigureAwait(false);
 
         results.Sort((a, b) => string.Compare(a.LogicalName, b.LogicalName, StringComparison.OrdinalIgnoreCase));
         return results;
+    }
+
+    /// <summary>A column a comparison can read; null for one it cannot, or one derived from another.</summary>
+    private static EntityColumn? ReadComparableColumn(JsonElement row)
+    {
+        var name = JsonHelper.GetString(row, "LogicalName");
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        if (!(JsonHelper.GetBool(row, "IsValidForRead") ?? true)) return null;
+        if (!string.IsNullOrWhiteSpace(JsonHelper.GetString(row, "AttributeOf"))) return null;
+
+        var typeName = ReadNested(row, "AttributeTypeName", "Value");
+        if (string.IsNullOrWhiteSpace(typeName)) return null;
+        if (UncomparableColumnTypes.Contains(typeName)) return null;
+
+        return new EntityColumn(
+            name,
+            ReadLabel(row, "DisplayName"),
+            typeName,
+            JsonHelper.GetBool(row, "IsPrimaryId") ?? false,
+            JsonHelper.GetBool(row, "IsPrimaryName") ?? false)
+        {
+            IsValidForCreate = JsonHelper.GetBool(row, "IsValidForCreate") ?? true,
+            IsValidForUpdate = JsonHelper.GetBool(row, "IsValidForUpdate") ?? true
+        };
     }
 
     /// <summary>
@@ -148,29 +135,25 @@ public sealed partial class DataverseClient
         {
             using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
 
-            if (doc.RootElement.TryGetProperty("value", out var value))
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    var name = JsonHelper.GetString(row, "LogicalName") ?? JsonHelper.GetString(row, "SchemaName");
-                    if (string.IsNullOrWhiteSpace(name)) continue;
+                var name = JsonHelper.GetString(row, "LogicalName") ?? JsonHelper.GetString(row, "SchemaName");
+                if (string.IsNullOrWhiteSpace(name)) continue;
 
-                    var attributes = row.TryGetProperty("KeyAttributes", out var array) &&
-                                     array.ValueKind == JsonValueKind.Array
-                        ? array.EnumerateArray()
-                               .Select(a => a.GetString())
-                               .Where(a => !string.IsNullOrWhiteSpace(a))
-                               .Select(a => a!)
-                               .ToList()
-                        : new List<string>();
+                var attributes = row.TryGetProperty("KeyAttributes", out var array) &&
+                                 array.ValueKind == JsonValueKind.Array
+                    ? array.EnumerateArray()
+                           .Select(a => a.GetString())
+                           .Where(a => !string.IsNullOrWhiteSpace(a))
+                           .Select(a => a!)
+                           .ToList()
+                    : new List<string>();
 
-                    if (attributes.Count == 0) continue;
+                if (attributes.Count == 0) continue;
 
-                    results.Add(new AlternateKeyInfo(name!, ReadLabel(row, "DisplayName"), attributes));
-                }
+                results.Add(new AlternateKeyInfo(name, ReadLabel(row, "DisplayName"), attributes));
             }
         }
-        catch (OperationCanceledException) { throw; }
         catch (DataverseException)
         {
             // A table that does not support keys answers with an error rather than an empty list.
@@ -220,17 +203,14 @@ public sealed partial class DataverseClient
 
             using var doc = await GetJsonAsync(url, ct, Annotations.All).ConfigureAwait(false);
 
-            if (doc.RootElement.TryGetProperty("value", out var value))
+            foreach (var row in JsonHelper.Rows(doc.RootElement))
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    if (results.Count >= maxRows) break;
-                    results.Add(ReadRecord(row, entity));
-                }
+                if (results.Count >= maxRows) break;
+                results.Add(ReadRecord(row, entity));
             }
 
             onRowsRead?.Invoke(results.Count);
-            url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
+            url = JsonHelper.NextLink(doc.RootElement);
         }
 
         return results;
@@ -260,6 +240,14 @@ public sealed partial class DataverseClient
         var navigationProperties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         string? etag = null;
 
+        // The column annotations a comparison or a later write uses, by the suffix that names them.
+        var annotations = new (string Suffix, Dictionary<string, string?> Into)[]
+        {
+            (FormattedValueSuffix, formatted),
+            (LookupTargetSuffix, lookupTargets),
+            (NavigationSuffix, navigationProperties)
+        };
+
         foreach (var property in row.EnumerateObject())
         {
             var at = property.Name.IndexOf('@', StringComparison.Ordinal);
@@ -276,28 +264,17 @@ public sealed partial class DataverseClient
 
             if (at > 0)
             {
-                var column = property.Name[..at];
-
-                if (property.Name.EndsWith(FormattedValueSuffix, StringComparison.Ordinal))
-                {
-                    formatted[column] = property.Value.GetString();
-                }
-                else if (property.Name.EndsWith(LookupTargetSuffix, StringComparison.Ordinal))
-                {
-                    lookupTargets[column] = property.Value.GetString();
-                }
-                else if (property.Name.EndsWith(NavigationSuffix, StringComparison.Ordinal))
-                {
-                    navigationProperties[column] = property.Value.GetString();
-                }
-
+                var into = annotations.FirstOrDefault(a => property.Name.EndsWith(a.Suffix, StringComparison.Ordinal)).Into;
+                if (into is not null) into[property.Name[..at]] = property.Value.GetString();
                 continue;
             }
 
             values[property.Name] = ReadValue(property.Value);
         }
 
-        Guid.TryParse(values.TryGetValue(entity.PrimaryIdAttribute, out var id) ? id : null, out var recordId);
+        var recordId = values.TryGetValue(entity.PrimaryIdAttribute, out var id) && Guid.TryParse(id, out var parsed)
+            ? parsed
+            : Guid.Empty;
 
         return new DataRecord
         {

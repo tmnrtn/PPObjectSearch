@@ -18,7 +18,7 @@ public sealed class ConnectionReferenceInfo
     /// <summary>The connector's short name - "shared_office365" - from the end of its id.</summary>
     public string Connector => ConnectorId is { Length: > 0 } id ? id[(id.LastIndexOf('/') + 1)..] : string.Empty;
 
-    public string Label => string.IsNullOrWhiteSpace(DisplayName) ? LogicalName : DisplayName!;
+    public string Label => string.IsNullOrWhiteSpace(DisplayName) ? LogicalName : DisplayName;
 }
 
 /// <summary>A connection as Power Automate reports it.</summary>
@@ -53,12 +53,14 @@ public sealed class ConnectionReferenceRow
     public string? ConnectionName => Connection?.DisplayName;
     public string? Owner => Connection?.Owner;
 
-    public ConnectionHealth Health =>
-        !Reference.HasConnection ? ConnectionHealth.NoConnection
-        : Connection is { IsConnected: true } ? ConnectionHealth.Connected
-        : Connection is not null ? ConnectionHealth.Error
-        : ConnectionsKnown ? ConnectionHealth.NotVisible
-        : ConnectionHealth.Unknown;
+    public ConnectionHealth Health => (Reference.HasConnection, Connection) switch
+    {
+        (false, _) => ConnectionHealth.NoConnection,
+        (_, { IsConnected: true }) => ConnectionHealth.Connected,
+        (_, not null) => ConnectionHealth.Error,
+        _ when ConnectionsKnown => ConnectionHealth.NotVisible,
+        _ => ConnectionHealth.Unknown
+    };
 
     public string HealthLabel => Health switch
     {

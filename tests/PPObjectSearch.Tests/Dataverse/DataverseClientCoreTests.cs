@@ -156,6 +156,8 @@ public class DataverseClientCoreTests
 
     // ---- $batch fallback ----
 
+    private static readonly string[] BothPages = ["first", "second"];
+
     [Fact]
     public async Task Url_over_the_limit_goes_through_batch_without_trying_the_get()
     {
@@ -170,7 +172,7 @@ public class DataverseClientCoreTests
 
         var solutions = await client.GetSolutionsAsync();
 
-        Assert.Equal(new[] { "first", "second" }, solutions.Select(s => s.UniqueName));
+        Assert.Equal(BothPages, solutions.Select(s => s.UniqueName));
         Assert.Equal(solutionId, solutions[1].SolutionId);
 
         Assert.Equal(2, handler.Requests.Count);
@@ -299,7 +301,7 @@ public class DataverseClientCoreTests
     public async Task Current_organization_propagates_cancellation()
     {
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
         var auth = new EnvironmentAuthContext((_, ct) => { ct.ThrowIfCancellationRequested(); return Task.FromResult<string?>("t"); });
         using var client = new DataverseClient(auth, Fakes.EnvironmentUrl, new FakeHttpHandler());
 
@@ -543,6 +545,9 @@ public class DataverseClientCoreTests
         Assert.Equal(expected, item.ComponentTypeName);
     }
 
+    private static readonly int[] TypesFromBothPages = [1, 2, 26];
+    private static readonly int[] RunningTotals = [2, 3];
+
     [Fact]
     public async Task Components_follow_next_link_and_report_progress()
     {
@@ -554,9 +559,11 @@ public class DataverseClientCoreTests
 
         var items = await client.GetSolutionComponentsAsync(Guid.NewGuid(), new SyncProgress(reports));
 
-        Assert.Equal(new[] { 1, 2, 26 }, items.Select(i => i.ComponentType));
-        Assert.Equal(new[] { 2, 3 }, reports);
+        Assert.Equal(TypesFromBothPages, items.Select(i => i.ComponentType));
+        Assert.Equal(RunningTotals, reports);
     }
+
+    private static readonly string[] OneFromEachSlice = ["flow", "table"];
 
     [Fact]
     public async Task Components_are_read_in_parallel_type_slices_when_range_filters_work()
@@ -572,7 +579,7 @@ public class DataverseClientCoreTests
 
         var items = await client.GetSolutionComponentsAsync(solutionId);
 
-        Assert.Equal(new[] { "flow", "table" }, items.Select(i => i.Name).OrderBy(n => n));
+        Assert.Equal(OneFromEachSlice, items.Select(i => i.Name).OrderBy(n => n));
 
         var sliceRequests = handler.Requests.Where(r => r.Url.Contains("msdyn_solutioncomponentsummaries") && !r.Url.Contains("$top=1")).ToList();
         Assert.Equal(20, sliceRequests.Count);
@@ -720,6 +727,8 @@ public class DataverseClientCoreTests
         Assert.Equal(DependencyDirection.Required, d.Direction);
     }
 
+    private static readonly string[] UnmanagedFirst = ["Alpha", "Zed", "Aaa"];
+
     [Fact]
     public async Task Containing_solutions_are_deduplicated_and_unmanaged_first()
     {
@@ -740,7 +749,7 @@ public class DataverseClientCoreTests
 
         var result = await client.GetContainingSolutionsAsync(objectId);
 
-        Assert.Equal(new[] { "Alpha", "Zed", "Aaa" }, result.Select(s => s.FriendlyName));
+        Assert.Equal(UnmanagedFirst, result.Select(s => s.FriendlyName));
         Assert.True(result[2].IsManaged);
         Assert.Equal("1.0", result[0].Version);
         Assert.Contains($"$filter=objectid eq {objectId}", handler.Requests[0].Url);
@@ -758,6 +767,8 @@ public class DataverseClientCoreTests
         Assert.Empty(handler.Requests);
     }
 
+    private static readonly string[] TopLayerFirst = ["Active", "(unknown)", "System"];
+
     [Fact]
     public async Task Component_layers_are_listed_top_layer_first()
     {
@@ -769,7 +780,7 @@ public class DataverseClientCoreTests
 
         var layers = await client.GetComponentLayersAsync(id, 61);
 
-        Assert.Equal(new[] { "Active", "(unknown)", "System" }, layers!.Select(l => l.SolutionName));
+        Assert.Equal(TopLayerFirst, layers!.Select(l => l.SolutionName));
         Assert.Contains($"msdyn_componentid eq '{id}' and msdyn_solutioncomponentname eq 'WebResource'", handler.Requests[0].Url);
     }
 

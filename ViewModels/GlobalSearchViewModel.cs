@@ -74,6 +74,9 @@ public sealed class SearchScope : ObservableObject
 /// </summary>
 public sealed class GlobalSearchViewModel : ObservableObject
 {
+    /// <summary>The columns an export puts ahead of each item's own.</summary>
+    private static readonly string[] ExportLeadingHeaders = ["Environment", "Environment URL", "Solution"];
+
     private readonly List<GlobalSearchRow> _all = new();
     private readonly DispatcherTimer _debounce;
     private string[] _terms = Array.Empty<string>();
@@ -272,19 +275,10 @@ public sealed class GlobalSearchViewModel : ObservableObject
         }
     }
 
-    private bool MatchesTerms(GlobalSearchRow row)
-    {
-        foreach (var term in _terms)
-        {
-            if (!row.Item.SearchIndex.Contains(term, StringComparison.Ordinal) &&
-                !row.Environment.Contains(term, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private bool MatchesTerms(GlobalSearchRow row) =>
+        _terms.All(term =>
+            row.Item.SearchIndex.Contains(term, StringComparison.Ordinal) ||
+            row.Environment.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private void Export()
     {
@@ -303,7 +297,7 @@ public sealed class GlobalSearchViewModel : ObservableObject
             CsvExporter.Write(
                 dialog.FileName,
                 rows.Select(r => (r.Item, (IReadOnlyList<string?>)new[] { r.Environment, r.Source.EnvironmentUrl, r.Solution })),
-                new[] { "Environment", "Environment URL", "Solution" });
+                ExportLeadingHeaders);
 
             Summary = $"Exported {rows.Count:N0} row(s) to {dialog.FileName}.";
         }

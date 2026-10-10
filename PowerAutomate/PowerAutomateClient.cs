@@ -35,6 +35,12 @@ public sealed class PowerAutomateClient : IDisposable
     private string BaseUrl => _auth.Cloud.FlowApi + "/providers/Microsoft.ProcessSimple/";
     private const string ApiVersion = "api-version=2016-11-01";
 
+    // The names the API's run, action and connection objects share.
+    private const string PropertiesKey = "properties";
+    private const string StatusKey = "status";
+    private const string ErrorKey = "error";
+    private const string MessageKey = "message";
+
     /// <summary>Pages of 100 actions; a flow larger than this is not one to read whole.</summary>
     private const int MaxPages = 50;
 
@@ -66,37 +72,15 @@ public sealed class PowerAutomateClient : IDisposable
 
         using (run)
         {
-            var properties = run.RootElement.TryGetProperty("properties", out var p) ? p : default;
-            var status = JsonHelper.GetString(properties, "status") ?? "Unknown";
-            var error = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("error", out var e) ? e : default;
+            var properties = run.RootElement.TryGetProperty(PropertiesKey, out var p) ? p : default;
+            var status = JsonHelper.GetString(properties, StatusKey) ?? "Unknown";
+            var error = Child(properties, ErrorKey);
 
-            FlowActionResult? trigger = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("trigger", out var t)
+            FlowActionResult? trigger = Child(properties, "trigger") is { ValueKind: not JsonValueKind.Undefined } t
                 ? ReadResult(JsonHelper.GetString(t, "name") ?? "trigger", t)
                 : null;
 
-            var actions = new Dictionary<string, FlowActionResult>(StringComparer.Ordinal);
-            var pages = 0;
-
-            for (string? url = $"{runUrl}/actions?{ApiVersion}"; url is not null; pages++)
-            {
-                if (pages >= MaxPages)
-                {
-                    throw new PowerAutomateException($"The run has more than {MaxPages * 100:N0} step results, which is more than this tool will read.");
-                }
-
-                using var page = await SendAsync(url, ct).ConfigureAwait(false);
-
-                if (page.RootElement.TryGetProperty("value", out var value))
-                {
-                    foreach (var action in value.EnumerateArray())
-                    {
-                        if (JsonHelper.GetString(action, "name") is not { } name) continue;
-                        actions[name] = ReadResult(name, action.TryGetProperty("properties", out var ap) ? ap : action);
-                    }
-                }
-
-                url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
-            }
+            var actions = await GetActionResultsAsync(runUrl, ct).ConfigureAwait(false);
 
             return new FlowRunDetail(
                 runName,
@@ -107,10 +91,39 @@ public sealed class PowerAutomateClient : IDisposable
                 trigger,
                 actions,
                 JsonHelper.GetString(error, "code"),
-                JsonHelper.GetString(error, "message"),
+                JsonHelper.GetString(error, MessageKey),
                 runUrl,
                 viaAdmin);
         }
+    }
+
+    /// <summary>Every step's result in a run, by step name.</summary>
+    private async Task<Dictionary<string, FlowActionResult>> GetActionResultsAsync(string runUrl, CancellationToken ct)
+    {
+        var actions = new Dictionary<string, FlowActionResult>(StringComparer.Ordinal);
+        var pages = 0;
+
+        string? url = $"{runUrl}/actions?{ApiVersion}";
+        while (url is not null)
+        {
+            if (pages >= MaxPages)
+            {
+                throw new PowerAutomateException($"The run has more than {MaxPages * 100:N0} step results, which is more than this tool will read.");
+            }
+
+            using var page = await SendAsync(url, ct).ConfigureAwait(false);
+
+            foreach (var action in JsonHelper.Rows(page.RootElement))
+            {
+                if (JsonHelper.GetString(action, "name") is not { } name) continue;
+                actions[name] = ReadResult(name, action.TryGetProperty(PropertiesKey, out var ap) ? ap : action);
+            }
+
+            url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
+            pages++;
+        }
+
+        return actions;
     }
 
     /// <summary>
@@ -142,38 +155,38 @@ public sealed class PowerAutomateClient : IDisposable
 
         using (doc)
         {
-            var runs = new List<ProcessRun>();
-            if (!doc.RootElement.TryGetProperty("value", out var value)) return runs;
-
-            foreach (var run in value.EnumerateArray())
-            {
-                if (JsonHelper.GetString(run, "name") is not { } name) continue;
-
-                var properties = run.TryGetProperty("properties", out var p) ? p : default;
-                var status = JsonHelper.GetString(properties, "status") ?? "Unknown";
-                var error = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("error", out var e) ? e : default;
-                var trigger = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("trigger", out var t) ? t : default;
-                var start = JsonHelper.GetDate(properties, "startTime");
-                var end = JsonHelper.GetDate(properties, "endTime");
-
-                runs.Add(new ProcessRun
-                {
-                    Name = name,
-                    Status = status,
-                    Outcome = DataverseClient.FlowOutcome(status),
-                    StartTime = start,
-                    EndTime = end,
-                    DurationMs = start is { } s && end is { } en && en >= s ? (long)(en - s).TotalMilliseconds : null,
-                    TriggerType = JsonHelper.GetString(trigger, "name"),
-                    ErrorCode = JsonHelper.GetString(error, "code"),
-                    ErrorMessage = JsonHelper.GetString(error, "message"),
-                    FlowId = flowId,
-                    IsLiveOnly = true
-                });
-            }
-
-            return runs;
+            return JsonHelper.Rows(doc.RootElement)
+                .Select(run => ReadLiveRun(run, flowId))
+                .OfType<ProcessRun>()
+                .ToList();
         }
+    }
+
+    private static ProcessRun? ReadLiveRun(JsonElement run, string flowId)
+    {
+        if (JsonHelper.GetString(run, "name") is not { } name) return null;
+
+        var properties = run.TryGetProperty(PropertiesKey, out var p) ? p : default;
+        var status = JsonHelper.GetString(properties, StatusKey) ?? "Unknown";
+        var error = Child(properties, ErrorKey);
+        var trigger = Child(properties, "trigger");
+        var start = JsonHelper.GetDate(properties, "startTime");
+        var end = JsonHelper.GetDate(properties, "endTime");
+
+        return new ProcessRun
+        {
+            Name = name,
+            Status = status,
+            Outcome = DataverseClient.FlowOutcome(status),
+            StartTime = start,
+            EndTime = end,
+            DurationMs = start is { } s && end is { } en && en >= s ? (long)(en - s).TotalMilliseconds : null,
+            TriggerType = JsonHelper.GetString(trigger, "name"),
+            ErrorCode = JsonHelper.GetString(error, "code"),
+            ErrorMessage = JsonHelper.GetString(error, MessageKey),
+            FlowId = flowId,
+            IsLiveOnly = true
+        };
     }
 
     /// <summary>
@@ -185,7 +198,8 @@ public sealed class PowerAutomateClient : IDisposable
         var repetitions = new FlowRepetitions();
         var pages = 0;
 
-        for (string? url = $"{run.RunUrl}/actions/{Uri.EscapeDataString(actionName)}/repetitions?{ApiVersion}"; url is not null; pages++)
+        string? url = $"{run.RunUrl}/actions/{Uri.EscapeDataString(actionName)}/repetitions?{ApiVersion}";
+        while (url is not null)
         {
             // Unlike the run's own steps this is not an error: the iterations read so far are
             // still worth showing, as long as they are not presented as all of them.
@@ -197,21 +211,19 @@ public sealed class PowerAutomateClient : IDisposable
 
             using var page = await SendAsync(url, ct).ConfigureAwait(false);
 
-            if (page.RootElement.TryGetProperty("value", out var value))
+            foreach (var repetition in JsonHelper.Rows(page.RootElement))
             {
-                foreach (var repetition in value.EnumerateArray())
-                {
-                    var properties = repetition.TryGetProperty("properties", out var p) ? p : repetition;
-                    var result = ReadResult(actionName, properties);
+                var properties = repetition.TryGetProperty(PropertiesKey, out var p) ? p : repetition;
+                var result = ReadResult(actionName, properties);
 
-                    repetitions.Add(new FlowRepetition(
-                        RepetitionLabel(properties, repetitions.Count),
-                        result.Status, result.Outcome, result.StartTime, result.EndTime,
-                        result.ErrorCode, result.ErrorMessage, result.InputsLink, result.OutputsLink));
-                }
+                repetitions.Add(new FlowRepetition(
+                    RepetitionLabel(properties, repetitions.Count),
+                    result.Status, result.Outcome, result.StartTime, result.EndTime,
+                    result.ErrorCode, result.ErrorMessage, result.InputsLink, result.OutputsLink));
             }
 
             url = Links.SameHostNext(JsonHelper.GetString(page.RootElement, "nextLink"), url, m => new PowerAutomateException(m));
+            pages++;
         }
 
         return repetitions;
@@ -249,7 +261,7 @@ public sealed class PowerAutomateClient : IDisposable
 
         while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
         {
-            buffer.Write(chunk, 0, read);
+            await buffer.WriteAsync(chunk.AsMemory(0, read), ct).ConfigureAwait(false);
             if (buffer.Length > MaxContentBytes) throw TooLarge(null);
         }
 
@@ -318,36 +330,7 @@ public sealed class PowerAutomateClient : IDisposable
 
             if (doc.RootElement.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Array)
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    if (JsonHelper.GetString(row, "name") is not { Length: > 0 } name) continue;
-
-                    var properties = row.TryGetProperty("properties", out var p) ? p : default;
-                    JsonElement status = default;
-                    if (properties.ValueKind == JsonValueKind.Object &&
-                        properties.TryGetProperty("statuses", out var statuses) &&
-                        statuses.ValueKind == JsonValueKind.Array && statuses.GetArrayLength() > 0)
-                    {
-                        status = statuses[0];
-                    }
-
-                    var error = status.ValueKind == JsonValueKind.Object && status.TryGetProperty("error", out var e) ? e : default;
-                    var createdBy = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("createdBy", out var c)
-                        ? c
-                        : default;
-
-                    connections.Add(new ConnectionInfo
-                    {
-                        Name = name,
-                        DisplayName = JsonHelper.GetString(properties, "displayName"),
-                        ConnectorId = JsonHelper.GetString(properties, "apiId"),
-                        Status = JsonHelper.GetString(status, "status"),
-                        StatusMessage = JsonHelper.GetString(error, "message"),
-                        Owner = JsonHelper.GetString(createdBy, "userPrincipalName")
-                                ?? JsonHelper.GetString(createdBy, "email")
-                                ?? JsonHelper.GetString(createdBy, "displayName")
-                    });
-                }
+                connections.AddRange(value.EnumerateArray().Select(ReadConnection).OfType<ConnectionInfo>());
             }
 
             url = Links.SameHostNext(JsonHelper.GetString(doc.RootElement, "nextLink"), url,
@@ -355,6 +338,32 @@ public sealed class PowerAutomateClient : IDisposable
         }
 
         return connections;
+    }
+
+    private static ConnectionInfo? ReadConnection(JsonElement row)
+    {
+        if (JsonHelper.GetString(row, "name") is not { Length: > 0 } name) return null;
+
+        var properties = row.TryGetProperty(PropertiesKey, out var p) ? p : default;
+
+        // A connection reports its status as the first of a list.
+        var statuses = Child(properties, "statuses");
+        var status = statuses.ValueKind == JsonValueKind.Array && statuses.GetArrayLength() > 0 ? statuses[0] : default;
+
+        var error = Child(status, ErrorKey);
+        var createdBy = Child(properties, "createdBy");
+
+        return new ConnectionInfo
+        {
+            Name = name,
+            DisplayName = JsonHelper.GetString(properties, "displayName"),
+            ConnectorId = JsonHelper.GetString(properties, "apiId"),
+            Status = JsonHelper.GetString(status, StatusKey),
+            StatusMessage = JsonHelper.GetString(error, MessageKey),
+            Owner = JsonHelper.GetString(createdBy, "userPrincipalName")
+                    ?? JsonHelper.GetString(createdBy, "email")
+                    ?? JsonHelper.GetString(createdBy, "displayName")
+        };
     }
 
     private async Task<JsonDocument> SendAsync(string url, CancellationToken ct)
@@ -388,8 +397,8 @@ public sealed class PowerAutomateClient : IDisposable
 
     private static FlowActionResult ReadResult(string name, JsonElement properties)
     {
-        var status = JsonHelper.GetString(properties, "status") ?? "Unknown";
-        var error = properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty("error", out var e) ? e : default;
+        var status = JsonHelper.GetString(properties, StatusKey) ?? "Unknown";
+        var error = Child(properties, ErrorKey);
         var code = JsonHelper.GetString(properties, "code");
 
         return new FlowActionResult(
@@ -399,10 +408,17 @@ public sealed class PowerAutomateClient : IDisposable
             JsonHelper.GetDate(properties, "startTime"),
             JsonHelper.GetDate(properties, "endTime"),
             JsonHelper.GetString(error, "code") ?? (Outcome(status) == FlowStepOutcome.Failed ? code : null),
-            JsonHelper.GetString(error, "message"),
+            JsonHelper.GetString(error, MessageKey),
             Link(properties, "inputsLink"),
             Link(properties, "outputsLink"));
     }
+
+    /// <summary>
+    /// A property of an object - or, when there is none, an undefined element, which every
+    /// JsonHelper read treats as having nothing in it.
+    /// </summary>
+    private static JsonElement Child(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var child) ? child : default;
 
     private static string? Link(JsonElement properties, string name) =>
         properties.ValueKind == JsonValueKind.Object && properties.TryGetProperty(name, out var link)
@@ -441,8 +457,8 @@ public sealed class PowerAutomateClient : IDisposable
         try
         {
             using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("error", out var error) &&
-                error.TryGetProperty("message", out var message))
+            if (doc.RootElement.TryGetProperty(ErrorKey, out var error) &&
+                error.TryGetProperty(MessageKey, out var message))
             {
                 return message.GetString() ?? body;
             }

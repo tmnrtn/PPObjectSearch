@@ -480,16 +480,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             // Every team's roles, together - a user in a dozen teams should not wait for a dozen round trips in a row.
             var viaTeams = await Task.WhenAll(teams.Select(t => Client.GetTeamRolesAsync(t.TeamId, t.Name)));
             var profiles = await ReadFieldProfilesAsync(user.SystemUserId, teams);
-            MailboxInfo? mailbox = null;
-            try
-            {
-                mailbox = await mailboxTask;
-            }
-            catch (Exception ex)
-            {
-                Services.Log.Warn("User mailbox could not be read", ex);
-                // The mailbox is a nicety in this pane; the Mailboxes tab says what is wrong with it.
-            }
+            var mailbox = await ReadMailboxAsync(mailboxTask);
 
             if (request != DetailRequest) return;
 
@@ -505,15 +496,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
                 RoleAssignments.Add(role);
             }
 
-            if (profiles.Error is { } error)
-            {
-                FieldProfileStatus = "Could not read field security profiles - " + error;
-            }
-            else
-            {
-                foreach (var profile in profiles.Found) FieldProfiles.Add(profile);
-                if (FieldProfiles.Count == 0) FieldProfileStatus = "No field security profile, directly or through a team - so no access to secured columns.";
-            }
+            ShowFieldProfiles(profiles);
 
             Mailbox = mailbox;
             RaiseRoleCounts();
@@ -529,6 +512,33 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         {
             if (request == DetailRequest) IsLoadingDetails = false;
         }
+    }
+
+    /// <summary>The user's mailbox, or none where it cannot be read.</summary>
+    private static async Task<MailboxInfo?> ReadMailboxAsync(Task<MailboxInfo?> mailboxTask)
+    {
+        try
+        {
+            return await mailboxTask;
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warn("User mailbox could not be read", ex);
+            // The mailbox is a nicety in this pane; the Mailboxes tab says what is wrong with it.
+            return null;
+        }
+    }
+
+    private void ShowFieldProfiles((IReadOnlyList<FieldProfileAssignment> Found, string? Error) profiles)
+    {
+        if (profiles.Error is { } error)
+        {
+            FieldProfileStatus = "Could not read field security profiles - " + error;
+            return;
+        }
+
+        foreach (var profile in profiles.Found) FieldProfiles.Add(profile);
+        if (FieldProfiles.Count == 0) FieldProfileStatus = "No field security profile, directly or through a team - so no access to secured columns.";
     }
 
     /// <summary>
@@ -794,7 +804,7 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
         View.Filter = o => o is MailboxInfo m && Include(m);
         ShowOwnerCommand = new RelayCommand(
             _ => Owner.Work.Track(ShowOwnerAsync()),
-            _ => SelectedMailbox is { RegardingId: not null, OwnerKind: "User" or "Queue" });
+            _ => SelectedMailbox is { RegardingId: not null, OwnerKind: MailboxInfo.UserOwner or MailboxInfo.QueueOwner });
     }
 
     public ObservableCollection<MailboxInfo> Items { get; } = new();
@@ -839,16 +849,18 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
     }
 
     public int CountAll => Items.Count;
-    public int CountUsers => Items.Count(m => m.OwnerKind == "User");
-    public int CountQueues => Items.Count(m => m.OwnerKind == "Queue");
-    public int CountOther => Items.Count(m => m.OwnerKind is not ("User" or "Queue"));
+    public int CountUsers => Items.Count(m => m.OwnerKind == MailboxInfo.UserOwner);
+    public int CountQueues => Items.Count(m => m.OwnerKind == MailboxInfo.QueueOwner);
+    public int CountOther => Items.Count(m => !HasUserOrQueueOwner(m));
+
+    private static bool HasUserOrQueueOwner(MailboxInfo m) => m.OwnerKind is MailboxInfo.UserOwner or MailboxInfo.QueueOwner;
 
     private bool Include(MailboxInfo m) =>
         OwnerFilter switch
         {
-            MailboxOwnerFilter.Users => m.OwnerKind == "User",
-            MailboxOwnerFilter.Queues => m.OwnerKind == "Queue",
-            MailboxOwnerFilter.Other => m.OwnerKind is not ("User" or "Queue"),
+            MailboxOwnerFilter.Users => m.OwnerKind == MailboxInfo.UserOwner,
+            MailboxOwnerFilter.Queues => m.OwnerKind == MailboxInfo.QueueOwner,
+            MailboxOwnerFilter.Other => !HasUserOrQueueOwner(m),
             _ => true
         } &&
         (SelectedApproval == AnyApproval || string.Equals(m.ApprovalLabel ?? "Empty", SelectedApproval, StringComparison.CurrentCultureIgnoreCase)) &&
@@ -916,8 +928,8 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
 
     private Task ShowOwnerAsync() => SelectedMailbox switch
     {
-        { RegardingId: { } id, OwnerKind: "User" } => Owner.ShowAsync(AdminTab.Users, id),
-        { RegardingId: { } id, OwnerKind: "Queue" } => Owner.ShowAsync(AdminTab.Queues, id),
+        { RegardingId: { } id, OwnerKind: MailboxInfo.UserOwner } => Owner.ShowAsync(AdminTab.Users, id),
+        { RegardingId: { } id, OwnerKind: MailboxInfo.QueueOwner } => Owner.ShowAsync(AdminTab.Queues, id),
         _ => Task.CompletedTask
     };
 }
@@ -1077,9 +1089,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
             foreach (var member in members.OrderBy(m => m.FullName, StringComparer.CurrentCultureIgnoreCase)) Members.Add(member);
             Mailbox = mailbox;
 
-            DetailStatus = Members.Count == 0
-                ? queue.IsPrivate ? "This private queue has no members, so nobody can see its items." : "No members. A public queue is open to everyone with access to queues."
-                : $"{Members.Count:N0} member(s)" + (Members.Count(m => m.IsDisabled == true) is > 0 and var off ? $", {off:N0} disabled." : ".");
+            DetailStatus = Members.Count == 0 ? NoMembersText(queue) : MembersText();
         }
         catch (Exception ex)
         {
@@ -1089,6 +1099,17 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         {
             if (request == DetailRequest) IsLoadingDetails = false;
         }
+    }
+
+    private static string NoMembersText(QueueDetail queue) => queue.IsPrivate
+        ? "This private queue has no members, so nobody can see its items."
+        : "No members. A public queue is open to everyone with access to queues.";
+
+    /// <summary>"12 member(s), 2 disabled."</summary>
+    private string MembersText()
+    {
+        var disabled = Members.Count(m => m.IsDisabled == true);
+        return $"{Members.Count:N0} member(s)" + (disabled > 0 ? $", {disabled:N0} disabled." : ".");
     }
 
     private Task ShowMailboxAsync() =>

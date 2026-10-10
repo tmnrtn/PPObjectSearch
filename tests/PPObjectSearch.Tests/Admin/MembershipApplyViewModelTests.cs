@@ -69,7 +69,7 @@ public class MembershipApplyViewModelTests
     private static async Task RunAsync(MembershipApplyViewModel vm)
     {
         Assert.True(vm.ApplyCommand.CanExecute(null), "Apply should be available");
-        vm.ApplyCommand.Execute(null);
+        await vm.ApplyCommand.ExecuteAsync(null);
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (!vm.HasRun)

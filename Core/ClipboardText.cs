@@ -7,6 +7,9 @@ namespace PPObjectSearch.Core;
 /// </summary>
 public static class ClipboardText
 {
+    /// <summary>Puts the text on the clipboard; replaced in tests, which must not touch the real one.</summary>
+    internal static Action<string> Set { get; set; } = text => Clipboard.SetDataObject(text, copy: true);
+
     /// <summary>
     /// Clipboard.SetText makes a single OLE attempt and throws if anything else currently holds
     /// the clipboard - clipboard history, a remote desktop session, another app mid-copy - which
@@ -21,7 +24,7 @@ public static class ClipboardText
         {
             try
             {
-                Clipboard.SetDataObject(text, copy: true);
+                Set(text);
                 failure = null;
                 return true;
             }

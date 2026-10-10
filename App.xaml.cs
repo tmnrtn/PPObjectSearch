@@ -46,10 +46,10 @@ public partial class App : Application
         // The same error raised again and again - from a binding or layout, say - is logged each
         // time but shown once, rather than as an endless queue of message boxes.
         var message = e.Exception.Message;
-        if (message == _lastShown && DateTime.Now - _lastShownAt < TimeSpan.FromSeconds(10)) return;
+        if (message == _lastShown && DateTime.UtcNow - _lastShownAt < TimeSpan.FromSeconds(10)) return;
 
         _lastShown = message;
-        _lastShownAt = DateTime.Now;
+        _lastShownAt = DateTime.UtcNow;
 
         var copy = MessageBox.Show(
             $"{message}\n\nThe details were written to the log ({Log.CurrentFile}).\n\n" +

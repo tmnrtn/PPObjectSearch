@@ -17,7 +17,7 @@ public sealed class ContentSearchViewModel : ObservableObject
     private readonly EnvironmentSessionViewModel _session;
     private readonly DataverseClient _client;
     private readonly DefinitionBodyCache _cache;
-    private readonly IReadOnlyList<SolutionComponentItem> _scope;
+    private readonly List<SolutionComponentItem> _scope;
     private CancellationTokenSource? _cts;
 
     public ContentSearchViewModel(
@@ -118,22 +118,29 @@ public sealed class ContentSearchViewModel : ObservableObject
     private string? _searchedTerm;
 
     /// <summary>"37 matches" once searched; empty before.</summary>
-    public string MatchCountLabel => _searchedTerm is null
-        ? string.Empty
-        : $"{Hits.Count:N0} match{(Hits.Count == 1 ? string.Empty : "es")}";
+    public string MatchCountLabel => (_searchedTerm, Hits.Count) switch
+    {
+        (null, _) => string.Empty,
+        (_, 1) => "1 match",
+        (_, var count) => $"{count:N0} matches"
+    };
 
     public bool HasHits => Hits.Count > 0;
 
     /// <summary>Why the list is empty and what to change - shown in its place.</summary>
-    public string EmptyHeading => _scope.Count == 0 ? "Nothing to search"
-        : _searchedTerm is null ? "Search the definitions"
-        : "No matches";
+    public string EmptyHeading => (_scope.Count, _searchedTerm) switch
+    {
+        (0, _) => "Nothing to search",
+        (_, null) => "Search the definitions",
+        _ => "No matches"
+    };
 
-    public string EmptyText => _scope.Count == 0
-        ? $"Nothing in {ScopeLabel} has a definition to search - flows, scripts, forms, views, plug-in steps, classic workflows or sitemaps. Load another solution."
-        : _searchedTerm is null
-            ? "Type a column, table, variable, connector or any text of two characters or more, and press Enter."
-            : $"'{_searchedTerm}' does not appear in any of the {_scope.Count:N0} definition(s) in {ScopeLabel}. Try a shorter or different term.";
+    public string EmptyText => (_scope.Count, _searchedTerm) switch
+    {
+        (0, _) => $"Nothing in {ScopeLabel} has a definition to search - flows, scripts, forms, views, plug-in steps, classic workflows or sitemaps. Load another solution.",
+        (_, null) => "Type a column, table, variable, connector or any text of two characters or more, and press Enter.",
+        _ => $"'{_searchedTerm}' does not appear in any of the {_scope.Count:N0} definition(s) in {ScopeLabel}. Try a shorter or different term."
+    };
 
     private void ShowHits()
     {
@@ -148,7 +155,7 @@ public sealed class ContentSearchViewModel : ObservableObject
         var term = Term.Trim();
         if (term.Length < 2 || IsSearching) return;
 
-        _cts = new CancellationTokenSource();
+        var cts = _cts = new CancellationTokenSource();
         IsSearching = true;
         var clock = Stopwatch.StartNew();
 
@@ -159,7 +166,7 @@ public sealed class ContentSearchViewModel : ObservableObject
             {
                 Status = $"Reading {stale.Count:N0} definition(s)...";
                 var progress = new Progress<int>(done => Status = $"Reading definitions... {done:N0} of {stale.Count:N0}");
-                var bodies = await _client.GetDefinitionBodiesAsync(stale, progress, _cts.Token);
+                var bodies = await _client.GetDefinitionBodiesAsync(stale, progress, cts.Token);
                 _cache.Store(stale, bodies);
             }
 
@@ -172,9 +179,10 @@ public sealed class ContentSearchViewModel : ObservableObject
 
             // The outcome goes in the summary; an empty list explains itself in its place.
             var components = hits.Select(h => h.Item.ObjectId).Distinct().Count();
+            var found = components == 1 ? "1 component" : $"{components:N0} components";
             ReadSummary = Describe(_scope.Count, clock.Elapsed) + (hits.Count == 0
                 ? string.Empty
-                : $", found in {components:N0} component{(components == 1 ? string.Empty : "s")} - double-click a match to open it");
+                : $", found in {found} - double-click a match to open it");
             Status = string.Empty;
         }
         catch (OperationCanceledException)
@@ -187,6 +195,8 @@ public sealed class ContentSearchViewModel : ObservableObject
         }
         finally
         {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+            cts.Dispose();
             IsSearching = false;
         }
     }

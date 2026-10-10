@@ -23,6 +23,9 @@ public class ReferenceDataWriterTests
     private static readonly EntitySummary ParentTable =
         new("new_parent", "Parent", "new_parents", "new_parentid", "new_name", false, false);
 
+    /// <summary>Just the name column: what several tests read, and expect a write to carry.</summary>
+    private static readonly string[] NameOnly = ["new_name"];
+
     private static Dictionary<string, EntitySummary> TargetEntities(EntitySummary? thing = null) =>
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -109,6 +112,9 @@ public class ReferenceDataWriterTests
         Assert.Empty(ReferenceDataWriter.Plan(new[] { row }, new ReconcileOptions(true, true, true)));
     }
 
+    private static readonly string[] CreateAndUpdate = ["create", "update"];
+    private static readonly string[] DeleteOnly = ["delete"];
+
     [Fact]
     public void Plan_leaves_out_actions_that_are_switched_off()
     {
@@ -125,8 +131,8 @@ public class ReferenceDataWriterTests
         var deleteOnly = ReferenceDataWriter.Plan(rows, new ReconcileOptions(false, false, true));
         var nothing = ReferenceDataWriter.Plan(rows, new ReconcileOptions(false, false, false));
 
-        Assert.Equal(new[] { "create", "update" }, defaults.Select(i => i.Key).ToArray());
-        Assert.Equal(new[] { "delete" }, deleteOnly.Select(i => i.Key).ToArray());
+        Assert.Equal(CreateAndUpdate, defaults.Select(i => i.Key).ToArray());
+        Assert.Equal(DeleteOnly, deleteOnly.Select(i => i.Key).ToArray());
         Assert.Empty(nothing);
     }
 
@@ -231,7 +237,7 @@ public class ReferenceDataWriterTests
         var value = ReferenceDataWriter.ToWriteValue(raw, Col("c", type));
 
         Assert.IsType<decimal>(value);
-        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), (decimal)value!);
+        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), (decimal)value);
     }
 
     [Fact]
@@ -594,7 +600,7 @@ public class ReferenceDataWriterTests
             Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build(), null));
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        var body = BodyOf(handler.Requests.Last());
+        var body = BodyOf(handler.Requests[^1]);
         Assert.Equal($"/new_parents({G(502)})", body.GetProperty("new_ParentId@odata.bind").GetString());
     }
 
@@ -655,7 +661,7 @@ public class ReferenceDataWriterTests
 
         Assert.True(outcome.Succeeded, outcome.Message);
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("$filter"));
-        Assert.Equal($"/new_parents({G(10)})", BodyOf(handler.Requests.Last()).GetProperty("new_ParentId@odata.bind").GetString());
+        Assert.Equal($"/new_parents({G(10)})", BodyOf(handler.Requests[^1]).GetProperty("new_ParentId@odata.bind").GetString());
     }
 
     [Fact]
@@ -704,6 +710,8 @@ public class ReferenceDataWriterTests
             ordered.Select(i => (i.Action, i.Table)));
     }
 
+    private static readonly string[] ParentBeforeChild = ["root", "child", "grandchild"];
+
     [Fact]
     public void Rows_of_a_self_referencing_table_are_written_parent_before_child()
     {
@@ -724,7 +732,7 @@ public class ReferenceDataWriterTests
         var ordered = ReferenceDataWriter.OrderForWriting(
             ReferenceDataWriter.Plan(rows, new ReconcileOptions(true, true, true)), i => i);
 
-        Assert.Equal(new[] { "root", "child", "grandchild" }, ordered.Select(i => i.Name));
+        Assert.Equal(ParentBeforeChild, ordered.Select(i => i.Name));
     }
 
     [Fact]
@@ -793,6 +801,8 @@ public class ReferenceDataWriterTests
 
     // ---- ApplyAsync: update -------------------------------------------------------------------
 
+    private static readonly string[] DifferingColumns = ["new_count", "new_flag"];
+
     [Fact]
     public async Task Apply_update_patches_only_the_differing_columns_with_if_match()
     {
@@ -815,7 +825,7 @@ public class ReferenceDataWriterTests
         Assert.Equal("*", request.Header("If-Match"));
 
         var body = BodyOf(request);
-        Assert.Equal(new[] { "new_count", "new_flag" }, PropertyNames(body));
+        Assert.Equal(DifferingColumns, PropertyNames(body));
         Assert.Equal(5, body.GetProperty("new_count").GetInt64());
         Assert.True(body.GetProperty("new_flag").GetBoolean());
     }
@@ -830,7 +840,7 @@ public class ReferenceDataWriterTests
         var outcome = await Writer(handler).ApplyAsync(Compared(new[] { IdColumn, Name }, source, target));
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        Assert.Equal(new[] { "new_name" }, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
+        Assert.Equal(NameOnly, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
         Assert.Equal(
             $"Updated 1 column(s). Not changed: the primary id ({PrimaryId}) differs, and an update cannot change a row's id.",
             outcome.Message);
@@ -908,6 +918,8 @@ public class ReferenceDataWriterTests
         Assert.Equal(1, BodyOf(post).GetProperty("statuscode").GetInt64());
     }
 
+    private static readonly string[] StateWithStatus = ["statecode", "statuscode"];
+
     [Fact]
     public async Task A_change_of_state_is_written_with_its_status()
     {
@@ -922,7 +934,7 @@ public class ReferenceDataWriterTests
         var outcome = await Writer(handler).ApplyAsync(Compared(new[] { stateful, Status }, source, target));
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        Assert.Equal(new[] { "statecode", "statuscode" }, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
+        Assert.Equal(StateWithStatus, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
     }
 
     [Fact]
@@ -978,13 +990,15 @@ public class ReferenceDataWriterTests
             "{\"value\":[{\"@odata.etag\":\"W/\\\"77\\\"\",\"new_thingid\":\"" + G(1) + "\",\"new_name\":\"A\"}]}");
         using var client = Fakes.Dataverse(handler);
 
-        var rows = await client.GetRecordsAsync(Entity(), new[] { "new_name" }, null, 10);
+        var rows = await client.GetRecordsAsync(Entity(), NameOnly, null, 10);
 
         var row = Assert.Single(rows);
         Assert.Equal("W/\"77\"", row.ETag);
         Assert.False(row.Values.ContainsKey("@odata.etag"));
         Assert.Contains("$orderby=new_thingid", handler.Requests[0].Url);
     }
+
+    private static readonly string[] ParentBindOnly = ["new_ParentId@odata.bind"];
 
     [Fact]
     public async Task Apply_update_clears_a_lookup_emptied_in_the_source()
@@ -997,7 +1011,7 @@ public class ReferenceDataWriterTests
 
         Assert.True(outcome.Succeeded, outcome.Message);
         var body = BodyOf(Assert.Single(handler.Requests));
-        Assert.Equal(new[] { "new_ParentId@odata.bind" }, PropertyNames(body));
+        Assert.Equal(ParentBindOnly, PropertyNames(body));
         Assert.Equal(JsonValueKind.Null, body.GetProperty("new_ParentId@odata.bind").ValueKind);
     }
 
@@ -1060,7 +1074,7 @@ public class ReferenceDataWriterTests
 
         Assert.True(outcome.Succeeded, outcome.Message);
         Assert.Equal("Updated 1 column(s). Left out as read-only: new_calc.", outcome.Message);
-        Assert.Equal(new[] { "new_name" }, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
+        Assert.Equal(NameOnly, PropertyNames(BodyOf(Assert.Single(handler.Requests))));
     }
 
     [Fact]
@@ -1181,7 +1195,7 @@ public class ReferenceDataWriterTests
         var skipped = await writer.ApplyAsync(onlyExcluded);
 
         Assert.Equal(new[] { "new_name", PrimaryId }, PropertyNames(BodyOf(handler.Requests[0])));
-        Assert.Equal(new[] { "new_name" }, PropertyNames(BodyOf(handler.Requests[1])));
+        Assert.Equal(NameOnly, PropertyNames(BodyOf(handler.Requests[1])));
         Assert.Equal(2, handler.Requests.Count);
         Assert.True(skipped.Succeeded);
         Assert.Contains("left out of this run", skipped.Message);

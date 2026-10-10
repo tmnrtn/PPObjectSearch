@@ -66,8 +66,12 @@ public static class ThemeManager
         Application.Current?.Dispatcher.BeginInvoke(() => Apply(AppTheme.System));
     }
 
-    private static AppTheme Resolve(AppTheme theme) =>
-        theme != AppTheme.System ? theme : SystemUsesLightTheme() ? AppTheme.Light : AppTheme.Dark;
+    private static AppTheme Resolve(AppTheme theme)
+    {
+        if (theme != AppTheme.System) return theme;
+
+        return SystemUsesLightTheme() ? AppTheme.Light : AppTheme.Dark;
+    }
 
     private static bool SystemUsesLightTheme()
     {

@@ -29,29 +29,36 @@ public class EnvironmentAdminTests
 
     private static string Value(params object[] rows) => JsonSerializer.Serialize(new { value = rows });
 
-    private static Dictionary<string, object?> User(Guid id, string name, string bu, bool disabled, int accessMode, string mode,
+    /// <summary>A choice column's stored value and the label Dataverse formats it as.</summary>
+    private readonly record struct Choice(int Code, string Label);
+
+    private static Dictionary<string, object?> User(Guid id, string name, string bu, bool disabled, Choice accessMode,
         Guid? app = null, Guid? mailbox = null) => new()
     {
         ["systemuserid"] = id, ["fullname"] = name, ["domainname"] = name.ToLowerInvariant().Replace(' ', '.') + "@contoso.com",
         ["_businessunitid_value"] = Guid.NewGuid(), ["_businessunitid_value" + Fv] = bu,
-        ["isdisabled"] = disabled, ["accessmode"] = accessMode, ["accessmode" + Fv] = mode,
+        ["isdisabled"] = disabled, ["accessmode"] = accessMode.Code, ["accessmode" + Fv] = accessMode.Label,
         ["applicationid"] = app, ["_defaultmailbox_value"] = mailbox
     };
 
     private static string Users() => Value(
-        User(Alice, "Alice Smith", "Contoso", false, 0, "Read-Write", mailbox: MailboxA),
-        User(Bob, "Bob Jones", "Contoso UK", true, 0, "Read-Write"),
-        User(AppUser, "Flow Bot", "Contoso", false, 4, "Non-interactive", app: Guid.NewGuid()));
+        User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"), mailbox: MailboxA),
+        User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write")),
+        User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid()));
 
-    private static Dictionary<string, object?> Mailbox(Guid id, string name, string regardingType, Guid regarding, int approval, string approvalLabel,
-        int incoming, int outgoing, int inDelivery = 2, int outDelivery = 2, bool scheduled = false) => new()
+    /// <summary>
+    /// A mailbox regarding a user or queue. Every mailbox here delivers by server-side sync both
+    /// ways and has no test scheduled; only approval and the incoming/outgoing statuses vary.
+    /// </summary>
+    private static Dictionary<string, object?> Mailbox(Guid id, string name, string regardingType, Guid regarding, Choice approval,
+        int incoming, int outgoing) => new()
     {
         ["mailboxid"] = id, ["name"] = name, ["emailaddress"] = name.Replace(' ', '.') + "@contoso.com",
         ["_regardingobjectid_value"] = regarding, ["_regardingobjectid_value" + Fv] = name, ["_regardingobjectid_value" + Lt] = regardingType,
-        ["emailrouteraccessapproval"] = approval, ["emailrouteraccessapproval" + Fv] = approvalLabel,
+        ["emailrouteraccessapproval"] = approval.Code, ["emailrouteraccessapproval" + Fv] = approval.Label,
         ["incomingemailstatus"] = incoming, ["outgoingemailstatus"] = outgoing,
-        ["incomingemaildeliverymethod"] = inDelivery, ["outgoingemaildeliverymethod"] = outDelivery,
-        ["testemailconfigurationscheduled"] = scheduled, ["statecode"] = 0
+        ["incomingemaildeliverymethod"] = 2, ["outgoingemaildeliverymethod"] = 2,
+        ["testemailconfigurationscheduled"] = false, ["statecode"] = 0
     };
 
     private static EnvironmentAdminViewModel Admin(FakeHttpHandler handler, AdminTab tab = AdminTab.Users) =>
@@ -132,7 +139,7 @@ public class EnvironmentAdminTests
                 new Dictionary<string, object?> { ["roleid"] = RoleCopy, ["name"] = "Basic User", ["_parentrootroleid_value"] = RoleRoot, ["_businessunitid_value" + Fv] = "Contoso UK" }))
             .OnJson(HttpMethod.Get, $"teams({TeamA})/teamroles_association", Value(
                 new Dictionary<string, object?> { ["roleid"] = Guid.NewGuid(), ["name"] = "Customer Service Rep", ["_businessunitid_value" + Fv] = "Contoso" }))
-            .OnJson(HttpMethod.Get, $"mailboxid eq {MailboxA}", Value(Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, 1, "Approved", 1, 1)));
+            .OnJson(HttpMethod.Get, $"mailboxid eq {MailboxA}", Value(Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, new(1, "Approved"), 1, 1)));
         var admin = Admin(handler);
         await admin.LoadAsync();
 
@@ -333,8 +340,8 @@ public class EnvironmentAdminTests
     public async Task Mailboxes_read_their_owner_approval_and_tests()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "mailboxes?", Value(
-            Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, 1, "Approved", 1, 1),
-            Mailbox(Guid.NewGuid(), "Support", "queue", QueueA, 2, "Pending Approval", 0, 0)));
+            Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, new(1, "Approved"), 1, 1),
+            Mailbox(Guid.NewGuid(), "Support", "queue", QueueA, new(2, "Pending Approval"), 0, 0)));
 
         var mailboxes = await Fakes.Dataverse(handler).GetMailboxesAsync();
 
@@ -348,9 +355,9 @@ public class EnvironmentAdminTests
     public async Task The_mailboxes_tab_filters_by_owner_approval_and_test()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "mailboxes?", Value(
-            Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, 1, "Approved", 1, 1),
-            Mailbox(Guid.NewGuid(), "Support", "queue", QueueA, 2, "Pending Approval", 0, 0),
-            Mailbox(Guid.NewGuid(), "Sales", "queue", Guid.NewGuid(), 1, "Approved", 2, 1)));
+            Mailbox(MailboxA, "Alice Smith", "systemuser", Alice, new(1, "Approved"), 1, 1),
+            Mailbox(Guid.NewGuid(), "Support", "queue", QueueA, new(2, "Pending Approval"), 0, 0),
+            Mailbox(Guid.NewGuid(), "Sales", "queue", Guid.NewGuid(), new(1, "Approved"), 2, 1)));
         var admin = Admin(handler, AdminTab.Mailboxes);
         await admin.LoadAsync();
         var m = admin.Mailboxes;
@@ -372,7 +379,7 @@ public class EnvironmentAdminTests
     public async Task A_mailboxs_owner_opens_on_its_own_tab_with_hidden_filters_cleared()
     {
         var handler = new FakeHttpHandler()
-            .OnJson(HttpMethod.Get, "mailboxes?", Value(Mailbox(MailboxA, "Bob Jones", "systemuser", Bob, 1, "Approved", 1, 1)))
+            .OnJson(HttpMethod.Get, "mailboxes?", Value(Mailbox(MailboxA, "Bob Jones", "systemuser", Bob, new(1, "Approved"), 1, 1)))
             .OnJson(HttpMethod.Get, "systemusers?", Users())
             .OnJson(HttpMethod.Get, "", Value());
         var admin = Admin(handler, AdminTab.Mailboxes);
@@ -424,7 +431,7 @@ public class EnvironmentAdminTests
             .OnJson(HttpMethod.Get, $"queues({QueueA})/queuemembership_association", Value(
                 new Dictionary<string, object?> { ["systemuserid"] = Bob, ["fullname"] = "Bob Jones", ["isdisabled"] = true },
                 new Dictionary<string, object?> { ["systemuserid"] = Alice, ["fullname"] = "Alice Smith", ["isdisabled"] = false }))
-            .OnJson(HttpMethod.Get, $"mailboxid eq {MailboxA}", Value(Mailbox(MailboxA, "Support", "queue", QueueA, 3, "Rejected", 0, 0)));
+            .OnJson(HttpMethod.Get, $"mailboxid eq {MailboxA}", Value(Mailbox(MailboxA, "Support", "queue", QueueA, new(3, "Rejected"), 0, 0)));
         var admin = Admin(handler, AdminTab.Queues);
         await admin.LoadAsync();
         var q = admin.Queues;
@@ -484,7 +491,7 @@ public class EnvironmentAdminTests
     // ---------------------------------------------------------------- round 3: history, summaries, detail views
 
     private static FakeHttpHandler LinkedHandler() => new FakeHttpHandler()
-        .OnJson(HttpMethod.Get, "mailboxes?", Value(Mailbox(MailboxA, "Bob Jones", "systemuser", Bob, 1, "Approved", 1, 1)))
+        .OnJson(HttpMethod.Get, "mailboxes?", Value(Mailbox(MailboxA, "Bob Jones", "systemuser", Bob, new(1, "Approved"), 1, 1)))
         .OnJson(HttpMethod.Get, "systemusers?", Users())
         .OnJson(HttpMethod.Get, "", Value());
 
@@ -504,7 +511,7 @@ public class EnvironmentAdminTests
         Assert.False(admin.CanGoForward);
         Assert.Equal("Back (Alt+Left) — to Mailboxes: Bob Jones", admin.BackToolTip);
 
-        admin.BackCommand.Execute(null);
+        await admin.BackCommand.ExecuteAsync(null);
         await Settle(admin);
 
         Assert.Equal(AdminTab.Mailboxes, admin.SelectedTab);
@@ -512,7 +519,7 @@ public class EnvironmentAdminTests
         Assert.True(admin.CanGoForward);
         Assert.Equal("Forward (Alt+Right) — to Users: Bob Jones", admin.ForwardToolTip);
 
-        admin.ForwardCommand.Execute(null);
+        await admin.ForwardCommand.ExecuteAsync(null);
         await Settle(admin);
 
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
@@ -541,7 +548,7 @@ public class EnvironmentAdminTests
         admin.Mailboxes.SelectedMailbox = admin.Mailboxes.Items[0];
         admin.Mailboxes.ShowOwnerCommand.Execute(null);
         await Settle(admin);
-        admin.BackCommand.Execute(null);
+        await admin.BackCommand.ExecuteAsync(null);
         await Settle(admin);
         Assert.True(admin.CanGoForward);
 

@@ -121,7 +121,7 @@ public class FlowDesignParserTests
         var design = FlowDesignParser.Parse(Flow(Actions(("A", Compose()), ("X", Compose("Y")), ("Y", Compose("X")))));
 
         Assert.Equal("A, X, Y", Shape(design.Actions));
-        Assert.Contains(design.Warnings, w => w.Contains("could not be ordered") && w.Contains("X") && w.Contains("Y"));
+        Assert.Contains(design.Warnings, w => w.Contains("could not be ordered") && w.Contains('X') && w.Contains('Y'));
     }
 
     [Fact]

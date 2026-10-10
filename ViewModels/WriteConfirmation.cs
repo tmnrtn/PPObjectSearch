@@ -47,6 +47,6 @@ public static class WriteConfirmation
     }
 
     /// <summary>The details window when the change was asked for there, else the main window.</summary>
-    private static Window? ActiveWindow() =>
+    internal static Window? ActiveWindow() =>
         Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
 }

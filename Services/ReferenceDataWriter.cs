@@ -165,130 +165,140 @@ public sealed class ReferenceDataWriter
                                   "so the amount could land in the wrong currency. Compare the currency column too.");
             }
 
-            switch (item.Action)
+            return item.Action switch
             {
-                case ReconcileAction.Delete:
-                {
-                    if (item.Row.Target is not { } target) return Fail(item, "no target row to delete.");
-
-                    JsonObject? before = null;
-                    UndoStep? undo = null;
-
-                    if (SaveSnapshots)
-                    {
-                        before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
-                        if (before is null) return Fail(item, "the row is no longer in the target.");
-
-                        var columns = await TargetColumnsAsync(plan.Entity.LogicalName, ct).ConfigureAwait(false);
-                        undo = WriteUndo.ForDelete(
-                            entitySet, target.Id, TargetPrimaryId(plan.Entity), before, columns, EntitySetOf);
-                    }
-
-                    await _target.DeleteRecordAsync(entitySet, target.Id, ct, target.ETag).ConfigureAwait(false);
-                    return new ReconcileOutcome(item, true, "Deleted.") { Id = target.Id, Before = before, Undo = undo };
-                }
-
-                case ReconcileAction.Create:
-                {
-                    if (item.Row.Source is not { } source) return Fail(item, "no source row to copy.");
-
-                    var skipped = new List<string>();
-
-                    var body = await BuildBodyAsync(source, null, ValueColumns(plan), true, plan.MatchLookupsByName, skipped, ct)
-                        .ConfigureAwait(false);
-
-                    // The source id travels with the row so the two environments converge on one
-                    // id instead of drifting into two rows only an alternate key can tie together.
-                    body[plan.Entity.PrimaryIdAttribute] = source.Id.ToString();
-
-                    // A row is always created in its default state. An inactive source row's status
-                    // would be refused against that state, so state and status are set afterwards.
-                    var state = DeferredState(plan, source, body, skipped);
-
-                    await _target.CreateRecordAsync(entitySet, source.Id, body, ct).ConfigureAwait(false);
-                    Remember(plan.Entity, source.PrimaryName, source.Id);
-
-                    var undoCreate = WriteUndo.ForCreate(entitySet, source.Id);
-
-                    if (state is not null)
-                    {
-                        try
-                        {
-                            await _target.UpdateRecordAsync(entitySet, source.Id, state, ct).ConfigureAwait(false);
-                        }
-                        catch (DataverseException ex)
-                        {
-                            return Fail(item, $"Created with id {source.Id}, but its status could not be set to match " +
-                                              $"the source: {ex.Message}") with { Id = source.Id, Written = body, Undo = undoCreate };
-                        }
-                    }
-
-                    if (state is not null) foreach (var (k, v) in state) body[k] = v;
-
-                    return new ReconcileOutcome(item, true,
-                        $"Created with id {source.Id}{(state is null ? string.Empty : ", then set to the source's status")}." +
-                        Note(skipped)) { Id = source.Id, Written = body, Undo = undoCreate };
-                }
-
-                default:
-                {
-                    if (item.Row.Source is not { } source) return Fail(item, "no source row to copy from.");
-                    if (item.Row.Target is not { } target) return Fail(item, "no target row to update.");
-
-                    var columns = item.Row.Differences.Select(d => d.Column).Where(c => !IsExcluded(plan, c)).ToList();
-                    if (columns.Count == 0)
-                    {
-                        return new ReconcileOutcome(item, true, item.Row.Differences.Count == 0
-                            ? "Nothing to change."
-                            : "Nothing written - every differing column is left out of this run.");
-                    }
-
-                    var skipped = new List<string>();
-                    var body = await BuildBodyAsync(source, target, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
-
-                    // A change of state needs its status alongside, or Dataverse pairs the new state
-                    // with a status that belongs to the old one and refuses it.
-                    PairStateWithStatus(plan, source, body);
-
-                    // Rows matched on another key can still carry different primary ids. An update
-                    // cannot change a row's id, so that difference is reported rather than written.
-                    var idDiffers = columns.Any(c => c.IsPrimaryId);
-
-                    if (body.Count == 0)
-                    {
-                        var reasons = new List<string>();
-                        if (idDiffers) reasons.Add(PrimaryIdNote(plan.Entity.PrimaryIdAttribute));
-                        if (skipped.Count > 0) reasons.Add("read-only in Dataverse: " + string.Join(", ", skipped));
-
-                        return Fail(item, "nothing could be written - " + string.Join("; ", reasons) + ".");
-                    }
-
-                    JsonObject? before = null;
-                    UndoStep? undo = null;
-
-                    if (SaveSnapshots)
-                    {
-                        before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
-                        if (before is null) return Fail(item, "the row is no longer in the target.");
-                        undo = WriteUndo.ForUpdate(entitySet, target.Id, body, before, EntitySetOf);
-                    }
-
-                    await _target.UpdateRecordAsync(entitySet, target.Id, body, ct, target.ETag).ConfigureAwait(false);
-                    Remember(plan.Entity, source.PrimaryName, target.Id);
-                    return new ReconcileOutcome(item, true,
-                        $"Updated {body.Count} column(s).{Note(skipped)}" +
-                        (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty))
-                    {
-                        Id = target.Id, Written = body, Before = before, Undo = undo
-                    };
-                }
-            }
+                ReconcileAction.Delete => await DeleteAsync(item, entitySet, ct).ConfigureAwait(false),
+                ReconcileAction.Create => await CreateAsync(item, entitySet, ct).ConfigureAwait(false),
+                _ => await UpdateAsync(item, entitySet, ct).ConfigureAwait(false)
+            };
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             return Fail(item, ex.Message);
         }
+    }
+
+    private async Task<ReconcileOutcome> DeleteAsync(ReconcilePlanItem item, string entitySet, CancellationToken ct)
+    {
+        if (item.Row.Target is not { } target) return Fail(item, "no target row to delete.");
+
+        var plan = item.Row.Plan;
+        JsonObject? before = null;
+        UndoStep? undo = null;
+
+        if (SaveSnapshots)
+        {
+            before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
+            if (before is null) return Fail(item, "the row is no longer in the target.");
+
+            var columns = await TargetColumnsAsync(plan.Entity.LogicalName, ct).ConfigureAwait(false);
+            undo = WriteUndo.ForDelete(
+                entitySet, target.Id, TargetPrimaryId(plan.Entity), before, columns, EntitySetOf);
+        }
+
+        await _target.DeleteRecordAsync(entitySet, target.Id, target.ETag, ct).ConfigureAwait(false);
+        return new ReconcileOutcome(item, true, "Deleted.") { Id = target.Id, Before = before, Undo = undo };
+    }
+
+    private async Task<ReconcileOutcome> CreateAsync(ReconcilePlanItem item, string entitySet, CancellationToken ct)
+    {
+        if (item.Row.Source is not { } source) return Fail(item, "no source row to copy.");
+
+        var plan = item.Row.Plan;
+        var skipped = new List<string>();
+
+        var body = await BuildBodyAsync(source, null, ValueColumns(plan), true, plan.MatchLookupsByName, skipped, ct)
+            .ConfigureAwait(false);
+
+        // The source id travels with the row so the two environments converge on one
+        // id instead of drifting into two rows only an alternate key can tie together.
+        body[plan.Entity.PrimaryIdAttribute] = source.Id.ToString();
+
+        // A row is always created in its default state. An inactive source row's status
+        // would be refused against that state, so state and status are set afterwards.
+        var state = DeferredState(plan, source, body, skipped);
+
+        await _target.CreateRecordAsync(entitySet, source.Id, body, ct).ConfigureAwait(false);
+        Remember(plan.Entity, source.PrimaryName, source.Id);
+
+        var undoCreate = WriteUndo.ForCreate(entitySet, source.Id);
+
+        if (state is not null)
+        {
+            try
+            {
+                await _target.UpdateRecordAsync(entitySet, source.Id, state, ct: ct).ConfigureAwait(false);
+            }
+            catch (DataverseException ex)
+            {
+                return Fail(item, $"Created with id {source.Id}, but its status could not be set to match " +
+                                  $"the source: {ex.Message}") with { Id = source.Id, Written = body, Undo = undoCreate };
+            }
+
+            foreach (var (k, v) in state) body[k] = v;
+        }
+
+        return new ReconcileOutcome(item, true,
+            $"Created with id {source.Id}{(state is null ? string.Empty : ", then set to the source's status")}." +
+            Note(skipped)) { Id = source.Id, Written = body, Undo = undoCreate };
+    }
+
+    private async Task<ReconcileOutcome> UpdateAsync(ReconcilePlanItem item, string entitySet, CancellationToken ct)
+    {
+        if (item.Row.Source is not { } source) return Fail(item, "no source row to copy from.");
+        if (item.Row.Target is not { } target) return Fail(item, "no target row to update.");
+
+        var plan = item.Row.Plan;
+        var columns = item.Row.Differences.Select(d => d.Column).Where(c => !IsExcluded(plan, c)).ToList();
+        if (columns.Count == 0)
+        {
+            return new ReconcileOutcome(item, true, item.Row.Differences.Count == 0
+                ? "Nothing to change."
+                : "Nothing written - every differing column is left out of this run.");
+        }
+
+        var skipped = new List<string>();
+        var body = await BuildBodyAsync(source, target, columns, false, plan.MatchLookupsByName, skipped, ct).ConfigureAwait(false);
+
+        // A change of state needs its status alongside, or Dataverse pairs the new state
+        // with a status that belongs to the old one and refuses it.
+        PairStateWithStatus(plan, source, body);
+
+        // Rows matched on another key can still carry different primary ids. An update
+        // cannot change a row's id, so that difference is reported rather than written.
+        var idDiffers = columns.Any(c => c.IsPrimaryId);
+
+        if (body.Count == 0) return Fail(item, NothingWritable(plan, idDiffers, skipped));
+
+        JsonObject? before = null;
+        UndoStep? undo = null;
+
+        if (SaveSnapshots)
+        {
+            before = await SnapshotAsync(entitySet, target.Id, ct).ConfigureAwait(false);
+            if (before is null) return Fail(item, "the row is no longer in the target.");
+            undo = WriteUndo.ForUpdate(entitySet, target.Id, body, before, EntitySetOf);
+        }
+
+        await _target.UpdateRecordAsync(entitySet, target.Id, body, target.ETag, ct).ConfigureAwait(false);
+        Remember(plan.Entity, source.PrimaryName, target.Id);
+        return new ReconcileOutcome(item, true,
+            $"Updated {body.Count} column(s).{Note(skipped)}" +
+            (idDiffers ? $" Not changed: {PrimaryIdNote(plan.Entity.PrimaryIdAttribute)}." : string.Empty))
+        {
+            Id = target.Id, Written = body, Before = before, Undo = undo
+        };
+    }
+
+    /// <summary>Why an update had nothing it could send.</summary>
+    private static string NothingWritable(EntityComparePlan plan, bool idDiffers, List<string> skipped)
+    {
+        var reasons = new List<string>();
+        if (idDiffers) reasons.Add(PrimaryIdNote(plan.Entity.PrimaryIdAttribute));
+        if (skipped.Count > 0) reasons.Add("read-only in Dataverse: " + string.Join(", ", skipped));
+
+        return "nothing could be written - " + string.Join("; ", reasons) + ".";
     }
 
     private async Task<JsonObject?> SnapshotAsync(string entitySet, Guid id, CancellationToken ct)
@@ -390,7 +400,7 @@ public sealed class ReferenceDataWriter
         }
     }
 
-    private static string Note(IReadOnlyList<string> skipped) =>
+    private static string Note(List<string> skipped) =>
         skipped.Count == 0
             ? string.Empty
             : $" Left out as read-only: {string.Join(", ", skipped)}.";
@@ -427,15 +437,13 @@ public sealed class ReferenceDataWriter
                 continue;
             }
 
-            var raw = source.Raw(column.SelectName);
-
             if (column.IsLookup)
             {
-                await AddLookupAsync(body, source, target, column, raw, isCreate, matchLookupsByName, ct).ConfigureAwait(false);
+                await AddLookupAsync(body, source, target, column, isCreate, matchLookupsByName, ct).ConfigureAwait(false);
                 continue;
             }
 
-            body[column.LogicalName] = ToWriteValue(raw, column);
+            body[column.LogicalName] = ToWriteValue(source.Raw(column.SelectName), column);
         }
 
         return body;
@@ -446,11 +454,12 @@ public sealed class ReferenceDataWriter
         DataRecord source,
         DataRecord? target,
         EntityColumn column,
-        string? raw,
         bool isCreate,
         bool matchLookupsByName,
         CancellationToken ct)
     {
+        var raw = source.Raw(column.SelectName);
+
         // Dataverse only annotates a lookup that has a value, so a source that is empty here says
         // nothing about how to bind it. The target row, which does have a value to clear, does.
         var navigation = NavigationOf(source, column) ?? NavigationOf(target, column);
@@ -487,7 +496,7 @@ public sealed class ReferenceDataWriter
                 "so the reference cannot be written.");
         }
 
-        if (!_targetEntities.TryGetValue(targetTable!, out var related))
+        if (!_targetEntities.TryGetValue(targetTable, out var related))
         {
             throw new DataverseException(
                 $"Lookup '{column.LogicalName}' points at '{targetTable}', which is not in the target environment.");
@@ -518,7 +527,7 @@ public sealed class ReferenceDataWriter
                 "target cannot be identified.");
         }
 
-        var id = await ResolveAsync(related, label!, ct).ConfigureAwait(false);
+        var id = await ResolveAsync(related, label, ct).ConfigureAwait(false);
 
         if (id is null)
         {
@@ -576,13 +585,10 @@ public sealed class ReferenceDataWriter
         {
             if (item.Row.Source is not { } source) continue;
 
-            foreach (var target in source.LookupTargets.Values)
+            foreach (var target in source.LookupTargets.Values.OfType<string>().Where(target =>
+                         dependsOn.ContainsKey(target) && !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)))
             {
-                if (target is not null && dependsOn.ContainsKey(target) &&
-                    !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase))
-                {
-                    dependsOn[item.Table].Add(target);
-                }
+                dependsOn[item.Table].Add(target);
             }
         }
 
@@ -627,38 +633,45 @@ public sealed class ReferenceDataWriter
                 .GroupBy(i => i.Row.Source!.PrimaryName!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-            ReconcilePlanItem? ParentOf(ReconcilePlanItem item)
-            {
-                if (item.Row.Source is not { } source) return null;
-
-                foreach (var (column, target) in source.LookupTargets)
-                {
-                    if (!string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (source.Label(column) is { Length: > 0 } label && byName.TryGetValue(label, out var parent) &&
-                        !ReferenceEquals(parent, item))
-                    {
-                        return parent;
-                    }
-                }
-
-                return null;
-            }
-
             foreach (var item in table)
             {
-                var depth = 0;
-                var seen = new HashSet<ReconcilePlanItem> { item };
-
-                for (var parent = ParentOf(item); parent is not null && seen.Add(parent); parent = ParentOf(parent))
-                {
-                    depth++;
-                }
-
-                depths[item] = depth;
+                depths[item] = AncestorCount(item, byName);
             }
         }
 
         return depths;
+    }
+
+    /// <summary>How many ancestors a row has among <paramref name="byName"/>; a cycle counts each row once.</summary>
+    private static int AncestorCount(ReconcilePlanItem item, Dictionary<string, ReconcilePlanItem> byName)
+    {
+        var depth = 0;
+        var seen = new HashSet<ReconcilePlanItem> { item };
+
+        for (var parent = ParentOf(item, byName); parent is not null && seen.Add(parent); parent = ParentOf(parent, byName))
+        {
+            depth++;
+        }
+
+        return depth;
+    }
+
+    /// <summary>The row of the run, by name, that a row's lookup to its own table points at.</summary>
+    private static ReconcilePlanItem? ParentOf(ReconcilePlanItem item, Dictionary<string, ReconcilePlanItem> byName)
+    {
+        if (item.Row.Source is not { } source) return null;
+
+        foreach (var (column, target) in source.LookupTargets)
+        {
+            if (!string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)) continue;
+            if (source.Label(column) is { Length: > 0 } label && byName.TryGetValue(label, out var parent) &&
+                !ReferenceEquals(parent, item))
+            {
+                return parent;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

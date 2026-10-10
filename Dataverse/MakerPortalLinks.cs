@@ -110,7 +110,7 @@ public sealed class MakerPortalLinkBuilder
         var entitySet = ResolveEntitySet(item);
 
         var primaryEntityId = !string.IsNullOrWhiteSpace(item.PrimaryEntityName) &&
-                              _tables.TryGetValue(item.PrimaryEntityName!, out var parent) &&
+                              _tables.TryGetValue(item.PrimaryEntityName, out var parent) &&
                               parent.MetadataId != Guid.Empty
             ? parent.MetadataId.ToString()
             : null;
@@ -162,7 +162,7 @@ public sealed class MakerPortalLinkBuilder
         if (item.ComponentType == 29) return IsModernFlow(item) ? "cloudflows" : "workflows";
 
         if (!string.IsNullOrWhiteSpace(item.ComponentLogicalName) &&
-            _tables.TryGetValue(item.ComponentLogicalName!, out var table) &&
+            _tables.TryGetValue(item.ComponentLogicalName, out var table) &&
             !string.IsNullOrWhiteSpace(table.EntitySetName))
         {
             return table.EntitySetName;
@@ -187,7 +187,7 @@ public sealed class MakerPortalLinkBuilder
         // settings.json wins: keyed by component type number, or by component logical name.
         if (_overrides.TryGetValue(item.ComponentType.ToString(), out var byNumber)) return byNumber;
         if (!string.IsNullOrWhiteSpace(item.ComponentLogicalName) &&
-            _overrides.TryGetValue(item.ComponentLogicalName!, out var byName)) return byName;
+            _overrides.TryGetValue(item.ComponentLogicalName, out var byName)) return byName;
 
         if (DefaultTemplates.TryGetValue(item.ComponentType, out var template)) return template;
 

@@ -60,12 +60,12 @@ public sealed class QuickActions
         try
         {
             await _client.SetSwitchStateAsync(kind, item.ObjectId, on, ct).ConfigureAwait(false);
-            Record(set, item.ObjectId, verb, item.Name, wasOn is null ? null : new JsonObject { ["on"] = wasOn }, after, true,
-                $"{verb} - done.", undo);
+            Record(set, item.ObjectId, verb, item.Name, wasOn is null ? null : new JsonObject { ["on"] = wasOn }, after,
+                Outcome.Done(verb, undo));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Record(set, item.ObjectId, verb, item.Name, null, after, false, ex.Message, null);
+            Record(set, item.ObjectId, verb, item.Name, null, after, Outcome.Failed(ex));
             throw;
         }
     }
@@ -98,18 +98,23 @@ public sealed class QuickActions
                 _ => null
             };
 
-            Record(set, id ?? variable.ValueId, action, variable.SchemaName, before, after, true, $"{action} - done.", undo);
+            Record(set, id ?? variable.ValueId, action, variable.SchemaName, before, after, Outcome.Done(action, undo));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Record(set, variable.ValueId, action, variable.SchemaName, before, after, false, ex.Message, null);
+            Record(set, variable.ValueId, action, variable.SchemaName, before, after, Outcome.Failed(ex));
             throw;
         }
     }
 
-    private void Record(
-        string table, Guid? id, string action, string? name, JsonObject? before, JsonObject? after,
-        bool succeeded, string message, UndoStep? undo)
+    /// <summary>How a write went, for its log entry: the message, and when it was made, the write that reverses it.</summary>
+    private readonly record struct Outcome(bool Succeeded, string Message, UndoStep? Undo)
+    {
+        public static Outcome Done(string action, UndoStep? undo) => new(true, $"{action} - done.", undo);
+        public static Outcome Failed(Exception ex) => new(false, ex.Message, null);
+    }
+
+    private void Record(string table, Guid? id, string action, string? name, JsonObject? before, JsonObject? after, Outcome outcome)
     {
         _log ??= WriteLog.Start(Tool, _logFolder);
         _log.Append(new WriteLogEntry
@@ -124,9 +129,9 @@ public sealed class QuickActions
             Name = name,
             Before = before,
             After = after,
-            Succeeded = succeeded,
-            Message = message,
-            Undo = undo
+            Succeeded = outcome.Succeeded,
+            Message = outcome.Message,
+            Undo = outcome.Undo
         });
     }
 }
