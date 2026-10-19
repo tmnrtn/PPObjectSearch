@@ -93,6 +93,83 @@ public class FailuresTests
         Assert.Equal("Contoso.Plugins.Validate", Assert.Single(data.Events).ComponentName);
     }
 
+    // ---- the cap ----
+
+    private static readonly FailureQuery PluginsOnly = new() { CloudFlows = false, ClassicWorkflows = false };
+
+    /// <summary>One page of trace log entries: some with an empty exception, then some with a real one.</summary>
+    private static FakeHttpHandler Traces(int clean, int failing)
+    {
+        var rows = Enumerable.Range(0, clean)
+            .Select(i => $$"""{"plugintracelogid":"c{{i}}","createdon":"2026-10-01T12:00:00Z","typename":"Contoso.Plugins.Audit","exceptiondetails":""}""")
+            .Concat(Enumerable.Range(0, failing)
+                .Select(i => $$"""{"plugintracelogid":"f{{i}}","createdon":"2026-10-01T08:00:00Z","typename":"Contoso.Plugins.Validate","exceptiondetails":"Message: Boom"}"""));
+
+        return new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "organizations?", """{"value":[{"plugintracelogsetting":2}]}""")
+            .OnJson(HttpMethod.Get, "plugintracelogs?", "{\"value\":[" + string.Join(",", rows) + "]}");
+    }
+
+    [Fact]
+    public async Task Flow_runs_are_read_newest_first_so_a_period_cut_short_loses_its_oldest()
+    {
+        var handler = Handler();
+        await Fakes.Dataverse(handler).GetFailuresAsync(From, To, new FailureQuery { ClassicWorkflows = false, Plugins = false });
+
+        Assert.Contains("$orderby=starttime desc", Uri.UnescapeDataString(handler.Requests.First(r => r.Url.Contains("flowruns?")).Url));
+    }
+
+    [Fact]
+    public async Task Runs_of_flows_outside_a_long_scope_do_not_count_toward_the_cap()
+    {
+        // More than 40 flows in scope, so runs are filtered here rather than asked for by id.
+        var scope = Enumerable.Range(0, 41).Select(i => Guid.Parse($"d0000000-0000-0000-0000-{i:D12}")).ToHashSet();
+        var inScope = scope.First();
+
+        var rows = Enumerable.Range(0, DataverseClient.MaxFailureRows)
+            .Select(i => $$"""{"name":"other{{i}}","status":"Succeeded","starttime":"2026-10-01T12:00:00Z","_workflow_value":"{{FlowA}}"}""")
+            .Append($$"""{"name":"mine","status":"Failed","starttime":"2026-10-01T08:00:00Z","errormessage":"Boom","_workflow_value":"{{inScope}}"}""");
+
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "flowruns?", "{\"value\":[" + string.Join(",", rows) + "]}")
+            .OnJson(HttpMethod.Get, "workflows?", """{"value":[]}""");
+
+        var data = await Fakes.Dataverse(handler).GetFailuresAsync(From, To,
+            new FailureQuery { ClassicWorkflows = false, Plugins = false, WorkflowIds = scope });
+
+        Assert.Equal("mine", Assert.Single(data.Events).RunName);
+        Assert.Empty(data.Notes);
+    }
+
+    [Fact]
+    public async Task Traces_with_an_empty_exception_do_not_crowd_out_real_ones()
+    {
+        var data = await Fakes.Dataverse(Traces(clean: DataverseClient.MaxFailureRows, failing: 1)).GetFailuresAsync(From, To, PluginsOnly);
+
+        Assert.Equal("Contoso.Plugins.Validate", Assert.Single(data.Events).ComponentName);
+        Assert.Empty(data.Notes);
+    }
+
+    [Fact]
+    public async Task Past_the_cap_of_real_exceptions_the_read_says_it_was_cut_short()
+    {
+        var data = await Fakes.Dataverse(Traces(clean: 0, failing: DataverseClient.MaxFailureRows + 1)).GetFailuresAsync(From, To, PluginsOnly);
+
+        Assert.Equal(DataverseClient.MaxFailureRows, data.Events.Count);
+        Assert.Equal($"Plug-ins: only the newest {DataverseClient.MaxFailureRows:N0} traced exceptions were read.", Assert.Single(data.Notes));
+    }
+
+    [Fact]
+    public async Task A_read_of_mostly_clean_traces_stops_at_the_scan_limit_and_says_so()
+    {
+        var data = await Fakes.Dataverse(Traces(clean: DataverseClient.MaxScannedRows, failing: 1)).GetFailuresAsync(From, To, PluginsOnly);
+
+        Assert.Empty(data.Events);
+        Assert.Equal(DataverseClient.MaxScannedRows, data.TraceLogsRead);
+        Assert.Equal($"Plug-ins: only the newest {DataverseClient.MaxScannedRows:N0} trace log entries were read, so older exceptions are missing.",
+            Assert.Single(data.Notes));
+    }
+
     [Fact]
     public async Task A_solution_scope_keeps_only_its_components_and_a_failing_source_is_noted()
     {
