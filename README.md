@@ -80,6 +80,8 @@ straight into the maker portal.
   any. Double-click a component in the loaded list to open it; **Copy failures as Markdown** and
   **Save raw XML…** are on the toolbar. An import still running shows its progress, refreshed every
   five seconds, until its log is ready.
+- **Table data** (in the sidebar) — a read-only, filterable look at the rows of one table, for
+  checking reference and config data, with export to CSV or Markdown. See [Table data](#table-data).
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
@@ -520,6 +522,36 @@ environment variables. Solution imports, upgrades and uninstalls from Solution h
 same timeline, with their result and any error. Filter by type, or to *unmanaged only* - the direct
 customisations that usually cause drift. Double-click a component to open it; export to CSV or
 Markdown for an incident write-up.
+
+## Table data
+
+**Table data…** (sidebar, under Investigate, or *Table data* in the command palette) is a quick,
+read-only look at the rows of one table - reference and configuration data, lookup tables,
+environment-specific settings, option lists. A table's details window opens it on that table with
+**Browse rows**, beside the row count.
+
+- **Choose a table** from the list on the left, searching by display name or logical name.
+- **Columns** - the primary name, then the columns of the table's default public view, in the
+  view's order (a table with no view shows its primary name and status). **Columns** opens a
+  searchable picker of every readable column; **Show columns** reads the rows again with the ones
+  ticked, and **Default columns** goes back to the view's.
+- **Labels, not ids** - lookups show the name of the row they point at, choices their label, and
+  money and dates Dataverse's own formatting. **Raw values** shows the ids and option numbers instead.
+- **Quick filter** narrows the rows already read to those with the text in any column shown,
+  without reading again.
+- **Server filter** - one column, a comparison and a value (*Where Rate greater than 10*), read
+  again from Dataverse. The comparisons follow the column's type as its metadata states it: text
+  (contains, equals, begins with), numbers, choices (by label or number), yes/no, lookups (by row
+  id), and dates (on, on or before, on or after, in your time zone). A column that holds dates as
+  text - as some virtual tables do - filters as text. **Active only** reads only active rows.
+- **Row limit** - 500, 5,000 (the default) or 50,000 rows, sorted by primary name. When the limit
+  stops a read before the table runs out, a banner says so; add a server filter or raise the limit.
+  **Stop** ends a read in progress.
+- **Export** the rows and columns shown, after both filters, as CSV or as a Markdown table with the
+  environment and filter above it. Select cells and press `Ctrl+C` to copy them with their headers.
+
+It only ever reads: every request is a GET, and there is nothing in the window that writes, so the
+production guard has nothing to guard.
 
 ## Overview tab for apps, agents and more
 

@@ -143,6 +143,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Import log…", Group = env, Detail = "choose an import in Solution history", Command = session.SolutionHistoryCommand },
             new() { Title = "Recent changes", Group = env, Command = session.RecentChangesCommand },
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
+            new() { Title = "Table data", Group = env, Detail = "rows of a table, read-only", Command = session.TableDataCommand },
             new() { Title = "Users", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Users" },
             new() { Title = "Security roles", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
             new() { Title = "Mailboxes", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },

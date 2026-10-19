@@ -825,6 +825,17 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         ClearEnvironmentValueCommand.RaiseCanExecuteChanged();
     }
 
+    // ---------------------------------------------------------------- browse rows
+
+    /// <summary>The table's logical name once its metadata is read; until then the component's name stands in.</summary>
+    private string? _tableLogicalName;
+
+    /// <summary>Opens the read-only table data window on this table.</summary>
+    public RelayCommand BrowseRowsCommand => _browseRowsCommand ??= new RelayCommand(
+        _ => Session?.OpenTableData(_tableLogicalName ?? Item.Name),
+        _ => IsTable && Session is not null);
+    private RelayCommand? _browseRowsCommand;
+
     // ---------------------------------------------------------------- row count
 
     private CancellationTokenSource? _countCts;
@@ -1571,6 +1582,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             problems.Add("table metadata: this component could not be matched to a table.");
             return;
         }
+
+        _tableLogicalName = table.LogicalName;
 
         var columns = _client.GetTableColumnsAsync(table, CancellationToken.None);
         var relationships = _client.GetTableRelationshipsAsync(table, CancellationToken.None);
