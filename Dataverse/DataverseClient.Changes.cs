@@ -15,8 +15,10 @@ public sealed partial class DataverseClient
     public async Task<ComponentList> GetRecentlyChangedAsync(
         Guid defaultSolutionId, DateTimeOffset since, CancellationToken ct = default)
     {
+        // The summary table's modified date is a string column (an ISO date in UTC), so it is
+        // compared with a quoted string - an unquoted date is a type mismatch and a 400.
         var url = EnvironmentUrl + ApiPath + "msdyn_solutioncomponentsummaries?$filter=" +
-                  Uri.EscapeDataString($"(msdyn_solutionid eq {defaultSolutionId}) and msdyn_modifiedon ge {since.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}") +
+                  Uri.EscapeDataString($"(msdyn_solutionid eq {defaultSolutionId}) and msdyn_modifiedon ge '{since.UtcDateTime:yyyy-MM-ddTHH:mm:ssZ}'") +
                   "&$orderby=msdyn_modifiedon desc";
 
         var items = new List<SolutionComponentItem>();

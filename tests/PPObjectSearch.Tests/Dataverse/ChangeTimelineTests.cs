@@ -60,7 +60,7 @@ public class ChangeTimelineTests
 
         Assert.Equal("new_recent.js", Assert.Single(changed).Name);
         var url = Uri.UnescapeDataString(handler.Requests[0].Url);
-        Assert.Contains($"(msdyn_solutionid eq {defaultSolution}) and msdyn_modifiedon ge 2026-09-27T12:00:00Z", url);
+        Assert.Contains($"(msdyn_solutionid eq {defaultSolution}) and msdyn_modifiedon ge '2026-09-27T12:00:00Z'", url);
         Assert.Contains("$orderby=msdyn_modifiedon desc", url);
         Assert.False(changed.IsTruncated);
     }
