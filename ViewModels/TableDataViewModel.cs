@@ -39,6 +39,12 @@ public sealed class TableDataRow(DataRecord record, IReadOnlyList<string?> cells
     public bool Matches(string text) => Cells.Any(c => c?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false);
 }
 
+/// <summary>One server-side condition: the OData the rows are read with, and the words it is shown as.</summary>
+public sealed record TableServerFilter(string Filter, string Label)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>An operator in the server filter's list, with the words it is shown as.</summary>
 public sealed record TableFilterChoice(TableFilterOperator Operator)
 {
@@ -58,9 +64,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _cts;
     private IReadOnlyList<DataRecord> _records = [];
 
-    /// <summary>The server filter the rows on screen were read with, as OData and as words.</summary>
-    private string? _serverFilter;
-    private string? _serverFilterLabel;
+    /// <summary>Per lookup column, the tables it points at and their name columns - read once per table opened.</summary>
+    private readonly Dictionary<string, IReadOnlyList<LookupNavigation>> _lookupNames = new(StringComparer.OrdinalIgnoreCase);
 
     public void Dispose()
     {
@@ -93,6 +98,11 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         DefaultColumnsCommand = new RelayCommand(_ => ShowDefaultColumns(), _ => Columns.Count > 0);
         ApplyFilterCommand = new AsyncRelayCommand(_ => ApplyFilterAsync(), _ => FilterColumn is not null);
         ClearFilterCommand = new AsyncRelayCommand(_ => ClearFilterAsync(), _ => HasServerFilter);
+        RemoveFilterCommand = new AsyncRelayCommand(p => RemoveFilterAsync(p as TableServerFilter), p => p is TableServerFilter);
+        CopyValueCommand = new RelayCommand(_ => CopyCell(raw: false), _ => CurrentRow is not null && CurrentColumn >= 0);
+        CopyRawValueCommand = new RelayCommand(_ => CopyCell(raw: true), _ => CurrentRow is not null && CurrentColumn >= 0);
+        CopyColumnCommand = new RelayCommand(_ => CopyColumn(), _ => CurrentColumn >= 0 && HasRows);
+        CopyRowIdCommand = new RelayCommand(_ => CopyRowId(), _ => CurrentRow is not null);
         ToggleColumnPickerCommand = new RelayCommand(_ => IsColumnPickerOpen = !IsColumnPickerOpen);
         ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => Rows.Count > 0);
         ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => Rows.Count > 0);
@@ -109,6 +119,11 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     public RelayCommand DefaultColumnsCommand { get; }
     public AsyncRelayCommand ApplyFilterCommand { get; }
     public AsyncRelayCommand ClearFilterCommand { get; }
+    public AsyncRelayCommand RemoveFilterCommand { get; }
+    public RelayCommand CopyValueCommand { get; }
+    public RelayCommand CopyRawValueCommand { get; }
+    public RelayCommand CopyColumnCommand { get; }
+    public RelayCommand CopyRowIdCommand { get; }
     public RelayCommand ToggleColumnPickerCommand { get; }
     public RelayCommand ExportCsvCommand { get; }
     public RelayCommand ExportMarkdownCommand { get; }
@@ -303,11 +318,15 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     /// <summary>What the value box takes, for its placeholder: "a number", "a date, such as 2026-10-19"...</summary>
     public string FilterHint => FilterColumn is null ? "Value" : TableRowFilter.ValueHint(FilterColumn.Column);
 
-    public bool HasServerFilter => _serverFilter is not null;
+    /// <summary>The conditions the rows on screen were read with; a row has to match every one.</summary>
+    public ObservableCollection<TableServerFilter> ServerFilters { get; } = new();
 
-    /// <summary>"Name contains 'tax'" - the filter the rows on screen were read with.</summary>
-    public string ServerFilterLabel => _serverFilterLabel ?? string.Empty;
+    public bool HasServerFilter => ServerFilters.Count > 0;
 
+    /// <summary>"Name contains 'tax' and Rate greater than '5'" - every condition, as words.</summary>
+    public string ServerFilterLabel => string.Join(" and ", ServerFilters.Select(f => f.Label));
+
+    /// <summary>Adds the condition in the filter boxes to those already applied, and reads the rows again.</summary>
     private async Task ApplyFilterAsync()
     {
         if (FilterColumn is not { } column || FilterOperator is not { } choice) return;
@@ -327,31 +346,80 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
             value = number;
         }
 
-        var filter = TableRowFilter.Build(column.Column, choice.Operator, value, out var error);
+        // A lookup compared by name goes through the tables it points at, which the metadata says.
+        IReadOnlyList<LookupNavigation>? lookupNames = null;
+        if (TableRowFilter.NeedsLookupNames(column.Column, choice.Operator, value))
+        {
+            lookupNames = await LookupNamesAsync(column);
+            if (lookupNames is null) return;
+        }
+
+        var filter = TableRowFilter.Build(column.Column, choice.Operator, value, out var error, lookupNames);
         if (filter is null)
         {
             Status = error ?? "That filter cannot be built.";
             return;
         }
 
-        SetServerFilter(filter, TableRowFilter.NeedsValue(choice.Operator)
-            ? $"{column.Header} {choice.Label} '{FilterValue.Trim()}'"
-            : $"{column.Header} {choice.Label}");
+        if (ServerFilters.Any(f => f.Filter == filter))
+        {
+            Status = "That filter is already applied.";
+            return;
+        }
 
+        ServerFilters.Add(new TableServerFilter(filter, TableRowFilter.NeedsValue(choice.Operator)
+            ? $"{column.Header} {choice.Label} '{FilterValue.Trim()}'"
+            : $"{column.Header} {choice.Label}"));
+        FiltersChanged();
+        FilterValue = string.Empty;
+
+        await LoadRowsAsync();
+    }
+
+    /// <summary>The lookup's targets, read once; null - with the reason in the status - when they cannot be read.</summary>
+    private async Task<IReadOnlyList<LookupNavigation>?> LookupNamesAsync(TableDataColumn column)
+    {
+        if (_lookupNames.TryGetValue(column.LogicalName, out var known)) return known;
+        if (_session.Client is not { } client || SelectedTable is not { } table) return null;
+
+        try
+        {
+            Status = $"Reading which tables {column.Header} points at...";
+            var names = await client.GetLookupNavigationsAsync(table.LogicalName, column.LogicalName);
+            _lookupNames[column.LogicalName] = names;
+            Status = string.Empty;
+            return names;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not read which tables {column.Header} points at - " + ex.Message;
+            return null;
+        }
+    }
+
+    private async Task RemoveFilterAsync(TableServerFilter? filter)
+    {
+        if (filter is null || !ServerFilters.Remove(filter)) return;
+
+        FiltersChanged();
         await LoadRowsAsync();
     }
 
     private async Task ClearFilterAsync()
     {
-        SetServerFilter(null, null);
+        ClearFilters();
         FilterValue = string.Empty;
         await LoadRowsAsync();
     }
 
-    private void SetServerFilter(string? filter, string? label)
+    private void ClearFilters()
     {
-        _serverFilter = filter;
-        _serverFilterLabel = label;
+        ServerFilters.Clear();
+        FiltersChanged();
+    }
+
+    private void FiltersChanged()
+    {
         OnPropertyChanged(nameof(HasServerFilter));
         OnPropertyChanged(nameof(ServerFilterLabel));
         ClearFilterCommand.RaiseCanExecuteChanged();
@@ -377,7 +445,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The OData filter a read uses: the server filter, and Active only where ticked.</summary>
-    public string? EffectiveFilter => TableRowFilter.And(_serverFilter, ActiveOnly && HasStateCode ? "statecode eq 0" : null);
+    public string? EffectiveFilter => TableRowFilter.And(
+        [.. ServerFilters.Select(f => f.Filter), ActiveOnly && HasStateCode ? "statecode eq 0" : null]);
 
     // ---------------------------------------------------------------- row limit
 
@@ -430,6 +499,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     {
         var raw = ShowRawValues;
         Rows.ReplaceAll(_records.Select(r => new TableDataRow(r, columns.Select(c => Cell(r, c.SelectName, raw)).ToArray())));
+        SetCurrentCell(null, -1);
         RefreshRows();
     }
 
@@ -466,7 +536,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         (null, _, _) => "Search for a table on the left by its display name or logical name.",
         (_, true, _) => "No row shown has that text. Clear the quick filter to see every row read.",
         ({ } table, _, true) => $"The rows of {table.Label} are being read.",
-        _ when HasServerFilter || ActiveOnly => "No row matches the filter. Clear the filter, or untick Active only.",
+        _ when HasServerFilter || ActiveOnly => "No row matches the filters. Remove a filter, or untick Active only.",
         ({ } table, _, _) => $"{table.Label} has no rows."
     };
 
@@ -557,7 +627,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         _records = [];
         Rows.ReplaceAll([]);
         Warnings = string.Empty;
-        SetServerFilter(null, null);
+        ClearFilters();
+        _lookupNames.Clear();
         FilterValue = string.Empty;
         QuickFilter = string.Empty;
 
@@ -604,7 +675,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
               "Add a server filter, or raise the row limit, to see the rest."
             : string.Empty;
 
-        var filtered = filter is null ? string.Empty : " matching the filter";
+        var filtered = filter is null ? string.Empty : " matching the filters";
         ReadSummary = $"Read {result.Rows.Count:N0} row{(result.Rows.Count == 1 ? string.Empty : "s")}{filtered} of {table.Label} " +
                       $"in {clock.Elapsed.TotalSeconds:0.0} s";
         Status = string.Empty;
@@ -640,6 +711,59 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ---------------------------------------------------------------- copy
+
+    /// <summary>The row of the cell last clicked or right-clicked in the grid.</summary>
+    public TableDataRow? CurrentRow { get; private set; }
+
+    /// <summary>The position in <see cref="ShownColumns"/> of the cell last clicked; -1 for none.</summary>
+    public int CurrentColumn { get; private set; } = -1;
+
+    /// <summary>Told by the grid which cell is current, so the copy commands know what to copy.</summary>
+    public void SetCurrentCell(TableDataRow? row, int column)
+    {
+        CurrentRow = row;
+        CurrentColumn = row is null || column < 0 || column >= ShownColumns.Count ? -1 : column;
+        CopyValueCommand.RaiseCanExecuteChanged();
+        CopyRawValueCommand.RaiseCanExecuteChanged();
+        CopyColumnCommand.RaiseCanExecuteChanged();
+        CopyRowIdCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>The value shown, or the raw one - a lookup's id, a choice's number.</summary>
+    private void CopyCell(bool raw)
+    {
+        if (CurrentRow is not { } row || CurrentColumn < 0) return;
+
+        var column = ShownColumns[CurrentColumn];
+        Copy(Cell(row.Record, column.SelectName, raw) ?? string.Empty,
+            $"{column.Header}{(raw ? " (raw)" : string.Empty)} of {Describe(row)}");
+    }
+
+    /// <summary>The column's value in every row shown, one per line - for a list of codes or ids.</summary>
+    private void CopyColumn()
+    {
+        if (CurrentColumn < 0) return;
+
+        var rows = RowsView.Cast<TableDataRow>().ToList();
+        Copy(string.Join(Environment.NewLine, rows.Select(r => r.Cells[CurrentColumn] ?? string.Empty)),
+            $"{ShownColumns[CurrentColumn].Header} of {rows.Count:N0} row(s)");
+    }
+
+    private void CopyRowId()
+    {
+        if (CurrentRow is not { } row) return;
+        Copy(row.Record.Id.ToString(), $"the id of {Describe(row)}");
+    }
+
+    private static string Describe(TableDataRow row) =>
+        string.IsNullOrWhiteSpace(row.Record.PrimaryName) ? "the row" : row.Record.PrimaryName;
+
+    private void Copy(string text, string what) =>
+        Status = ClipboardText.TryCopy(text, out var failure)
+            ? $"Copied {what}."
+            : $"Could not copy {what} - {failure}";
+
     // ---------------------------------------------------------------- export
 
     /// <summary>The headers and cells on screen, after both filters.</summary>
@@ -650,7 +774,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     internal IEnumerable<string> ExportNotes()
     {
         yield return $"Environment: {_session.Title}";
-        if (HasServerFilter) yield return $"Filter: {ServerFilterLabel}";
+        foreach (var filter in ServerFilters) yield return $"Filter: {filter.Label}";
         if (ActiveOnly && HasStateCode) yield return "Active rows only";
         if (!string.IsNullOrWhiteSpace(QuickFilter)) yield return $"Quick filter: {QuickFilter.Trim()}";
         yield return $"Rows: {CountLabel}";

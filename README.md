@@ -539,16 +539,25 @@ environment-specific settings, option lists. A table's details window opens it o
   money and dates Dataverse's own formatting. **Raw values** shows the ids and option numbers instead.
 - **Quick filter** narrows the rows already read to those with the text in any column shown,
   without reading again.
-- **Server filter** - one column, a comparison and a value (*Where Rate greater than 10*), read
-  again from Dataverse. The comparisons follow the column's type as its metadata states it: text
-  (contains, equals, begins with), numbers, choices (by label or number), yes/no, lookups (by row
-  id), and dates (on, on or before, on or after, in your time zone). A column that holds dates as
-  text - as some virtual tables do - filters as text. **Active only** reads only active rows.
+- **Server filters** - a column, a comparison and a value (*Where Rate greater than 10*); **Add
+  filter** reads the rows again from Dataverse. Add as many as you like: a row has to match every
+  one. Each shows as a chip under the boxes - its ✕ removes it, and **Clear filters** removes them
+  all. The comparisons follow the column's type as its metadata states it: text (contains, equals,
+  begins with), numbers, choices (by label or number), yes/no, dates (on, on or before, on or after,
+  in your time zone), and lookups. A lookup compares the **name of the row it points at** (*Where
+  Parent contains Contoso*), through the lookup's relationship to that table's primary name column;
+  type a row id (GUID) with equals or does not equal to compare ids instead. A customer or owner
+  lookup matches the name in any of the tables it can point at. A column that holds dates as text -
+  as some virtual tables do - filters as text. **Active only** reads only active rows.
 - **Row limit** - 500, 5,000 (the default) or 50,000 rows, sorted by primary name. When the limit
   stops a read before the table runs out, a banner says so; add a server filter or raise the limit.
   **Stop** ends a read in progress.
 - **Export** the rows and columns shown, after both filters, as CSV or as a Markdown table with the
-  environment and filter above it. Select cells and press `Ctrl+C` to copy them with their headers.
+  environment and filters above it.
+- **Copy** - right-click a cell for **Copy value** (as shown), **Copy raw value** (a lookup's row
+  id, a choice's number), **Copy column** (that column's value in every row shown, one per line)
+  and **Copy row id**. Select cells and press `Ctrl+C` (or **Copy selected cells**) to copy them
+  with their headers, ready to paste into a spreadsheet.
 
 It only ever reads: every request is a GET, and there is nothing in the window that writes, so the
 production guard has nothing to guard.

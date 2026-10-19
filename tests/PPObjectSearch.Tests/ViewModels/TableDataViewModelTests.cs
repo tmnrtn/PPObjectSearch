@@ -31,6 +31,7 @@ public class TableDataViewModelTests
         Attribute("new_region", "PicklistType", "Region"),
         Attribute("statecode", "StateType", "Status"),
         Attribute("new_notes", "MemoType", "Notes"),
+        Attribute("new_parentid", "LookupType", "Parent"),
         Attribute("msdyn_modifiedon", "StringType", "Modified on")) + "]}";
 
     private const string View = """
@@ -41,7 +42,8 @@ public class TableDataViewModelTests
         {"value":[
           {"new_taxcodeid":"00000000-0000-0000-0000-000000000001","new_name":"Reduced","new_rate":5,
            "new_rate@OData.Community.Display.V1.FormattedValue":"5.00",
-           "new_region":100000001,"new_region@OData.Community.Display.V1.FormattedValue":"Europe"},
+           "new_region":100000001,"new_region@OData.Community.Display.V1.FormattedValue":"Europe",
+           "_new_parentid_value":"aaaaaaaa-0000-0000-0000-000000000001","_new_parentid_value@OData.Community.Display.V1.FormattedValue":"Group A"},
           {"new_taxcodeid":"00000000-0000-0000-0000-000000000002","new_name":"Standard","new_rate":20,
            "new_rate@OData.Community.Display.V1.FormattedValue":"20.00",
            "new_region":100000000,"new_region@OData.Community.Display.V1.FormattedValue":"Americas"},
@@ -52,6 +54,10 @@ public class TableDataViewModelTests
 
     private static FakeHttpHandler Handler(string rows = TaxCodeRows) => new FakeHttpHandler()
         .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='new_taxcode')/Attributes", TaxCodeColumns)
+        .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='new_taxcode')/ManyToOneRelationships", """
+            {"value":[{"ReferencingAttribute":"new_parentid","ReferencingEntityNavigationPropertyName":"new_ParentId","ReferencedEntity":"new_group"}]}
+            """)
+        .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='new_group')?", """{"PrimaryNameAttribute":"new_name"}""")
         .OnJson(HttpMethod.Get, "EntityDefinitions?", Tables)
         .OnJson(HttpMethod.Get, "savedqueries", View)
         .OnJson(HttpMethod.Get, "new_taxcodes?", rows);
@@ -99,7 +105,7 @@ public class TableDataViewModelTests
         Assert.Equal("Columns (3)", vm.ColumnsLabel);
 
         // The default ones first, in the view's order, then the rest by name.
-        Assert.Equal(["new_name", "new_rate", "new_region", "msdyn_modifiedon", "new_notes", "statecode", "new_taxcodeid"],
+        Assert.Equal(["new_name", "new_rate", "new_region", "msdyn_modifiedon", "new_notes", "new_parentid", "statecode", "new_taxcodeid"],
             vm.Columns.Select(c => c.LogicalName));
 
         Assert.Equal(["Reduced", "5.00", "Europe"], vm.Rows[0].Cells);
@@ -296,7 +302,7 @@ public class TableDataViewModelTests
         await vm.Pending;
 
         Assert.Equal("No rows", vm.EmptyHeading);
-        Assert.Equal("No row matches the filter. Clear the filter, or untick Active only.", vm.EmptyText);
+        Assert.Equal("No row matches the filters. Remove a filter, or untick Active only.", vm.EmptyText);
         Assert.False(vm.ExportCsvCommand.CanExecute(null));
     }
 
@@ -460,5 +466,111 @@ public class TableDataViewModelTests
         Assert.Equal(string.Empty, vm.QuickFilter);
         Assert.False(vm.HasStateCode);
         Assert.DoesNotContain("$filter", handler.Requests[^1].Url);
+    }
+
+    [Fact]
+    public async Task A_lookup_is_filtered_by_the_name_of_the_row_it_points_at()
+    {
+        var handler = Handler();
+        var vm = await Opened(handler);
+
+        vm.FilterColumn = vm.Columns.First(c => c.LogicalName == "new_parentid");
+
+        Assert.Equal(TableFilterOperator.Contains, vm.FilterOperator?.Operator);
+        Assert.Equal("the related row's name, or its id", vm.FilterHint);
+
+        vm.FilterValue = "Group";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Contains("$filter=contains(new_ParentId/new_name,'Group')", RowReads(handler)[^1].Url);
+        Assert.Equal("Parent contains 'Group'", vm.ServerFilterLabel);
+
+        // The second condition on the same lookup uses what was read for the first.
+        vm.FilterOperator = vm.FilterOperators.First(o => o.Operator == TableFilterOperator.Equals);
+        vm.FilterValue = "Group A";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Contains("$filter=(contains(new_ParentId/new_name,'Group')) and (new_ParentId/new_name eq 'Group A')", RowReads(handler)[^1].Url);
+        Assert.Single(handler.Requests, r => r.Url.Contains("ManyToOneRelationships", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_lookup_compared_with_an_id_reads_no_relationships()
+    {
+        var handler = Handler();
+        var vm = await Opened(handler);
+
+        vm.FilterColumn = vm.Columns.First(c => c.LogicalName == "new_parentid");
+        vm.FilterOperator = vm.FilterOperators.First(o => o.Operator == TableFilterOperator.Equals);
+        vm.FilterValue = "aaaaaaaa-0000-0000-0000-000000000001";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Contains("$filter=_new_parentid_value eq aaaaaaaa-0000-0000-0000-000000000001", RowReads(handler)[^1].Url);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("ManyToOneRelationships", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_lookup_whose_targets_cannot_be_read_asks_for_an_id_and_reads_nothing()
+    {
+        // First match wins, so the failing relationships route goes ahead of the usual ones.
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "/ManyToOneRelationships", HttpStatusCode.BadRequest, "not here")
+            .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='new_taxcode')/Attributes", TaxCodeColumns)
+            .OnJson(HttpMethod.Get, "EntityDefinitions?", Tables)
+            .OnJson(HttpMethod.Get, "savedqueries", View)
+            .OnJson(HttpMethod.Get, "new_taxcodes?", TaxCodeRows);
+        var vm = await Opened(handler);
+
+        vm.FilterColumn = vm.Columns.First(c => c.LogicalName == "new_parentid");
+        vm.FilterValue = "Group";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Equal("The name of the row Parent points at cannot be filtered on here - type the row's id (GUID) instead.", vm.StatusLine);
+        Assert.Single(RowReads(handler));
+        Assert.False(vm.HasServerFilter);
+    }
+
+    [Fact]
+    public async Task Filters_add_up_and_each_can_be_removed()
+    {
+        var handler = Handler();
+        var vm = await Opened(handler);
+
+        vm.FilterColumn = vm.Columns.First(c => c.LogicalName == "new_rate");
+        vm.FilterOperator = vm.FilterOperators.First(o => o.Operator == TableFilterOperator.GreaterThan);
+        vm.FilterValue = "1";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, vm.FilterValue);
+
+        vm.FilterColumn = vm.Columns.First(c => c.LogicalName == "new_name");
+        vm.FilterValue = "a";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Contains("$filter=(new_rate gt 1) and (contains(new_name,'a'))", RowReads(handler)[^1].Url);
+        Assert.Equal(["Rate greater than '1'", "Name contains 'a'"], vm.ServerFilters.Select(f => f.Label));
+        Assert.Equal("Rate greater than '1' and Name contains 'a'", vm.ServerFilterLabel);
+        Assert.Contains("Filter: Rate greater than '1'", vm.ExportNotes());
+        Assert.Contains("Filter: Name contains 'a'", vm.ExportNotes());
+
+        // The same condition twice reads nothing more.
+        var reads = RowReads(handler).Count;
+        vm.FilterValue = "a";
+        await vm.ApplyFilterCommand.ExecuteAsync(null);
+
+        Assert.Equal("That filter is already applied.", vm.StatusLine);
+        Assert.Equal(reads, RowReads(handler).Count);
+
+        Assert.True(vm.RemoveFilterCommand.CanExecute(vm.ServerFilters[0]));
+        Assert.False(vm.RemoveFilterCommand.CanExecute(null));
+        await vm.RemoveFilterCommand.ExecuteAsync(vm.ServerFilters[0]);
+
+        Assert.Contains("$filter=contains(new_name,'a')", RowReads(handler)[^1].Url);
+        Assert.Equal(["Name contains 'a'"], vm.ServerFilters.Select(f => f.Label));
+
+        await vm.ClearFilterCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.ServerFilters);
+        Assert.DoesNotContain("$filter", RowReads(handler)[^1].Url);
     }
 }

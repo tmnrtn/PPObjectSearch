@@ -1,3 +1,4 @@
+using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 
@@ -19,6 +20,69 @@ public class TableRowFilterTests
     {
         Assert.Null(TableRowFilter.Build(column, op, value, out var error));
         return Assert.IsType<string>(error);
+    }
+
+    private static readonly LookupNavigation[] Parent = [new("new_ParentId", "new_group", "new_name")];
+
+    private static readonly LookupNavigation[] Customer =
+    [
+        new("parentcustomerid_account", "account", "name"),
+        new("parentcustomerid_contact", "contact", "fullname")
+    ];
+
+    private static string? Named(EntityColumn column, TableFilterOperator op, string value, IReadOnlyList<LookupNavigation> names)
+    {
+        var filter = TableRowFilter.Build(column, op, value, out var error, names);
+        Assert.True(filter is not null, error);
+        return filter;
+    }
+
+    [Theory]
+    [InlineData(TableFilterOperator.Contains, "contains(new_ParentId/new_name,'O''Neil')")]
+    [InlineData(TableFilterOperator.BeginsWith, "startswith(new_ParentId/new_name,'O''Neil')")]
+    [InlineData(TableFilterOperator.Equals, "new_ParentId/new_name eq 'O''Neil'")]
+    [InlineData(TableFilterOperator.NotEquals, "new_ParentId/new_name ne 'O''Neil'")]
+    public void A_lookup_filters_on_the_name_of_the_row_it_points_at(TableFilterOperator op, string expected)
+    {
+        Assert.Equal(expected, Named(Column("new_parentid", "LookupType", "Parent"), op, "O'Neil", Parent));
+    }
+
+    [Fact]
+    public void A_customer_lookup_matches_a_name_in_any_table_it_points_at()
+    {
+        var column = Column("parentcustomerid", "CustomerType");
+
+        Assert.Equal("(contains(parentcustomerid_account/name,'Contoso') or contains(parentcustomerid_contact/fullname,'Contoso'))",
+            Named(column, TableFilterOperator.Contains, "Contoso", Customer));
+
+        // A row points at one table; the others compare as null, which differs - so every one must differ.
+        Assert.Equal("(parentcustomerid_account/name ne 'Contoso' and parentcustomerid_contact/fullname ne 'Contoso')",
+            Named(column, TableFilterOperator.NotEquals, "Contoso", Customer));
+    }
+
+    [Fact]
+    public void A_lookup_compared_with_a_guid_compares_ids_and_needs_no_names()
+    {
+        var id = Guid.NewGuid();
+        var column = Column("new_parentid", "LookupType");
+
+        Assert.False(TableRowFilter.NeedsLookupNames(column, TableFilterOperator.Equals, id.ToString()));
+        Assert.False(TableRowFilter.NeedsLookupNames(column, TableFilterOperator.IsEmpty, null));
+        Assert.True(TableRowFilter.NeedsLookupNames(column, TableFilterOperator.Equals, "Contoso"));
+        Assert.True(TableRowFilter.NeedsLookupNames(column, TableFilterOperator.Contains, id.ToString()));
+        Assert.False(TableRowFilter.NeedsLookupNames(Column("new_name", "StringType"), TableFilterOperator.Contains, "x"));
+
+        Assert.Equal($"_new_parentid_value ne {id}", Named(column, TableFilterOperator.NotEquals, id.ToString(), Parent));
+        Assert.Equal(TableFilterOperator.Contains, TableRowFilter.OperatorsFor(column)[0]);
+    }
+
+    [Fact]
+    public void A_row_id_column_is_still_compared_by_id_only()
+    {
+        var column = Column("new_thingid", "UniqueidentifierType");
+
+        Assert.DoesNotContain(TableFilterOperator.Contains, TableRowFilter.OperatorsFor(column));
+        Assert.Equal("\"Contoso\" is not a row id (GUID).", Error(column, TableFilterOperator.Equals, "Contoso"));
     }
 
     [Theory]
@@ -120,7 +184,8 @@ public class TableRowFilterTests
 
         Assert.Equal($"_parentaccountid_value eq {id}", Build(column, TableFilterOperator.Equals, id.ToString("B")));
         Assert.Equal("_parentaccountid_value eq null", Build(column, TableFilterOperator.IsEmpty, null));
-        Assert.Equal("\"Contoso\" is not a row id (GUID).", Error(column, TableFilterOperator.Equals, "Contoso"));
+        Assert.Equal("The name of the row parentaccountid points at cannot be filtered on here - type the row's id (GUID) instead.",
+            Error(column, TableFilterOperator.Equals, "Contoso"));
     }
 
     [Fact]
@@ -165,7 +230,8 @@ public class TableRowFilterTests
         Assert.Equal("a date, such as 2026-10-19", TableRowFilter.ValueHint(Column("modifiedon", "DateTimeType")));
         Assert.Equal("the choice's label or number", TableRowFilter.ValueHint(Column("statecode", "StateType")));
         Assert.Equal("yes or no", TableRowFilter.ValueHint(Column("new_on", "BooleanType")));
-        Assert.Equal("a row id (GUID)", TableRowFilter.ValueHint(Column("ownerid", "OwnerType")));
+        Assert.Equal("the related row's name, or its id", TableRowFilter.ValueHint(Column("ownerid", "OwnerType")));
+        Assert.Equal("a row id (GUID)", TableRowFilter.ValueHint(Column("new_thingid", "UniqueidentifierType")));
         Assert.Equal("a number", TableRowFilter.ValueHint(Column("new_n", "DoubleType")));
         Assert.Equal("the choice's number", TableRowFilter.ValueHint(Column("new_days", "MultiSelectPicklistType")));
     }

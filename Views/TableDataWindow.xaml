@@ -147,7 +147,7 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- One server-side condition: the rows are read again with it. -->
+                    <!-- Server-side conditions, added one at a time: the rows are read again matching every one. -->
                     <WrapPanel Grid.Row="1" Margin="14,0,14,10">
                         <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
                                   ItemsSource="{Binding Columns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
@@ -162,16 +162,35 @@
                                 <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
                             </TextBox.InputBindings>
                         </TextBox>
-                        <Button Content="Filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
-                                ToolTip="Read the rows again, only those that match" />
+                        <Button Content="Add filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
+                                ToolTip="Add this condition to the filters and read the rows again - a row has to match every filter" />
                         <CheckBox Content="Active only" Margin="12,0,0,0" VerticalAlignment="Center" IsChecked="{Binding ActiveOnly}"
                                   Visibility="{Binding HasStateCode, Converter={StaticResource BoolToVis}}"
                                   ToolTip="Only rows whose status is Active" />
-                        <ContentControl Style="{StaticResource Chip}" Margin="12,0,0,0" VerticalAlignment="Center"
-                                        Content="{Binding ServerFilterLabel}"
-                                        Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}"
-                                        ToolTip="The filter the rows shown were read with" />
-                        <Button Style="{StaticResource LinkButton}" Content="Clear filter" Margin="2,0,0,0"
+                        <ItemsControl ItemsSource="{Binding ServerFilters}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                      AutomationProperties.Name="Filters applied">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <ContentControl Style="{StaticResource Chip}" Margin="6,2,0,2" VerticalAlignment="Center"
+                                                    ToolTip="A filter the rows shown were read with">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                            <Button AutomationProperties.Name="Remove this filter" Style="{StaticResource LinkButton}"
+                                                    Content="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9"
+                                                    Padding="4,0" Margin="4,0,0,0" ToolTip="Remove this filter and read the rows again"
+                                                    Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </ContentControl>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="4,0,0,0"
                                 Command="{Binding ClearFilterCommand}"
                                 Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}" />
                     </WrapPanel>
@@ -184,7 +203,26 @@
                                   EnableRowVirtualization="True" EnableColumnVirtualization="True"
                                   AutomationProperties.Name="Rows"
                                   BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
-                                  Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}" />
+                                  CurrentCellChanged="RowsGrid_CurrentCellChanged"
+                                  PreviewMouseRightButtonDown="RowsGrid_PreviewMouseRightButtonDown"
+                                  Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
+                            <!-- Right-click a cell: copy its value, its id or option number, its column, or the row's id. -->
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy value" Command="{Binding CopyValueCommand}"
+                                              ToolTip="The value as shown - a lookup's name, a choice's label" />
+                                    <MenuItem Header="Copy raw value" Command="{Binding CopyRawValueCommand}"
+                                              ToolTip="A lookup's row id, a choice's number, a date as stored" />
+                                    <MenuItem Header="Copy column" Command="{Binding CopyColumnCommand}"
+                                              ToolTip="This column's value in every row shown, one per line" />
+                                    <MenuItem Header="Copy row id" Command="{Binding CopyRowIdCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="Copy selected cells" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C"
+                                              CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              ToolTip="The cells selected, with their column headers, ready to paste into a spreadsheet" />
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                        </DataGrid>
 
                         <!-- Nothing to list: say why, and what to change. -->
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360"

@@ -170,4 +170,43 @@ public class DataverseClientTableRowsTests
 
         Assert.Single(handler.Requests);
     }
+
+    [Fact]
+    public async Task A_lookup_reaches_each_table_it_points_at_through_its_navigation_property()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/ManyToOneRelationships", """
+                {"value":[
+                  {"ReferencingAttribute":"parentcustomerid","ReferencingEntityNavigationPropertyName":"parentcustomerid_account","ReferencedEntity":"account"},
+                  {"ReferencingAttribute":"ParentCustomerId","ReferencingEntityNavigationPropertyName":"parentcustomerid_contact","ReferencedEntity":"contact"},
+                  {"ReferencingAttribute":"parentcustomerid","ReferencingEntityNavigationPropertyName":"parentcustomerid_gone","ReferencedEntity":"new_gone"},
+                  {"ReferencingAttribute":"parentcustomerid","ReferencingEntityNavigationPropertyName":"parentcustomerid_nameless","ReferencedEntity":"new_nameless"},
+                  {"ReferencingAttribute":"ownerid","ReferencingEntityNavigationPropertyName":"ownerid","ReferencedEntity":"owner"}
+                ]}
+                """)
+            .OnJson(HttpMethod.Get, "LogicalName='account')?", """{"PrimaryNameAttribute":"name"}""")
+            .OnJson(HttpMethod.Get, "LogicalName='contact')?", """{"PrimaryNameAttribute":"fullname"}""")
+            .OnJson(HttpMethod.Get, "LogicalName='new_nameless')?", """{"PrimaryNameAttribute":null}""")
+            .OnError(HttpMethod.Get, "LogicalName='new_gone')?", HttpStatusCode.NotFound, "no such table");
+
+        var names = await Fakes.Dataverse(handler).GetLookupNavigationsAsync("Contact", "parentcustomerid");
+
+        Assert.Equal(
+            [
+                new LookupNavigation("parentcustomerid_account", "account", "name"),
+                new LookupNavigation("parentcustomerid_contact", "contact", "fullname")
+            ],
+            names);
+        Assert.Contains("EntityDefinitions(LogicalName='contact')/ManyToOneRelationships", handler.Requests[0].Url);
+        Assert.All(handler.Requests, r => Assert.Equal(HttpMethod.Get, r.Method));
+    }
+
+    [Fact]
+    public async Task A_lookup_whose_relationships_cannot_be_read_has_no_names_to_filter_on()
+    {
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "/ManyToOneRelationships", HttpStatusCode.BadRequest, "not for virtual tables");
+
+        Assert.Empty(await Fakes.Dataverse(handler).GetLookupNavigationsAsync("new_virtual", "new_parentid"));
+    }
 }
