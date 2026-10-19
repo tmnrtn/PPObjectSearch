@@ -69,10 +69,16 @@ public sealed class FailureData
     /// <summary>Sources that could not be read, or were cut short, said rather than left empty.</summary>
     public List<string> Notes { get; } = new();
 
-    /// <summary>How much was read for this: flow runs of every outcome, failed system jobs, traced exceptions.</summary>
+    /// <summary>How much was read for this: flow runs of every outcome, failed system jobs, trace log entries.</summary>
     public int FlowRunsRead { get; set; }
     public int SystemJobsRead { get; set; }
     public int TraceLogsRead { get; set; }
+
+    /// <summary>
+    /// The trace log entries read that held an exception, in scope or not. Entries with an empty
+    /// exception are read too, so this can be far fewer than <see cref="TraceLogsRead"/>.
+    /// </summary>
+    public int TraceExceptionsRead { get; set; }
 }
 
 /// <summary>What to read failures for. Null sets mean the whole environment.</summary>

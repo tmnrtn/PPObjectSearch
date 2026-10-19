@@ -237,7 +237,7 @@ public class RoundFourLayoutTests
     {
         var data = new FailureData { FlowRunsRead = 1284, SystemJobsRead = 96, TraceLogsRead = 1 };
 
-        Assert.Equal("Read 1,284 flow runs, 96 system jobs and 1 trace log in 6.1 s",
+        Assert.Equal("Read 1,284 flow runs, 96 system jobs and 1 trace log (none with an exception) in 6.1 s",
             FailuresViewModel.Describe(data, TimeSpan.FromSeconds(6.08)));
     }
 

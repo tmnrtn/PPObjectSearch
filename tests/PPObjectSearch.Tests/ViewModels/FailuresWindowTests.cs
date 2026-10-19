@@ -103,7 +103,7 @@ public class FailuresWindowTests
         Assert.Contains(vm.Trend, b => b.Height > 0);
         Assert.Equal(string.Empty, vm.Notes);
         Assert.Equal(string.Empty, vm.Status);
-        Assert.StartsWith("Read 4 flow runs, 1 system job and 1 trace log in ", vm.StatusLine);
+        Assert.StartsWith("Read 4 flow runs, 1 system job and 1 trace log (1 with an exception) in ", vm.StatusLine);
         Assert.False(vm.IsBusy);
         Assert.True(vm.ExportCsvCommand.CanExecute(null));
         Assert.True(vm.ExportMarkdownCommand.CanExecute(null));
@@ -624,10 +624,21 @@ public class FailuresWindowTests
     [Fact]
     public void The_read_summary_counts_each_source_in_the_singular_or_plural()
     {
-        var one = new FailureData { FlowRunsRead = 1, SystemJobsRead = 1, TraceLogsRead = 1 };
-        var many = new FailureData { FlowRunsRead = 2, SystemJobsRead = 0, TraceLogsRead = 3 };
+        var one = new FailureData { FlowRunsRead = 1, SystemJobsRead = 1, TraceLogsRead = 1, TraceExceptionsRead = 1 };
+        var many = new FailureData { FlowRunsRead = 2, SystemJobsRead = 0, TraceLogsRead = 3, TraceExceptionsRead = 2 };
 
-        Assert.StartsWith("Read 1 flow run, 1 system job and 1 trace log in ", FailuresViewModel.Describe(one, TimeSpan.FromSeconds(2)));
-        Assert.StartsWith("Read 2 flow runs, 0 system jobs and 3 trace logs in ", FailuresViewModel.Describe(many, TimeSpan.FromSeconds(2)));
+        Assert.StartsWith("Read 1 flow run, 1 system job and 1 trace log (1 with an exception) in ", FailuresViewModel.Describe(one, TimeSpan.FromSeconds(2)));
+        Assert.StartsWith("Read 2 flow runs, 0 system jobs and 3 trace logs (2 with an exception) in ", FailuresViewModel.Describe(many, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public void The_read_summary_says_when_no_trace_log_held_an_exception()
+    {
+        var clean = new FailureData { FlowRunsRead = 1516, TraceLogsRead = 116 };
+        var none = new FailureData { FlowRunsRead = 3 };
+
+        Assert.StartsWith("Read 1,516 flow runs, 0 system jobs and 116 trace logs (none with an exception) in ",
+            FailuresViewModel.Describe(clean, TimeSpan.FromSeconds(1.4)));
+        Assert.StartsWith("Read 3 flow runs, 0 system jobs and 0 trace logs in ", FailuresViewModel.Describe(none, TimeSpan.FromSeconds(1)));
     }
 }
