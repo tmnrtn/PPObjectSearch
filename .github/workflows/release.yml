@@ -9,7 +9,7 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# Nothing may write by default. Only the last job, which runs no build or package code at all,
+# Nothing may write by default. Only the release job, which runs no build or package code at all,
 # is given the right to create the release.
 permissions:
   contents: read
@@ -142,3 +142,89 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             --verify-tag
+
+  # Opens pull requests on microsoft/winget-pkgs that move both winget packages to this release.
+  # wingetcreate update only updates a package winget-pkgs already has, so the first version of each
+  # is submitted by hand - see packaging/winget/README.md.
+  winget:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: windows-latest
+
+    # Everything here acts on winget-pkgs with the token below, never on this repository.
+    permissions: {}
+
+    env:
+      # A classic PAT with public_repo (fine-grained tokens are not supported), from the account the
+      # winget-pkgs pull requests come from. wingetcreate reads it from this variable, which keeps it
+      # off the command line.
+      WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      # Pinned like the actions above, which Dependabot does not cover: to upgrade, copy the version
+      # and wingetcreate.exe's sha256 digest from a microsoft/winget-create release.
+      WINGETCREATE_VERSION: v1.12.13.0
+      WINGETCREATE_SHA256: 24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea
+
+    steps:
+      # A job's if cannot read secrets, so each step checks the token instead. Without one (a fork,
+      # or before the secret is set up) the job passes having done nothing.
+      - name: Check for a token
+        if: env.WINGET_CREATE_GITHUB_TOKEN == ''
+        run: Write-Host "::notice::WINGET_TOKEN is not set, so no winget-pkgs pull request was opened."
+
+      # Microsoft's own release of wingetcreate rather than a third-party action, checked against
+      # the pinned hash before it runs with the token.
+      - name: Download wingetcreate
+        if: env.WINGET_CREATE_GITHUB_TOKEN != ''
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/microsoft/winget-create/releases/download/$env:WINGETCREATE_VERSION/wingetcreate.exe" `
+            -OutFile wingetcreate.exe
+          $hash = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:WINGETCREATE_SHA256) {
+            throw "wingetcreate.exe SHA-256 is $hash, expected $env:WINGETCREATE_SHA256"
+          }
+
+      # One package per exe, each pointed at the exe the release job just attached.
+      - name: Submit to winget-pkgs
+        if: env.WINGET_CREATE_GITHUB_TOKEN != ''
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG -replace '^v', ''
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG"
+          $packages = [ordered]@{
+            'TomNorton.PPObjectSearch'     = "$base/PPObjectSearch.exe"
+            'TomNorton.PPObjectSearch.CLI' = "$base/ppos.exe"
+          }
+          $failed = $false
+          foreach ($id in $packages.Keys) {
+            # Until a package's first submission is merged there is nothing to update: skip it
+            # rather than fail a release that has already been published.
+            $path = 'manifests/' + $id.Substring(0, 1).ToLowerInvariant() + '/' + ($id -replace '\.', '/')
+            try {
+              $entries = Invoke-RestMethod "https://api.github.com/repos/microsoft/winget-pkgs/contents/$path" `
+                -Headers @{ Authorization = "Bearer $env:WINGET_CREATE_GITHUB_TOKEN" }
+            } catch {
+              if ($_.Exception.Response.StatusCode -ne 404) { throw }
+              $entries = @()
+            }
+            # Version folders only: TomNorton/PPObjectSearch also holds the CLI package's folder.
+            if (-not ($entries | Where-Object { $_.type -eq 'dir' -and $_.name -match '^\d' })) {
+              Write-Host "::notice::$id is not in winget-pkgs yet, so it was not updated."
+              continue
+            }
+
+            ./wingetcreate.exe update $id `
+              --version $version `
+              --urls $packages[$id] `
+              --release-notes-url "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:TAG" `
+              --release-date (Get-Date -AsUTC -Format 'yyyy-MM-dd') `
+              --no-open `
+              --submit
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::wingetcreate update $id failed with exit code $LASTEXITCODE."
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }

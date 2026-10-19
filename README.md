@@ -90,6 +90,23 @@ straight into the maker portal.
   group, and make a queue's members match a team's. Every change is previewed and confirmed first,
   under the same production guard.
 
+## Install
+
+Download `PPObjectSearch.exe` (and `ppos.exe` for the [command line](#command-line-ppos)) from the
+[latest release](https://github.com/tmnrtn/PPObjectSearch/releases/latest). Each is a single
+self-contained exe: nothing to install, and no .NET needed.
+
+Or, once the packages are accepted into the winget repository, install with winget:
+
+```powershell
+winget install TomNorton.PPObjectSearch
+winget install TomNorton.PPObjectSearch.CLI
+```
+
+The second installs `ppos`. Both are portable installs: winget puts the exe on your `PATH`, so you
+start the app by running `PPObjectSearch`, but adds no Start menu shortcut. `winget upgrade`
+updates them; the app's own [update check](#updates) only points at the new release.
+
 ## Build and run
 
 ```powershell
@@ -175,6 +192,9 @@ attestation (`gh attestation verify PPObjectSearch.exe --repo tmnrtn/PPObjectSea
 generated from the commits. Package versions are pinned and recorded in `packages.lock.json`;
 CI restores in locked mode, and Dependabot proposes updates as pull requests. Running the
 workflow manually from the Actions tab instead just uploads the exe as a build artifact.
+
+With a `WINGET_TOKEN` secret, a tag also opens pull requests on the winget repository that move
+both winget packages to the new version - see [packaging/winget](packaging/winget/README.md).
 
 ## Usage
 
