@@ -201,6 +201,7 @@ public sealed partial class DataverseClient
                 data.TraceLogsRead++;
                 var exception = JsonHelper.GetString(row, "exceptiondetails");
                 if (string.IsNullOrWhiteSpace(exception)) return;
+                data.TraceExceptionsRead++;
 
                 var typeName = JsonHelper.GetString(row, "typename") ?? "(unknown plug-in)";
                 var step = ParseGuid(JsonHelper.GetString(row, "pluginstepid"));

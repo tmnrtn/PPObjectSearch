@@ -238,7 +238,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     };
 
     private string _readSummary = string.Empty;
-    /// <summary>"Read 1,284 flow runs, 96 system jobs and 0 trace logs in 6.1 s".</summary>
+    /// <summary>"Read 1,284 flow runs, 96 system jobs and 116 trace logs (none with an exception) in 6.1 s".</summary>
     public string ReadSummary
     {
         get => _readSummary;
@@ -251,7 +251,15 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     internal static string Describe(FailureData data, TimeSpan took) =>
         $"Read {data.FlowRunsRead:N0} flow run{(data.FlowRunsRead == 1 ? string.Empty : "s")}, " +
         $"{data.SystemJobsRead:N0} system job{(data.SystemJobsRead == 1 ? string.Empty : "s")} and " +
-        $"{data.TraceLogsRead:N0} trace log{(data.TraceLogsRead == 1 ? string.Empty : "s")} in {took.TotalSeconds:0.0} s";
+        $"{data.TraceLogsRead:N0} trace log{(data.TraceLogsRead == 1 ? string.Empty : "s")}{TraceExceptions(data)} in {took.TotalSeconds:0.0} s";
+
+    /// <summary>
+    /// How many of the trace logs held an exception - most entries are plug-ins that ran fine, so
+    /// without it a count of trace logs and no plug-in failures reads like a missed read.
+    /// </summary>
+    private static string TraceExceptions(FailureData data) => data.TraceLogsRead == 0
+        ? string.Empty
+        : $" ({(data.TraceExceptionsRead == 0 ? "none" : data.TraceExceptionsRead.ToString("N0"))} with an exception)";
 
     // ---------------------------------------------------------------- the selected component
 

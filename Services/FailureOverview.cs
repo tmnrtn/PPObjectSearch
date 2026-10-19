@@ -161,7 +161,8 @@ public static partial class FailureOverview
         {
             FlowRunsRead = data.FlowRunsRead,
             SystemJobsRead = data.SystemJobsRead,
-            TraceLogsRead = data.TraceLogsRead
+            TraceLogsRead = data.TraceLogsRead,
+            TraceExceptionsRead = data.TraceExceptionsRead
         };
 
         only.Events.AddRange(data.Events.Where(e => sources.Contains(e.Source)));

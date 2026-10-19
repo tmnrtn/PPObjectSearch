@@ -76,6 +76,24 @@ public class FailuresTests
     }
 
     [Fact]
+    public async Task A_trace_with_an_empty_exception_is_read_but_is_not_a_failure()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "organizations?", """{"value":[{"plugintracelogsetting":2}]}""")
+            .OnJson(HttpMethod.Get, "plugintracelogs?", """
+                {"value":[
+                  {"plugintracelogid":"t1","createdon":"2026-10-01T08:00:00Z","typename":"Contoso.Plugins.Audit","messagename":"Retrieve","exceptiondetails":""},
+                  {"plugintracelogid":"t2","createdon":"2026-10-01T09:00:00Z","typename":"Contoso.Plugins.Validate","messagename":"Update","exceptiondetails":"Message: Name is required"}
+                ]}
+                """);
+
+        var data = await Fakes.Dataverse(handler).GetFailuresAsync(From, To, new FailureQuery { CloudFlows = false, ClassicWorkflows = false });
+
+        Assert.Equal((2, 1), (data.TraceLogsRead, data.TraceExceptionsRead));
+        Assert.Equal("Contoso.Plugins.Validate", Assert.Single(data.Events).ComponentName);
+    }
+
+    [Fact]
     public async Task A_solution_scope_keeps_only_its_components_and_a_failing_source_is_noted()
     {
         var handler = Handler(tracesFail: true);
