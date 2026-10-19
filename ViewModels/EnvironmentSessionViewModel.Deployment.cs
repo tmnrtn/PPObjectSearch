@@ -51,6 +51,22 @@ public sealed partial class EnvironmentSessionViewModel
         new Views.FailuresWindow { DataContext = new FailuresViewModel(this), Owner = Application.Current.MainWindow }.Show();
     });
 
+    // ---------------------------------------------------------------- table data
+
+    private RelayCommand? _tableDataCommand;
+    public RelayCommand TableDataCommand => _tableDataCommand ??= new RelayCommand(_ => OpenTableData());
+
+    /// <summary>The rows of a table, read-only - optionally one table, from its details window.</summary>
+    public void OpenTableData(string? tableLogicalName = null)
+    {
+        if (_client is null || !IsConnected) return;
+        new Views.TableDataWindow
+        {
+            DataContext = new TableDataViewModel(this, tableLogicalName),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
     // ---------------------------------------------------------------- security lookup
 
     private RelayCommand? _securityLookupCommand;

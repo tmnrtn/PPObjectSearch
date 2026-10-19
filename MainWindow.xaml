@@ -227,6 +227,10 @@
                                 <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             </Button>
                         </UniformGrid>
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding TableDataCommand}"
+                                ToolTip="The rows of a table - reference and config data, lookups, option lists. Read-only.">
+                            <TextBlock Text="Table data…" VerticalAlignment="Center" />
+                        </Button>
 
                         <!-- Read-only: who is here, what they can do, and how mail reaches them. -->
                         <TextBlock Text="ADMIN · READ-ONLY" Style="{StaticResource SidebarGroup}" />
