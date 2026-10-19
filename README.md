@@ -739,3 +739,12 @@ can be corrected via `MakerLinkTemplates` without a rebuild.
 Links need the Power Platform environment id, which is resolved from the organization metadata
 and, failing that, from the Global Discovery Service. If neither is reachable the status bar says
 so and the names render as plain text; set the id under `EnvironmentIds` to restore linking.
+
+## License
+
+PPObjectSearch is released under the [MIT License](LICENSE). Copyright (c) 2026 Tom Norton.
+
+The released exes also contain third-party code under its own licenses, all MIT:
+[AvalonEdit](https://github.com/icsharpcode/AvalonEdit),
+[Microsoft Authentication Library for .NET](https://github.com/AzureAD/microsoft-authentication-library-for-dotnet)
+and the [.NET runtime](https://github.com/dotnet/runtime).
