@@ -251,7 +251,7 @@ public class ChangesViewModelTests
         await TestSessions.Until(() => !vm.IsBusy && vm.Entries.Count > 0);
 
         var since = DateTimeOffset.UtcNow.AddDays(-30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        Assert.Contains(handler.Requests, r => r.Url.Contains($"msdyn_modifiedon ge {since}"));
+        Assert.Contains(handler.Requests, r => r.Url.Contains($"msdyn_modifiedon ge '{since}"));
         Assert.Contains("in the last 30 days", vm.ReadSummary);
     }
 
