@@ -42,10 +42,28 @@ public sealed partial class DataverseClient
 
     private static string Iso(DateTimeOffset t) => t.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Most rows read per source in one period whatever they hold - a bound on the time a read takes
+    /// when most rows are not counted toward <see cref="MaxFailureRows"/>.
+    /// </summary>
+    public const int MaxScannedRows = 50000;
+
     /// <summary>Rows of one query, page by page, up to <see cref="MaxFailureRows"/>. True when cut short.</summary>
-    private async Task<bool> ReadCappedAsync(string url, Action<JsonElement> row, CancellationToken ct)
+    private Task<bool> ReadCappedAsync(string url, Action<JsonElement> row, CancellationToken ct) =>
+        ReadCappedAsync(url, item =>
+        {
+            row(item);
+            return true;
+        }, ct);
+
+    /// <summary>
+    /// Rows of one query, page by page, until <see cref="MaxFailureRows"/> of them have counted - the
+    /// callback says whether each one does - or <see cref="MaxScannedRows"/> have been read. True when cut short.
+    /// </summary>
+    private async Task<bool> ReadCappedAsync(string url, Func<JsonElement, bool> row, CancellationToken ct)
     {
-        var read = 0;
+        var counted = 0;
+        var scanned = 0;
 
         while (url.Length > 0)
         {
@@ -55,8 +73,8 @@ public sealed partial class DataverseClient
             {
                 foreach (var item in value.EnumerateArray())
                 {
-                    if (read++ >= MaxFailureRows) return true;
-                    row(item);
+                    if (counted >= MaxFailureRows || scanned++ >= MaxScannedRows) return true;
+                    if (row(item)) counted++;
                 }
             }
 
@@ -68,8 +86,9 @@ public sealed partial class DataverseClient
 
     private async Task FlowFailuresAsync(DateTimeOffset from, DateTimeOffset to, FailureQuery query, FailureData data, CancellationToken ct)
     {
-        // Every run in the period is read, not only failures, so each flow has a failure rate. A
-        // short scope is asked for by id; a long one is filtered here.
+        // Every run in the period is read, not only failures, so each flow has a failure rate -
+        // newest first, so a period cut short loses its oldest runs. A short scope is asked for by
+        // id; a long one is filtered here, and the runs it leaves out do not count toward the cap.
         var filter = $"starttime ge {Iso(from)} and starttime le {Iso(to)}";
         if (query.WorkflowIds is { Count: > 0 and <= 40 } few)
         {
@@ -81,18 +100,19 @@ public sealed partial class DataverseClient
 
         var truncated = await ReadCappedAsync(
             EnvironmentUrl + ApiPath + "flowruns?$select=name,status,starttime,errorcode,errormessage,workflowid,_workflow_value&$filter=" +
-            Uri.EscapeDataString(filter),
+            Uri.EscapeDataString(filter) + "&$orderby=starttime desc",
             row =>
             {
                 data.FlowRunsRead++;
-                if (!Guid.TryParse(JsonHelper.GetString(row, "_workflow_value"), out var workflow)) return;
-                if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) return;
+                if (!Guid.TryParse(JsonHelper.GetString(row, "_workflow_value"), out var workflow)) return false;
+                if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) return false;
 
                 runs[workflow] = runs.GetValueOrDefault(workflow) + 1;
                 if (FlowOutcome(JsonHelper.GetString(row, "status") ?? string.Empty) == RunOutcome.Failed) failed.Add((workflow, row.Clone()));
+                return true;
             }, ct).ConfigureAwait(false);
 
-        if (truncated) data.Notes.Add($"Cloud flows: only the first {MaxFailureRows:N0} runs in the period were read.");
+        if (truncated) data.Notes.Add($"Cloud flows: only the newest {runs.Values.Sum():N0} runs in the period were read.");
 
         var names = await GetWorkflowNamesAsync(runs.Keys, ct).ConfigureAwait(false);
         foreach (var (workflow, count) in runs) data.RunCounts[workflow.ToString()] = count;
@@ -189,8 +209,11 @@ public sealed partial class DataverseClient
             data.Notes.Add("Plug-in tracing is off in this environment, so only failures traced before it was turned off appear.");
         }
 
+        // Entries with an empty exception - plug-ins that ran fine - pass "ne null" too. They are
+        // dropped here and do not count toward the cap, so they cannot crowd out real exceptions.
         var filter = $"createdon ge {Iso(from)} and createdon le {Iso(to)} and exceptiondetails ne null";
         var scoped = query.PluginTypeNames is not null || query.PluginStepIds is not null;
+        var failures = 0;
 
         var truncated = await ReadCappedAsync(
             EnvironmentUrl + ApiPath +
@@ -200,7 +223,7 @@ public sealed partial class DataverseClient
             {
                 data.TraceLogsRead++;
                 var exception = JsonHelper.GetString(row, "exceptiondetails");
-                if (string.IsNullOrWhiteSpace(exception)) return;
+                if (string.IsNullOrWhiteSpace(exception)) return false;
                 data.TraceExceptionsRead++;
 
                 var typeName = JsonHelper.GetString(row, "typename") ?? "(unknown plug-in)";
@@ -210,7 +233,7 @@ public sealed partial class DataverseClient
                     !(query.PluginTypeNames?.Contains(typeName) ?? false) &&
                     !(step is { } s && (query.PluginStepIds?.Contains(s) ?? false)))
                 {
-                    return;
+                    return false;
                 }
 
                 var message = JsonHelper.GetString(row, "messagename");
@@ -227,9 +250,16 @@ public sealed partial class DataverseClient
                     Context = string.IsNullOrWhiteSpace(table) || table == "none" ? message : $"{message} of {table}",
                     StepId = step
                 });
+                failures++;
+                return true;
             }, ct).ConfigureAwait(false);
 
-        if (truncated) data.Notes.Add($"Plug-ins: only the newest {MaxFailureRows:N0} traced exceptions were read.");
+        if (truncated)
+        {
+            data.Notes.Add(failures >= MaxFailureRows
+                ? $"Plug-ins: only the newest {MaxFailureRows:N0} traced exceptions were read."
+                : $"Plug-ins: only the newest {MaxScannedRows:N0} trace log entries were read, so older exceptions are missing.");
+        }
     }
 
     /// <summary>
