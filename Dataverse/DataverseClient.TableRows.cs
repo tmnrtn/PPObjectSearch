@@ -7,6 +7,13 @@ namespace PPObjectSearch.Dataverse;
 public sealed record TableRowsResult(IReadOnlyList<DataRecord> Rows, bool IsTruncated);
 
 /// <summary>
+/// One table a lookup can point at, and how a filter reaches that row's name: through the lookup's
+/// navigation property to the target's primary name column (<c>new_parentid/new_name</c>). A
+/// customer or owner lookup has one of these per table it can point at.
+/// </summary>
+public sealed record LookupNavigation(string NavigationProperty, string TargetTable, string TargetNameColumn);
+
+/// <summary>
 /// Reading a table's rows to look at them - reference and configuration data, a lookup table, an
 /// option list. Read-only: nothing here sends anything but a GET.
 /// </summary>
@@ -71,6 +78,65 @@ public sealed partial class DataverseClient
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// How a lookup column reaches the name of the row it points at, one entry per table it can
+    /// point at. The navigation property is read from the relationship rather than guessed - it is
+    /// not reliably the column's own name. A target with no primary name column is left out, and a
+    /// lookup whose relationships cannot be read gives none: the caller then filters by id only.
+    /// </summary>
+    public async Task<IReadOnlyList<LookupNavigation>> GetLookupNavigationsAsync(
+        string logicalName,
+        string lookupColumn,
+        CancellationToken ct = default)
+    {
+        var url = EnvironmentUrl + ApiPath +
+                  $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(logicalName.ToLowerInvariant())}')/ManyToOneRelationships" +
+                  "?$select=ReferencingAttribute,ReferencingEntityNavigationPropertyName,ReferencedEntity";
+
+        var relationships = new List<(string Navigation, string Target)>();
+
+        try
+        {
+            await ForEachRowAsync(url, null, row =>
+            {
+                if (!string.Equals(JsonHelper.GetString(row, "ReferencingAttribute"), lookupColumn, StringComparison.OrdinalIgnoreCase)) return;
+
+                var navigation = JsonHelper.GetString(row, "ReferencingEntityNavigationPropertyName");
+                var target = JsonHelper.GetString(row, "ReferencedEntity");
+                if (string.IsNullOrWhiteSpace(navigation) || string.IsNullOrWhiteSpace(target)) return;
+
+                relationships.Add((navigation, target));
+            }, ct).ConfigureAwait(false);
+        }
+        catch (DataverseException)
+        {
+            return [];
+        }
+
+        var results = new List<LookupNavigation>();
+
+        foreach (var (navigation, target) in relationships.DistinctBy(r => r.Navigation, StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var doc = await GetJsonAsync(EnvironmentUrl + ApiPath +
+                    $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(target.ToLowerInvariant())}')?$select=PrimaryNameAttribute", ct)
+                    .ConfigureAwait(false);
+
+                if (JsonHelper.GetString(doc.RootElement, "PrimaryNameAttribute") is { Length: > 0 } name)
+                {
+                    results.Add(new LookupNavigation(navigation, target, name));
+                }
+            }
+            catch (DataverseException)
+            {
+                // A target whose metadata cannot be read is one whose name cannot be filtered on.
+            }
+        }
+
+        return results;
     }
 
     /// <summary>

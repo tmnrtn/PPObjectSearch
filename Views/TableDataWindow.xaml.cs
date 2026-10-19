@@ -36,6 +36,34 @@ public partial class TableDataWindow : Window
         }
     }
 
+    /// <summary>
+    /// Tells the view model which cell the copy commands act on. A column's index in the grid's
+    /// own list is its position in the row's cells, whatever order the columns were dragged into.
+    /// </summary>
+    private void RowsGrid_CurrentCellChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is not TableDataViewModel viewModel) return;
+
+        var cell = RowsGrid.CurrentCell;
+        viewModel.SetCurrentCell(cell.Item as TableDataRow, cell.Column is null ? -1 : RowsGrid.Columns.IndexOf(cell.Column));
+    }
+
+    /// <summary>A right-click makes the cell under the mouse current, so the menu copies that one.</summary>
+    private void RowsGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var element = e.OriginalSource as DependencyObject;
+        while (element is not null and not DataGridCell) element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+        if (element is not DataGridCell cell) return;
+
+        if (!cell.IsSelected)
+        {
+            RowsGrid.SelectedCells.Clear();
+            cell.IsSelected = true;
+        }
+        cell.Focus();
+        RowsGrid.CurrentCell = new DataGridCellInfo(cell);
+    }
+
     /// <summary>One text column per column read, bound to the row's cell at the same position.</summary>
     private void BuildColumns(IReadOnlyList<TableDataColumn> columns)
     {

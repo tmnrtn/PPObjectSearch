@@ -40,6 +40,8 @@ public static class TableRowFilter
             TableFilterOperator.IsEmpty, TableFilterOperator.IsNotEmpty],
         Kind.MultiChoice => [TableFilterOperator.Contains, TableFilterOperator.IsEmpty, TableFilterOperator.IsNotEmpty],
         Kind.Boolean => [TableFilterOperator.Equals, TableFilterOperator.NotEquals],
+        Kind.Lookup => [TableFilterOperator.Contains, TableFilterOperator.Equals, TableFilterOperator.BeginsWith,
+            TableFilterOperator.NotEquals, TableFilterOperator.IsEmpty, TableFilterOperator.IsNotEmpty],
         _ => [TableFilterOperator.Equals, TableFilterOperator.NotEquals, TableFilterOperator.IsEmpty, TableFilterOperator.IsNotEmpty]
     };
 
@@ -69,14 +71,31 @@ public static class TableRowFilter
         Kind.MultiChoice => "the choice's number",
         Kind.Boolean => "yes or no",
         Kind.Guid => "a row id (GUID)",
+        Kind.Lookup => "the related row's name, or its id",
         _ => "text"
     };
 
     /// <summary>
-    /// The filter expression, or null with <paramref name="error"/> saying what is wrong with the
-    /// value. A choice's label is turned into its number by the caller, who has the labels.
+    /// Whether this comparison is on the name of the row a lookup points at rather than its id -
+    /// contains and begins with always are; equals and does not equal are unless a GUID is typed.
+    /// The caller reads the lookup's navigations only when it is.
     /// </summary>
-    public static string? Build(EntityColumn column, TableFilterOperator op, string? value, out string? error)
+    public static bool NeedsLookupNames(EntityColumn column, TableFilterOperator op, string? value) =>
+        KindOf(column) == Kind.Lookup && op switch
+        {
+            TableFilterOperator.Contains or TableFilterOperator.BeginsWith => true,
+            TableFilterOperator.Equals or TableFilterOperator.NotEquals => !Guid.TryParse(value?.Trim(), out _),
+            _ => false
+        };
+
+    /// <summary>
+    /// The filter expression, or null with <paramref name="error"/> saying what is wrong with the
+    /// value. A choice's label is turned into its number by the caller, who has the labels; a
+    /// lookup compared by name needs the <paramref name="lookupNames"/> the caller read for it.
+    /// </summary>
+    public static string? Build(
+        EntityColumn column, TableFilterOperator op, string? value, out string? error,
+        IReadOnlyList<Dataverse.LookupNavigation>? lookupNames = null)
     {
         error = null;
         var name = column.SelectName;
@@ -109,6 +128,18 @@ public static class TableRowFilter
                     TableFilterOperator.NotEquals => $"{name} ne {quoted}",
                     _ => $"{name} eq {quoted}"
                 };
+
+            case Kind.Lookup when NeedsLookupNames(column, op, text):
+                return LookupNameFilter(column, op, text, lookupNames, out error);
+
+            case Kind.Lookup:
+            case Kind.Guid:
+                if (!Guid.TryParse(text, out var id))
+                {
+                    error = $"\"{text}\" is not a row id (GUID).";
+                    return null;
+                }
+                return $"{name} {Comparison(op)} {id}";
 
             case Kind.Number:
             case Kind.Choice:
@@ -148,14 +179,6 @@ public static class TableRowFilter
                 }
                 return $"{name} {Comparison(op)} {(flag.Value ? "true" : "false")}";
 
-            case Kind.Guid:
-                if (!Guid.TryParse(text, out var id))
-                {
-                    error = $"\"{text}\" is not a row id (GUID).";
-                    return null;
-                }
-                return $"{name} {Comparison(op)} {id}";
-
             case Kind.Date:
                 if (!DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
                     !DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.None, out date))
@@ -175,6 +198,42 @@ public static class TableRowFilter
 
         error = $"{Name(column)} cannot be filtered.";
         return null;
+    }
+
+    /// <summary>
+    /// A comparison on the name of the row a lookup points at, through each table it can point at:
+    /// <c>contains(new_parentid/new_name,'x')</c>. A customer or owner lookup points at one table per
+    /// row, so the tables are joined with "or" - except for does not equal, where a row must differ
+    /// through every one (the tables it does not point at compare as null, which differs too).
+    /// </summary>
+    private static string? LookupNameFilter(
+        EntityColumn column, TableFilterOperator op, string text,
+        IReadOnlyList<Dataverse.LookupNavigation>? lookupNames, out string? error)
+    {
+        if (lookupNames is not { Count: > 0 })
+        {
+            error = $"The name of the row {Name(column)} points at cannot be filtered on here - type the row's id (GUID) instead.";
+            return null;
+        }
+
+        error = null;
+        var quoted = Quote(text);
+        var parts = lookupNames.Select(n =>
+        {
+            var path = $"{n.NavigationProperty}/{n.TargetNameColumn}";
+            return op switch
+            {
+                TableFilterOperator.Contains => $"contains({path},{quoted})",
+                TableFilterOperator.BeginsWith => $"startswith({path},{quoted})",
+                TableFilterOperator.NotEquals => $"{path} ne {quoted}",
+                _ => $"{path} eq {quoted}"
+            };
+        }).ToList();
+
+        if (parts.Count == 1) return parts[0];
+
+        var join = op == TableFilterOperator.NotEquals ? " and " : " or ";
+        return "(" + string.Join(join, parts) + ")";
     }
 
     /// <summary>Combines filters with "and", leaving out the empty ones; null when none is left.</summary>
@@ -205,7 +264,7 @@ public static class TableRowFilter
         _ => "eq"
     };
 
-    private enum Kind { Text, Number, Choice, MultiChoice, Boolean, Guid, Date }
+    private enum Kind { Text, Number, Choice, MultiChoice, Boolean, Guid, Lookup, Date }
 
     /// <summary>Text for anything else - string, memo, and whatever a virtual table calls its columns.</summary>
     private static Kind KindOf(EntityColumn column) => column switch
@@ -213,7 +272,8 @@ public static class TableRowFilter
         { IsDateTime: true } => Kind.Date,
         { IsNumeric: true } => Kind.Number,
         { IsBoolean: true } => Kind.Boolean,
-        { IsLookup: true } or { IsUniqueIdentifier: true } => Kind.Guid,
+        { IsLookup: true } => Kind.Lookup,
+        { IsUniqueIdentifier: true } => Kind.Guid,
         { TypeName: "MultiSelectPicklistType" } => Kind.MultiChoice,
         _ when ChoiceTypes.Contains(column.TypeName) => Kind.Choice,
         _ => Kind.Text
