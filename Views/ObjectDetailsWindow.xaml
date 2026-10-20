@@ -155,7 +155,10 @@
                                 ToolTip="The table's rows in the read-only Table data window - filter, choose columns, export" />
                     </StackPanel>
 
-                    <!-- A canvas app can be played as well as edited; a role's members are managed in Environment admin. -->
+                    <!-- Read-only views of the object kept elsewhere: its audited changes, the app's player, the role in Environment admin. -->
+                    <Button Content="Audit history" Height="30" Margin="0,0,8,0" Command="{Binding AuditHistoryCommand}"
+                            ToolTip="Who changed it and how - each audited change, where Dataverse auditing records it"
+                            Visibility="{Binding HasAuditHistory, Converter={StaticResource BoolToVis}}" />
                     <Button Content="Play app" Height="30" Margin="0,0,8,0" Command="{Binding PlayCommand}"
                             ToolTip="Open the app to run it, rather than in the studio"
                             Visibility="{Binding HasPlayUrl, Converter={StaticResource BoolToVis}}" />
@@ -198,8 +201,11 @@
                              Visibility="{Binding HasOverview, Converter={StaticResource BoolToVis}}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="18,14,18,18">
-                                <TextBlock Text="{Binding OverviewStatus}" TextWrapping="Wrap" Foreground="{DynamicResource Amber}" Margin="0,0,0,10"
-                                           Visibility="{Binding OverviewStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                                <!-- A part that could not be read - or sharing only owners can see - in the banner, as partial results are elsewhere. -->
+                                <Border Style="{StaticResource Banner}" Margin="0,0,0,10" MaxWidth="900" HorizontalAlignment="Left"
+                                        Visibility="{Binding OverviewStatus, Converter={StaticResource EmptyToCollapsed}}">
+                                    <TextBlock Text="{Binding OverviewStatus}" TextWrapping="Wrap" />
+                                </Border>
                                 <ItemsControl ItemsSource="{Binding OverviewProperties}" MaxWidth="900" HorizontalAlignment="Left">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -686,35 +692,43 @@
                                                Visibility="{Binding IsSecret, Converter={StaticResource BoolToVis}}" />
                                 </Grid>
 
-                                <Button Style="{StaticResource RowButton}" Content="Find usages" HorizontalAlignment="Left" Margin="130,4,0,0"
+                                <Button Style="{StaticResource LinkButton}" Content="Find usages" HorizontalAlignment="Left" Margin="130,4,0,0"
                                         Command="{Binding FindUsagesCommand}" CommandParameter="{Binding EnvironmentVariable.SchemaName}"
                                         ToolTip="Search the definitions of the flows, scripts and other components in the loaded list for this variable's schema name"
                                         Visibility="{Binding EnvironmentVariable, Converter={StaticResource EmptyToCollapsed}}" />
 
-                                <!-- Setting the value here: checked against the type, guarded, confirmed and logged. -->
-                                <Grid Margin="0,12,0,0" Visibility="{Binding CanEditEnvironmentValue, Converter={StaticResource BoolToVis}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="130" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="New value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
-                                    <StackPanel Grid.Column="1">
-                                        <TextBox Style="{StaticResource CodeBox}" Text="{Binding EnvironmentValueInput, UpdateSourceTrigger=PropertyChanged}"
-                                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="220"
-                                                 AutomationProperties.Name="New value for this environment" />
-                                        <TextBlock Text="{Binding EnvironmentValueError}" Foreground="{DynamicResource Red}" TextWrapping="Wrap"
-                                                   Margin="0,4,0,0"
-                                                   Visibility="{Binding EnvironmentValueError, Converter={StaticResource EmptyToCollapsed}}" />
-                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                            <Button Style="{StaticResource PrimaryButton}" Content="Set value" Height="30"
-                                                    Command="{Binding SetEnvironmentValueCommand}"
-                                                    ToolTip="Write this as the current value in this environment" />
-                                            <Button Content="Remove current value" Height="30" Margin="8,0,0,0"
-                                                    Command="{Binding ClearEnvironmentValueCommand}"
-                                                    ToolTip="Delete the value record, so the default value applies" />
-                                        </StackPanel>
+                                <!-- Change · WRITES: setting the value here - checked against the type, guarded, confirmed and logged. -->
+                                <StackPanel Margin="0,14,0,0" Visibility="{Binding CanEditEnvironmentValue, Converter={StaticResource BoolToVis}}">
+                                    <Border Height="1" Background="{DynamicResource Border}" Margin="0,0,0,12" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Change" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Style="{StaticResource WritesTag}" Margin="8,0,0,0" />
                                     </StackPanel>
-                                </Grid>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="New value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBox Style="{StaticResource CodeBox}" Text="{Binding EnvironmentValueInput, UpdateSourceTrigger=PropertyChanged}"
+                                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="220"
+                                                     AutomationProperties.Name="New value for this environment" />
+                                            <TextBlock Text="{Binding EnvironmentValueError}" Foreground="{DynamicResource Red}" TextWrapping="Wrap"
+                                                       Margin="0,4,0,0"
+                                                       Visibility="{Binding EnvironmentValueError, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <Button Content="Set value…" Height="26"
+                                                        Command="{Binding SetEnvironmentValueCommand}" ToolTip="{Binding SetValueToolTip}" />
+                                                <Button Content="Remove current value…" Height="26" Margin="8,0,0,0"
+                                                        Command="{Binding ClearEnvironmentValueCommand}" ToolTip="{Binding RemoveValueToolTip}" />
+                                                <TextBlock Text="Asks first" FontSize="11" Foreground="{DynamicResource Faint}" Margin="10,0,0,0"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

@@ -61,6 +61,13 @@ public sealed class SolutionComponentItem : ObservableObject
     /// <summary>Absolute maker portal URL for this object, or null when no link can be built.</summary>
     public string? MakerUrl { get; set; }
 
+    /// <summary>
+    /// A flow, classic workflow, plug-in step or environment variable: a row whose changes Dataverse
+    /// auditing can show, wherever the object is listed.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasAuditHistory => ObjectId != Guid.Empty && Dataverse.DataverseClient.HasAuditHistory(ComponentType);
+
     private bool? _hasUnmanagedLayer;
     /// <summary>
     /// Whether this object has an unmanaged customization on top of its managed layer. Null until

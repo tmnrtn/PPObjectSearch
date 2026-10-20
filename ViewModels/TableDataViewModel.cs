@@ -161,6 +161,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _selectedTable, value)) return;
 
             OnPropertyChanged(nameof(TableHeading));
+            OnPropertyChanged(nameof(TableDisplayName));
+            OnPropertyChanged(nameof(TableLogicalName));
             RefreshCommand.RaiseCanExecuteChanged();
             ApplyColumnsCommand.RaiseCanExecuteChanged();
             if (value is not null) _ = OpenTableAsync(value);
@@ -169,6 +171,16 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
     /// <summary>The table chosen, else the window's own name.</summary>
     public string TableHeading => SelectedTable?.Label ?? "Choose a table";
+
+    /// <summary>The heading's name: the table's display name, else its logical name.</summary>
+    public string TableDisplayName => SelectedTable is { } table
+        ? string.IsNullOrWhiteSpace(table.DisplayName) ? table.LogicalName : table.DisplayName
+        : "Choose a table";
+
+    /// <summary>Beside the display name; empty when the display name already is the logical name.</summary>
+    public string TableLogicalName => SelectedTable is { DisplayName: { Length: > 0 } display } table && display.Trim().Length > 0
+        ? table.LogicalName
+        : string.Empty;
 
     // ---------------------------------------------------------------- columns
 
@@ -197,7 +209,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string ColumnsLabel => $"Columns ({ShownColumns.Count})";
+    public string ColumnsLabel => $"Columns · {ShownColumns.Count}";
 
     private bool _isColumnPickerOpen;
     public bool IsColumnPickerOpen
@@ -675,8 +687,10 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
               "Add a server filter, or raise the row limit, to see the rest."
             : string.Empty;
 
-        var filtered = filter is null ? string.Empty : " matching the filters";
-        ReadSummary = $"Read {result.Rows.Count:N0} row{(result.Rows.Count == 1 ? string.Empty : "s")}{filtered} of {table.Label} " +
+        // The heading names the table; the summary says how the rows were chosen.
+        var filters = ServerFilters.Count + (ActiveOnly && HasStateCode ? 1 : 0);
+        var filtered = filters == 0 ? string.Empty : $" matching {filters} filter{(filters == 1 ? string.Empty : "s")}";
+        ReadSummary = $"Read {result.Rows.Count:N0} row{(result.Rows.Count == 1 ? string.Empty : "s")}{filtered} " +
                       $"in {clock.Elapsed.TotalSeconds:0.0} s";
         Status = string.Empty;
     }

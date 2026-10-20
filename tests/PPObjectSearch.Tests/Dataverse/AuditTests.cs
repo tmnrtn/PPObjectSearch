@@ -89,4 +89,16 @@ public class AuditTests
         Assert.Contains($"_objectid_value eq {Flow}", Uri.UnescapeDataString(handler.Requests[0].Url));
         Assert.False(DataverseClient.HasAuditHistory(61));
     }
+
+    [Fact]
+    public void Only_a_flow_step_or_variable_with_an_id_has_an_audit_history()
+    {
+        static PPObjectSearch.Models.SolutionComponentItem Item(int type, Guid id) =>
+            new() { Name = "x", ComponentTypeName = "T", ComponentType = type, ObjectId = id };
+
+        Assert.True(Item(29, Flow).HasAuditHistory);
+        Assert.True(Item(380, Flow).HasAuditHistory);
+        Assert.False(Item(1, Flow).HasAuditHistory);
+        Assert.False(Item(29, Guid.Empty).HasAuditHistory);
+    }
 }

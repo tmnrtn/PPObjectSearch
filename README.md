@@ -371,11 +371,12 @@ than what was true before the writes.
   remove the same way.
 - **The target row is copied before every update or delete.** The copy goes in the run log; a
   row that cannot be read first is not written.
-- **Undo run** reverses what the window wrote, newest first: deleted rows are re-created with
+- **Undo run…** reverses what the window wrote, newest first: deleted rows are re-created with
   their original id from every column the target accepts on a create (and set back to inactive
   where they were), updated columns are set back to what they held, and created rows are
   deleted. Rows Dataverse removed through cascading relationships are not restored, and edits
-  made to the same columns since the run are overwritten.
+  made to the same columns since the run are overwritten. It asks first, in the same
+  confirmation as every other write, with a count of each kind of write it will reverse.
 - **What else a delete reaches is counted first.** Switching Delete on reads the table's
   relationships and counts the rows that point at the ones being deleted: those Dataverse would
   delete with them (cascade), those that would make the delete fail (restrict), and those that
@@ -570,8 +571,9 @@ same timeline, with their result and any error. Filter by type, or to *unmanaged
 customisations that usually cause drift. Double-click a component to open it; export to CSV or
 Markdown for an incident write-up.
 
-**Audit history** on a flow, classic workflow, plug-in step or environment variable shows what the
-timeline cannot: each audited change to it - when, by whom, and each column's old and new value -
+**Audit history** on a flow, classic workflow, plug-in step or environment variable - in its details
+window, the grid's right-click menu, the command palette, or a row's right-click menu here - shows
+what the timeline cannot: each audited change to it - when, by whom, and each column's old and new value -
 so a flow turned off, a step disabled or a variable's value replaced can be traced. A variable's
 history covers its definition and its current value row. It reads Dataverse auditing, so it shows
 only what was recorded while auditing was on; the window says whether it is on now for the
@@ -579,7 +581,7 @@ environment and the table, and needs the View Audit History privilege.
 
 ## Table data
 
-**Table data…** (sidebar, under Investigate, or *Table data* in the command palette) is a quick,
+**Table data** (sidebar, under Investigate, or *Table data* in the command palette) is a quick,
 read-only look at the rows of one table - reference and configuration data, lookup tables,
 environment-specific settings, option lists. A table's details window opens it on that table with
 **Browse rows**, beside the row count.
@@ -699,10 +701,11 @@ The most common fixes after a deployment, without leaving for the maker portal:
 
 - **Turn on / Turn off** a cloud flow, **Activate / Deactivate** a classic workflow, business rule
   or action, and **Enable / Disable** a plug-in step - from the details window, or from the grid's
-  right-click menu for every selected row at once.
-- **Turn on every flow listed that is off** (right-click menu) checks every cloud flow in the
-  loaded list and turns on the ones that are off.
-- **Set value / Remove current value** on an environment variable's *Value* tab. The value is
+  right-click menu for every selected row at once. In the menu they sit together at the bottom,
+  under *Change in {environment}*.
+- **Turn on every flow listed that is off…** (right-click menu, when the list has cloud flows)
+  checks every cloud flow in the loaded list and turns on the ones that are off.
+- **Set value… / Remove current value…** on an environment variable's *Value* tab. The value is
   checked against the variable's type first: a number, yes/no, valid JSON, a non-empty data
   source. Secrets (Key Vault references) are left to the maker portal.
 

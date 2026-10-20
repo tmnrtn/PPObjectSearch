@@ -160,6 +160,32 @@ public sealed class CommandPaletteViewModelTests : IDisposable
         Assert.Equal("contoso admin", items.Single(i => i.Title == "Users").Group);
         Assert.Equal("Users", items.Single(i => i.Title == "Users").Parameter);
         Assert.Equal("Account sync", items.Single(i => i.Title == "Dependency explorer…").Detail);
+
+        // A process has an audit history, opened for the object selected.
+        var audit = items.Single(i => i.Title == "Audit history");
+        Assert.Same(session.AuditHistoryCommand, audit.Command);
+        Assert.Same(session.Items[1], audit.Parameter);
+    }
+
+    [Fact]
+    public void Audit_history_is_offered_for_one_flow_step_or_variable_only()
+    {
+        var session = Connect();
+        Assert.True(session.CanShowAuditHistory);
+
+        // A table has no audit history here.
+        session.SelectedItem = session.Items[0];
+        Assert.DoesNotContain(CommandPaletteViewModel.BuildItems(Shell, session), i => i.Title == "Audit history");
+        Assert.False(session.CanShowAuditHistory);
+        Assert.False(session.AuditHistoryCommand.CanExecute(null));
+
+        // The grid menu offers it for one row at a time.
+        session.SelectedItem = session.Items[1];
+        session.SetSelection(session.Items);
+        Assert.False(session.CanShowAuditHistory);
+        session.SetSelection([session.Items[1]]);
+        Assert.True(session.CanShowAuditHistory);
+        Assert.True(session.AuditHistoryCommand.CanExecute(null));
     }
 
     [Fact]

@@ -3,6 +3,26 @@ using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
+/// <summary>One line of a confirmation's tally: "3 created rows are deleted".</summary>
+public sealed record WriteCount(int Count, string Label);
+
+/// <summary>
+/// What a run's undo is about to do, for the confirmation: what it reverses, a tally by kind of
+/// write, the caveats, and the confirm button's words.
+/// </summary>
+public sealed record UndoConfirmation(string Action, IReadOnlyList<WriteCount> Counts, string Caveat, string ConfirmLabel);
+
+/// <summary>
+/// What the environment line at the top of a window shows, for a window that has no tab behind it -
+/// the same names as <see cref="EnvironmentSessionViewModel"/>, so <c>EnvironmentLine</c> binds to either.
+/// </summary>
+public sealed record EnvironmentLineInfo(
+    string Title,
+    Dataverse.EnvironmentSku EnvironmentSku,
+    string EnvironmentHost,
+    bool IsWriteAllowlisted,
+    string EnvironmentTypeDescription);
+
 /// <summary>
 /// The gate in front of every one-click change: the write guard first, then a confirmation that
 /// names the change, the environment and its type. Nothing is written unless both say yes.

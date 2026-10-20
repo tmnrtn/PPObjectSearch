@@ -171,6 +171,15 @@ public sealed class CommandPaletteViewModel : ObservableObject
                 Title = "Dependency explorer…", Group = env, Detail = selected.PrimaryLabel,
                 Command = session.ExploreDependenciesCommand
             });
+
+            if (selected.HasAuditHistory)
+            {
+                items.Add(new PaletteItem
+                {
+                    Title = "Audit history", Group = env, Detail = selected.PrimaryLabel,
+                    Command = session.AuditHistoryCommand, Parameter = selected
+                });
+            }
         }
 
         foreach (var recent in session.RecentObjects)

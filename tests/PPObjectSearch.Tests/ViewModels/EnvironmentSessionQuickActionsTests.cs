@@ -143,6 +143,25 @@ public sealed class EnvironmentSessionQuickActionsTests : IDisposable
     });
 
     [Fact]
+    public Task A_list_without_flows_offers_no_writes_for_a_table() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        var solution = env.AddSolution("Default Solution", "Default");
+        env.AddComponent(solution, 92, "account create step");
+        env.AddComponent(solution, 1, "account", "Account");
+        var session = await env.ConnectedAsync();
+
+        Assert.False(session.HasCloudFlows);
+        session.SetSelection([Row(session, "account")]);
+        Assert.False(session.ShowsChangeGroup);
+
+        // A plug-in step can be switched, so the group shows for it - without the list's flows.
+        session.SetSelection([Row(session, "account create step")]);
+        Assert.True(session.ShowsChangeGroup);
+        Assert.Equal("Disable…", session.SwitchOffLabel);
+    });
+
+    [Fact]
     public Task Different_kinds_together_are_turned_on_and_off_by_count() => EnvironmentSessionThread.Run(async () =>
     {
         var env = new FakeEnvironment();
@@ -154,6 +173,9 @@ public sealed class EnvironmentSessionQuickActionsTests : IDisposable
 
         session.SetSelection([Row(session, "account")]);
         Assert.False(session.HasSwitchableSelection);
+        // The list has a cloud flow, so the menu's Change group still offers to turn on the list's flows.
+        Assert.True(session.HasCloudFlows);
+        Assert.True(session.ShowsChangeGroup);
         Assert.Equal("Turn on", session.SwitchOnHeader);
         Assert.Equal("Turn off", session.SwitchOffHeader);
         Assert.Equal(string.Empty, session.SwitchOnToolTip);

@@ -275,60 +275,71 @@
             </DataGrid>
 
             <!-- ============================================================ footer -->
+            <!-- What the run did, then: the plan and the log on the left, closing and applying on the right. -->
             <Border Grid.Row="3" Style="{StaticResource Footer}" Padding="18,10">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{Binding FooterText}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Muted}"
+                               ToolTip="{Binding FooterText}" Margin="0,0,0,10" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="{Binding FooterText}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Muted}"
-                               ToolTip="{Binding FooterText}" />
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Export plan…" Height="30" Margin="0,0,8,0"
+                                    Command="{Binding ExportPlanCommand}"
+                                    IsEnabled="{Binding IsNotRunning}"
+                                    ToolTip="Save every planned change as CSV, for review or a change ticket" />
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
-                        <Button Content="Export plan…" Height="30" Margin="0,0,8,0"
-                                Command="{Binding ExportPlanCommand}"
-                                IsEnabled="{Binding IsNotRunning}"
-                                ToolTip="Save every planned change as CSV, for review or a change ticket" />
+                            <Button Content="Open run log" Height="30"
+                                    Command="{Binding OpenRunLogCommand}"
+                                    ToolTip="Each write is recorded - with the row as it was - under %LOCALAPPDATA%\PPObjectSearch\writes" />
 
-                        <Button Content="Open run log" Height="30" Margin="0,0,8,0"
-                                Command="{Binding OpenRunLogCommand}"
-                                ToolTip="Each write is recorded - with the row as it was - under %LOCALAPPDATA%\PPObjectSearch\writes" />
+                            <!-- Undoing writes too, so it stands apart, marked as a write. -->
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding CanUndo, Converter={StaticResource BoolToVis}}">
+                                <Rectangle Style="{StaticResource VDivider}" Margin="12,0" />
+                                <Button Height="30" Command="{Binding UndoCommand}"
+                                        ToolTip="Put back what this run changed, from the copies kept before each write. Asks first; recorded in the run log.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Undo run…" VerticalAlignment="Center" />
+                                        <TextBlock Style="{StaticResource WritesTag}" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
 
-                        <Button Content="Undo run" Height="30" Margin="0,0,8,0"
-                                Command="{Binding UndoCommand}"
-                                ToolTip="Put back what this run changed, from the copies kept before each write"
-                                Visibility="{Binding CanUndo, Converter={StaticResource BoolToVis}}" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <Button Content="Stop" Height="30" Margin="0,0,8,0"
+                                    Command="{Binding CancelRunCommand}"
+                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
 
-                        <Button Content="Stop" Height="30" Margin="0,0,8,0"
-                                Command="{Binding CancelRunCommand}"
-                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
+                            <Button Content="Retry failed" Height="30" Margin="0,0,8,0"
+                                    Command="{Binding RetryFailedCommand}"
+                                    ToolTip="Write the rows that failed again - for example after throttling or a lost connection"
+                                    Visibility="{Binding HasFailures, Converter={StaticResource BoolToVis}}" />
 
-                        <Button Content="Retry failed" Height="30" Margin="0,0,8,0"
-                                Command="{Binding RetryFailedCommand}"
-                                ToolTip="Write the rows that failed again - for example after throttling or a lost connection"
-                                Visibility="{Binding HasFailures, Converter={StaticResource BoolToVis}}" />
+                            <Button Content="Close" Height="30" Click="Close_Click" IsEnabled="{Binding IsNotRunning}" />
 
-                        <Button Content="Close" Height="30" Click="Close_Click" IsEnabled="{Binding IsNotRunning}" />
-
-                        <Button Height="30" Margin="8,0,0,0" Content="{Binding ApplyLabel}"
-                                Command="{Binding ApplyCommand}"
-                                Visibility="{Binding HasRun, Converter={StaticResource NotBoolToVis}}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsDestructiveApply}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource DangerBg}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource DangerBg}" />
-                                            <Setter Property="Foreground" Value="{DynamicResource DangerText}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </StackPanel>
-                </Grid>
+                            <Button Height="30" Margin="8,0,0,0" Content="{Binding ApplyLabel}"
+                                    Command="{Binding ApplyCommand}"
+                                    Visibility="{Binding HasRun, Converter={StaticResource NotBoolToVis}}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDestructiveApply}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                                                <Setter Property="BorderBrush" Value="{DynamicResource DangerBg}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource DangerText}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
             </Border>
         </Grid>
     </Border>

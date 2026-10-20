@@ -530,6 +530,13 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private RelayCommand? _playCommand;
     public RelayCommand PlayCommand => _playCommand ??= new RelayCommand(_ => OpenUrl(PlayUrl), _ => HasPlayUrl);
 
+    /// <summary>A flow, classic workflow, plug-in step or environment variable: who changed it, from auditing.</summary>
+    public bool HasAuditHistory => HasSession && Item.HasAuditHistory;
+
+    private RelayCommand? _auditHistoryCommand;
+    public RelayCommand AuditHistoryCommand => _auditHistoryCommand ??=
+        new RelayCommand(_ => Session?.ShowAuditHistory(Item), _ => HasAuditHistory);
+
     /// <summary>A security role's members, teams and business units are managed in Environment admin.</summary>
     public bool CanShowRoleInAdmin => Kind == ObjectKind.SecurityRole && HasSession && Item.ObjectId != Guid.Empty;
 
@@ -810,6 +817,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     /// <summary>Secrets are Key Vault references and are left to the maker portal.</summary>
     public bool CanEditEnvironmentValue => HasSession && EnvironmentVariable is { IsSecret: false };
+
+    public string SetValueToolTip =>
+        $"Sets the current value in {Session?.Title}. Checked against the variable's type; asks first; recorded in the run log.";
+
+    public string RemoveValueToolTip =>
+        $"Removes the current value in {Session?.Title}, so the default value applies. Asks first; recorded in the run log.";
 
     private AsyncRelayCommand? _setEnvironmentValueCommand;
     public AsyncRelayCommand SetEnvironmentValueCommand => _setEnvironmentValueCommand ??= new AsyncRelayCommand(

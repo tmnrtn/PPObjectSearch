@@ -229,12 +229,16 @@ public sealed class ReconcileViewModelDetailTests : IDisposable
         await vm.ApplyCommand.ExecuteAsync(null);
         Assert.False(vm.CanEditActions);
         var before = target.Handler.Requests.Count;
-        string? question = null;
-        vm.Confirm = message => { question = message; return false; };
+        UndoConfirmation? question = null;
+        vm.Confirm = undo => { question = undo; return false; };
 
         await vm.UndoCommand.ExecuteAsync(null);
 
-        Assert.StartsWith("Undo 3 write(s) in Test?", question);
+        Assert.NotNull(question);
+        Assert.StartsWith("Reverses the 3 writes made at ", question.Action);
+        Assert.Equal("Undo 3 writes", question.ConfirmLabel);
+        Assert.Equal(3, question.Counts.Sum(c => c.Count));
+        Assert.StartsWith("Rows removed by cascading deletes are not restored.", question.Caveat);
         Assert.Equal(before, target.Handler.Requests.Count);
         Assert.True(vm.CanUndo);
     }

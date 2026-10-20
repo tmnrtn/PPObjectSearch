@@ -101,8 +101,10 @@ public class TableDataViewModelTests
 
         Assert.Equal("new_taxcode", vm.SelectedTable?.LogicalName);
         Assert.Equal("Tax code (new_taxcode)", vm.TableHeading);
+        Assert.Equal("Tax code", vm.TableDisplayName);
+        Assert.Equal("new_taxcode", vm.TableLogicalName);
         Assert.Equal(["Name", "Rate", "Region"], vm.ShownColumns.Select(c => c.Header));
-        Assert.Equal("Columns (3)", vm.ColumnsLabel);
+        Assert.Equal("Columns · 3", vm.ColumnsLabel);
 
         // The default ones first, in the view's order, then the rest by name.
         Assert.Equal(["new_name", "new_rate", "new_region", "msdyn_modifiedon", "new_notes", "new_parentid", "statecode", "new_taxcodeid"],
@@ -114,7 +116,7 @@ public class TableDataViewModelTests
         Assert.True(vm.HasRows);
         Assert.True(vm.HasStateCode);
         Assert.Equal(string.Empty, vm.Warnings);
-        Assert.StartsWith("Read 3 rows of Tax code (new_taxcode) in ", vm.StatusLine);
+        Assert.StartsWith("Read 3 rows in ", vm.StatusLine);
 
         var read = Assert.Single(RowReads(handler));
         Assert.Contains("$select=new_taxcodeid,new_name,new_rate,new_region", read.Url);
@@ -285,10 +287,12 @@ public class TableDataViewModelTests
 
         Assert.Contains("$filter=(new_rate gt 1) and (statecode eq 0)", RowReads(handler)[^1].Url);
         Assert.Contains("Active rows only", vm.ExportNotes());
+        Assert.Matches(@"^Read \d+ rows? matching 2 filters in ", vm.StatusLine);
 
         await vm.ClearFilterCommand.ExecuteAsync(null);
 
         Assert.Contains("$filter=statecode eq 0", RowReads(handler)[^1].Url);
+        Assert.Matches(@"^Read \d+ rows? matching 1 filter in ", vm.StatusLine);
         Assert.False(vm.HasServerFilter);
         Assert.Equal(string.Empty, vm.FilterValue);
     }

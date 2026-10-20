@@ -21,6 +21,20 @@ public sealed partial class EnvironmentSessionViewModel
 
     public bool HasSwitchableSelection => SwitchableSelection().Count > 0;
 
+    private bool _hasCloudFlows;
+    /// <summary>The loaded list has cloud flows, so "Turn on every flow listed that is off" has something to do.</summary>
+    public bool HasCloudFlows
+    {
+        get => _hasCloudFlows;
+        private set
+        {
+            if (SetProperty(ref _hasCloudFlows, value)) OnPropertyChanged(nameof(ShowsChangeGroup));
+        }
+    }
+
+    /// <summary>The grid menu's Change group: switches for the selection, or turning on the list's flows.</summary>
+    public bool ShowsChangeGroup => HasSwitchableSelection || HasCloudFlows;
+
     // ---------------------------------------------------------------- detail pane: Change · WRITES
 
     /// <summary>The selection has actions that write - the pane's Change group shows only then.</summary>
@@ -121,6 +135,7 @@ public sealed partial class EnvironmentSessionViewModel
     private void RaiseSwitchCommands()
     {
         OnPropertyChanged(nameof(HasSwitchableSelection));
+        OnPropertyChanged(nameof(ShowsChangeGroup));
         OnPropertyChanged(nameof(HasQuickActions));
         OnPropertyChanged(nameof(ShowSwitchOn));
         OnPropertyChanged(nameof(ShowSwitchOff));
