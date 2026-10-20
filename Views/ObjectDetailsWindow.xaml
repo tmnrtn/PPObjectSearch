@@ -201,8 +201,11 @@
                              Visibility="{Binding HasOverview, Converter={StaticResource BoolToVis}}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="18,14,18,18">
-                                <TextBlock Text="{Binding OverviewStatus}" TextWrapping="Wrap" Foreground="{DynamicResource Amber}" Margin="0,0,0,10"
-                                           Visibility="{Binding OverviewStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                                <!-- A part that could not be read - or sharing only owners can see - in the banner, as partial results are elsewhere. -->
+                                <Border Style="{StaticResource Banner}" Margin="0,0,0,10" MaxWidth="900" HorizontalAlignment="Left"
+                                        Visibility="{Binding OverviewStatus, Converter={StaticResource EmptyToCollapsed}}">
+                                    <TextBlock Text="{Binding OverviewStatus}" TextWrapping="Wrap" />
+                                </Border>
                                 <ItemsControl ItemsSource="{Binding OverviewProperties}" MaxWidth="900" HorizontalAlignment="Left">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
