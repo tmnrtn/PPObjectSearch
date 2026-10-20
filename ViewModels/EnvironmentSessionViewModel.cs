@@ -1246,6 +1246,9 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         var chosen = SelectedSolution;
         string? note = null;
 
+        // Busy from the start, so nothing that waits for a load slips in while the list is read.
+        IsBusy = true;
+
         try
         {
             Status = "Reading the solutions...";
@@ -1261,9 +1264,10 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                        (SelectedSolution is { } now ? $"'{now.FriendlyName}' is shown instead." : "there is nothing to show.");
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
-            // The list on screen stays; the objects are still worth reading again.
+            // Nothing cancels this read but a timeout. The list on screen stays; the objects are
+            // still worth reading again.
             note = "The solution list could not be read again - " + ex.Message;
         }
 
@@ -1274,6 +1278,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             HasCloudFlows = false;
             ResultSummary = string.Empty;
             Status = note ?? "No solutions were returned.";
+            IsBusy = false;
             return;
         }
 
