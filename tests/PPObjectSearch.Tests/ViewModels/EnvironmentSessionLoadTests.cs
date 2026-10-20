@@ -141,6 +141,51 @@ public class EnvironmentSessionLoadTests
     });
 
     [Fact]
+    public Task Refreshing_reads_the_solution_list_again_and_keeps_the_one_chosen() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        var fallback = env.AddSolution("Default Solution", "Default");
+        var core = env.AddSolution("Contoso Core", "contoso_core");
+        env.AddComponent(fallback, 1, "account", "Account");
+        env.AddComponent(core, 61, "core.js");
+        var session = await env.ConnectedAsync();
+        session.SelectedSolution = session.Solutions.Single(s => s.UniqueName == "contoso_core");
+        await EnvironmentSessionThread.Until(() => session.Items.Any(i => i.Name == "core.js") && !session.IsBusy, "the Contoso Core load");
+
+        // Imported since the tab connected.
+        env.AddSolution("Contoso Sales", "contoso_sales");
+
+        await session.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Default", "contoso_core", "contoso_sales"], session.Solutions.Select(s => s.UniqueName));
+        Assert.Equal("contoso_core", session.SelectedSolution?.UniqueName);
+        Assert.Equal("core.js", Assert.Single(session.Items).Name);
+        Assert.StartsWith("Loaded 1 objects from 'Contoso Core'", session.Status);
+    });
+
+    [Fact]
+    public Task A_chosen_solution_gone_on_refresh_falls_back_to_the_default_and_says_so() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        var fallback = env.AddSolution("Default Solution", "Default");
+        var core = env.AddSolution("Contoso Core", "contoso_core");
+        env.AddComponent(fallback, 1, "account", "Account");
+        env.AddComponent(core, 61, "core.js");
+        var session = await env.ConnectedAsync();
+        session.SelectedSolution = session.Solutions.Single(s => s.UniqueName == "contoso_core");
+        await EnvironmentSessionThread.Until(() => session.Items.Any(i => i.Name == "core.js") && !session.IsBusy, "the Contoso Core load");
+
+        env.RemoveSolution(core);
+
+        await session.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Default"], session.Solutions.Select(s => s.UniqueName));
+        Assert.Equal("Default", session.SelectedSolution?.UniqueName);
+        Assert.Equal("account", Assert.Single(session.Items).Name);
+        Assert.StartsWith("'Contoso Core' is no longer in this environment, so 'Default Solution' is shown instead. Loaded 1 objects", session.Status);
+    });
+
+    [Fact]
     public Task Refreshing_keeps_the_chosen_filters() => EnvironmentSessionThread.Run(async () =>
     {
         var env = new FakeEnvironment();

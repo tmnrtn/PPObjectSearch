@@ -52,6 +52,10 @@ internal sealed class FakeEnvironment
         return id;
     }
 
+    /// <summary>A solution deleted from the environment: it is no longer listed.</summary>
+    public void RemoveSolution(Guid id) =>
+        _solutions.RemoveAll(s => s is Dictionary<string, object?> solution && Equals(solution["solutionid"], id));
+
     public Guid AddComponent(Guid solutionId, int type, string name, string? displayName = null, bool managed = false,
         int? workflowCategory = null)
     {

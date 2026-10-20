@@ -95,7 +95,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         ConnectCommand = new AsyncRelayCommand(_ => ConnectAsync());
         SwitchAccountCommand = new AsyncRelayCommand(_ => ConnectAsync(forceAccountPicker: true));
-        RefreshCommand = new AsyncRelayCommand(_ => LoadSolutionComponentsAsync(useCache: false), _ => IsConnected);
+        RefreshCommand = new AsyncRelayCommand(_ => RefreshAsync(), _ => IsConnected);
         ClearSearchCommand = new RelayCommand(_ => SearchText = string.Empty);
         ClearFiltersCommand = new RelayCommand(_ => ClearFilters());
         OpenLinkCommand = new RelayCommand(p => OpenUrl(Target(p)?.MakerUrl), p => Target(p)?.MakerUrl is not null);
@@ -1187,26 +1187,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             LinksAvailable = _linkBuilder.CanBuildLinks;
 
             Status = "Loading solutions...";
-            var solutions = await _client.GetSolutionsAsync(cts.Token);
-
-            _suppressSolutionReload = true;
-            Solutions.Clear();
-            foreach (var solution in solutions.OrderBy(s => s.IsDefaultSolution ? 0 : 1)
-                                              .ThenBy(s => s.FriendlyName, StringComparer.CurrentCultureIgnoreCase))
-            {
-                Solutions.Add(solution);
-            }
-
-            _selectedSolution = Solutions.FirstOrDefault(s =>
-                                   !string.IsNullOrWhiteSpace(_preferredSolutionUniqueName) &&
-                                   string.Equals(s.UniqueName, _preferredSolutionUniqueName, StringComparison.OrdinalIgnoreCase))
-                               ?? Solutions.FirstOrDefault(s => s.IsDefaultSolution)
-                               ?? Solutions.FirstOrDefault();
-            OnPropertyChanged(nameof(SelectedSolution));
-            _suppressSolutionReload = false;
-
-            _preferredSolutionUniqueName = _selectedSolution?.UniqueName;
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            FillSolutions(await _client.GetSolutionsAsync(cts.Token));
 
             if (SelectedSolution is null)
             {
@@ -1226,6 +1207,83 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         {
             if (ReferenceEquals(cts, _loadCts)) IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// The picker's list, default solution first then by name, keeping the solution chosen (by
+    /// unique name) where it is still there, else the default. Filling it loads nothing.
+    /// </summary>
+    private void FillSolutions(IEnumerable<SolutionInfo> solutions)
+    {
+        _suppressSolutionReload = true;
+        Solutions.Clear();
+        foreach (var solution in solutions.OrderBy(s => s.IsDefaultSolution ? 0 : 1)
+                                          .ThenBy(s => s.FriendlyName, StringComparer.CurrentCultureIgnoreCase))
+        {
+            Solutions.Add(solution);
+        }
+
+        _selectedSolution = Solutions.FirstOrDefault(s =>
+                               !string.IsNullOrWhiteSpace(_preferredSolutionUniqueName) &&
+                               string.Equals(s.UniqueName, _preferredSolutionUniqueName, StringComparison.OrdinalIgnoreCase))
+                           ?? Solutions.FirstOrDefault(s => s.IsDefaultSolution)
+                           ?? Solutions.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedSolution));
+        _suppressSolutionReload = false;
+
+        _preferredSolutionUniqueName = _selectedSolution?.UniqueName;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// F5: the solution list read again - a solution imported or created since connecting appears,
+    /// and one deleted goes - then the chosen solution's objects, bypassing the cache.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        if (_client is not { } client || !IsConnected) return;
+
+        var chosen = SelectedSolution;
+        string? note = null;
+
+        // Busy from the start, so nothing that waits for a load slips in while the list is read.
+        IsBusy = true;
+
+        try
+        {
+            Status = "Reading the solutions...";
+            var solutions = await client.GetSolutionsAsync(CancellationToken.None);
+
+            // Disconnected or connected again meanwhile: the tab is no longer this refresh's.
+            if (!ReferenceEquals(_client, client) || !IsConnected) return;
+            FillSolutions(solutions);
+
+            if (chosen is not null && !string.Equals(SelectedSolution?.UniqueName, chosen.UniqueName, StringComparison.OrdinalIgnoreCase))
+            {
+                note = $"'{chosen.FriendlyName}' is no longer in this environment, so " +
+                       (SelectedSolution is { } now ? $"'{now.FriendlyName}' is shown instead." : "there is nothing to show.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Nothing cancels this read but a timeout. The list on screen stays; the objects are
+            // still worth reading again.
+            note = "The solution list could not be read again - " + ex.Message;
+        }
+
+        if (SelectedSolution is null)
+        {
+            Items.Clear();
+            _allItems.Clear();
+            HasCloudFlows = false;
+            ResultSummary = string.Empty;
+            Status = note ?? "No solutions were returned.";
+            IsBusy = false;
+            return;
+        }
+
+        await LoadSolutionComponentsAsync(useCache: false);
+        if (note is not null) Status = note + " " + Status;
     }
 
     private void ReportConnectFailure(Exception ex)

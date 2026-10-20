@@ -160,9 +160,9 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button AutomationProperties.Name="F5 - re-reads the environment, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
+                    <Button AutomationProperties.Name="F5 - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
-                            ToolTip="F5 - re-reads the environment, bypassing the cache." />
+                            ToolTip="F5 - reads the solution list and the solution's objects again, bypassing the cache." />
                 </StackPanel>
 
                 <!-- Account -->
