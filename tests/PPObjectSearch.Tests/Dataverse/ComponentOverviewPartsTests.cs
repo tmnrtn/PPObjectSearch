@@ -10,6 +10,8 @@ public class ComponentOverviewPartsTests
 {
     private static readonly Guid Id = Guid.Parse("34343434-3434-3434-3434-343434343434");
     private static readonly Guid UniqueId = Guid.Parse("56565656-5656-5656-5656-565656565656");
+    private static readonly Guid AccountTable = Guid.Parse("78787878-7878-7878-7878-787878787878");
+    private static readonly Guid AccountForm = Guid.Parse("9a9a9a9a-9a9a-9a9a-9a9a-9a9a9a9a9a9a");
 
     private const string Formatted = "@OData.Community.Display.V1.FormattedValue";
 
@@ -109,8 +111,14 @@ public class ComponentOverviewPartsTests
                 """)
             .OnJson(HttpMethod.Get, "sitemaps?", System.Text.Json.JsonSerializer.Serialize(new { value = new[] { new { sitemapxml = sitemap } } }))
             .OnJson(HttpMethod.Get, "appmodulecomponents?", $$"""
-                {"value":[{"componenttype":60,"componenttype{{Formatted}}":"System Form","objectid":"f1"},
-                          {"componenttype":1,"componenttype{{Formatted}}":"Entity","objectid":"e1"}]}
+                {"value":[{"componenttype":60,"componenttype{{Formatted}}":"System Form","objectid":"{{AccountForm}}"},
+                          {"componenttype":1,"componenttype{{Formatted}}":"Entity","objectid":"{{AccountTable}}"}]}
+                """)
+            .OnJson(HttpMethod.Get, "EntityDefinitions?$select=MetadataId", $$$$"""
+                {"value":[{"MetadataId":"{{{{AccountTable}}}}","LogicalName":"account","DisplayName":{"UserLocalizedLabel":{"Label":"Account"}}}]}
+                """)
+            .OnJson(HttpMethod.Get, "systemforms?", $$"""
+                {"value":[{"formid":"{{AccountForm}}","name":"Account main","objecttypecode":"account","type":2}]}
                 """);
 
         var overview = await Fakes.Dataverse(handler).GetOverviewAsync(Item(80));
@@ -118,8 +126,12 @@ public class ComponentOverviewPartsTests
         Assert.Empty(overview.Problems);
         Assert.Equal("Sales Hub", Value(overview, "Name"));
         Assert.Equal("Single session", Value(overview, "Navigation"));
-        Assert.Equal(["Sales", "Customers", "Accounts", "Table: account"], overview.Tables.Single(t => t.Title == "Navigation (sitemap)").Rows.Single());
-        Assert.Equal([["Entity", "e1"], ["System Form", "f1"]], overview.Tables.Single(t => t.Title == "Components in the app").Rows);
+        Assert.Equal(
+            [["Sales", null], ["    Customers", null], ["        Accounts", "Table: account"]],
+            overview.Tables.Single(t => t.Title == "Navigation (sitemap)").Rows);
+        Assert.Equal(
+            [["Table", "Account", "account"], ["Form", "Account main", "account"]],
+            overview.Tables.Single(t => t.Title == "Tables, forms, views and dashboards in the app").Rows);
         Assert.Equal([["Basic User"], ["Sales Manager"]], overview.Tables.Single(t => t.Title == "Security roles with access").Rows);
         Assert.Contains(handler.Requests, r => r.Url.Contains("sitemapnameunique eq 'new_sales'"));
         Assert.Contains(handler.Requests, r => r.Url.Contains($"_appmoduleidunique_value eq {UniqueId}"));
@@ -192,7 +204,8 @@ public class ComponentOverviewPartsTests
         Assert.Equal("Integrated", Value(overview, "Authentication"));
         Assert.Equal(
             [["Knowledge", "Policies", "k1"], ["Topic", "Greeting", "t1"], ["Topic", "Reset password", "t2"]],
-            Assert.Single(overview.Tables).Rows);
+            overview.Tables.Single(t => t.Title == "Topics, knowledge and actions").Rows);
+        Assert.Empty(overview.Tables.Single(t => t.Title == "Flows called").Rows);
         Assert.Contains(handler.Requests, r => r.Url.Contains($"_parentbotid_value eq {Id}"));
     }
 
