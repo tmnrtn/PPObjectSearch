@@ -1303,6 +1303,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _authContext = NewAuthContext();
 
         _allItems.Clear();
+        HasCloudFlows = false;
         _insights.Clear();
         Items.Clear();
         Solutions.Clear();
@@ -1405,6 +1406,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         Items.Clear();
         _allItems.Clear();
+        HasCloudFlows = false;
         TypeFilters.Clear();
         SubTypeFilters.Clear();
         StateFilters.Clear();
@@ -1483,6 +1485,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 : string.Compare(a.PrimaryLabel, b.PrimaryLabel, StringComparison.CurrentCultureIgnoreCase);
         });
 
+        HasCloudFlows = _allItems.Exists(IsCloudFlow);
         RebuildFilters();
 
         // One reset rather than a change per row: the filtered view and the grid behind it would

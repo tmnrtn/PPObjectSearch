@@ -472,7 +472,8 @@
                         SelectedItem instead, and right-clicking a row selects it first.
                     -->
                     <ContextMenu>
-                        <MenuItem Header="Details..." Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
+                        <!-- Open · copy · the selection · then, kept apart at the bottom, what writes. -->
+                        <MenuItem Header="Details…" Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
                         <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
@@ -485,15 +486,6 @@
                         <MenuItem Header="{Binding CopyIdHeader}" Command="{Binding CopyIdCommand}" />
                         <MenuItem Header="Copy as table" Command="{Binding CopyAsTableCommand}"
                                   ToolTip="Tab-separated with a header row - pastes into Excel as a table" />
-                        <Separator Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
-                        <MenuItem Header="{Binding SwitchOnHeader}" Command="{Binding SwitchOnCommand}"
-                                  ToolTip="Turn on flows, activate processes, enable plug-in steps - guarded, confirmed and logged"
-                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
-                        <MenuItem Header="{Binding SwitchOffHeader}" Command="{Binding SwitchOffCommand}"
-                                  ToolTip="Turn off flows, deactivate processes, disable plug-in steps - guarded, confirmed and logged"
-                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
-                        <MenuItem Header="Turn on every flow listed that is off" Command="{Binding TurnOnSolutionFlowsCommand}"
-                                  ToolTip="Checks every cloud flow in the loaded list and turns on the ones that are off" />
                         <Separator Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
                         <MenuItem Header="{Binding SelectionHeader}" IsEnabled="False"
                                   Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
@@ -501,8 +493,27 @@
                                   Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
                         <MenuItem Header="Check layers for selection" Command="{Binding CheckSelectionLayersCommand}"
                                   Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
-                        <MenuItem Header="Export selection to CSV..." Command="{Binding ExportSelectionCommand}"
+                        <MenuItem Header="Export selection to CSV…" Command="{Binding ExportSelectionCommand}"
                                   Visibility="{Binding HasMultipleSelected, Converter={StaticResource BoolToVis}}" />
+                        <!-- Change in {env} · WRITES: each asks first, so each ends in "…". -->
+                        <Separator Visibility="{Binding ShowsChangeGroup, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem IsEnabled="False" Visibility="{Binding ShowsChangeGroup, Converter={StaticResource BoolToVis}}">
+                            <MenuItem.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Title, StringFormat=Change in {0}}" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource WritesTag}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </MenuItem.Header>
+                        </MenuItem>
+                        <MenuItem Header="{Binding SwitchOnLabel}" Command="{Binding SwitchOnCommand}"
+                                  ToolTip="{Binding Title, StringFormat='Turn on flows, activate processes, enable plug-in steps in {0} - guarded, confirmed and logged'}"
+                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="{Binding SwitchOffLabel}" Command="{Binding SwitchOffCommand}"
+                                  ToolTip="{Binding Title, StringFormat='Turn off flows, deactivate processes, disable plug-in steps in {0} - guarded, confirmed and logged'}"
+                                  Visibility="{Binding HasSwitchableSelection, Converter={StaticResource BoolToVis}}" />
+                        <MenuItem Header="Turn on every flow listed that is off…" Command="{Binding TurnOnSolutionFlowsCommand}"
+                                  ToolTip="{Binding Title, StringFormat='Checks every cloud flow in the loaded list and turns on the ones that are off, in {0} - guarded, confirmed and logged'}"
+                                  Visibility="{Binding HasCloudFlows, Converter={StaticResource BoolToVis}}" />
                     </ContextMenu>
                 </DataGrid.ContextMenu>
 
