@@ -33,7 +33,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Filters first, then the selected change's audit history, then read again, then export. -->
+                <!-- Filters first, then read again, then export. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                     <ComboBox Width="170" core:Ui.InlineLabel="Show" FontWeight="SemiBold"
                               AutomationProperties.Name="Time range"
@@ -49,8 +49,6 @@
                               ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" />
                     <CheckBox Content="Unmanaged only" Margin="12,0,6,0" VerticalAlignment="Center" IsChecked="{Binding UnmanagedOnly}"
                               ToolTip="Direct customisations - changes made in this environment rather than imported" />
-                    <Button Content="Audit history" Margin="6,0,0,0" Command="{Binding AuditCommand}"
-                            ToolTip="Who turned a flow on or off, enabled or disabled a step, or changed a variable's value - where Dataverse auditing records it" />
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
                     <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
@@ -86,11 +84,22 @@
                 <DataGrid ItemsSource="{Binding EntriesView}" SelectedItem="{Binding SelectedEntry}" IsReadOnly="True"
                           AutomationProperties.Name="Changes, newest first"
                           BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                          PreviewMouseRightButtonDown="EntriesGrid_PreviewMouseRightButtonDown"
                           Visibility="{Binding HasEntries, Converter={StaticResource BoolToVis}}">
                     <DataGrid.InputBindings>
                         <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
                         <KeyBinding Key="Enter" Command="{Binding OpenCommand}" />
                     </DataGrid.InputBindings>
+                    <!-- The row right-clicked: its details, and for flows, steps and variables its audited changes. -->
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Open details" Command="{Binding OpenCommand}" FontWeight="SemiBold"
+                                      InputGestureText="Double-click" />
+                            <MenuItem Header="Audit history" Command="{Binding AuditCommand}"
+                                      ToolTip="Who turned a flow on or off, enabled or disabled a step, or changed a variable's value - where Dataverse auditing records it"
+                                      Visibility="{Binding SelectedHasAudit, Converter={StaticResource BoolToVis}}" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="When" Width="140" SortMemberPath="When" HeaderStyle="{StaticResource FirstHeader}"
                                             Binding="{Binding When, StringFormat={}{0:yyyy-MM-dd HH:mm}}" ElementStyle="{StaticResource CellFirst}" />

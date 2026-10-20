@@ -570,8 +570,9 @@ same timeline, with their result and any error. Filter by type, or to *unmanaged
 customisations that usually cause drift. Double-click a component to open it; export to CSV or
 Markdown for an incident write-up.
 
-**Audit history** on a flow, classic workflow, plug-in step or environment variable shows what the
-timeline cannot: each audited change to it - when, by whom, and each column's old and new value -
+**Audit history** on a flow, classic workflow, plug-in step or environment variable - in its details
+window, the grid's right-click menu, the command palette, or a row's right-click menu here - shows
+what the timeline cannot: each audited change to it - when, by whom, and each column's old and new value -
 so a flow turned off, a step disabled or a variable's value replaced can be traced. A variable's
 history covers its definition and its current value row. It reads Dataverse auditing, so it shows
 only what was recorded while auditing was on; the window says whether it is on now for the

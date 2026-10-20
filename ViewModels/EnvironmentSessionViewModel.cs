@@ -308,6 +308,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         OnPropertyChanged(nameof(CopyIdHeader));
         OnPropertyChanged(nameof(SelectionHeader));
         OnPropertyChanged(nameof(FavouriteHeader));
+        OnPropertyChanged(nameof(CanShowAuditHistory));
         CopyAsTableCommand.RaiseCanExecuteChanged();
         ToggleFavouriteCommand.RaiseCanExecuteChanged();
         OpenSelectionDetailsCommand.RaiseCanExecuteChanged();
@@ -841,6 +842,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
             OpenLinkCommand.RaiseCanExecuteChanged();
             ShowDetailsCommand.RaiseCanExecuteChanged();
+            _auditHistoryCommand?.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(CanShowAuditHistory));
             OnPropertyChanged(nameof(DetailShortcuts));
             OnPropertyChanged(nameof(IsSelectedEnvironmentVariable));
             QueueSelectionInsight();
@@ -1891,6 +1894,29 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         }
 
         return known;
+    }
+
+    private RelayCommand? _auditHistoryCommand;
+    /// <summary>
+    /// Who changed a flow's state, a step's state or a variable's value, from Dataverse auditing -
+    /// for the row right-clicked, the palette's selected object, or a details window's object.
+    /// </summary>
+    public RelayCommand AuditHistoryCommand => _auditHistoryCommand ??= new RelayCommand(
+        p => ShowAuditHistory(Target(p)),
+        p => IsConnected && Target(p) is { HasAuditHistory: true });
+
+    /// <summary>The grid menu offers audit history for one row at a time.</summary>
+    public bool CanShowAuditHistory => !HasMultipleSelected && SelectedItem is { HasAuditHistory: true };
+
+    internal void ShowAuditHistory(SolutionComponentItem? item)
+    {
+        if (item is not { HasAuditHistory: true } || _client is null || !IsConnected) return;
+
+        new Views.AuditHistoryWindow
+        {
+            DataContext = new AuditHistoryViewModel(this, _client, item),
+            Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
+        }.Show();
     }
 
     private RelayCommand? _exploreDependenciesCommand;

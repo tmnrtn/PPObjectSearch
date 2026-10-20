@@ -530,6 +530,13 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private RelayCommand? _playCommand;
     public RelayCommand PlayCommand => _playCommand ??= new RelayCommand(_ => OpenUrl(PlayUrl), _ => HasPlayUrl);
 
+    /// <summary>A flow, classic workflow, plug-in step or environment variable: who changed it, from auditing.</summary>
+    public bool HasAuditHistory => HasSession && Item.HasAuditHistory;
+
+    private RelayCommand? _auditHistoryCommand;
+    public RelayCommand AuditHistoryCommand => _auditHistoryCommand ??=
+        new RelayCommand(_ => Session?.ShowAuditHistory(Item), _ => HasAuditHistory);
+
     /// <summary>A security role's members, teams and business units are managed in Environment admin.</summary>
     public bool CanShowRoleInAdmin => Kind == ObjectKind.SecurityRole && HasSession && Item.ObjectId != Guid.Empty;
 

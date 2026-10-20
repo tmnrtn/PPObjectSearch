@@ -475,6 +475,9 @@
                         <MenuItem Header="Details..." Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
+                        <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
+                                  ToolTip="Who changed it and how - each audited change, where Dataverse auditing records it"
+                                  Visibility="{Binding CanShowAuditHistory, Converter={StaticResource BoolToVis}}" />
                         <MenuItem Header="{Binding FavouriteHeader}" Command="{Binding ToggleFavouriteCommand}" />
                         <Separator />
                         <MenuItem Header="{Binding CopyNameHeader}" Command="{Binding CopyNameCommand}" />

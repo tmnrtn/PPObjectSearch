@@ -111,6 +111,7 @@ public sealed class ChangesViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _selectedEntry, value)) return;
             OpenCommand.RaiseCanExecuteChanged();
             AuditCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(SelectedHasAudit));
         }
     }
 
@@ -299,19 +300,14 @@ public sealed class ChangesViewModel : ObservableObject, IDisposable
         if (entry?.Item is { } item) _session.OpenDetails(item);
     }
 
-    internal static bool HasAudit(ChangeEntry? entry) =>
-        entry?.Item is { } item && item.ObjectId != Guid.Empty && Dataverse.DataverseClient.HasAuditHistory(item.ComponentType);
+    internal static bool HasAudit(ChangeEntry? entry) => entry?.Item is { HasAuditHistory: true };
+
+    /// <summary>The row menu offers audit history only for the rows that have one.</summary>
+    public bool SelectedHasAudit => HasAudit(SelectedEntry);
 
     private void OpenAudit(ChangeEntry? entry)
     {
-        if (!HasAudit(entry) || _session.Client is not { } client) return;
-
-        new Views.AuditHistoryWindow
-        {
-            DataContext = new AuditHistoryViewModel(_session, client, entry!.Item!),
-            Owner = System.Windows.Application.Current.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
-                    ?? System.Windows.Application.Current.MainWindow
-        }.Show();
+        if (HasAudit(entry)) _session.ShowAuditHistory(entry!.Item);
     }
 
     private void Export(bool markdown)

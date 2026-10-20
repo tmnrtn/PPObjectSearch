@@ -155,7 +155,10 @@
                                 ToolTip="The table's rows in the read-only Table data window - filter, choose columns, export" />
                     </StackPanel>
 
-                    <!-- A canvas app can be played as well as edited; a role's members are managed in Environment admin. -->
+                    <!-- Read-only views of the object kept elsewhere: its audited changes, the app's player, the role in Environment admin. -->
+                    <Button Content="Audit history" Height="30" Margin="0,0,8,0" Command="{Binding AuditHistoryCommand}"
+                            ToolTip="Who changed it and how - each audited change, where Dataverse auditing records it"
+                            Visibility="{Binding HasAuditHistory, Converter={StaticResource BoolToVis}}" />
                     <Button Content="Play app" Height="30" Margin="0,0,8,0" Command="{Binding PlayCommand}"
                             ToolTip="Open the app to run it, rather than in the studio"
                             Visibility="{Binding HasPlayUrl, Converter={StaticResource BoolToVis}}" />
