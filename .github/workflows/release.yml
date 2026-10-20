@@ -48,6 +48,7 @@ jobs:
             '1.0.0'
           }
           Write-Host "Publishing version $version"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
           # Publishing adds the SDK's own ILLink package, whose version follows the SDK, so this
           # restore leaves the lock file alone; every package is still pinned to an exact version.
@@ -80,18 +81,32 @@ jobs:
             -o publish-cli
           Copy-Item publish-cli/ppos.exe publish/ppos.exe
 
+      # The installer (packaging/installer/PPObjectSearch.iss): both exes, a Start menu shortcut,
+      # ppos on PATH and an uninstaller. Inno Setup comes preinstalled on the Windows runner.
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup is not installed on this runner: $iscc not found" }
+          # The installer's file version takes numbers only, so 1.2.3-beta is stamped 1.2.3.
+          $fileVersion = ($env:VERSION -split '[-+]')[0]
+          & $iscc /Qp "/DAppVersion=$env:VERSION" "/DFileVersion=$fileVersion" `
+            "/DPublishDir=$PWD\publish" packaging/installer/PPObjectSearch.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
       # A checksum published beside the exe, so a download can be checked against the release.
       - name: Checksum
         shell: pwsh
         run: |
-          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe') {
+          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe', 'PPObjectSearch-Setup.exe') {
             $hash = (Get-FileHash "publish/$exe" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $exe" | Out-File -FilePath "publish/$exe.sha256" -Encoding ascii -NoNewline
             Write-Host "$exe SHA-256: $hash"
           }
 
       # Code signing (Authenticode) would go here, e.g. with Azure Trusted Signing, once a signing
-      # account is set up for the project - it needs credentials this workflow does not have.
+      # account is set up for the project - it needs credentials this workflow does not have. The
+      # exes would be signed before the Installer step, and the installer after it.
 
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,6 +117,8 @@ jobs:
             publish/PPObjectSearch.exe.sha256
             publish/ppos.exe
             publish/ppos.exe.sha256
+            publish/PPObjectSearch-Setup.exe
+            publish/PPObjectSearch-Setup.exe.sha256
           if-no-files-found: error
 
   release:
@@ -128,6 +145,7 @@ jobs:
           subject-path: |
             publish/PPObjectSearch.exe
             publish/ppos.exe
+            publish/PPObjectSearch-Setup.exe
 
       # The GitHub CLI on the runner rather than a third-party action: this step can write to the
       # repository, so nothing outside GitHub's own tooling runs with that permission.
@@ -138,6 +156,7 @@ jobs:
         run: |
           gh release create "$TAG" publish/PPObjectSearch.exe publish/PPObjectSearch.exe.sha256 \
             publish/ppos.exe publish/ppos.exe.sha256 \
+            publish/PPObjectSearch-Setup.exe publish/PPObjectSearch-Setup.exe.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
             --generate-notes \

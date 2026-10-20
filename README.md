@@ -94,9 +94,17 @@ straight into the maker portal.
 
 ## Install
 
-Download `PPObjectSearch.exe` (and `ppos.exe` for the [command line](#command-line-ppos)) from the
-[latest release](https://github.com/tmnrtn/PPObjectSearch/releases/latest). Each is a single
-self-contained exe: nothing to install, and no .NET needed.
+Run `PPObjectSearch-Setup.exe` from the
+[latest release](https://github.com/tmnrtn/PPObjectSearch/releases/latest). It installs the app and
+`ppos.exe` (the [command line](#command-line-ppos)) for you alone, in
+`%LOCALAPPDATA%\Programs\PPObjectSearch` with no admin rights needed, or for all users if you
+choose that on its first page. It adds a Start menu shortcut, optionally a desktop one, and puts
+`ppos` on your `PATH`. Running a newer installer upgrades in place; uninstall from **Settings >
+Apps**. Your settings and logs in `%LOCALAPPDATA%\PPObjectSearch` are kept either way. For an
+unattended install, run `PPObjectSearch-Setup.exe /SILENT` (`/VERYSILENT` for no window at all).
+
+Or download `PPObjectSearch.exe` and `ppos.exe` from the same release and run them as they are. Each
+is a single self-contained exe: nothing to install, and no .NET needed.
 
 Or, once the packages are accepted into the winget repository, install with winget:
 
@@ -121,6 +129,14 @@ that runs without .NET installed:
 
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json -o publish
+```
+
+To build the installer as well, publish `tools/ppos/ppos.csproj` the same way, copy its `ppos.exe`
+into `publish`, and compile `packaging/installer/PPObjectSearch.iss` with
+[Inno Setup 6](https://jrsoftware.org/isinfo.php). It writes `publish\PPObjectSearch-Setup.exe`:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.3 packaging\installer\PPObjectSearch.iss
 ```
 
 ## Tests
@@ -181,19 +197,21 @@ them, `ppos` uses the account signed in to the app, opening a browser if it must
 
 ## Releases
 
-`.github/workflows/release.yml` builds that same single-file exe on `windows-latest`. Push a tag
-to cut a release:
+`.github/workflows/release.yml` builds that same single-file exe, and `ppos.exe`, on
+`windows-latest`, then wraps both in the installer with the Inno Setup the runner comes with. Push
+a tag to cut a release:
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The exe is attached to the GitHub release with a `.sha256` checksum and a build provenance
-attestation (`gh attestation verify PPObjectSearch.exe --repo tmnrtn/PPObjectSearch`), with notes
+The exes and the installer are attached to the GitHub release, each with a `.sha256` checksum and a
+build provenance attestation (`gh attestation verify PPObjectSearch-Setup.exe --repo
+tmnrtn/PPObjectSearch`), with notes
 generated from the commits. Package versions are pinned and recorded in `packages.lock.json`;
 CI restores in locked mode, and Dependabot proposes updates as pull requests. Running the
-workflow manually from the Actions tab instead just uploads the exe as a build artifact.
+workflow manually from the Actions tab instead just uploads them as a build artifact.
 
 With a `WINGET_TOKEN` secret, a tag also opens pull requests on the winget repository that move
 both winget packages to the new version - see [packaging/winget](packaging/winget/README.md).
