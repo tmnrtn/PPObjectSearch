@@ -26,6 +26,8 @@ straight into the maker portal.
   and holds its own account, so tabs in different tenants work simultaneously. *Switch account*,
   in the account menu at the top right, re-signs a single tab without touching the others.
 - **Solution picker** — defaults to the default solution; any visible solution can be selected.
+  **Refresh** (F5) reads the solution list again, so one imported or created since connecting
+  appears, as well as re-reading the chosen solution's objects.
 - **Instant keyword search** — space-separated terms, all of which must match; matched against
   name, display name, schema name, object type, related table, owner and object id.
 - **Filters** — type, sub type, managed state and layer, each listing what is present with a count.
