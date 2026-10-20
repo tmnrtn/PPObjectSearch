@@ -123,17 +123,21 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- The table, then what narrows the rows already read. -->
-                    <Grid Margin="14,10,14,6">
+                    <!-- The table, then what narrows the rows already read and which columns are read. -->
+                    <Grid Margin="14,10,14,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding TableHeading}" Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TableHeading}">
+                            <Run Text="{Binding TableDisplayName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" /><Run Text="  " /><Run
+                                 Text="{Binding TableLogicalName, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                 Foreground="{DynamicResource Muted}" />
+                        </TextBlock>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <TextBox Width="220" Height="28" core:Ui.Icon="&#xE71C;" core:Ui.Placeholder="Quick filter"
                                      AutomationProperties.Name="Quick filter"
@@ -148,26 +152,39 @@
                     </Grid>
 
                     <!-- Server-side conditions, added one at a time: the rows are read again matching every one. -->
-                    <WrapPanel Grid.Row="1" Margin="14,0,14,10">
-                        <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
-                                  ItemsSource="{Binding Columns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
-                                  IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
-                        <ComboBox Width="140" Margin="6,0,0,0" AutomationProperties.Name="Filter operator"
-                                  ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
-                        <TextBox Width="200" Height="28" Margin="6,0,0,0" AutomationProperties.Name="Filter value"
-                                 core:Ui.Placeholder="{Binding FilterHint}"
-                                 IsEnabled="{Binding NeedsFilterValue}"
-                                 Text="{Binding FilterValue, UpdateSourceTrigger=PropertyChanged}">
-                            <TextBox.InputBindings>
-                                <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
-                            </TextBox.InputBindings>
-                        </TextBox>
-                        <Button Content="Add filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
-                                ToolTip="Add this condition to the filters and read the rows again - a row has to match every filter" />
-                        <CheckBox Content="Active only" Margin="12,0,0,0" VerticalAlignment="Center" IsChecked="{Binding ActiveOnly}"
+                    <Grid Grid.Row="1" Margin="14,0,14,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
+                                      ItemsSource="{Binding Columns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
+                                      IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
+                            <ComboBox Width="140" Margin="6,0,0,0" AutomationProperties.Name="Filter operator"
+                                      ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
+                            <TextBox Width="200" Height="28" Margin="6,0,0,0" AutomationProperties.Name="Filter value"
+                                     core:Ui.Placeholder="{Binding FilterHint}"
+                                     IsEnabled="{Binding NeedsFilterValue}"
+                                     Text="{Binding FilterValue, UpdateSourceTrigger=PropertyChanged}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <Button Content="Add filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
+                                    ToolTip="Add this condition to the filters and read the rows again - a row has to match every filter" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Content="Active only" Margin="12,0,0,0" VerticalAlignment="Center" IsChecked="{Binding ActiveOnly}"
                                   Visibility="{Binding HasStateCode, Converter={StaticResource BoolToVis}}"
                                   ToolTip="Only rows whose status is Active" />
-                        <ItemsControl ItemsSource="{Binding ServerFilters}" Margin="6,0,0,0" VerticalAlignment="Center"
+                    </Grid>
+
+                    <!-- The filters the rows shown were read with - only once there is one. -->
+                    <DockPanel Grid.Row="2" Margin="14,0,14,10" LastChildFill="False"
+                               Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Read with" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <ItemsControl ItemsSource="{Binding ServerFilters}" VerticalAlignment="Center" Focusable="False"
                                       AutomationProperties.Name="Filters applied">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -176,26 +193,28 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <ContentControl Style="{StaticResource Chip}" Margin="6,2,0,2" VerticalAlignment="Center"
-                                                    ToolTip="A filter the rows shown were read with">
+                                    <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                            CornerRadius="3" Height="22" Padding="7,0,2,0" Margin="4,2,0,2" SnapsToDevicePixels="True"
+                                            ToolTip="A filter the rows shown were read with">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
                                             <Button AutomationProperties.Name="Remove this filter" Style="{StaticResource LinkButton}"
                                                     Content="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9"
-                                                    Padding="4,0" Margin="4,0,0,0" ToolTip="Remove this filter and read the rows again"
+                                                    Foreground="{DynamicResource Muted}"
+                                                    Padding="5,0" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                    ToolTip="Remove this filter and read the rows again"
                                                     Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}" />
                                         </StackPanel>
-                                    </ContentControl>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="4,0,0,0"
-                                Command="{Binding ClearFilterCommand}"
-                                Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}" />
-                    </WrapPanel>
+                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Command="{Binding ClearFilterCommand}" />
+                    </DockPanel>
 
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="3">
                         <!-- Columns are the table's, so they are made in code when the rows change. -->
                         <DataGrid x:Name="RowsGrid" ItemsSource="{Binding RowsView}" IsReadOnly="True"
                                   AutoGenerateColumns="False" ClipboardCopyMode="IncludeHeader"
