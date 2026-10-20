@@ -579,7 +579,7 @@ environment and the table, and needs the View Audit History privilege.
 
 ## Table data
 
-**Table data…** (sidebar, under Investigate, or *Table data* in the command palette) is a quick,
+**Table data** (sidebar, under Investigate, or *Table data* in the command palette) is a quick,
 read-only look at the rows of one table - reference and configuration data, lookup tables,
 environment-specific settings, option lists. A table's details window opens it on that table with
 **Browse rows**, beside the row count.
