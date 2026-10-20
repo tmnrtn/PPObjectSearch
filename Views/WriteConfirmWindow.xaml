@@ -13,6 +13,24 @@
                 <local:EnvironmentLine x:Name="Environment" />
                 <TextBlock x:Name="Heading" Style="{StaticResource WindowHeading}" Margin="0,0,0,10" />
                 <TextBlock x:Name="Action" TextWrapping="Wrap" />
+                <!-- A tally, where the change is several kinds of write: count right-aligned, then what happens. -->
+                <ItemsControl x:Name="Counts" Margin="16,6,0,0" Focusable="False" Visibility="Collapsed"
+                              Grid.IsSharedSizeScope="True">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Count" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Count, StringFormat=N0}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="8,0,0,0" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="Caveat" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,12,0,0"
+                           Visibility="Collapsed" />
                 <TextBlock Text="Asks first; the change is recorded in the run log." Foreground="{DynamicResource Muted}"
                            TextWrapping="Wrap" Margin="0,12,0,0" />
             </StackPanel>

@@ -271,6 +271,14 @@ public class ReconcileViewModelTests
         Assert.True(vm.CanUndo);
         Assert.Equal(3, vm.UndoCount);
 
+        // The confirmation tallies the run by kind of write.
+        var asked = vm.DescribeUndo();
+        Assert.Equal(
+            [new WriteCount(1, "created row is deleted"), new WriteCount(1, "updated row is set back"),
+             new WriteCount(1, "deleted row is re-created with its original id")],
+            asked.Counts);
+        Assert.Matches(@"^Reverses the 3 writes made at \d\d:\d\d to .+, newest first:$", asked.Action);
+
         var before = handler.Requests.Count;
         await vm.UndoCommand.ExecuteAsync(null);
 

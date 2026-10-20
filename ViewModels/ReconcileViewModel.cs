@@ -104,6 +104,8 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
     private readonly string? _account;
     private readonly string? _writeLogFolder;
     private readonly List<UndoStep> _undo = new();
+    private readonly HashSet<string> _undoTables = new(StringComparer.OrdinalIgnoreCase);
+    private DateTimeOffset? _runStartedAt;
     private WriteLog? _log;
     private CancellationTokenSource? _cts;
     private CancellationTokenSource? _impactCts;
@@ -144,6 +146,9 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
             _ => Permission.Allowed && HasRun && !IsRunning && HasFailures && !_hasUndone);
         CancelRunCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsRunning);
         UndoCommand = new AsyncRelayCommand(_ => UndoAsync(), _ => CanUndo);
+        Confirm = undo => Views.WriteConfirmWindow.Ask(
+            System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive),
+            TargetLine, "Undo run", undo.Action, undo.Counts, undo.Caveat, undo.ConfirmLabel);
         ExportPlanCommand = new RelayCommand(_ => ExportPlan());
         OpenRunLogCommand = new RelayCommand(_ => OpenRunLog());
 
@@ -238,10 +243,12 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
 
     public RelayCommand OpenRunLogCommand { get; }
 
-    /// <summary>Asks before undoing. Replaced in tests.</summary>
-    internal Func<string, bool> Confirm { get; set; } = message =>
-        System.Windows.MessageBox.Show(message, "Undo run", System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes;
+    /// <summary>Asks before undoing, in the confirmation every other write uses. Replaced in tests.</summary>
+    internal Func<UndoConfirmation, bool> Confirm { get; set; }
+
+    /// <summary>The target as the confirmation's environment line shows it.</summary>
+    private EnvironmentLineInfo TargetLine => new(
+        TargetName, Permission.Type.Sku, TargetHost, Permission.IsAllowlisted, Permission.Type.SkuLabel);
 
     /// <summary>Where this window's writes are recorded; null until something has been written.</summary>
     public string? RunLogPath => _log?.Path;
@@ -546,7 +553,8 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
             SaveSnapshots = true,
             ExcludedColumns = ExcludedColumns
         };
-        _log ??= WriteLog.Start("reconcile", _writeLogFolder);
+        _runStartedAt ??= DateTimeOffset.Now;
+        _log ??= WriteLog.Start("reconcile", _writeLogFolder, _runStartedAt);
         OnPropertyChanged(nameof(RunLogPath));
         var succeeded = 0;
         var failed = 0;
@@ -612,7 +620,11 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
     private void Record(ReconcileOutcome outcome)
     {
         var item = outcome.Item;
-        if (outcome.Undo is { } undo) _undo.Add(undo);
+        if (outcome.Undo is { } undo)
+        {
+            _undo.Add(undo);
+            _undoTables.Add(item.Table);
+        }
 
         _log?.Append(new WriteLogEntry
         {
@@ -650,14 +662,7 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
     {
         if (!CanUndo) return;
 
-        if (!Confirm(
-                $"Undo {_undo.Count:N0} write(s) in {TargetName}?\n\n" +
-                "Deleted rows are re-created with their original ids, updated columns are set back to what they " +
-                "held, and created rows are deleted. Anyone else's edits to those columns since the run are " +
-                "overwritten."))
-        {
-            return;
-        }
+        if (!Confirm(DescribeUndo())) return;
 
         IsRunning = true;
         var undone = 0;
@@ -714,6 +719,32 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
             IsRunning = false;
             RaiseUndoState();
         }
+    }
+
+    /// <summary>What undoing this run does, by kind of write - from the steps kept as it ran.</summary>
+    internal UndoConfirmation DescribeUndo()
+    {
+        var tables = _undoTables.Select(t => _targetEntities.TryGetValue(t, out var e) && !string.IsNullOrWhiteSpace(e.DisplayName) ? e.DisplayName : t)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var to = tables.Count == 1 ? tables[0] : $"{tables.Count:N0} tables";
+        var at = _runStartedAt is { } started ? $" at {started:HH:mm}" : string.Empty;
+        var writes = _undo.Count == 1 ? "the 1 write" : $"the {_undo.Count:N0} writes";
+
+        var counts = new List<WriteCount>();
+        void Add(UndoMethod method, string one, string many)
+        {
+            var n = _undo.Count(s => s.Method == method);
+            if (n > 0) counts.Add(new WriteCount(n, n == 1 ? one : many));
+        }
+        Add(UndoMethod.Delete, "created row is deleted", "created rows are deleted");
+        Add(UndoMethod.Update, "updated row is set back", "updated rows are set back");
+        Add(UndoMethod.Create, "deleted row is re-created with its original id", "deleted rows are re-created with their original id");
+
+        return new UndoConfirmation(
+            $"Reverses {writes} made{at} to {to}, newest first:",
+            counts,
+            "Rows removed by cascading deletes are not restored. Edits made to the same columns since the run are overwritten.",
+            _undo.Count == 1 ? "Undo 1 write" : $"Undo {_undo.Count:N0} writes");
     }
 
     private void ExportPlan()
