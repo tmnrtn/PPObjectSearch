@@ -22,6 +22,8 @@ public sealed partial class DataverseClient
     /// </summary>
     public PowerAutomate.PowerAutomateClient CreatePowerAutomateClient() => new(_auth, _handler);
 
+    public PowerApps.PowerAppsClient CreatePowerAppsClient() => new(_auth, _handler);
+
     /// <summary>
     /// A cloud flow's recent runs, newest first. Dataverse keeps these in the flowrun table - an
     /// elastic table, for 28 days by default - and only once flow run history in Dataverse is on.
