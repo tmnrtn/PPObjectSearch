@@ -213,8 +213,37 @@ generated from the commits. Package versions are pinned and recorded in `package
 CI restores in locked mode, and Dependabot proposes updates as pull requests. Running the
 workflow manually from the Actions tab instead just uploads them as a build artifact.
 
+Once SignPath is set up, the exes and the installer are Authenticode-signed before the checksums
+are taken: a tag waits for the signing requests to be approved in SignPath, and a manual run is
+signed with SignPath's test certificate. Until then they are built unsigned. See the
+[code signing policy](#code-signing-policy) and [packaging/signpath](packaging/signpath/README.md).
+
 With a `WINGET_TOKEN` secret, a tag also opens pull requests on the winget repository that move
 both winget packages to the new version - see [packaging/winget](packaging/winget/README.md).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+Only the files the [release workflow](.github/workflows/release.yml) builds from this repository
+on GitHub's own runners are signed: `PPObjectSearch.exe`, `ppos.exe` and `PPObjectSearch-Setup.exe`.
+Each release is signed only after it is approved in SignPath.
+
+Team roles:
+
+- Committers and reviewers: [Tom Norton](https://github.com/tmnrtn). Pull requests from anyone
+  else are reviewed before they are merged.
+- Approvers: [Tom Norton](https://github.com/tmnrtn).
+
+Privacy policy: this program will not transfer any information to other networked systems unless
+specifically requested by the user or the person installing or operating it, with one exception:
+once a day it asks GitHub's API for the latest release, which can be turned off (see
+[Updates](#updates)). Everything else it sends goes to the Microsoft services you sign in to -
+Microsoft Entra ID, Dataverse, Microsoft Graph, Power Automate and the Power Platform API - for the
+environments you choose. Those services' handling of data is covered by the
+[Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement), and GitHub's by the
+[GitHub General Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
 
 ## Usage
 

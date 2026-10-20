@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "exes": the two published exes, as release.yml uploads them. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="PPObjectSearch.exe" product-name="Power Platform Object Search">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="ppos.exe" product-name="Power Platform Object Search">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

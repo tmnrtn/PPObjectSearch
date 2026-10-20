@@ -15,7 +15,9 @@
     <RootNamespace>PPObjectSearch.Cli</RootNamespace>
     <AssemblyName>ppos</AssemblyName>
     <Version>1.12.2</Version>
-    <Product>Power Platform Object Search (command line)</Product>
+    <!-- The same product name as the app: signing (packaging/signpath) checks every exe carries it. -->
+    <Product>Power Platform Object Search</Product>
+    <AssemblyTitle>Power Platform Object Search command line</AssemblyTitle>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
