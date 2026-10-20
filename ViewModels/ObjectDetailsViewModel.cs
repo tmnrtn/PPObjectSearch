@@ -818,6 +818,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     /// <summary>Secrets are Key Vault references and are left to the maker portal.</summary>
     public bool CanEditEnvironmentValue => HasSession && EnvironmentVariable is { IsSecret: false };
 
+    public string SetValueToolTip =>
+        $"Sets the current value in {Session?.Title}. Checked against the variable's type; asks first; recorded in the run log.";
+
+    public string RemoveValueToolTip =>
+        $"Removes the current value in {Session?.Title}, so the default value applies. Asks first; recorded in the run log.";
+
     private AsyncRelayCommand? _setEnvironmentValueCommand;
     public AsyncRelayCommand SetEnvironmentValueCommand => _setEnvironmentValueCommand ??= new AsyncRelayCommand(
         _ => SetEnvironmentValueAsync(EnvironmentValueInput), _ => CanEditEnvironmentValue && !_isWriting);
