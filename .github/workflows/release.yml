@@ -18,6 +18,13 @@ jobs:
   build:
     runs-on: windows-latest
 
+    permissions:
+      contents: read
+      actions: read   # SignPath reads this run's details and downloads the unsigned artifacts
+
+    outputs:
+      signing-policy: ${{ steps.signing.outputs.policy }}
+
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -48,6 +55,7 @@ jobs:
             '1.0.0'
           }
           Write-Host "Publishing version $version"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
           # Publishing adds the SDK's own ILLink package, whose version follows the SDK, so this
           # restore leaves the lock file alone; every package is still pinned to an exact version.
@@ -80,18 +88,126 @@ jobs:
             -o publish-cli
           Copy-Item publish-cli/ppos.exe publish/ppos.exe
 
-      # A checksum published beside the exe, so a download can be checked against the release.
+      # Signing (packaging/signpath/README.md) is on once SignPath is set up: the SIGNPATH_API_TOKEN
+      # secret and the SIGNPATH_ORGANIZATION_ID variable. Without them (a fork, or before setup)
+      # the build is unsigned. A step's if cannot read secrets, so this step checks for them.
+      - name: Check for signing
+        id: signing
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          if ($env:SIGNPATH_API_TOKEN -and $env:SIGNPATH_ORGANIZATION_ID) {
+            # A tag is signed with the real certificate, which SignPath holds until the request is
+            # approved there. A manual run is signed with SignPath's untrusted test certificate.
+            $policy = if ($env:GITHUB_REF -like 'refs/tags/v*') { 'release-signing' } else { 'test-signing' }
+            "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "policy=$policy" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Signing with the $policy policy"
+          } else {
+            "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "::notice::SignPath is not set up, so this build is unsigned."
+          }
+
+      # SignPath signs only what this workflow uploaded as an artifact, so the exes go up, come back
+      # signed, and replace the unsigned ones - before the installer is built around them.
+      - name: Upload unsigned exes
+        id: unsigned-exes
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-exes
+          path: |
+            publish/PPObjectSearch.exe
+            publish/ppos.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign exes
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'PPObjectSearch' }}
+          signing-policy-slug: ${{ steps.signing.outputs.policy }}
+          artifact-configuration-slug: exes
+          github-artifact-id: ${{ steps.unsigned-exes.outputs.artifact-id }}
+          # Long enough to approve the request in SignPath after pushing the tag.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-exes
+
+      - name: Use signed exes
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: Copy-Item signed-exes/PPObjectSearch.exe, signed-exes/ppos.exe publish/ -Force
+
+      # The installer (packaging/installer/PPObjectSearch.iss): both exes, a Start menu shortcut,
+      # ppos on PATH and an uninstaller. Inno Setup comes preinstalled on the Windows runner.
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup is not installed on this runner: $iscc not found" }
+          # The installer's file version takes numbers only, so 1.2.3-beta is stamped 1.2.3.
+          $fileVersion = ($env:VERSION -split '[-+]')[0]
+          & $iscc /Qp "/DAppVersion=$env:VERSION" "/DFileVersion=$fileVersion" `
+            "/DPublishDir=$PWD\publish" packaging/installer/PPObjectSearch.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
+      # The installer is signed by its own request - a second approval in SignPath for a release.
+      - name: Upload unsigned installer
+        id: unsigned-installer
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-installer
+          path: publish/PPObjectSearch-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign installer
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'PPObjectSearch' }}
+          signing-policy-slug: ${{ steps.signing.outputs.policy }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-installer
+
+      # On a tag every file must carry a valid signature from the trusted certificate; a test-signed
+      # manual run just reports what it got.
+      - name: Check signatures
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          POLICY: ${{ steps.signing.outputs.policy }}
+        run: |
+          Copy-Item signed-installer/PPObjectSearch-Setup.exe publish/ -Force
+          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe', 'PPObjectSearch-Setup.exe') {
+            $sig = Get-AuthenticodeSignature "publish/$exe"
+            Write-Host "${exe}: $($sig.Status), $($sig.SignerCertificate.Subject)"
+            if (-not $sig.SignerCertificate) { throw "$exe is not signed" }
+            if ($env:POLICY -eq 'release-signing' -and $sig.Status -ne 'Valid') {
+              throw "$exe signature is $($sig.Status): $($sig.StatusMessage)"
+            }
+          }
+
+      # A checksum published beside each file, so a download can be checked against the release. It
+      # is taken after signing, which changes the file.
       - name: Checksum
         shell: pwsh
         run: |
-          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe') {
+          foreach ($exe in 'PPObjectSearch.exe', 'ppos.exe', 'PPObjectSearch-Setup.exe') {
             $hash = (Get-FileHash "publish/$exe" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $exe" | Out-File -FilePath "publish/$exe.sha256" -Encoding ascii -NoNewline
             Write-Host "$exe SHA-256: $hash"
           }
-
-      # Code signing (Authenticode) would go here, e.g. with Azure Trusted Signing, once a signing
-      # account is set up for the project - it needs credentials this workflow does not have.
 
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,6 +218,8 @@ jobs:
             publish/PPObjectSearch.exe.sha256
             publish/ppos.exe
             publish/ppos.exe.sha256
+            publish/PPObjectSearch-Setup.exe
+            publish/PPObjectSearch-Setup.exe.sha256
           if-no-files-found: error
 
   release:
@@ -128,18 +246,27 @@ jobs:
           subject-path: |
             publish/PPObjectSearch.exe
             publish/ppos.exe
+            publish/PPObjectSearch-Setup.exe
 
       # The GitHub CLI on the runner rather than a third-party action: this step can write to the
       # repository, so nothing outside GitHub's own tooling runs with that permission.
+      # SignPath Foundation asks for its attribution and the code signing policy on the release page.
       - name: Attach to release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          SIGNING_POLICY: ${{ needs.build.outputs.signing-policy }}
         run: |
+          notes=""
+          if [ "$SIGNING_POLICY" = "release-signing" ]; then
+            notes="Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org) - see the [code signing policy](https://github.com/$GITHUB_REPOSITORY#code-signing-policy)."
+          fi
           gh release create "$TAG" publish/PPObjectSearch.exe publish/PPObjectSearch.exe.sha256 \
             publish/ppos.exe publish/ppos.exe.sha256 \
+            publish/PPObjectSearch-Setup.exe publish/PPObjectSearch-Setup.exe.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
+            --notes "$notes" \
             --generate-notes \
             --verify-tag
 

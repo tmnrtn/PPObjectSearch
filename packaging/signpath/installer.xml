@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installer": the Inno Setup installer, built around the signed exes. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="PPObjectSearch-Setup.exe" product-name="Power Platform Object Search">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
