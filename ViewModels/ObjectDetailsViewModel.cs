@@ -512,7 +512,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         try
         {
             using var powerApps = _client.CreatePowerAppsClient();
-            var permissions = await powerApps.GetAppPermissionsAsync(_environmentId!, Item.ObjectId);
+            var permissions = await powerApps.GetAppPermissionsAsync(_environmentId, Item.ObjectId, CancellationToken.None);
 
             overview.Tables.Add(new OverviewTable
             {

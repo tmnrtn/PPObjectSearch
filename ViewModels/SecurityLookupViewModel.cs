@@ -227,7 +227,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
 
         try
         {
-            var columns = await Client.GetSecurableColumnsAsync(table);
+            var columns = await Client.GetSecurableColumnsAsync(table, CancellationToken.None);
             if (!string.Equals(_columnsFor, table, StringComparison.OrdinalIgnoreCase)) return;
             foreach (var column in columns) Columns.Add(column);
         }

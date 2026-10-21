@@ -12,6 +12,11 @@ public partial class AuditHistoryWindow : Window
         {
             if (DataContext is AuditHistoryViewModel viewModel) await viewModel.LoadAsync();
         };
-        Closed += (_, _) => (DataContext as AuditHistoryViewModel)?.Detach();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        (DataContext as IDisposable)?.Dispose();
+        base.OnClosed(e);
     }
 }
