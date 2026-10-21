@@ -351,10 +351,14 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
 
     public bool HasDeleteImpact => !string.IsNullOrEmpty(DeleteImpactText);
 
+    /// <summary>What the deletes reach, a row each: the count, then the table, relationship and effect.</summary>
+    public ObservableCollection<DeleteImpactLine> DeleteImpactLines { get; } = new();
+
     private Task CancelImpactCheck()
     {
         _impactCts?.Cancel();
         DeleteImpactText = string.Empty;
+        DeleteImpactLines.Clear();
         IsCheckingImpact = false;
         return Task.CompletedTask;
     }
@@ -373,14 +377,19 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
         if (deletes.Count == 0) return;
 
         IsCheckingImpact = true;
-        DeleteImpactText = "Checking what else these deletes would reach...";
+        DeleteImpactLines.Clear();
+        DeleteImpactText = "Checking what else these deletes reach…";
 
         try
         {
             var lines = await DeleteImpact.CheckAsync(_targetClient, _targetEntities, deletes, cts.Token);
             if (cts.IsCancellationRequested) return;
 
-            DeleteImpactText = DeleteImpact.Describe(lines);
+            var shown = DeleteImpact.Shown(lines);
+            foreach (var line in shown) DeleteImpactLines.Add(line);
+            DeleteImpactText = shown.Count == 0
+                ? DeleteImpact.Describe(lines)
+                : "These deletes reach beyond the rows listed:";
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {

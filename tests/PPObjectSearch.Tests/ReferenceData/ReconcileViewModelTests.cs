@@ -378,7 +378,9 @@ public class ReconcileViewModelTests
         await vm.ImpactCheck!;
 
         Assert.False(vm.IsCheckingImpact);
-        Assert.Equal("Dataverse will also delete 7 new_child (via new_thingid).", vm.DeleteImpactText);
+        Assert.Equal("These deletes reach beyond the rows listed:", vm.DeleteImpactText);
+        var line = Assert.Single(vm.DeleteImpactLines);
+        Assert.Equal(("7", "new_child · via new_thingid - deleted with them", true), (line.CountLabel, line.Description, line.IsCascade));
         var count = Assert.Single(handler.Requests, r => r.Url.Contains("new_children?"));
         Assert.Contains($"_new_thingid_value eq {G(3)}", Uri.UnescapeDataString(count.Url));
     }

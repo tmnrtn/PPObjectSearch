@@ -9,7 +9,25 @@ public sealed record DeleteImpactLine(string Table, string Via, string Behaviour
     /// <summary>Dataverse stops counting here, so the count is a floor.</summary>
     public const int CountCap = 5000;
 
-    public string CountLabel => Count >= CountCap ? $"{CountCap:N0}+" : Count.ToString("N0");
+    public string CountLabel => Count < 0 ? "?" : Count >= CountCap ? $"{CountCap:N0}+" : Count.ToString("N0");
+
+    /// <summary>Deleted along with the rows: the gravest effect, in Red.</summary>
+    public bool IsCascade => Behaviour == "Cascade" && Count > 0;
+
+    /// <summary>Still pointing at the rows, so those deletes fail: in Amber.</summary>
+    public bool IsBlocking => Behaviour == "Restrict" && Count > 0;
+
+    public bool IsUncounted => Count < 0;
+
+    /// <summary>The line's words after its count: the table, the relationship and what happens.</summary>
+    public string Description => (Behaviour, Count) switch
+    {
+        (_, < 0) => $"{Table} · via {Via} - not counted, the table cannot be read here",
+        ("Cascade", _) => $"{Table} · via {Via} - deleted with them",
+        ("Restrict", _) => $"{Table} · via {Via} - still point at them, so those deletes fail",
+        ("RemoveLink", _) => $"{Table} · via {Via} - lose their reference to them",
+        _ => $"{Table} · via {Via}"
+    };
 }
 
 /// <summary>
@@ -56,6 +74,13 @@ public static class DeleteImpact
 
         return lines;
     }
+
+    /// <summary>The lines worth a row each - counted ones, cascades first, then blocks - and the uncounted.</summary>
+    public static IReadOnlyList<DeleteImpactLine> Shown(IReadOnlyList<DeleteImpactLine> lines) =>
+        lines.Where(l => l.Count != 0)
+            .OrderBy(l => l.IsCascade ? 0 : l.IsBlocking ? 1 : l.IsUncounted ? 3 : 2)
+            .ThenByDescending(l => l.Count)
+            .ToList();
 
     /// <summary>One sentence per kind of effect, or a plain "nothing else" when there is none.</summary>
     public static string Describe(IReadOnlyList<DeleteImpactLine> lines)

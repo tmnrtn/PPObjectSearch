@@ -55,6 +55,25 @@ public class DeleteImpactTests
     }
 
     [Fact]
+    public void Each_effect_gets_a_row_cascades_first_then_blocks()
+    {
+        var shown = DeleteImpact.Shown(
+        [
+            new("new_note", "new_thingid", "RemoveLink", 3),
+            new("new_order", "new_thingid", "Restrict", 2),
+            new("new_hidden", "new_thingid", "Cascade", -1),
+            new("new_log", "new_thingid", "Cascade", 0),
+            new("new_child", "new_thingid", "Cascade", 7)
+        ]);
+
+        Assert.Equal(["new_child", "new_order", "new_note", "new_hidden"], shown.Select(l => l.Table));
+        Assert.Equal("new_order · via new_thingid - still point at them, so those deletes fail", shown[1].Description);
+        Assert.True(shown[0].IsCascade);
+        Assert.True(shown[1].IsBlocking);
+        Assert.Equal("?", shown[3].CountLabel);
+    }
+
+    [Fact]
     public void Nothing_reached_says_so()
     {
         Assert.StartsWith("No other rows", DeleteImpact.Describe(Array.Empty<DeleteImpactLine>()));
