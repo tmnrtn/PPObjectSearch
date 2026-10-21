@@ -58,12 +58,14 @@ straight into the maker portal.
     waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
     connector or condition, and selecting one shows its JSON. A "Run a child flow" step names
     the flow it calls. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
-    README or pull request. **Diagram** on a run in Run history
-    draws that run over the design, read step by step from the Power Automate API: each step's
+    README or pull request. Double-click a run in Run history (or **Show on diagram**)
+    to draw that run over the design, read step by step from the Power Automate API: each step's
     outcome and duration, skipped and unreached steps faded, loops with their iteration count,
     and the first failure selected with its error. The run sits in the diagram's toolbar, with
-    **First failure** and a button to clear it. A step inside a loop lists its iterations; a
-    step's **Inputs** and **Outputs** are fetched only when asked for, and never saved. Run details are
+    **First failure**, ‹ › to step to the previous or next run, and a button to clear it. A step
+    inside a loop lists its iterations, each with its outcome dot - in a failed run the first
+    failed iteration is picked; a step's **Inputs** and **Outputs** are fetched only when asked
+    for, and never saved. Run details are
     kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
   - **Classic workflows**: recent system jobs and their errors.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
@@ -303,7 +305,7 @@ environment's value — so the output can be sorted and filtered outside the app
 Some details worth knowing:
 
 - **Lookups are matched on their label, not their id**, because the id behind a lookup only agrees
-  where the target row was deployed. Untick **Match lookups by name** to compare the raw ids
+  where the target row was deployed. Untick **Match lookups by name** (under **Options**) to compare the raw ids
   instead; the result is re-judged from rows already read, without asking either environment again.
 - **Columns are intersected across both environments.** A column that exists only in the source
   would make the target's query fail outright, so it is left out and reported in the warnings.
@@ -386,7 +388,7 @@ than what was true before the writes.
   relationships and counts the rows that point at the ones being deleted: those Dataverse would
   delete with them (cascade), those that would make the delete fail (restrict), and those that
   would lose their reference (remove link). The counts appear above the delete acknowledgement,
-  which cannot be ticked until they are in.
+  a line each - cascades in red, blocks in amber - and it cannot be ticked until they are in.
 - **Columns can be left out of one run.** The *Columns* list under the action cards names every
   column the run would write; unticking one leaves it out of this run only, without changing the
   saved configuration. An update with nothing left to write is skipped. Key columns are always
@@ -412,8 +414,9 @@ Each entry clears exactly the one environment it names — matched on host, so t
 trailing slash do not matter, but there are no wildcards and no suffix matching.
 
 To allow writes to an environment, right-click it in the sidebar and choose **Allow writes to this
-environment…**. It is only offered where the guard applies, and it asks you to confirm, naming the
-environment and its type; the answer defaults to No. An allowlisted environment carries an amber
+environment…**. It is only offered where the guard applies, and it asks first, naming the
+environment, its type and what writes it unlocks; for production, or an environment whose type
+could not be read, an acknowledgement has to be ticked before **Allow writes** is enabled. An allowlisted environment carries an amber
 unlock icon in the sidebar, and **Stop allowing writes** on the same menu takes it off the list
 again. Open windows pick the change up at their next preview. The list can also be edited by hand
 (close the app first — it rewrites `settings.json` from memory):
@@ -530,7 +533,8 @@ often there for automation. Tick **Additive only** to never remove anyone: queue
 not in the team are then shown as *kept*, and only additions go to the confirmation. Users are
 added and removed one at a time with a direct associate on
 the queue membership relationship, and each reports its own result; afterwards the preview is
-read again.
+read again. **Undo run…** then reverses the run - adding back who it removed and removing who it
+added - after the same confirmation as every other write.
 
 ## Where is this used? (search inside definitions)
 
@@ -679,8 +683,9 @@ solution, and the environment it is going to. Both are only read. It reports:
 - **Unmanaged layers** on the solution's components in the target, which would hide the import's
   changes (up to 400 components).
 
-Each finding is a *Blocker*, *Warning* or *Info*; double-click one to open the component's
-details. An area that could not be checked is listed as such rather than passing silently.
+Above the findings is the verdict - *Not ready* with its blocker and warning counts, or *Ready
+to import* - with a toggle for each severity. Each finding is a *Blocker*, *Warning* or *Info*;
+double-click one to open the component's details. An area that could not be checked is listed as such rather than passing silently.
 **Export Markdown…** saves the report for a pull request or change ticket.
 
 ## Table settings
@@ -705,11 +710,14 @@ need a look; the filter box narrows every view; **Export CSV…** saves the view
   Grey italics mean a setting that holds but does nothing here (a table audited while the
   environment's auditing is off); amber means something is wrong - a table linked without change
   tracking, or switched on for search but not in the index.
-- **Columns** - with **Columns** ticked, column-level audit on every table audited in at least one
-  environment: custom, writable columns only, managed ones included.
-- **Audit gaps** - columns not audited on a table that is: changes going unrecorded.
-- **Synapse Link** - every table in every link profile: the profile, its folder and state, the
-  table's sync state, lake and Dataverse row counts and last sync, and what is wrong with it.
+- **Columns** - with **Column-level audit** ticked, audit on each column of every table audited in
+  at least one environment: custom, writable columns only, managed ones included.
+- **Audit gaps** - columns not audited on a table that is: changes going unrecorded. Grouped by
+  table, a row per column and a cell per environment (*Not audited*, *Audited*, or a dash).
+- **Synapse Link** - every table in every link profile, grouped by environment and profile (its
+  folder, state, table count and problems): each table's sync state, Dataverse and lake row
+  counts, how many rows the lake is **Behind**, last sync, and what is wrong with it, problems
+  first. Tables in a folder that is not counted show in faint italics.
   **Link folders counted** decides which links count as "linked" in the Tables view - untick a
   Fabric link's folder (often `cds_workspace`) to compare the Synapse link alone. Remembered too.
 - **Search index** - each environment's Dataverse search index against the tables switched on for
@@ -735,7 +743,8 @@ listed above the views, so its silence is not taken for a pass.
   for the selected solution: each environment variable's schema name and value, and each
   connection reference's logical name, connection id and connector. It can be filled from this
   environment's current values - open the target environment's tab to take its values - or
-  written as a blank template. The status line says how many blanks are left to fill in.
+  written as a blank template. Once saved, the dialog shows where the file went and lists the
+  names still blank, with **Open folder** and **Copy path**.
 
 ## Quick actions
 
