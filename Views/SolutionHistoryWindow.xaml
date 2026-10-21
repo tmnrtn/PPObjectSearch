@@ -63,7 +63,10 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <local:EnvironmentLine DataContext="{Binding Session}" />
-                    <TextBlock Text="Solution history" Style="{StaticResource WindowHeading}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Solution history" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}" Margin="8,2,0,0" ToolTip="Reads the environment - nothing is written" />
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="Import log" Height="30" Margin="0,0,6,0" Command="{Binding ImportLogCommand}"
