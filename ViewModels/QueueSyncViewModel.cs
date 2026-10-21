@@ -381,12 +381,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         // Fixed at the moment of confirming, so the run cannot change character part-way through.
         var additive = AdditiveOnly;
 
-        var changes = Rows
-            .Where(r => r.Status is QueuePlanStatus.Add || (r.Status is QueuePlanStatus.Remove && !additive))
-            .Select(r => new MembershipChange(
-                r.Status == QueuePlanStatus.Add ? MembershipChangeKind.Add : MembershipChangeKind.Remove,
-                r.Row.User.SystemUserId, r.Name, r.Upn, r.Detail, r.Row.IncludedByDefault))
-            .ToList();
+        var changes = PlannedChanges(additive);
 
         var viewModel = new MembershipApplyViewModel(new MembershipApplyRequest
         {
@@ -429,6 +424,14 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         await PreviewAsync();
         Status = outcome + " The preview has been read again.";
     }
+
+    /// <summary>The preview's adds, and its removes unless the sync is additive only.</summary>
+    private List<MembershipChange> PlannedChanges(bool additive) => Rows
+        .Where(r => r.Status is QueuePlanStatus.Add || (r.Status is QueuePlanStatus.Remove && !additive))
+        .Select(r => new MembershipChange(
+            r.Status == QueuePlanStatus.Add ? MembershipChangeKind.Add : MembershipChangeKind.Remove,
+            r.Row.User.SystemUserId, r.Name, r.Upn, r.Detail, r.Row.IncludedByDefault))
+        .ToList();
 
     /// <summary>Said beside the changes: what an additive sync keeps, and the preview's warnings.</summary>
     private string? ApplyNote()

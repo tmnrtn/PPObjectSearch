@@ -147,32 +147,14 @@ public static partial class BusinessRuleReader
             switch (name)
             {
                 case "SetDefaultValue":
-                    // The value is set just before by SetEntityProperty; this makes it the default.
-                    if (_lastSetField is { } defaulted && _lastSetIndex == Steps.Count - 1 && Steps[^1].Depth == depth)
-                        Steps[^1] = Steps[^1] with { Text = "Set default value of " + defaulted + _lastSetValue };
-                    else
-                        Add(depth, Action, "Set default value of " + (FieldOf(e) ?? AnyField));
+                    SetDefaultValue(e, depth);
                     return;
-
                 case "SetAttributeValue":
-                    // Usually follows the SetEntityProperty that holds the field and value - already said.
-                    if (FieldOf(e) is { } own && !(_lastSetIndex == Steps.Count - 1 && _lastSetField == own))
-                        Add(depth, Action, "Set " + own + " value");
-                    else if (FieldOf(e) is null && _lastSetIndex != Steps.Count - 1)
-                        Add(depth, Action, "Set a field value");
+                    SetAttributeValue(e, depth);
                     return;
-
                 case "SetEntityProperty":
-                {
-                    var field = Attr(e, "Attribute") ?? AnyField;
-                    var value = ValueOf(Attr(e, "Value")) is { } v ? " to " + v : string.Empty;
-                    Add(depth, Action, $"Set {field} value{value}");
-                    _lastSetField = field;
-                    _lastSetValue = value;
-                    _lastSetIndex = Steps.Count - 1;
+                    SetEntityProperty(e, depth);
                     return;
-                }
-
                 case "Recommendation":
                     Add(depth, Action, "Recommendation on " + (FieldOf(e) ?? AnyField)
                         + (Attr(e, "Title") is { Length: > 0 } title ? ": " + title : string.Empty));
@@ -193,6 +175,36 @@ public static partial class BusinessRuleReader
         private string? _lastSetField;
         private string _lastSetValue = string.Empty;
         private int _lastSetIndex = -1;
+
+        private bool LastStepWasSet => _lastSetIndex == Steps.Count - 1;
+
+        // The value is set just before by SetEntityProperty; this makes it the default.
+        private void SetDefaultValue(XElement e, int depth)
+        {
+            if (_lastSetField is { } defaulted && LastStepWasSet && Steps[^1].Depth == depth)
+                Steps[^1] = Steps[^1] with { Text = "Set default value of " + defaulted + _lastSetValue };
+            else
+                Add(depth, Action, "Set default value of " + (FieldOf(e) ?? AnyField));
+        }
+
+        // Usually follows the SetEntityProperty that holds the field and value - already said.
+        private void SetAttributeValue(XElement e, int depth)
+        {
+            if (FieldOf(e) is { } own && !(LastStepWasSet && _lastSetField == own))
+                Add(depth, Action, "Set " + own + " value");
+            else if (FieldOf(e) is null && !LastStepWasSet)
+                Add(depth, Action, "Set a field value");
+        }
+
+        private void SetEntityProperty(XElement e, int depth)
+        {
+            var field = Attr(e, "Attribute") ?? AnyField;
+            var value = ValueOf(Attr(e, "Value")) is { } v ? " to " + v : string.Empty;
+            Add(depth, Action, $"Set {field} value{value}");
+            _lastSetField = field;
+            _lastSetValue = value;
+            _lastSetIndex = Steps.Count - 1;
+        }
 
         private void VisitReference(XElement e, int depth)
         {
@@ -248,28 +260,28 @@ public static partial class BusinessRuleReader
 
             // An Else held by the branch itself rather than as a sibling branch.
             if (Property(e, "Else") is { } otherwise && BodyOf(otherwise).Any())
-            {
-                var at = Steps.Count;
-                Add(depth, Else, Else);
-                var before = Steps.Count;
-                var body = BodyOf(otherwise).ToList();
+                OwnElse(BodyOf(otherwise).ToList(), depth);
+        }
 
-                // Else holding just another condition reads as Else if.
-                if (body.Count == 1 && ReferenceType(body[0]) is "ConditionSequence" or ConditionBranchType)
-                {
-                    Steps.RemoveAt(at);
-                    if (ReferenceType(body[0]) == ConditionBranchType)
-                        Branch(body[0], depth, ElseIf);
-                    else
-                        ElseIfSequence(body[0], depth);
-                }
+        private void OwnElse(List<XElement> body, int depth)
+        {
+            // Else holding just another condition reads as Else if.
+            if (body.Count == 1 && ReferenceType(body[0]) is "ConditionSequence" or ConditionBranchType)
+            {
+                if (ReferenceType(body[0]) == ConditionBranchType)
+                    Branch(body[0], depth, ElseIf);
                 else
-                {
-                    Walk(body, depth + 1);
-                    if (Steps.Count == before)
-                        Steps.RemoveAt(at);
-                }
+                    ElseIfSequence(body[0], depth);
+                return;
             }
+
+            var at = Steps.Count;
+            Add(depth, Else, Else);
+            Walk(body, depth + 1);
+
+            // An Else with nothing under it says nothing.
+            if (Steps.Count == at + 1)
+                Steps.RemoveAt(at);
         }
 
         private void ElseIfSequence(XElement e, int depth)
@@ -361,7 +373,9 @@ public static partial class BusinessRuleReader
         }
 
         /// <summary>The message a SetMessage shows: a value it refers to, or the expression just before it.</summary>
-        private string? MessageOf(XElement e)
+        private string? MessageOf(XElement e) => OwnMessage(e) ?? ExpressionBefore(e);
+
+        private string? OwnMessage(XElement e)
         {
             foreach (var text in e.Attributes().Where(a => a.Name.LocalName is not ("Entity" or "EntityName" or "ControlId" or "ControlType" or "DisplayName"))
                          .Select(a => a.Value)
@@ -373,6 +387,12 @@ public static partial class BusinessRuleReader
                     return quoted;
             }
 
+            return null;
+        }
+
+        /// <summary>The literal an EvaluateExpression just before computes, past the plumbing between them.</summary>
+        private string? ExpressionBefore(XElement e)
+        {
             foreach (var before in e.ElementsBeforeSelf().Reverse())
             {
                 if (ReferenceType(before) == "EvaluateExpression")

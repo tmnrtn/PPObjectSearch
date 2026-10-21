@@ -361,43 +361,43 @@ public static class TableSettingsReview
         return snapshot.Tables.TryGetValue(table, out var setting) ? TableCell(snapshot, setting, kind, excludedFolders) : SettingCell.Absent("table");
     }
 
-    private static SettingCell TableCell(TableSettingsSnapshot snapshot, TableSetting table, TableSettingKind kind, ISet<string> excludedFolders)
-    {
-        var environmentAudit = snapshot.Settings?.AuditEnabled;
-
-        switch (kind)
+    private static SettingCell TableCell(TableSettingsSnapshot snapshot, TableSetting table, TableSettingKind kind, ISet<string> excludedFolders) =>
+        kind switch
         {
-            case TableSettingKind.Audit:
-                // A table's audit flag does nothing while the environment's own switch is off.
-                return environmentAudit == false && table.IsAuditEnabled == true
-                    ? new SettingCell(SettingCellState.Inactive, "On", "Audited, but auditing is off for the environment")
-                    : SettingCell.Flag(table.IsAuditEnabled);
+            TableSettingKind.Audit => AuditCell(snapshot, table),
+            TableSettingKind.ChangeTracking => SettingCell.Flag(table.ChangeTrackingEnabled),
+            TableSettingKind.SynapseLink => LinkCell(snapshot, table, excludedFolders),
+            TableSettingKind.Search => SearchCell(snapshot, table),
+            _ => PackedCell(snapshot, table, excludedFolders)
+        };
 
-            case TableSettingKind.ChangeTracking:
-                return SettingCell.Flag(table.ChangeTrackingEnabled);
+    // A table's audit flag does nothing while the environment's own switch is off.
+    private static SettingCell AuditCell(TableSettingsSnapshot snapshot, TableSetting table) =>
+        snapshot.Settings?.AuditEnabled == false && table.IsAuditEnabled == true
+            ? new SettingCell(SettingCellState.Inactive, "On", "Audited, but auditing is off for the environment")
+            : SettingCell.Flag(table.IsAuditEnabled);
 
-            case TableSettingKind.SynapseLink:
-                var linked = snapshot.IsLinked(table.LogicalName, excludedFolders);
-                if (linked is null) return SettingCell.Unknown("Synapse Link could not be read");
-                if (linked == true && table.ChangeTrackingEnabled == false)
-                {
-                    return new SettingCell(SettingCellState.Problem, "On", "Linked, but change tracking is off");
-                }
-                return SettingCell.Flag(linked, LinkToolTip(snapshot, table.LogicalName));
-
-            case TableSettingKind.Search:
-                return SearchCell(snapshot, table);
-
-            default:
-                var linkedAll = snapshot.IsLinked(table.LogicalName, excludedFolders);
-                var text = string.Join(" ",
-                    table.IsAuditEnabled == true ? "A" : "·",
-                    table.ChangeTrackingEnabled == true ? "C" : "·",
-                    linkedAll switch { true => "L", false => "·", null => "?" },
-                    table.SearchEnabled == true ? "S" : "·");
-                return new SettingCell(SettingCellState.Text, text,
-                    "A audit · C change tracking · L Synapse Link · S Dataverse search - a dot where it is off");
+    private static SettingCell LinkCell(TableSettingsSnapshot snapshot, TableSetting table, ISet<string> excludedFolders)
+    {
+        var linked = snapshot.IsLinked(table.LogicalName, excludedFolders);
+        if (linked is null) return SettingCell.Unknown("Synapse Link could not be read");
+        if (linked == true && table.ChangeTrackingEnabled == false)
+        {
+            return new SettingCell(SettingCellState.Problem, "On", "Linked, but change tracking is off");
         }
+        return SettingCell.Flag(linked, LinkToolTip(snapshot, table.LogicalName));
+    }
+
+    /// <summary>All four settings in one cell, a letter each: "A C L S", a dot where one is off.</summary>
+    private static SettingCell PackedCell(TableSettingsSnapshot snapshot, TableSetting table, ISet<string> excludedFolders)
+    {
+        var text = string.Join(" ",
+            table.IsAuditEnabled == true ? "A" : "·",
+            table.ChangeTrackingEnabled == true ? "C" : "·",
+            snapshot.IsLinked(table.LogicalName, excludedFolders) switch { true => "L", false => "·", null => "?" },
+            table.SearchEnabled == true ? "S" : "·");
+        return new SettingCell(SettingCellState.Text, text,
+            "A audit · C change tracking · L Synapse Link · S Dataverse search - a dot where it is off");
     }
 
     private static string? LinkToolTip(TableSettingsSnapshot snapshot, string table)
@@ -449,43 +449,51 @@ public static class TableSettingsReview
     public static IReadOnlyList<SettingRow> Columns(IReadOnlyList<TableSettingsSnapshot> snapshots, IEnumerable<string> scope)
     {
         var environments = snapshots.Select(s => s.Environment).ToList();
+
+        return scope.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)
+            .SelectMany(table => ColumnRows(snapshots, environments, table))
+            .ToList();
+    }
+
+    /// <summary>A row per column one environment or another has on the table.</summary>
+    private static List<SettingRow> ColumnRows(IReadOnlyList<TableSettingsSnapshot> snapshots, IReadOnlyList<string> environments, string table)
+    {
+        var byEnvironment = snapshots
+            .Select(s => s.Columns.TryGetValue(table, out var columns)
+                ? columns.ToDictionary(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
+                : null)
+            .ToList();
+
+        var names = byEnvironment.Where(d => d is not null).SelectMany(d => d!.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase);
+
         var rows = new List<SettingRow>();
-
-        foreach (var table in scope.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var column in names)
         {
-            var byEnvironment = snapshots
-                .Select(s => s.Columns.TryGetValue(table, out var columns)
-                    ? columns.ToDictionary(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
-                    : null)
-                .ToList();
+            var cells = snapshots.Select((s, i) => ColumnCell(s, table, byEnvironment[i], column)).ToList();
 
-            var names = byEnvironment.Where(d => d is not null).SelectMany(d => d!.Keys)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Order(StringComparer.OrdinalIgnoreCase);
+            var label = byEnvironment.Select(d => d?.GetValueOrDefault(column)?.DisplayName)
+                .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
 
-            foreach (var column in names)
-            {
-                var cells = snapshots.Select((s, i) =>
-                {
-                    if (!s.TablesRead) return SettingCell.Unknown("The tables could not be read here");
-                    if (!s.Tables.TryGetValue(table, out var setting)) return SettingCell.Absent("table");
-                    if (byEnvironment[i] is not { } columns) return SettingCell.Unknown("Columns were not read here");
-                    if (!columns.TryGetValue(column, out var audit)) return SettingCell.Absent("column");
-
-                    if (setting.IsAuditEnabled != false && s.Settings?.AuditEnabled != false) return SettingCell.Flag(audit.IsAuditEnabled);
-
-                    var why = setting.IsAuditEnabled == false ? "The table is not audited here, so this has no effect" : "Auditing is off for the environment";
-                    return new SettingCell(SettingCellState.Inactive, audit.IsAuditEnabled == true ? "On" : "Off", why);
-                }).ToList();
-
-                var label = byEnvironment.Select(d => d?.GetValueOrDefault(column)?.DisplayName)
-                    .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
-
-                rows.Add(new SettingRow($"{table}|{column}", column, label is null ? table : $"{label} · {table}", environments, cells));
-            }
+            rows.Add(new SettingRow($"{table}|{column}", column, label is null ? table : $"{label} · {table}", environments, cells));
         }
 
         return rows;
+    }
+
+    /// <summary>One column's audit flag in one environment - inactive where its table or the environment is not audited.</summary>
+    private static SettingCell ColumnCell(TableSettingsSnapshot s, string table, Dictionary<string, ColumnAudit>? columns, string column)
+    {
+        if (!s.TablesRead) return SettingCell.Unknown("The tables could not be read here");
+        if (!s.Tables.TryGetValue(table, out var setting)) return SettingCell.Absent("table");
+        if (columns is null) return SettingCell.Unknown("Columns were not read here");
+        if (!columns.TryGetValue(column, out var audit)) return SettingCell.Absent("column");
+
+        if (setting.IsAuditEnabled != false && s.Settings?.AuditEnabled != false) return SettingCell.Flag(audit.IsAuditEnabled);
+
+        var why = setting.IsAuditEnabled == false ? "The table is not audited here, so this has no effect" : "Auditing is off for the environment";
+        return new SettingCell(SettingCellState.Inactive, audit.IsAuditEnabled == true ? "On" : "Off", why);
     }
 
     /// <summary>
@@ -660,9 +668,7 @@ public static class TableSettingsReview
             Row("Auditing", "Start auditing - nothing is audited while this is off", s => FromSettings(s, x => SettingCell.Flag(x.AuditEnabled))),
             Row("Log access", "User access audit - sign-ins", s => FromSettings(s, x => SettingCell.Flag(x.UserAccessAuditEnabled))),
             Row("Read logs", "Read audit (Microsoft Purview)", s => FromSettings(s, x => SettingCell.Flag(x.ReadAuditEnabled))),
-            Row("Retain audit logs", "Audit retention period", s => FromSettings(s, x => x.AuditRetentionDays is null
-                ? SettingCell.Unknown("Not reported")
-                : new SettingCell(SettingCellState.Text, x.RetentionLabel))),
+            Row("Retain audit logs", "Audit retention period", s => FromSettings(s, RetentionCell)),
             Row("Audited tables", "Tables with audit on", s => new SettingCell(SettingCellState.Text,
                 s.Tables.Values.Count(t => t.IsAuditEnabled == true).ToString("N0"))),
             Row("Change-tracked tables", "Tables with change tracking on", s => new SettingCell(SettingCellState.Text,
@@ -671,25 +677,39 @@ public static class TableSettingsReview
             Row("Search index", "Provisioning state of the index", s => FromSearch(s, x => new SettingCell(IndexState(x), x.StatusLabel))),
             Row("Searchable tables", "Tables with search on", s => new SettingCell(SettingCellState.Text,
                 s.Tables.Values.Count(t => t.SearchEnabled == true).ToString("N0"))),
-            Row("Indexed tables", "Tables in the index / of them fully synced", s => FromSearch(s, x => new SettingCell(
-                x.Tables.All(t => t.IsComplete) ? SettingCellState.Text : SettingCellState.Problem,
-                $"{x.Tables.Count:N0} / {x.Tables.Count(t => t.IsComplete):N0}",
-                x.Tables.Any(t => !t.IsComplete)
-                    ? "Not fully synced: " + string.Join(", ", x.Tables.Where(t => !t.IsComplete).Select(t => t.Table))
-                    : null))),
+            Row("Indexed tables", "Tables in the index / of them fully synced", s => FromSearch(s, IndexedTablesCell)),
             Row("Search documents", "Rows in the index", s => FromSearch(s, x => Count(x.DocumentCount))),
             Row("Search storage (MB)", "Size of the index", s => FromSearch(s, x => Count(x.StorageMegabytes))),
-            Row("Link profiles", "Synapse and Fabric link profiles / of them active", s => FromLinks(s, x => new SettingCell(
-                SettingCellState.Text, $"{x.Profiles.Count:N0} / {x.Profiles.Count(p => p.IsActive):N0}",
-                x.Profiles.Count == 0 ? null : string.Join("\n", x.Profiles.Select(p => $"{p.Name} → {p.FolderLabel} ({p.State ?? "unknown"})"))))),
-            Row("Linked tables", "Tables exported by an active profile, and of them not keeping up", s => FromLinks(s, x =>
-            {
-                var active = x.Profiles.Where(p => p.IsActive).Select(p => p.Id).ToHashSet();
-                var tables = x.Tables.Where(t => t.IsActive && active.Contains(t.ProfileId)).ToList();
-                var behind = tables.Count(t => !t.IsHealthy);
-                return new SettingCell(behind > 0 ? SettingCellState.Problem : SettingCellState.Text,
-                    behind > 0 ? $"{tables.Count:N0} ({behind:N0} behind)" : tables.Count.ToString("N0"));
-            }))
+            Row("Link profiles", "Synapse and Fabric link profiles / of them active", s => FromLinks(s, LinkProfilesCell)),
+            Row("Linked tables", "Tables exported by an active profile, and of them not keeping up", s => FromLinks(s, LinkedTablesCell))
         ];
+    }
+
+    private static SettingCell RetentionCell(EnvironmentDataSettings settings) => settings.AuditRetentionDays is null
+        ? SettingCell.Unknown("Not reported")
+        : new SettingCell(SettingCellState.Text, settings.RetentionLabel);
+
+    /// <summary>"Indexed / of them fully synced", a problem while any table is part-way through.</summary>
+    private static SettingCell IndexedTablesCell(SearchIndexStatus search)
+    {
+        var syncing = search.Tables.Where(t => !t.IsComplete).Select(t => t.Table).ToList();
+        return new SettingCell(
+            syncing.Count == 0 ? SettingCellState.Text : SettingCellState.Problem,
+            $"{search.Tables.Count:N0} / {search.Tables.Count - syncing.Count:N0}",
+            syncing.Count == 0 ? null : "Not fully synced: " + string.Join(", ", syncing));
+    }
+
+    private static SettingCell LinkProfilesCell(SynapseLinkSetup links) => new(
+        SettingCellState.Text, $"{links.Profiles.Count:N0} / {links.Profiles.Count(p => p.IsActive):N0}",
+        links.Profiles.Count == 0 ? null : string.Join("\n", links.Profiles.Select(p => $"{p.Name} → {p.FolderLabel} ({p.State ?? "unknown"})")));
+
+    /// <summary>Tables an active profile exports, and how many of them are behind.</summary>
+    private static SettingCell LinkedTablesCell(SynapseLinkSetup links)
+    {
+        var active = links.Profiles.Where(p => p.IsActive).Select(p => p.Id).ToHashSet();
+        var tables = links.Tables.Where(t => t.IsActive && active.Contains(t.ProfileId)).ToList();
+        var behind = tables.Count(t => !t.IsHealthy);
+        return new SettingCell(behind > 0 ? SettingCellState.Problem : SettingCellState.Text,
+            behind > 0 ? $"{tables.Count:N0} ({behind:N0} behind)" : tables.Count.ToString("N0"));
     }
 }
