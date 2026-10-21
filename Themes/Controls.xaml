@@ -1608,6 +1608,7 @@
         <Setter Property="EnableRowVirtualization" Value="True" />
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="core:Ui.KeepsColumnWidths" Value="True" />
     </Style>
 
     <!-- Nested grids (detail panes): 26px header. -->
