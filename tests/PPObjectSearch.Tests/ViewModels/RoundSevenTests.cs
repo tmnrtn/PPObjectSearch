@@ -1,4 +1,6 @@
+using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
+using PPObjectSearch.Services;
 using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Tests.ViewModels;
@@ -25,6 +27,17 @@ public class RoundSevenTests
         Assert.Equal("Open 14 windows", asked.Confirm);
         Assert.False(asked.ConfirmIsDefault);
     });
+
+    [Theory]
+    [InlineData(EnvironmentSku.Sandbox, false, "Writes permitted.")]
+    [InlineData(EnvironmentSku.Production, true, "Writes allowed to production.")]
+    [InlineData(EnvironmentSku.Unknown, true, "Writes allowed to an environment of unknown type.")]
+    public void The_guard_box_names_a_protected_environment_that_was_allowed(EnvironmentSku sku, bool allowlisted, string label)
+    {
+        var permission = new WritePermission(true, new EnvironmentTypeInfo(sku, null, null), "reason") { IsAllowlisted = allowlisted };
+
+        Assert.Equal(label, permission.AllowedLabel);
+    }
 
     [Fact]
     public void Stopping_a_run_names_both_choices()

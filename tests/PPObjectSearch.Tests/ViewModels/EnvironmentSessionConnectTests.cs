@@ -501,7 +501,7 @@ public class EnvironmentSessionConnectTests
         Assert.True((await session.EvaluateWritePermissionAsync()).Allowed);
         Assert.True(session.IsWriteAllowlisted);
         Assert.False(session.CanAllowWrites);
-        Assert.Equal("Writes allowed - this environment is in AllowProductionWrites.", session.WriteAccessDescription);
+        Assert.Equal("Writes allowed. Every change is still previewed and confirmed.", session.WriteAccessDescription);
         var changed = 0;
         session.WriteAllowlistChanged += (_, _) => changed++;
 

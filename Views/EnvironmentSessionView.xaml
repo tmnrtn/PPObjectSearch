@@ -88,6 +88,10 @@
                                     Content="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}}"
                                     ToolTip="{Binding EnvironmentTypeDescription}"
                                     Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}" />
+                    <!-- As every other window's environment line shows it. -->
+                    <ContentControl Style="{StaticResource ChipAmber}" Margin="8,1,0,0" Content="Writes allowed" FontWeight="SemiBold"
+                                    FontSize="10" VerticalAlignment="Center" ToolTip="Writes allowed. Every change is still previewed and confirmed."
+                                    Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
                 <TextBlock Text="{Binding EnvironmentUrl}" FontSize="11" Foreground="{DynamicResource Muted}"
                            Margin="0,2,0,0" TextTrimming="CharacterEllipsis"

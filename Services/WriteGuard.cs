@@ -9,6 +9,18 @@ public sealed record WritePermission(bool Allowed, EnvironmentTypeInfo Type, str
     /// saying differently from an ordinary sandbox, because it means a guard was deliberately
     /// lifted rather than never applying.</summary>
     public bool IsAllowlisted { get; init; }
+
+    /// <summary>
+    /// The guard box's first words when writes may go ahead: plain for a sandbox, and naming the
+    /// type where a protected environment has been allowed.
+    /// </summary>
+    public string AllowedLabel => !IsAllowlisted ? "Writes permitted."
+        : Type.Sku switch
+        {
+            EnvironmentSku.Production => "Writes allowed to production.",
+            EnvironmentSku.Unknown => "Writes allowed to an environment of unknown type.",
+            _ => $"Writes allowed to the {Type.SkuLabel.ToLowerInvariant()} environment."
+        };
 }
 
 /// <summary>

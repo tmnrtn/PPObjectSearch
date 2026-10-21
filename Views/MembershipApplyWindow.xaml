@@ -57,6 +57,10 @@
                         <Style TargetType="Border">
                             <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
                             <Style.Triggers>
+                                <!-- Allowed, but production or unknown: amber, so green only ever means a sandbox. -->
+                                <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                     <Setter Property="Background" Value="{DynamicResource RedSoft}" />
                                 </DataTrigger>
@@ -75,6 +79,9 @@
                                 <Style TargetType="Border" BasedOn="{StaticResource StatusCircle}">
                                     <Setter Property="Background" Value="{DynamicResource Green}" />
                                     <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Amber}" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Red}" />
                                         </DataTrigger>
@@ -103,9 +110,12 @@
                             <Run FontWeight="SemiBold">
                                 <Run.Style>
                                     <Style TargetType="Run">
-                                        <Setter Property="Text" Value="Writes permitted." />
+                                        <Setter Property="Text" Value="{Binding Permission.AllowedLabel, Mode=OneWay}" />
                                         <Setter Property="Foreground" Value="{DynamicResource Green}" />
                                         <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                                 <Setter Property="Text" Value="Writes blocked." />
                                                 <Setter Property="Foreground" Value="{DynamicResource Red}" />

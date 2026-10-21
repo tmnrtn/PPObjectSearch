@@ -119,11 +119,11 @@
                                             <MenuItem Header="Allow writes to this environment…"
                                                       Command="{Binding AllowWritesCommand}"
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource NotBoolToVis}}"
-                                                      ToolTip="Add this environment to AllowProductionWrites, so reconciling and the admin tools may change it. Only offered where the production guard applies." />
+                                                      ToolTip="Lets Reconcile, the membership tools and quick actions change this environment. Only offered where the production guard applies." />
                                             <MenuItem Header="Stop allowing writes"
                                                       Command="{Binding RevokeWritesCommand}"
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}"
-                                                      ToolTip="Remove this environment from AllowProductionWrites. The production guard applies again." />
+                                                      ToolTip="Blocks writes here again, as the production guard does by default." />
                                             <Separator />
                                             <MenuItem Header="Close tab" InputGestureText="Ctrl+W"
                                                       Click="CloseTab_Click" />
@@ -151,7 +151,7 @@
                                                        TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="1" Style="{StaticResource Icon}" Text="&#xE785;" FontSize="10" Margin="5,1,0,0"
                                                        Foreground="{DynamicResource Amber}"
-                                                       ToolTip="Writes allowed - this environment is in AllowProductionWrites."
+                                                       ToolTip="Writes allowed. Every change is still previewed and confirmed."
                                                        Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
                                             <Ellipse Grid.Column="2" Margin="6,1,0,0">
                                                 <Ellipse.Style>

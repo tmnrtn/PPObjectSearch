@@ -539,7 +539,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     /// <summary>For the sidebar tooltip; empty unless writes have been allowed here.</summary>
     public string WriteAccessDescription => IsWriteAllowlisted
-        ? "Writes allowed - this environment is in AllowProductionWrites."
+        ? "Writes allowed. Every change is still previewed and confirmed."
         : string.Empty;
 
     private bool HasHost => EnvironmentHost != "Not connected" && !string.IsNullOrWhiteSpace(EnvironmentUrl);
