@@ -235,17 +235,23 @@
                     <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap"
                                Foreground="{DynamicResource Muted}" />
 
-                    <Grid Grid.Column="1" Margin="12,0,0,0">
-                        <Button Height="30" Style="{StaticResource PrimaryButton}"
-                                Content="Apply changes…" Command="{Binding ApplyCommand}"
-                                Visibility="{Binding HasPlan, Converter={StaticResource BoolToVis}}"
-                                ToolTip="Review every change, then confirm. Nothing is written until you do."
-                                ToolTipService.ShowOnDisabled="True" />
-                        <Button Height="30" Content="Apply changes…" Command="{Binding ApplyCommand}"
-                                Visibility="{Binding HasPlan, Converter={StaticResource NotBoolToVis}}"
-                                ToolTip="Preview first: Apply reviews the changes the preview works out."
-                                ToolTipService.ShowOnDisabled="True" />
-                    </Grid>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <!-- What follows writes: Change in {env} · WRITES, as the grid menu and Reconcile mark it. -->
+                        <TextBlock Text="{Binding Session.Title, StringFormat=Change in {0}}" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,10,0" VerticalAlignment="Center" />
+                        <Grid>
+                            <Button Height="30" Style="{StaticResource PrimaryButton}"
+                                    Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}"
+                                    Visibility="{Binding HasPlan, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Review every change, then confirm. Nothing is written until you do."
+                                    ToolTipService.ShowOnDisabled="True" />
+                            <Button Height="30" Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}"
+                                    Visibility="{Binding HasPlan, Converter={StaticResource NotBoolToVis}}"
+                                    ToolTip="Preview first: Apply reviews the changes the preview works out."
+                                    ToolTipService.ShowOnDisabled="True" />
+                        </Grid>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

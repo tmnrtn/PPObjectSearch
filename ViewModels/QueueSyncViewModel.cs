@@ -153,6 +153,14 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
 
     public bool HasPlan => _planFor is not null;
 
+    /// <summary>"Apply 7 changes…" once previewed - disabled at zero - else "Apply changes…".</summary>
+    public string ApplyLabel => !HasPlan ? "Apply changes…"
+        : (CountAdd + CountRemove) switch
+        {
+            1 => "Apply 1 change…",
+            var n => $"Apply {n:N0} changes…"
+        };
+
     public string PlanHeading => _planFor is { } p ? $"{p.Team.Name}  →  {p.Queue.Name}" : "Pick a team and a queue, then Preview.";
 
     private QueuePlanFilter _filter;
@@ -277,6 +285,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(CanPreview));
         OnPropertyChanged(nameof(HasPlan));
+        OnPropertyChanged(nameof(ApplyLabel));
         OnPropertyChanged(nameof(PlanHeading));
         PreviewCommand.RaiseCanExecuteChanged();
     }
@@ -327,6 +336,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
 
             OnPropertyChanged(nameof(HasPlan));
             OnPropertyChanged(nameof(PlanHeading));
+            OnPropertyChanged(nameof(ApplyLabel));
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -451,6 +461,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         CountKeep = Rows.Count(r => r.Status == QueuePlanStatus.Keep);
         RowsView.Refresh();
         ApplyCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(ApplyLabel));
     }
 
     private bool FilterRow(object o)

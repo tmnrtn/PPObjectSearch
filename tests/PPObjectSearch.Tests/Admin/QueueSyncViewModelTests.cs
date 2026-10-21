@@ -178,6 +178,7 @@ public sealed class QueueSyncViewModelTests : IDisposable
         Assert.True(sync.HasPlan);
         Assert.Equal("Service Desk  →  Support", sync.PlanHeading);
         Assert.Equal((6, 1, 2, 1, 2, 0), (sync.CountAll, sync.CountAdd, sync.CountRemove, sync.CountInBoth, sync.CountSkip, sync.CountKeep));
+        Assert.Equal("Apply 3 changes…", sync.ApplyLabel);
 
         var alice = sync.Rows.Single(r => r.Name == "Alice");
         Assert.Equal("Add", alice.StatusLabel);
