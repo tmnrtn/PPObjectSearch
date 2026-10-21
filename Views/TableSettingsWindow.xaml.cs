@@ -12,8 +12,6 @@ namespace PPObjectSearch.Views;
 /// </summary>
 public partial class TableSettingsWindow : Window
 {
-    /// <summary>Columns ahead of the environments in each matrix grid.</summary>
-    private const int LeadingColumns = 2;
 
     private readonly Dictionary<DataGrid, List<DataGridColumn>> _environmentColumns = new();
 
@@ -40,7 +38,8 @@ public partial class TableSettingsWindow : Window
         var environments = viewModel?.ResultEnvironments ?? [];
         var skus = viewModel?.ResultEnvironmentSkus ?? [];
 
-        foreach (var grid in new[] { TablesGrid, ColumnsGrid, EnvironmentGrid })
+        // Each matrix grid, and how many of its columns come ahead of the environments.
+        foreach (var (grid, leading) in new[] { (TablesGrid, 2), (ColumnsGrid, 2), (EnvironmentGrid, 1), (GapsGrid, 2) })
         {
             if (_environmentColumns.TryGetValue(grid, out var old))
             {
@@ -55,7 +54,7 @@ public partial class TableSettingsWindow : Window
                 SortMemberPath = $"Cells[{i}].Text"
             }).ToList();
 
-            for (var i = 0; i < added.Count; i++) grid.Columns.Insert(LeadingColumns + i, added[i]);
+            for (var i = 0; i < added.Count; i++) grid.Columns.Insert(leading + i, added[i]);
             _environmentColumns[grid] = added;
         }
     }

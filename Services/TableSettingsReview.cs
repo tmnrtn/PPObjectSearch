@@ -154,6 +154,22 @@ public sealed class SettingRow
 /// <summary>A column that is not audited on a table that is, in one environment: changes going unrecorded.</summary>
 public sealed record AuditGap(string Environment, string Table, string? TableLabel, string Column, string? ColumnLabel, bool IsManaged);
 
+/// <summary>A table with columns going unaudited somewhere: the group they are listed under.</summary>
+public sealed class GapGroup
+{
+    public required string Table { get; init; }
+    public required string Label { get; init; }
+    public required int ColumnCount { get; init; }
+    public required IReadOnlyList<string> Environments { get; init; }
+
+    /// <summary>"3 columns not audited in Prod, UAT".</summary>
+    public string Summary =>
+        $"{ColumnCount:N0} column{(ColumnCount == 1 ? string.Empty : "s")} not audited in {string.Join(", ", Environments)}";
+}
+
+/// <summary>A column not audited somewhere on an audited table, with a cell per environment.</summary>
+public sealed record GapRow(GapGroup Group, string Column, string? ColumnLabel, bool IsManaged, IReadOnlyList<SettingCell> Cells);
+
 /// <summary>One environment's link profile: the group its tables are listed under.</summary>
 public sealed class LinkGroup
 {
@@ -488,6 +504,50 @@ public static class TableSettingsReview
             .ThenBy(g => g.Column, StringComparer.OrdinalIgnoreCase)
             .ThenBy(g => snapshots.Select(s => s.Environment).ToList().IndexOf(g.Environment))
             .ToList();
+    }
+
+    /// <summary>
+    /// The gaps as a pivot: a row per column that is not audited somewhere, grouped by table, with
+    /// a cell per environment - "Not audited", "Audited", or "—" where the table is not audited or
+    /// the column is not there.
+    /// </summary>
+    public static IReadOnlyList<GapRow> GapMatrix(IReadOnlyList<TableSettingsSnapshot> snapshots, IReadOnlyList<AuditGap> gaps)
+    {
+        var rows = new List<GapRow>();
+
+        foreach (var table in gaps.GroupBy(g => g.Table, StringComparer.OrdinalIgnoreCase))
+        {
+            var columns = table.GroupBy(g => g.Column, StringComparer.OrdinalIgnoreCase).ToList();
+            var group = new GapGroup
+            {
+                Table = table.Key,
+                Label = table.Select(g => g.TableLabel).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? table.Key,
+                ColumnCount = columns.Count,
+                Environments = snapshots.Select(s => s.Environment)
+                    .Where(e => table.Any(g => g.Environment == e)).ToList()
+            };
+
+            foreach (var column in columns)
+            {
+                var cells = snapshots.Select(s =>
+                {
+                    if (column.Any(g => g.Environment == s.Environment))
+                        return new SettingCell(SettingCellState.Problem, "Not audited", "Changes to this column are not recorded here");
+                    if (s.Tables.GetValueOrDefault(table.Key)?.IsAuditEnabled != true)
+                        return new SettingCell(SettingCellState.Absent, "—", "The table is not audited here");
+                    var audit = s.Columns.GetValueOrDefault(table.Key)?
+                        .FirstOrDefault(c => string.Equals(c.LogicalName, column.Key, StringComparison.OrdinalIgnoreCase));
+                    return audit is null
+                        ? SettingCell.Absent("column")
+                        : new SettingCell(SettingCellState.Off, "Audited");
+                }).ToList();
+
+                var first = column.First();
+                rows.Add(new GapRow(group, first.Column, first.ColumnLabel, first.IsManaged, cells));
+            }
+        }
+
+        return rows;
     }
 
     /// <summary>Every table in every link profile, environment by environment, profile by profile.</summary>
