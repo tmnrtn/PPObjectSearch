@@ -36,7 +36,7 @@ public enum SettingCellState
 /// <summary>One environment's value in a row of the matrix.</summary>
 public sealed record SettingCell(SettingCellState State, string Text, string? ToolTip = null)
 {
-    public static SettingCell Absent(string what) => new(SettingCellState.Absent, "–", $"No such {what} in this environment");
+    public static SettingCell Absent(string what) => new(SettingCellState.Absent, "—", $"No such {what} in this environment");
     public static SettingCell Unknown(string why) => new(SettingCellState.Unknown, "?", why);
 
     public static SettingCell Flag(bool? value, string? toolTip = null) => value switch
@@ -66,6 +66,30 @@ public sealed class SettingRow
         IsConsistent = present.Count == cells.Count && present.Select(c => c.Text).Distinct().Count() <= 1;
         HasProblem = cells.Any(c => c.State == SettingCellState.Problem);
         Difference = difference ?? Join([.. Minority(environments, cells), .. Missing(environments, cells), .. Problems(environments, cells)]);
+        Exceptions = ExceptionsOf(cells);
+    }
+
+    /// <summary>
+    /// The environments, by column, that the difference is about: the odd ones out among those that
+    /// have the setting, and any where it is missing, unknown or wrong.
+    /// </summary>
+    public IReadOnlyList<int> Exceptions { get; }
+
+    /// <summary>Set by the view, which knows the environments' types: a production one is among <see cref="Exceptions"/>.</summary>
+    public bool InvolvesProduction { get; set; }
+
+    private static IReadOnlyList<int> ExceptionsOf(IReadOnlyList<SettingCell> cells)
+    {
+        var present = cells.Where(c => c.State is not (SettingCellState.Absent or SettingCellState.Unknown)).ToList();
+        var usual = present.GroupBy(c => c.Text).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key;
+        var differs = present.Select(c => c.Text).Distinct().Count() > 1;
+
+        return cells
+            .Select((cell, i) => (cell, i))
+            .Where(x => x.cell.State is SettingCellState.Absent or SettingCellState.Unknown or SettingCellState.Problem ||
+                        (differs && x.cell.Text != usual))
+            .Select(x => x.i)
+            .ToList();
     }
 
     /// <summary>The table, or table|column - what an export is keyed on.</summary>

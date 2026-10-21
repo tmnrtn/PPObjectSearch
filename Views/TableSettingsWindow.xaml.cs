@@ -36,7 +36,9 @@ public partial class TableSettingsWindow : Window
 
     private void BuildEnvironmentColumns()
     {
-        var environments = (DataContext as TableSettingsViewModel)?.ResultEnvironments ?? [];
+        var viewModel = DataContext as TableSettingsViewModel;
+        var environments = viewModel?.ResultEnvironments ?? [];
+        var skus = viewModel?.ResultEnvironmentSkus ?? [];
 
         foreach (var grid in new[] { TablesGrid, ColumnsGrid, EnvironmentGrid })
         {
@@ -47,7 +49,7 @@ public partial class TableSettingsWindow : Window
 
             var added = environments.Select((name, i) => (DataGridColumn)new DataGridTemplateColumn
             {
-                Header = name,
+                Header = Header(name, i < skus.Count ? skus[i] : Dataverse.EnvironmentSku.Unknown),
                 Width = new DataGridLength(Math.Max(90, name.Length * 7 + 24)),
                 CellTemplate = CellTemplate(i),
                 SortMemberPath = $"Cells[{i}].Text"
@@ -58,9 +60,20 @@ public partial class TableSettingsWindow : Window
         }
     }
 
+    /// <summary>An environment's column header: its colour bar, then its name.</summary>
+    private object Header(string name, Dataverse.EnvironmentSku sku)
+    {
+        var bar = new Border { Style = (Style)FindResource("EnvBar"), Height = 10, Margin = new Thickness(0, 0, 5, 0), Tag = sku };
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(bar);
+        panel.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
+        return panel;
+    }
+
     /// <summary>
-    /// One environment's cell: its text, coloured by what it means - green on, muted off, faint where
-    /// it has no effect or the table is missing, amber where something is wrong.
+    /// One environment's cell, so the exceptions stand out rather than the rule: On in plain text,
+    /// Off muted, faint italic where it has no effect, faint where the table is missing, amber where
+    /// something is wrong. The packed All cell is mono.
     /// </summary>
     private static DataTemplate CellTemplate(int index) => (DataTemplate)XamlReader.Parse($$"""
         <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
@@ -70,10 +83,6 @@ public partial class TableSettingsWindow : Window
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground" Value="{DynamicResource Text}" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Cells[{{index}}].State}" Value="On">
-                                <Setter Property="Foreground" Value="{DynamicResource Green}" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </DataTrigger>
                             <DataTrigger Binding="{Binding Cells[{{index}}].State}" Value="Off">
                                 <Setter Property="Foreground" Value="{DynamicResource Muted}" />
                             </DataTrigger>
@@ -87,6 +96,7 @@ public partial class TableSettingsWindow : Window
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Cells[{{index}}].State}" Value="Unknown">
                                 <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Cells[{{index}}].State}" Value="Absent">
                                 <Setter Property="Foreground" Value="{DynamicResource Faint}" />

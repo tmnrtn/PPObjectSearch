@@ -255,9 +255,13 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         set
         {
             if (!SetProperty(ref _kind, value)) return;
+            OnPropertyChanged(nameof(IsAllKind));
             RebuildTables();
         }
     }
+
+    /// <summary>All settings packs four into one cell, so it needs its key: A, C, L, S, and a dot for off.</summary>
+    public bool IsAllKind => Kind == TableSettingKind.All;
 
     public static IReadOnlyList<KeyValuePair<TableSettingKind, string>> Kinds { get; } =
     [
@@ -306,6 +310,9 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         get => _resultEnvironments;
         private set => SetProperty(ref _resultEnvironments, value);
     }
+
+    /// <summary>The same environments' types, for their colour in the column headers.</summary>
+    public IReadOnlyList<Dataverse.EnvironmentSku> ResultEnvironmentSkus { get; private set; } = [];
 
     public ObservableCollection<SettingRow> TableRows { get; } = new();
     public ObservableCollection<SettingRow> ColumnRows { get; } = new();
@@ -452,6 +459,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
 
             _snapshots = snapshots;
             _scopeTables = tables;
+            ResultEnvironmentSkus = chosen.Select(s => s.EnvironmentSku).ToList();
             ResultEnvironments = snapshots.Select(s => s.Environment).ToList();
 
             LoadFolders();
@@ -559,6 +567,8 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         _allGaps = TableSettingsReview.Gaps(_snapshots, _scopeTables).ToList();
         _allSearch = TableSettingsReview.SearchIndex(_snapshots).ToList();
         _allEnvironments = TableSettingsReview.Environments(_snapshots).ToList();
+        MarkProduction(_allColumns);
+        MarkProduction(_allEnvironments);
         RebuildLinks();
         RebuildTables();
     }
@@ -566,7 +576,18 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     private void RebuildTables()
     {
         _allTables = TableSettingsReview.Tables(_snapshots, _scopeTables, Kind, IgnoredFolders()).ToList();
+        MarkProduction(_allTables);
         Refill();
+    }
+
+    /// <summary>A difference is Amber only where production is one of the environments it is about.</summary>
+    private void MarkProduction(IEnumerable<SettingRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            row.InvolvesProduction = row.Difference.Length > 0 && row.Exceptions.Any(i =>
+                i < ResultEnvironmentSkus.Count && ResultEnvironmentSkus[i] == Dataverse.EnvironmentSku.Production);
+        }
     }
 
     private void RebuildLinks()

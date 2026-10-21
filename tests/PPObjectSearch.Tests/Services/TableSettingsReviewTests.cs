@@ -30,6 +30,19 @@ public class TableSettingsReviewTests
             null, null, 10, 10, null, true)).ToList());
 
     [Fact]
+    public void A_rows_exceptions_are_the_odd_ones_out_and_anything_missing_or_wrong()
+    {
+        var on = SettingCell.Flag(true);
+        var off = SettingCell.Flag(false);
+
+        var row = new SettingRow("t", "t", null, ["Dev", "QA", "UAT", "Prod"], [on, on, SettingCell.Absent("table"), off]);
+
+        Assert.Equal([2, 3], row.Exceptions);
+        Assert.Equal("—", row.Cells[2].Text);
+        Assert.Empty(new SettingRow("t", "t", null, ["Dev", "QA"], [on, on]).Exceptions);
+    }
+
+    [Fact]
     public void A_table_audited_everywhere_is_consistent()
     {
         var rows = TableSettingsReview.Tables([Env("Dev", Table("account")), Env("Prod", Table("account"))],
