@@ -559,6 +559,24 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _connectionsStatus, value);
     }
 
+    private RelayCommand? _copyConnectionLogicalNameCommand;
+    public RelayCommand CopyConnectionLogicalNameCommand => _copyConnectionLogicalNameCommand ??= new RelayCommand(
+        p => CopyValue("logical name", (p as ConnectionReferenceRow)?.LogicalName), p => p is ConnectionReferenceRow);
+
+    private RelayCommand? _copyConnectionIdCommand;
+    public RelayCommand CopyConnectionIdCommand => _copyConnectionIdCommand ??= new RelayCommand(
+        p => CopyValue("connection id", (p as ConnectionReferenceRow)?.ConnectionId),
+        p => p is ConnectionReferenceRow { ConnectionId.Length: > 0 });
+
+    private void CopyValue(string what, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+
+        Status = ClipboardText.TryCopy(value, out var failure)
+            ? $"Copied {what}: {value}"
+            : $"Could not copy the {what} - the clipboard is held by another application ({failure}).";
+    }
+
     private bool _hasBrokenConnection;
     /// <summary>A reference with no connection, or one in error - the usual reason a flow will not turn on.</summary>
     public bool HasBrokenConnection

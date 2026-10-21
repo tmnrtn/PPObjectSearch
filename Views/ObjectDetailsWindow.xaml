@@ -50,6 +50,14 @@
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
+        <!-- A connection reference's ids: in the row's tooltip, and copied from its menu. -->
+        <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False">
+            <MenuItem Header="Copy logical name" CommandParameter="{Binding}"
+                      Command="{Binding Data.CopyConnectionLogicalNameCommand, Source={StaticResource WindowProxy}}" />
+            <MenuItem Header="Copy connection id" CommandParameter="{Binding}"
+                      Command="{Binding Data.CopyConnectionIdCommand, Source={StaticResource WindowProxy}}" />
+        </ContextMenu>
+
         <Style TargetType="DataGridRow" x:Key="CopyRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -647,23 +655,70 @@
                                 <TextBlock Text="{Binding ConnectionsStatus}" TextWrapping="Wrap" FontWeight="SemiBold"
                                            Foreground="{DynamicResource Amber}" />
                             </Border>
-                            <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                            <!-- Said once: in the banner when something is broken, else here. -->
+                            <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}"
+                                    Visibility="{Binding HasBrokenConnection, Converter={StaticResource NotBoolToVis}}">
                                 <TextBlock Text="{Binding ConnectionsStatus}" Foreground="{DynamicResource Muted}"
                                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding ConnectionsStatus}" />
                             </Border>
+                            <TextBlock DockPanel.Dock="Bottom" Text="Hover a row for its logical name and connection id. Right-click to copy either."
+                                       Style="{StaticResource FaintText}" FontSize="11" Margin="12,8,12,10" TextWrapping="Wrap" />
                             <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding ConnectionRows}"
-                                      SelectionMode="Single" IsReadOnly="True"
+                                      SelectionMode="Single" IsReadOnly="True" Margin="0,8,0,0"
+                                      BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
                                       AutomationProperties.Name="Connection references">
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                        <Setter Property="ToolTip" Value="{Binding RowToolTip}" />
+                                        <Setter Property="ContextMenu" Value="{StaticResource ConnectionRowMenu}" />
+                                    </Style>
+                                </DataGrid.RowStyle>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Connection reference" Width="1.2*" Binding="{Binding Label}"
-                                                        HeaderStyle="{StaticResource PaneFirstHeader}" />
-                                    <DataGridTextColumn Header="Logical name" Width="*" Binding="{Binding LogicalName}" />
-                                    <DataGridTextColumn Header="Connector" Width="*" Binding="{Binding Connector}" />
-                                    <DataGridTextColumn Header="Connection" Width="*" Binding="{Binding ConnectionName}" />
-                                    <DataGridTextColumn Header="Status" Width="1.3*" Binding="{Binding HealthLabel}" />
-                                    <DataGridTextColumn Header="Owner" Width="*" Binding="{Binding Owner}" />
-                                    <DataGridTextColumn Header="Connection id" Width="*" Binding="{Binding ConnectionId}" />
+                                    <DataGridTextColumn Header="Connection reference" Width="1.3*" Binding="{Binding Label}"
+                                                        HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellFullFirst}" />
+                                    <DataGridTextColumn Header="Connector" Width="0.9*" Binding="{Binding Connector}" ElementStyle="{StaticResource Cell}" />
+                                    <DataGridTemplateColumn Header="Connection" Width="*" SortMemberPath="ConnectionShown">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock x:Name="Text" Style="{StaticResource Cell}" Text="{Binding ConnectionShown}" />
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding ConnectionName}" Value="{x:Null}">
+                                                        <Setter TargetName="Text" Property="Foreground" Value="{DynamicResource Faint}" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <!-- A 7px dot: Green connected, Red error, Amber no connection, Faint not shared or not read. -->
+                                    <DataGridTemplateColumn Header="Status" Width="1.5*" SortMemberPath="Health">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center" ToolTip="{Binding HealthLabel}">
+                                                    <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,1,6,0" Fill="{DynamicResource Faint}" VerticalAlignment="Center" />
+                                                    <TextBlock x:Name="StatusText" Text="{Binding HealthLabel}" Foreground="{DynamicResource Muted}"
+                                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Health}" Value="{x:Static models:ConnectionHealth.Connected}">
+                                                        <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource Green}" />
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource Text}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Health}" Value="{x:Static models:ConnectionHealth.Error}">
+                                                        <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource Red}" />
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource Red}" />
+                                                        <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Health}" Value="{x:Static models:ConnectionHealth.NoConnection}">
+                                                        <Setter TargetName="StatusDot" Property="Fill" Value="{DynamicResource Amber}" />
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource Amber}" />
+                                                        <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Owner" Width="0.9*" Binding="{Binding Owner}" ElementStyle="{StaticResource CellMuted}" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
