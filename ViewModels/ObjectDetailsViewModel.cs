@@ -430,10 +430,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<OverviewProperty> OverviewProperties { get; } = new();
 
-    /// <summary>Each part as a table whose columns differ by type, so it is handed to the grid as a DataView.</summary>
-    public ObservableCollection<OverviewSection> OverviewSections { get; } = new();
-
-    public sealed record OverviewSection(string Heading, System.Data.DataView Rows);
+    /// <summary>Each part in the shape that suits it - see <see cref="OverviewPart"/>.</summary>
+    public ObservableCollection<OverviewPart> OverviewSections { get; } = new();
 
     private string _overviewStatus = string.Empty;
     public string OverviewStatus
@@ -454,23 +452,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
             foreach (var property in overview.Properties) OverviewProperties.Add(property);
 
-            foreach (var table in overview.Tables)
-            {
-                var data = new System.Data.DataTable();
-                for (var i = 0; i < table.Columns.Count; i++)
-                {
-                    // Column names must be unique and non-empty; the header is what is shown.
-                    var name = string.IsNullOrWhiteSpace(table.Columns[i]) ? $"Column {i + 1}" : table.Columns[i];
-                    data.Columns.Add(UniqueColumnName(data, name), typeof(string));
-                }
-
-                foreach (var row in table.Rows)
-                {
-                    data.Rows.Add(row.Take(table.Columns.Count).Select(v => (object?)v ?? DBNull.Value).ToArray());
-                }
-
-                OverviewSections.Add(new OverviewSection(table.Heading, data.DefaultView));
-            }
+            foreach (var table in overview.Tables) OverviewSections.Add(OverviewPart.From(table));
 
             OverviewStatus = overview.Problems.Count == 0 ? string.Empty : "Some parts could not be read - " + string.Join("; ", overview.Problems);
             problems.AddRange(overview.Problems.Select(p => "overview " + p));
@@ -480,14 +462,6 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             OverviewStatus = "Could not read the overview - " + ex.Message;
             problems.Add("overview: " + ex.Message);
         }
-    }
-
-    /// <summary>The name with as few trailing spaces as make it unique; the header still reads the same.</summary>
-    private static string UniqueColumnName(System.Data.DataTable data, string name)
-    {
-        var padding = 0;
-        while (data.Columns.Contains(name + new string(' ', padding))) padding++;
-        return name + new string(' ', padding);
     }
 
     /// <summary>

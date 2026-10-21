@@ -297,6 +297,60 @@
         <Setter Property="Foreground" Value="{DynamicResource Green}" />
     </Style>
 
+    <!-- How far a privilege reaches: nothing, then User, BU, Parent, Org in deepening colour. -->
+    <Style TargetType="ContentControl" x:Key="DepthPill" BasedOn="{StaticResource StatusPill}">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.None}">
+                <Setter Property="Visibility" Value="Hidden" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.User}">
+                <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.BusinessUnit}">
+                <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                <Setter Property="Foreground" Value="{DynamicResource Blue}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.ParentChild}">
+                <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
+                <Setter Property="Foreground" Value="{DynamicResource Link}" />
+            </Trigger>
+            <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.Organization}">
+                <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                <Setter Property="Foreground" Value="{DynamicResource Green}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A privilege column: its depth as a pill. -->
+    <DataTemplate x:Key="DepthCell">
+        <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding}" Content="{Binding Converter={StaticResource DepthShort}}" />
+    </DataTemplate>
+
+    <!-- The key to DepthPill, beside any grid of them: "Reach" then User, BU, Parent and Org. -->
+    <Style TargetType="ContentControl" x:Key="ReachKey">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Reach" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.User}" Content="User" Margin="0,0,4,0"
+                                        ToolTip="Records the user owns" />
+                        <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.BusinessUnit}" Content="BU" Margin="0,0,4,0"
+                                        ToolTip="Records in the user's business unit" />
+                        <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.ParentChild}" Content="Parent" Margin="0,0,4,0"
+                                        ToolTip="Records in the user's business unit and the units beneath it" />
+                        <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.Organization}" Content="Org"
+                                        ToolTip="Every record in the organization" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- A 6px status dot. -->
     <Style TargetType="Ellipse" x:Key="Dot">
         <Setter Property="Width" Value="6" />

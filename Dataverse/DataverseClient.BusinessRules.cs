@@ -36,7 +36,8 @@ public sealed partial class DataverseClient
         {
             Title = "Steps",
             Columns = ["Step"],
-            Rows = steps.Select(s => (IReadOnlyList<string?>)[s.Indented]).ToList()
+            Rows = steps.Select(s => (IReadOnlyList<string?>)[s.Indented]).ToList(),
+            Steps = steps
         });
     }
 

@@ -4,6 +4,7 @@
         xmlns:local="clr-namespace:PPObjectSearch.Views"
         xmlns:core="clr-namespace:PPObjectSearch.Core"
         xmlns:models="clr-namespace:PPObjectSearch.Models"
+        xmlns:vm="clr-namespace:PPObjectSearch.ViewModels"
         Title="{Binding Title}"
         Style="{StaticResource AppWindow}"
         Height="760" Width="1180"
@@ -214,7 +215,7 @@
                                                     <ColumnDefinition Width="180" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Label}" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource DetailKey}" Margin="0,4,10,4" />
                                                 <TextBox Grid.Column="1" Text="{Binding Shown, Mode=OneWay}" IsReadOnly="True" BorderThickness="0"
                                                          Background="Transparent" TextWrapping="Wrap" Padding="0,4"
                                                          AutomationProperties.Name="{Binding Label}" />
@@ -222,17 +223,206 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <ItemsControl ItemsSource="{Binding OverviewSections}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Margin="0,16,0,0">
-                                                <TextBlock Text="{Binding Heading}" Style="{StaticResource SectionHeading}" Margin="0,0,0,6" />
-                                                <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="True" IsReadOnly="True" MaxHeight="360"
-                                                          AutomationProperties.Name="{Binding Heading}"
-                                                          BorderBrush="{DynamicResource Border}" BorderThickness="1" />
+                                <!-- Each part in its own shape: rule steps as an outline, privileges as pills, a sitemap as a tree, the rest a grid. -->
+                                <ItemsControl ItemsSource="{Binding OverviewSections}" Focusable="False">
+                                    <ItemsControl.Resources>
+                                        <!-- Every part's heading: title, the count beside it in Faint, then its note in Muted. -->
+                                        <DataTemplate x:Key="PartHeading">
+                                            <StackPanel Margin="0,0,0,6">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource SectionHeading}" />
+                                                    <TextBlock Text="{Binding CountText}" Style="{StaticResource FaintText}" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Note}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding Note, Converter={StaticResource EmptyToCollapsed}}" />
                                             </StackPanel>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
+
+                                        <DataTemplate DataType="{x:Type vm:OverviewGridPart}">
+                                            <StackPanel Margin="0,16,0,0">
+                                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource PartHeading}" />
+                                                <DataGrid ItemsSource="{Binding Rows}" AutoGenerateColumns="True" IsReadOnly="True" core:Ui.ScrollsPage="True"
+                                                          AutomationProperties.Name="{Binding Heading}" HorizontalAlignment="Left"
+                                                          BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                                          Visibility="{Binding Count, Converter={StaticResource CountToVis}}" />
+                                                <TextBlock Text="None" Style="{StaticResource FaintText}"
+                                                           Visibility="{Binding Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+
+                                        <!-- A business rule: If / Else if / Else in Accent, Then in Muted, actions indented 20px a level. -->
+                                        <DataTemplate DataType="{x:Type vm:OverviewStepsPart}">
+                                            <!-- Up to 900 wide, from the left. -->
+                                            <Grid Margin="0,16,0,0">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource PartHeading}" />
+                                                    <Border BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="4" Padding="0,6">
+                                                        <ItemsControl ItemsSource="{Binding Lines}" Focusable="False" AutomationProperties.Name="{Binding Heading}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="{Binding Margin}">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="52" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock x:Name="Keyword" Text="{Binding Keyword}" FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource Muted}" />
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" Margin="8,0,0,0" />
+                                                                    </Grid>
+                                                                    <DataTemplate.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsCondition}" Value="True">
+                                                                            <Setter TargetName="Keyword" Property="Foreground" Value="{DynamicResource Accent}" />
+                                                                        </DataTrigger>
+                                                                    </DataTemplate.Triggers>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+
+                                        <!-- A role's table privileges: the same pills and Reach key as Environment admin, with a table filter. -->
+                                        <DataTemplate DataType="{x:Type vm:OverviewPrivilegesPart}">
+                                            <!-- Up to 900 wide, from the left. -->
+                                            <Grid Margin="0,16,0,0">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <DockPanel Margin="0,0,0,6">
+                                                        <TextBox DockPanel.Dock="Right" Width="200" Height="26" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter tables"
+                                                                 AutomationProperties.Name="Filter tables"
+                                                                 Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                                                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource PartHeading}" VerticalAlignment="Center" />
+                                                    </DockPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                        <ContentControl Style="{StaticResource ReachKey}" />
+                                                        <TextBlock Text="blank = none" Style="{StaticResource FaintText}" FontSize="11" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding RowsView}" IsReadOnly="True" core:Ui.ScrollsPage="True"
+                                                              AutomationProperties.Name="{Binding Heading}"
+                                                              BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="Table" Width="*" MinWidth="160" Binding="{Binding Table}"
+                                                                                HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellMonoFullFirst}" />
+                                                            <DataGridTemplateColumn Header="Create" Width="64" SortMemberPath="Create">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Create}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Read" Width="64" SortMemberPath="Read">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Read}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Write" Width="64" SortMemberPath="Write">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Write}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Delete" Width="64" SortMemberPath="Delete">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Delete}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Append" Width="64" SortMemberPath="Append">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Append}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Append to" Width="72" SortMemberPath="AppendTo">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding AppendTo}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Assign" Width="64" SortMemberPath="Assign">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Assign}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                            <DataGridTemplateColumn Header="Share" Width="64" SortMemberPath="Share">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate><ContentPresenter Content="{Binding Share}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+                                                    <TextBlock Text="No table matches the filter." Foreground="{DynamicResource Muted}" Margin="12,8,0,0"
+                                                               Visibility="{Binding NothingMatches, Converter={StaticResource BoolToVis}}" />
+                                                    <Button Style="{StaticResource LinkButton}" Content="{Binding ShowAllLabel}" Command="{Binding ShowAllCommand}"
+                                                            HorizontalAlignment="Left" Margin="6,6,0,0"
+                                                            Visibility="{Binding HasMore, Converter={StaticResource BoolToVis}}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+
+                                        <!-- A role's other privileges: each with its reach as a pill, the words in its tooltip. -->
+                                        <DataTemplate DataType="{x:Type vm:OverviewOtherPrivilegesPart}">
+                                            <!-- Up to 900 wide, from the left. -->
+                                            <Grid Margin="0,16,0,0">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource PartHeading}" />
+                                                    <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Rows}" IsReadOnly="True" core:Ui.ScrollsPage="True"
+                                                              AutomationProperties.Name="{Binding Heading}"
+                                                              BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                                              Visibility="{Binding Count, Converter={StaticResource CountToVis}}">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="Privilege" Width="*" Binding="{Binding Name}"
+                                                                                HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellFullFirst}" />
+                                                            <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
+                                                                <DataGridTemplateColumn.CellTemplate>
+                                                                    <DataTemplate>
+                                                                        <ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding DepthLabel}" />
+                                                                    </DataTemplate>
+                                                                </DataGridTemplateColumn.CellTemplate>
+                                                            </DataGridTemplateColumn>
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+                                                    <TextBlock Text="None" Style="{StaticResource FaintText}"
+                                                               Visibility="{Binding Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+
+                                        <!-- A sitemap: areas SemiBold, groups Muted, items with what they open beside them. -->
+                                        <DataTemplate DataType="{x:Type vm:OverviewTreePart}">
+                                            <!-- Up to 900 wide, from the left. -->
+                                            <Grid Margin="0,16,0,0">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" MaxWidth="900" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource PartHeading}" />
+                                                    <Border BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="4" Padding="0,6">
+                                                        <ItemsControl ItemsSource="{Binding Lines}" Focusable="False" Grid.IsSharedSizeScope="True"
+                                                                      AutomationProperties.Name="{Binding Heading}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="{Binding Margin}">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="SitemapText" MinWidth="260" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock x:Name="Text" Text="{Binding Text}" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Opens}" Style="{StaticResource Mono}" FontSize="11"
+                                                                                   Foreground="{DynamicResource Muted}" Margin="16,0,0,0" TextTrimming="CharacterEllipsis"
+                                                                                   ToolTip="{Binding Opens}" VerticalAlignment="Center" />
+                                                                    </Grid>
+                                                                    <DataTemplate.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsArea}" Value="True">
+                                                                            <Setter TargetName="Text" Property="FontWeight" Value="SemiBold" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding IsGroup}" Value="True">
+                                                                            <Setter TargetName="Text" Property="Foreground" Value="{DynamicResource Muted}" />
+                                                                        </DataTrigger>
+                                                                    </DataTemplate.Triggers>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.Resources>
                                 </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>

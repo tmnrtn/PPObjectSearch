@@ -397,7 +397,7 @@ public class ObjectDetailsOtherKindsTests
         await details.LoadAsync();
 
         Assert.Contains(details.OverviewProperties, p => p is { Label: "Binding", Value: "Entity" });
-        var parameters = details.OverviewSections.Single(s => s.Heading.StartsWith("Request parameters", StringComparison.Ordinal));
+        var parameters = details.OverviewSections.OfType<OverviewGridPart>().Single(s => s.Heading.StartsWith("Request parameters", StringComparison.Ordinal));
         Assert.Equal(["Name", "Type", "Column 3", "Table"], parameters.Rows.Table!.Columns.Cast<System.Data.DataColumn>().Select(c => c.ColumnName));
         var row = Assert.Single(parameters.Rows.Cast<System.Data.DataRowView>());
         Assert.Equal("Mode", row["Name"]);

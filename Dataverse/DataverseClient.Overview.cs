@@ -177,7 +177,8 @@ public sealed partial class DataverseClient
             {
                 Title = "Navigation (sitemap)",
                 Columns = ["Navigation", "Opens"],
-                Rows = SitemapTree(xml)
+                Rows = SitemapTree(xml),
+                Tree = SitemapLines(xml)
             });
         }
     }
@@ -226,9 +227,13 @@ public sealed partial class DataverseClient
     /// A sitemap as an indented tree - areas, their groups, and each group's items - with what each
     /// item opens, read top to bottom as the app's navigation shows it.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<string?>> SitemapTree(string xml)
+    public static IReadOnlyList<IReadOnlyList<string?>> SitemapTree(string xml) =>
+        SitemapLines(xml).Select(l => (IReadOnlyList<string?>)[new string(' ', l.Depth * 4) + l.Text, l.Opens]).ToList();
+
+    /// <summary>The same tree as lines with their depth: area 0, group 1, item 2.</summary>
+    public static IReadOnlyList<OverviewTreeLine> SitemapLines(string xml)
     {
-        var rows = new List<IReadOnlyList<string?>>();
+        var rows = new List<OverviewTreeLine>();
         XElement root;
         try
         {
@@ -245,17 +250,17 @@ public sealed partial class DataverseClient
 
         foreach (var area in root.Descendants("Area"))
         {
-            rows.Add([Title(area), null]);
+            rows.Add(new(0, Title(area), null));
             foreach (var group in area.Elements("Group"))
             {
-                rows.Add(["    " + Title(group), null]);
+                rows.Add(new(1, Title(group), null));
                 foreach (var sub in group.Elements("SubArea"))
                 {
                     var opens = (string?)sub.Attribute("Entity") is { Length: > 0 } entity ? $"Table: {entity}"
                         : (string?)sub.Attribute("DashboardId") is { Length: > 0 } dashboard ? $"Dashboard: {dashboard}"
                         : (string?)sub.Attribute("Url") is { Length: > 0 } url ? url
                         : null;
-                    rows.Add(["        " + Title(sub), opens]);
+                    rows.Add(new(2, Title(sub), opens));
                 }
             }
         }
@@ -467,13 +472,15 @@ public sealed partial class DataverseClient
             Title = "Table privileges",
             Columns = [TableHeading, "Create", "Read", "Write", "Delete", "Append", "Append to", "Assign", "Share"],
             Rows = tables.Select(t => (IReadOnlyList<string?>)[t.Table, D(t.Create), D(t.Read), D(t.Write), D(t.Delete),
-                D(t.Append), D(t.AppendTo), D(t.Assign), D(t.Share)]).ToList()
+                D(t.Append), D(t.AppendTo), D(t.Assign), D(t.Share)]).ToList(),
+            Privileges = tables
         });
         overview.Tables.Add(new OverviewTable
         {
             Title = "Other privileges",
             Columns = ["Privilege", "Depth"],
-            Rows = misc.Select(m => (IReadOnlyList<string?>)[m.Name, m.DepthLabel]).ToList()
+            Rows = misc.Select(m => (IReadOnlyList<string?>)[m.Name, m.DepthLabel]).ToList(),
+            OtherPrivileges = misc
         });
     }
 

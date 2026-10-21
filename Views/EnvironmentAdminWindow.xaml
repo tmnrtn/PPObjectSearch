@@ -37,32 +37,6 @@
             <Setter Property="Margin" Value="16,0,8,0" />
         </Style>
 
-        <!-- How far a privilege reaches: nothing, then User, BU, Parent, Org in deepening colour. -->
-        <Style TargetType="ContentControl" x:Key="DepthPill" BasedOn="{StaticResource StatusPill}">
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Style.Triggers>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.None}">
-                    <Setter Property="Visibility" Value="Hidden" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.User}">
-                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.BusinessUnit}">
-                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.ParentChild}">
-                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Link}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.Organization}">
-                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- emailrouteraccessapproval: 1 Approved, 2 Pending, 3 Rejected. -->
         <Style TargetType="ContentControl" x:Key="ApprovalPill" BasedOn="{StaticResource StatusPill}">
             <Style.Triggers>
@@ -122,11 +96,6 @@
             <Setter Property="Margin" Value="16,14" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-
-        <!-- A privilege column: its depth as a pill. -->
-        <DataTemplate x:Key="DepthCell">
-            <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding}" Content="{Binding Converter={StaticResource DepthShort}}" />
-        </DataTemplate>
     </Window.Resources>
 
     <Border Style="{StaticResource WindowBody}">
@@ -622,15 +591,7 @@
                                         <DockPanel Grid.Row="1" Margin="16,0,16,10"
                                                    Visibility="{Binding IsPrivilegesView, Converter={StaticResource BoolToVis}}">
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="Reach" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.User}" Content="User" Margin="0,0,4,0"
-                                                                ToolTip="Records the user owns" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.BusinessUnit}" Content="BU" Margin="0,0,4,0"
-                                                                ToolTip="Records in the user's business unit" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.ParentChild}" Content="Parent" Margin="0,0,4,0"
-                                                                ToolTip="Records in the user's business unit and the units beneath it" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.Organization}" Content="Org"
-                                                                ToolTip="Every record in the organization" />
+                                                <ContentControl Style="{StaticResource ReachKey}" />
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBox Width="200" Height="28" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Table"
