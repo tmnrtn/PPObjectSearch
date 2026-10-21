@@ -62,12 +62,12 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- Configuration · Save · Options · More, then source → target, then Compare. -->
                 <ComboBox Grid.Column="0" MinWidth="220" MaxWidth="300" Height="32" Padding="10,0"
                           FontWeight="SemiBold"
                           core:Ui.InlineLabel="Configuration"
@@ -99,7 +99,7 @@
                     </StackPanel>
                 </Button>
 
-                <Button AutomationProperties.Name="More" Grid.Column="2" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
+                <Button AutomationProperties.Name="More" Grid.Column="3" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
                         FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE712;"
                         ToolTip="More" core:Ui.OpensMenu="True">
                     <Button.ContextMenu>
@@ -112,31 +112,57 @@
                     </Button.ContextMenu>
                 </Button>
 
-                <Rectangle Grid.Column="3" Style="{StaticResource VDivider}" Margin="12,0" />
+                <!-- Saved with the configuration, so kept beside Save rather than on the bar. -->
+                <Grid Grid.Column="2" Margin="6,0,0,0">
+                    <ToggleButton x:Name="OptionsToggle" Height="32" Padding="10,0"
+                                  IsHitTestVisible="{Binding IsOpen, ElementName=OptionsPopup, Converter={StaticResource NotBool}}"
+                                  ToolTip="How rows are matched and how many are read - saved with the configuration">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Options" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="8,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <Popup x:Name="OptionsPopup" PlacementTarget="{Binding ElementName=OptionsToggle}" Placement="Bottom"
+                           IsOpen="{Binding IsChecked, ElementName=OptionsToggle}" StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="None">
+                        <Grid Margin="0,4,10,10">
+                            <Border Width="320" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                    BorderThickness="1" CornerRadius="6" Padding="14,12">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                                </Border.Effect>
+                                <StackPanel>
+                                    <CheckBox Content="Match lookups by name" IsChecked="{Binding MatchLookupsByName}" />
+                                    <TextBlock Text="Compare a lookup on the label it renders rather than the id behind it. Ids only agree where the target row was deployed."
+                                               Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="22,2,0,12" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Row cap" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                                        <TextBox Text="{Binding MaxRowsPerEntity, UpdateSourceTrigger=LostFocus}" Width="70" Height="28" Margin="8,0,0,0"
+                                                 AutomationProperties.Name="Row cap" />
+                                    </StackPanel>
+                                    <TextBlock Text="Most rows read per table per environment. A table that hits the cap is reported as partial."
+                                               Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Popup>
+                </Grid>
 
-                <ComboBox Grid.Column="4" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
+                <Rectangle Grid.Column="4" Style="{StaticResource VDivider}" Margin="12,0" />
+
+                <ComboBox Grid.Column="5" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
                           core:Ui.InlineLabel="Source"
                           ItemsSource="{Binding Sessions}" SelectedItem="{Binding Source}" />
 
-                <TextBlock Grid.Column="5" Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="11"
+                <TextBlock Grid.Column="6" Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="11"
                            Foreground="{DynamicResource Muted}" Margin="8,0" />
 
-                <ComboBox Grid.Column="6" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
+                <ComboBox Grid.Column="7" Style="{StaticResource EnvPicker}" Width="210" ItemTemplate="{StaticResource EnvironmentItemCompact}"
                           core:Ui.InlineLabel="Target"
                           ItemsSource="{Binding Sessions}" SelectedItem="{Binding Target}" />
 
-                <CheckBox Grid.Column="8" Content="Match lookups by name" Margin="16,0,0,0"
-                          VerticalAlignment="Center" IsChecked="{Binding MatchLookupsByName}"
-                          ToolTip="Compare a lookup on the label it renders rather than the id behind it. Ids only agree where the target row was deployed." />
-
-                <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                    <TextBlock Text="Row cap" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
-                    <TextBox Text="{Binding MaxRowsPerEntity, UpdateSourceTrigger=LostFocus}"
-                             Width="58" Height="32" Margin="8,0,0,0"
-                             ToolTip="Most rows read per table per environment. A table that hits the cap is reported as partial." />
-                </StackPanel>
-
-                <Grid Grid.Column="10" Margin="16,0,0,0">
+                <Grid Grid.Column="9" Margin="16,0,0,0">
                     <Button Style="{StaticResource PrimaryButton}" Content="Compare" Height="32" Padding="16,0"
                             Command="{Binding CompareCommand}"
                             Visibility="{Binding IsIdle, Converter={StaticResource BoolToVis}}" />
@@ -379,8 +405,14 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <DataGridTextColumn Header="Table" Binding="{Binding EntityLogicalName}" Width="130"
-                                                ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Table" Binding="{Binding EntityDisplayName}" Width="130"
+                                                SortMemberPath="EntityDisplayName">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
+                                        <Setter Property="ToolTip" Value="{Binding EntityLogicalName}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="140"
                                                 ElementStyle="{StaticResource CellMono}" />
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" MinWidth="120"

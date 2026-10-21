@@ -78,6 +78,9 @@ public sealed class RecordComparison
 
     public string EntityLabel => Plan.EntityLabel;
     public string EntityLogicalName => Plan.Entity.LogicalName;
+
+    /// <summary>The table as a person knows it; the logical name is its tooltip.</summary>
+    public string EntityDisplayName => string.IsNullOrWhiteSpace(Plan.Entity.DisplayName) ? Plan.Entity.LogicalName : Plan.Entity.DisplayName;
     public string KeyLabel => Plan.KeyLabel;
 
     /// <summary>The primary name value, which is what a person recognises the row by.</summary>
