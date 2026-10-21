@@ -416,9 +416,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
     public string ReconcileLabel => SelectedRows.Count switch
     {
-        0 => "Reconcile...",
-        1 => "Reconcile 1 row...",
-        var n => $"Reconcile {n:N0} rows..."
+        0 => "Reconcile…",
+        1 => "Reconcile 1 row…",
+        var n => $"Reconcile {n:N0} rows…"
     };
 
     public string SelectionSummary

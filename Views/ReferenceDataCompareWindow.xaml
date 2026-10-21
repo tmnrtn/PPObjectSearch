@@ -562,10 +562,14 @@
 
                     <Button Grid.Column="1" Content="Export CSV…" Height="30" Margin="12,0,0,0"
                             Command="{Binding ExportCommand}" />
-                    <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Height="30" Margin="8,0,0,0"
-                            Content="{Binding ReconcileLabel}"
-                            Command="{Binding ReconcileCommand}"
-                            ToolTip="Write the selected rows from the source into the target. Nothing is written until you confirm, and production environments are refused unless allowlisted in settings.json." />
+                    <!-- The window's one write, marked as one. -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource WritesTag}" Margin="4,0,8,0" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource PrimaryButton}" Height="30"
+                                Content="{Binding ReconcileLabel}"
+                                Command="{Binding ReconcileCommand}"
+                                ToolTip="Opens a preview. Nothing is written until you confirm." />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>
