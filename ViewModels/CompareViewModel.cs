@@ -119,6 +119,26 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
     public int CountOnlyRight { get => _countOnlyRight; private set => SetProperty(ref _countOnlyRight, value); }
     public int CountBoth { get => _countBoth; private set => SetProperty(ref _countBoth, value); }
 
+    private int _countModifiedDiffers, _countSameModified;
+    public int CountModifiedDiffers { get => _countModifiedDiffers; private set => SetProperty(ref _countModifiedDiffers, value); }
+    public int CountSameModified { get => _countSameModified; private set => SetProperty(ref _countSameModified, value); }
+
+    private RelayCommand? _openRowCommand;
+    /// <summary>A double-click: the Diff where both sides have the component, else its details in the side that does.</summary>
+    public RelayCommand OpenRowCommand => _openRowCommand ??= new RelayCommand(p =>
+    {
+        if (p is not CompareRow row) return;
+
+        if (row.ExistsOnBothSides)
+        {
+            if (CompareDefinitionCommand.CanExecute(row)) CompareDefinitionCommand.Execute(row);
+            return;
+        }
+
+        if (row.Left is { } left) ComparedLeft?.OpenDetails(left);
+        else if (row.Right is { } right) ComparedRight?.OpenDetails(right);
+    });
+
     private string _resultSummary = string.Empty;
     /// <summary>"47 differences · 2,904 in both".</summary>
     public string ResultSummary
@@ -330,6 +350,8 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
         CountOnlyLeft = narrowed.Count(r => r.Status == CompareStatus.OnlyInLeft);
         CountOnlyRight = narrowed.Count(r => r.Status == CompareStatus.OnlyInRight);
         CountBoth = narrowed.Count(r => r.Status == CompareStatus.Same);
+        CountModifiedDiffers = narrowed.Count(r => r.ModifiedDiffers);
+        CountSameModified = CountBoth - CountModifiedDiffers;
 
         OnPropertyChanged(nameof(IsListEmpty));
         OnPropertyChanged(nameof(CanClearFilters));
@@ -388,6 +410,8 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
             CompareStatusFilter.OnlyLeft => row.Status == CompareStatus.OnlyInLeft,
             CompareStatusFilter.OnlyRight => row.Status == CompareStatus.OnlyInRight,
             CompareStatusFilter.Both => row.Status == CompareStatus.Same,
+            CompareStatusFilter.ModifiedDiffers => row.ModifiedDiffers,
+            CompareStatusFilter.SameModified => row.Status == CompareStatus.Same && !row.ModifiedDiffers,
             _ => true
         };
 

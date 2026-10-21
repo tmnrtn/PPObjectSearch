@@ -111,6 +111,14 @@ public class CompareViewModelTests
         vm.StatusFilter = CompareStatusFilter.Both;
         Assert.Equal(OnBothSides.Order(StringComparer.Ordinal), Shown(vm).Order(StringComparer.Ordinal));
 
+        // In both splits by the modified dates already loaded.
+        Assert.Equal(vm.CountBoth, vm.CountModifiedDiffers + vm.CountSameModified);
+        vm.StatusFilter = CompareStatusFilter.ModifiedDiffers;
+        Assert.Equal(vm.CountModifiedDiffers, vm.RowsView.Count);
+        Assert.All(vm.RowsView.Cast<CompareRow>(), r => Assert.True(r.ModifiedDiffers));
+        vm.StatusFilter = CompareStatusFilter.SameModified;
+        Assert.Equal(vm.CountSameModified, vm.RowsView.Count);
+
         vm.StatusFilter = CompareStatusFilter.All;
         Assert.Equal(4, vm.RowsView.Count);
     }

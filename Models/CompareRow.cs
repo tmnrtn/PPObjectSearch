@@ -17,7 +17,13 @@ public enum CompareStatusFilter
     All,
     OnlyLeft,
     OnlyRight,
-    Both
+    Both,
+
+    /// <summary>In both, last modified at different times: the ones worth a Diff.</summary>
+    ModifiedDiffers,
+
+    /// <summary>In both, last modified at the same time.</summary>
+    SameModified
 }
 
 public sealed class CompareRow
@@ -42,6 +48,9 @@ public sealed class CompareRow
 
     /// <summary>Only a component present on both sides has two definitions to compare.</summary>
     public bool ExistsOnBothSides => Left is not null && Right is not null;
+
+    /// <summary>In both, but changed at different times - from the dates already loaded, so no read is needed.</summary>
+    public bool ModifiedDiffers => Status == CompareStatus.Same && LeftModified != RightModified;
 
     public string StatusLabel => Status switch
     {

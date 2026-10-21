@@ -70,10 +70,15 @@
                         <RadioButton Style="{StaticResource SegmentedToggle}" Content="Only in right" GroupName="CompareStatus"
                                      core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountOnlyRight, StringFormat=N0}"
                                      IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=OnlyRight}" />
-                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="In both" GroupName="CompareStatus"
-                                     core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountBoth, StringFormat=N0}"
-                                     ToolTip="Components present in both environments. Their definitions may still differ - use Diff on a row to see."
-                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Both}" />
+                        <!-- In both, split by the modified dates already loaded: the ones worth a Diff first. -->
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Modified differs" GroupName="CompareStatus"
+                                     core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountModifiedDiffers, StringFormat=N0}"
+                                     ToolTip="In both environments, last modified at different times. Double-click a row to Diff it."
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDiffers}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Same modified" GroupName="CompareStatus"
+                                     core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountSameModified, StringFormat=N0}"
+                                     ToolTip="In both environments, last modified at the same time"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=SameModified}" />
                     </StackPanel>
                 </Border>
 
@@ -93,11 +98,16 @@
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
             </Grid>
 
-            <DataGrid Grid.Row="2"
+            <DataGrid Grid.Row="2" x:Name="RowsGrid"
                       ItemsSource="{Binding RowsView}"
                       SelectedItem="{Binding SelectedRow}"
                       IsReadOnly="True"
                       BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                <!-- Double-click: Diff where both sides have it, else open its details. -->
+                <DataGrid.InputBindings>
+                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenRowCommand}"
+                                  CommandParameter="{Binding SelectedItem, ElementName=RowsGrid}" />
+                </DataGrid.InputBindings>
 
                 <DataGrid.Columns>
                     <DataGridTemplateColumn Header="Status" Width="124" SortMemberPath="Status"
