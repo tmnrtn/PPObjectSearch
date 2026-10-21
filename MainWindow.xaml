@@ -27,10 +27,11 @@
 
     <Window.Resources>
         <!-- A group of the selected environment's tools: 10 SemiBold Faint. -->
+        <!-- Every sidebar heading. Muted, not Faint: at 10px Faint is about 3:1 on the sidebar. -->
         <Style TargetType="TextBlock" x:Key="SidebarGroup">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
             <Setter Property="Margin" Value="8,6,8,2" />
         </Style>
 
@@ -58,8 +59,7 @@
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0" Margin="8,8,0,6">
-                <TextBlock Text="Environments" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                <TextBlock Text="ENVIRONMENTS" Style="{StaticResource SidebarGroup}" Margin="0" VerticalAlignment="Center" />
                 <Button AutomationProperties.Name="Open another environment in a new tab (Ctrl+T)" HorizontalAlignment="Right" Style="{StaticResource GhostButton}"
                         Width="22" Height="22" Padding="0" FontFamily="{StaticResource IconFont}" FontSize="11"
                         Foreground="{DynamicResource Muted}" Content="&#xE710;"
@@ -274,8 +274,7 @@
                         </Button>
                     </StackPanel>
 
-                    <TextBlock Text="Across environments" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,12,8,2" />
+                    <TextBlock Text="ACROSS ENVIRONMENTS" Style="{StaticResource SidebarGroup}" Margin="8,12,8,2" />
 
                     <!-- Everything not listed here - import log, dependencies, documentation, closing windows - is in the palette. -->
                     <Button Height="28" Margin="0,2" Padding="8,0" HorizontalContentAlignment="Stretch"
