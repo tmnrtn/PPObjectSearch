@@ -302,29 +302,7 @@ public sealed partial class DataverseClient
         {
             try
             {
-                if (group.Key == 1)
-                {
-                    foreach (var (metadataId, logicalName, display) in await TableNamesAsync(ct).ConfigureAwait(false))
-                    {
-                        names[metadataId] = (TableKind, display ?? logicalName, logicalName);
-                    }
-                    continue;
-                }
-
-                if (!AppComponentSources.TryGetValue(group.Key, out var source)) continue;
-
-                foreach (var chunk in group.Select(c => c.Item2).Distinct().Chunk(50))
-                {
-                    var select = source.Table is null ? $"{source.Id},{source.Name}" : $"{source.Id},{source.Name},{source.Table}";
-                    if (group.Key == 60) select += ",type";
-
-                    var rows = await ReadRowsAsync(
-                        EnvironmentUrl + ApiPath + $"{source.Set}?$select={select}&$filter=" + InFilter(source.Id, chunk.Select(c => c.ToString())),
-                        row => AppComponentName(row, group.Key, source),
-                        ct).ConfigureAwait(false);
-
-                    foreach (var (rowId, kind, name, table) in rows) names[rowId] = (kind, name, table == "none" ? null : table);
-                }
+                await ReadAppComponentNamesAsync(group.Key, group.Select(c => c.Item2), names, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -350,6 +328,35 @@ public sealed partial class DataverseClient
                 .ThenBy(r => r[1], StringComparer.CurrentCultureIgnoreCase)
                 .ToList()
         });
+    }
+
+    /// <summary>The names of one type's app components, into <paramref name="names"/> by id; a type with nowhere to read them from is skipped.</summary>
+    private async Task ReadAppComponentNamesAsync(
+        int type, IEnumerable<Guid> ids, Dictionary<Guid, (string Kind, string Name, string? Table)> names, CancellationToken ct)
+    {
+        if (type == 1)
+        {
+            foreach (var (metadataId, logicalName, display) in await TableNamesAsync(ct).ConfigureAwait(false))
+            {
+                names[metadataId] = (TableKind, display ?? logicalName, logicalName);
+            }
+            return;
+        }
+
+        if (!AppComponentSources.TryGetValue(type, out var source)) return;
+
+        var select = source.Table is null ? $"{source.Id},{source.Name}" : $"{source.Id},{source.Name},{source.Table}";
+        if (type == 60) select += ",type";
+
+        foreach (var chunk in ids.Distinct().Chunk(50))
+        {
+            var rows = await ReadRowsAsync(
+                EnvironmentUrl + ApiPath + $"{source.Set}?$select={select}&$filter=" + InFilter(source.Id, chunk.Select(c => c.ToString())),
+                row => AppComponentName(row, type, source),
+                ct).ConfigureAwait(false);
+
+            foreach (var (rowId, kind, name, table) in rows) names[rowId] = (kind, name, table == "none" ? null : table);
+        }
     }
 
     /// <summary>One component's id, kind, name and table from a row of its type's names; null without an id.</summary>
@@ -525,42 +532,10 @@ public sealed partial class DataverseClient
         var found = new List<string>();
         if (string.IsNullOrWhiteSpace(configuration)) return found;
 
-        void Walk(JsonElement element, int depth)
-        {
-            if (depth > 8) return;
-
-            if (element.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var property in element.EnumerateObject())
-                {
-                    if (property.Name.Equals("channels", StringComparison.OrdinalIgnoreCase) &&
-                        property.Value.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var channel in property.Value.EnumerateArray())
-                        {
-                            var name = channel.ValueKind == JsonValueKind.String
-                                ? channel.GetString()
-                                : JsonHelper.GetString(channel, "channelId") ?? JsonHelper.GetString(channel, "id") ??
-                                  JsonHelper.GetString(channel, "name");
-                            if (!string.IsNullOrWhiteSpace(name) && !found.Contains(name, StringComparer.OrdinalIgnoreCase)) found.Add(name);
-                        }
-                    }
-                    else
-                    {
-                        Walk(property.Value, depth + 1);
-                    }
-                }
-            }
-            else if (element.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in element.EnumerateArray()) Walk(item, depth + 1);
-            }
-        }
-
         try
         {
             using var doc = JsonDocument.Parse(configuration);
-            Walk(doc.RootElement, 0);
+            WalkForChannels(doc.RootElement, 0, found);
         }
         catch (JsonException)
         {
@@ -568,6 +543,43 @@ public sealed partial class DataverseClient
         }
 
         return found;
+    }
+
+    private static void WalkForChannels(JsonElement element, int depth, List<string> found)
+    {
+        if (depth > 8) return;
+
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray()) WalkForChannels(item, depth + 1, found);
+            return;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object) return;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals("channels", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.Array)
+            {
+                AddChannels(property.Value, found);
+            }
+            else
+            {
+                WalkForChannels(property.Value, depth + 1, found);
+            }
+        }
+    }
+
+    /// <summary>A "channels" list's names, each once: a plain string, or an object's channel id, id or name.</summary>
+    private static void AddChannels(JsonElement channels, List<string> found)
+    {
+        foreach (var channel in channels.EnumerateArray())
+        {
+            var name = channel.ValueKind == JsonValueKind.String
+                ? channel.GetString()
+                : JsonHelper.GetString(channel, "channelId") ?? JsonHelper.GetString(channel, "id") ?? JsonHelper.GetString(channel, "name");
+            if (!string.IsNullOrWhiteSpace(name) && !found.Contains(name, StringComparer.OrdinalIgnoreCase)) found.Add(name);
+        }
     }
 
     /// <summary>The cloud flows an agent's topics and actions call, through their flow relationship.</summary>
@@ -583,18 +595,7 @@ public sealed partial class DataverseClient
             while (url.Length > 0)
             {
                 using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-                if (doc.RootElement.TryGetProperty(ValueProperty, out var value))
-                {
-                    foreach (var component in value.EnumerateArray())
-                    {
-                        if (!component.TryGetProperty("botcomponent_workflow", out var flows) || flows.ValueKind != JsonValueKind.Array) continue;
-                        foreach (var flow in flows.EnumerateArray())
-                        {
-                            rows.Add([JsonHelper.GetString(flow, "name"), JsonHelper.GetString(component, "name")]);
-                        }
-                    }
-                }
-
+                AddCalledFlows(doc.RootElement, rows);
                 url = JsonHelper.GetString(doc.RootElement, "@odata.nextLink") ?? string.Empty;
             }
 
@@ -609,6 +610,21 @@ public sealed partial class DataverseClient
         catch (Exception ex)
         {
             overview.Problems.Add("flows called: " + ex.Message);
+        }
+    }
+
+    /// <summary>A row per flow a page's components call: the flow, then the component calling it.</summary>
+    private static void AddCalledFlows(JsonElement page, List<IReadOnlyList<string?>> rows)
+    {
+        if (!page.TryGetProperty(ValueProperty, out var value)) return;
+
+        foreach (var component in value.EnumerateArray())
+        {
+            if (!component.TryGetProperty("botcomponent_workflow", out var flows) || flows.ValueKind != JsonValueKind.Array) continue;
+            foreach (var flow in flows.EnumerateArray())
+            {
+                rows.Add([JsonHelper.GetString(flow, "name"), JsonHelper.GetString(component, "name")]);
+            }
         }
     }
 

@@ -88,22 +88,7 @@ public sealed class PowerAppsClient : IDisposable
 
             if (doc.RootElement.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Array)
             {
-                foreach (var row in value.EnumerateArray())
-                {
-                    if (!row.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Object) continue;
-
-                    var principal = properties.TryGetProperty("principal", out var p) ? p : default;
-                    var type = JsonHelper.GetString(principal, "type") ?? "User";
-
-                    permissions.Add(new AppPermission(
-                        type.Equals("Tenant", StringComparison.OrdinalIgnoreCase)
-                            ? "Everyone in the organisation"
-                            : JsonHelper.GetString(principal, "displayName") ?? JsonHelper.GetString(principal, "email")
-                              ?? JsonHelper.GetString(principal, "id") ?? "(unknown)",
-                        JsonHelper.GetString(principal, "email"),
-                        type,
-                        RoleLabel(JsonHelper.GetString(properties, "roleName"))));
-                }
+                permissions.AddRange(value.EnumerateArray().Select(PermissionOf).OfType<AppPermission>());
             }
 
             next = Links.SameHostNext(JsonHelper.GetString(doc.RootElement, "nextLink"), next,
@@ -114,6 +99,21 @@ public sealed class PowerAppsClient : IDisposable
             .OrderBy(p => p.Role switch { "Owner" => 0, "Co-owner" => 1, _ => 2 })
             .ThenBy(p => p.Principal, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>One row of an app's permissions: who, and as what; null for a row without properties.</summary>
+    private static AppPermission? PermissionOf(JsonElement row)
+    {
+        if (!row.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Object) return null;
+
+        var principal = properties.TryGetProperty("principal", out var p) ? p : default;
+        var type = JsonHelper.GetString(principal, "type") ?? "User";
+        var who = type.Equals("Tenant", StringComparison.OrdinalIgnoreCase)
+            ? "Everyone in the organisation"
+            : JsonHelper.GetString(principal, "displayName") ?? JsonHelper.GetString(principal, "email")
+              ?? JsonHelper.GetString(principal, "id") ?? "(unknown)";
+
+        return new AppPermission(who, JsonHelper.GetString(principal, "email"), type, RoleLabel(JsonHelper.GetString(properties, "roleName")));
     }
 
     internal static string RoleLabel(string? role) => role switch

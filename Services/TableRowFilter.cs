@@ -101,103 +101,107 @@ public static class TableRowFilter
         var name = column.SelectName;
         var kind = KindOf(column);
 
-        if (!OperatorsFor(column).Contains(op))
-        {
-            error = $"{Name(column)} cannot be compared with \"{Label(op)}\".";
-            return null;
-        }
+        if (!OperatorsFor(column).Contains(op)) return Invalid($"{Name(column)} cannot be compared with \"{Label(op)}\".", out error);
 
         if (op == TableFilterOperator.IsEmpty) return $"{name} eq null";
         if (op == TableFilterOperator.IsNotEmpty) return $"{name} ne null";
 
         var text = value?.Trim() ?? string.Empty;
-        if (text.Length == 0)
+        if (text.Length == 0) return Invalid($"Type {ValueHint(column)} to compare {Name(column)} with.", out error);
+
+        return kind switch
         {
-            error = $"Type {ValueHint(column)} to compare {Name(column)} with.";
-            return null;
-        }
+            Kind.Text => TextFilter(name, op, text),
+            Kind.Lookup when NeedsLookupNames(column, op, text) => LookupNameFilter(column, op, text, lookupNames, out error),
+            Kind.Lookup or Kind.Guid => IdFilter(name, op, text, out error),
+            Kind.Number or Kind.Choice => NumberFilter(column, kind, op, text, out error),
+            Kind.MultiChoice => MultiChoiceFilter(name, text, out error),
+            Kind.Boolean => BooleanFilter(name, op, text, out error),
+            Kind.Date => DateFilter(name, op, text, out error),
+            _ => Invalid($"{Name(column)} cannot be filtered.", out error)
+        };
+    }
 
-        switch (kind)
-        {
-            case Kind.Text:
-                var quoted = Quote(text);
-                return op switch
-                {
-                    TableFilterOperator.Contains => $"contains({name},{quoted})",
-                    TableFilterOperator.BeginsWith => $"startswith({name},{quoted})",
-                    TableFilterOperator.NotEquals => $"{name} ne {quoted}",
-                    _ => $"{name} eq {quoted}"
-                };
-
-            case Kind.Lookup when NeedsLookupNames(column, op, text):
-                return LookupNameFilter(column, op, text, lookupNames, out error);
-
-            case Kind.Lookup:
-            case Kind.Guid:
-                if (!Guid.TryParse(text, out var id))
-                {
-                    error = $"\"{text}\" is not a row id (GUID).";
-                    return null;
-                }
-                return $"{name} {Comparison(op)} {id}";
-
-            case Kind.Number:
-            case Kind.Choice:
-                if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var number) &&
-                    !decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out number))
-                {
-                    error = $"\"{text}\" is not {ValueHint(column)}.";
-                    return null;
-                }
-                if (kind == Kind.Choice && number != decimal.Truncate(number))
-                {
-                    error = $"\"{text}\" is not a choice's number.";
-                    return null;
-                }
-                var literal = number.ToString(CultureInfo.InvariantCulture);
-                return $"{name} {Comparison(op)} {literal}";
-
-            case Kind.MultiChoice:
-                if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var option))
-                {
-                    error = $"\"{text}\" is not a choice's number.";
-                    return null;
-                }
-                return $"Microsoft.Dynamics.CRM.ContainValues(PropertyName='{name}',PropertyValues=['{option}'])";
-
-            case Kind.Boolean:
-                bool? flag = text.ToLowerInvariant() switch
-                {
-                    "yes" or "true" or "1" => true,
-                    "no" or "false" or "0" => false,
-                    _ => null
-                };
-                if (flag is null)
-                {
-                    error = $"\"{text}\" is not yes or no.";
-                    return null;
-                }
-                return $"{name} {Comparison(op)} {(flag.Value ? "true" : "false")}";
-
-            case Kind.Date:
-                if (!DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
-                    !DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.None, out date))
-                {
-                    error = $"\"{text}\" is not a date.";
-                    return null;
-                }
-                // The query functions compare in the signed-in user's time zone, as the app's own views do.
-                var function = op switch
-                {
-                    TableFilterOperator.OnOrBefore => "OnOrBefore",
-                    TableFilterOperator.OnOrAfter => "OnOrAfter",
-                    _ => "On"
-                };
-                return $"Microsoft.Dynamics.CRM.{function}(PropertyName='{name}',PropertyValue='{date:yyyy-MM-dd}')";
-        }
-
-        error = $"{Name(column)} cannot be filtered.";
+    /// <summary>No filter, and why: the value's problem, said to the user.</summary>
+    private static string? Invalid(string message, out string? error)
+    {
+        error = message;
         return null;
+    }
+
+    private static string TextFilter(string name, TableFilterOperator op, string text)
+    {
+        var quoted = Quote(text);
+        return op switch
+        {
+            TableFilterOperator.Contains => $"contains({name},{quoted})",
+            TableFilterOperator.BeginsWith => $"startswith({name},{quoted})",
+            TableFilterOperator.NotEquals => $"{name} ne {quoted}",
+            _ => $"{name} eq {quoted}"
+        };
+    }
+
+    private static string? IdFilter(string name, TableFilterOperator op, string text, out string? error)
+    {
+        error = null;
+        return Guid.TryParse(text, out var id)
+            ? $"{name} {Comparison(op)} {id}"
+            : Invalid($"\"{text}\" is not a row id (GUID).", out error);
+    }
+
+    private static string? NumberFilter(EntityColumn column, Kind kind, TableFilterOperator op, string text, out string? error)
+    {
+        error = null;
+        if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var number) &&
+            !decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out number))
+        {
+            return Invalid($"\"{text}\" is not {ValueHint(column)}.", out error);
+        }
+        if (kind == Kind.Choice && number != decimal.Truncate(number))
+        {
+            return Invalid($"\"{text}\" is not a choice's number.", out error);
+        }
+        return $"{column.SelectName} {Comparison(op)} {number.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private static string? MultiChoiceFilter(string name, string text, out string? error)
+    {
+        error = null;
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var option)
+            ? $"Microsoft.Dynamics.CRM.ContainValues(PropertyName='{name}',PropertyValues=['{option}'])"
+            : Invalid($"\"{text}\" is not a choice's number.", out error);
+    }
+
+    private static string? BooleanFilter(string name, TableFilterOperator op, string text, out string? error)
+    {
+        error = null;
+        bool? flag = text.ToLowerInvariant() switch
+        {
+            "yes" or "true" or "1" => true,
+            "no" or "false" or "0" => false,
+            _ => null
+        };
+        if (flag is not { } yes) return Invalid($"\"{text}\" is not yes or no.", out error);
+        return $"{name} {Comparison(op)} {(yes ? "true" : "false")}";
+    }
+
+    private static string? DateFilter(string name, TableFilterOperator op, string text, out string? error)
+    {
+        error = null;
+        if (!DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
+            !DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.None, out date))
+        {
+            return Invalid($"\"{text}\" is not a date.", out error);
+        }
+
+        // The query functions compare in the signed-in user's time zone, as the app's own views do.
+        var function = op switch
+        {
+            TableFilterOperator.OnOrBefore => "OnOrBefore",
+            TableFilterOperator.OnOrAfter => "OnOrAfter",
+            _ => "On"
+        };
+        return $"Microsoft.Dynamics.CRM.{function}(PropertyName='{name}',PropertyValue='{date:yyyy-MM-dd}')";
     }
 
     /// <summary>

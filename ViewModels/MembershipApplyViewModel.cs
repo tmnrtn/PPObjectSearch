@@ -294,19 +294,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
                 done++;
                 Status = $"Undoing ({done}/{rows.Count}) - {(row.IsRemove ? "adding back" : "removing")} {row.Name}...";
 
-                try
-                {
-                    await undoEach(row.Change, CancellationToken.None);
-                    row.Result = row.IsRemove ? "Added back" : "Removed again";
-                    Record(row.IsRemove ? "Undo remove" : "Undo add", row, true, row.Result);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    failed++;
-                    row.Succeeded = false;
-                    row.Result = "Undo failed - " + ex.Message;
-                    Record(row.IsRemove ? "Undo remove" : "Undo add", row, false, ex.Message);
-                }
+                if (!await UndoOneAsync(undoEach, row)) failed++;
             }
 
             _hasUndone = true;
@@ -318,6 +306,26 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
         {
             IsRunning = false;
             RaiseUndoState();
+        }
+    }
+
+    /// <summary>Reverses one change, saying how it went on its row and in the run log; false when it could not be.</summary>
+    private async Task<bool> UndoOneAsync(Func<MembershipChange, CancellationToken, Task> undoEach, MembershipChangeRow row)
+    {
+        var action = row.IsRemove ? "Undo remove" : "Undo add";
+        try
+        {
+            await undoEach(row.Change, CancellationToken.None);
+            row.Result = row.IsRemove ? "Added back" : "Removed again";
+            Record(action, row, true, row.Result);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            row.Succeeded = false;
+            row.Result = "Undo failed - " + ex.Message;
+            Record(action, row, false, ex.Message);
+            return false;
         }
     }
 
