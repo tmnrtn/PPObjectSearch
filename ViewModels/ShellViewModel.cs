@@ -35,6 +35,7 @@ public sealed class ShellViewModel : ObservableObject
         CompareCommand = new RelayCommand(_ => OpenCompare());
         CompareDataCommand = new RelayCommand(_ => OpenDataCompare());
         ReadinessCommand = new RelayCommand(p => OpenReadiness(p as EnvironmentSessionViewModel));
+        TableSettingsCommand = new RelayCommand(_ => OpenTableSettings());
         CommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
@@ -120,6 +121,9 @@ public sealed class ShellViewModel : ObservableObject
     public RelayCommand CompareCommand { get; }
     public RelayCommand CompareDataCommand { get; }
     public RelayCommand ReadinessCommand { get; }
+
+    /// <summary>Ctrl+Shift+A: audit, change tracking, Synapse Link and search, across environments.</summary>
+    public RelayCommand TableSettingsCommand { get; }
 
     /// <summary>Ctrl+K: every command, environment and object, by typing.</summary>
     public RelayCommand CommandPaletteCommand { get; }
@@ -217,6 +221,21 @@ public sealed class ShellViewModel : ObservableObject
         new Views.ReadinessWindow
         {
             DataContext = new ReadinessViewModel(Sessions, source),
+            Owner = Application.Current.MainWindow
+        }.Show();
+    }
+
+    /// <summary>
+    /// One environment is enough - its audit gaps, link state and search index are worth seeing on
+    /// their own - though the point is usually to compare several.
+    /// </summary>
+    private void OpenTableSettings()
+    {
+        if (!RequireConnectedTabs(1, "Connect at least one environment first.")) return;
+
+        new Views.TableSettingsWindow
+        {
+            DataContext = new TableSettingsViewModel(Sessions, _settings, SelectedSession, s => s.Save(_settingsPath)),
             Owner = Application.Current.MainWindow
         }.Show();
     }

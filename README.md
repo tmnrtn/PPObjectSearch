@@ -88,6 +88,9 @@ straight into the maker portal.
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
   environments are refused unless explicitly allowlisted, and deleting needs its own confirmation.
+- **Table settings** — audit, change tracking, Synapse Link and Dataverse search, table by table
+  across environments, with column-level audit gaps, link sync state and the search index. See
+  [Table settings](#table-settings).
 - **Environment admin** (in the sidebar, under the selected environment) — read-only views of
   users, security roles, mailboxes and queues. See [Environment admin](#environment-admin).
 - **Admin tools** (in the sidebar, under the selected environment) — sync an Entra group team with its Entra (RBAC)
@@ -679,6 +682,43 @@ solution, and the environment it is going to. Both are only read. It reports:
 Each finding is a *Blocker*, *Warning* or *Info*; double-click one to open the component's
 details. An area that could not be checked is listed as such rather than passing silently.
 **Export Markdown…** saves the report for a pull request or change ticket.
+
+## Table settings
+
+**Table settings** (`Ctrl+Shift+A`, in the sidebar under *Across environments*) lays out, table by
+table, where each environment sends its data beyond Dataverse: **audit**, **change tracking**,
+**Synapse Link** (Fabric links included - they are link profiles too) and **Dataverse search**. It
+reads every environment ticked across the top - one is enough, several is the point - and writes
+nothing.
+
+**Which tables.** *In solutions* takes the tables of the solutions you tick, as one environment
+(**From**) holds them; that one list is then checked in every environment, so a table missing
+from one shows as missing rather than quietly dropping out. *Every custom table* and *Every table*
+need no solution. The choice is remembered.
+
+Each view has a column per environment, in sidebar order, and a **Difference** column naming the
+exception - "Off in Prod; missing from UAT". **Findings only** keeps just the rows that differ or
+need a look; the filter box narrows every view; **Export CSV…** saves the view on screen.
+
+- **Tables** - **Show** picks the setting: *Audit*, *Change tracking*, *Synapse Link*,
+  *Dataverse search*, or *All settings* packed into one cell (`A C L S`, a dot where one is off).
+  Grey italics mean a setting that holds but does nothing here (a table audited while the
+  environment's auditing is off); amber means something is wrong - a table linked without change
+  tracking, or switched on for search but not in the index.
+- **Columns** - with **Columns** ticked, column-level audit on every table audited in at least one
+  environment: custom, writable columns only, managed ones included.
+- **Audit gaps** - columns not audited on a table that is: changes going unrecorded.
+- **Synapse Link** - every table in every link profile: the profile, its folder and state, the
+  table's sync state, lake and Dataverse row counts and last sync, and what is wrong with it.
+  **Link folders counted** decides which links count as "linked" in the Tables view - untick a
+  Fabric link's folder (often `cds_workspace`) to compare the Synapse link alone. Remembered too.
+- **Search index** - each environment's Dataverse search index against the tables switched on for
+  search: sync state, last sync and the columns indexed (from the table's Quick Find view).
+- **Environment** - auditing on or off, access and read logging, audit retention, Dataverse search
+  and its index (tables, documents, size), and link profiles.
+
+Anything that could not be read - Synapse Link profiles need read access to them, for one - is
+listed above the views, so its silence is not taken for a pass.
 
 ## Connection references and deployment settings
 

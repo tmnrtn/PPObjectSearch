@@ -21,6 +21,28 @@ public sealed class TabState
     public Dataverse.EnvironmentSku? EnvironmentType { get; set; }
 }
 
+/// <summary>Which tables the table settings review covers.</summary>
+public enum TableScope
+{
+    /// <summary>The tables in chosen solutions, as one environment holds them.</summary>
+    Solutions,
+    CustomTables,
+    AllTables
+}
+
+/// <summary>What the table settings review remembers between runs.</summary>
+public sealed class TableSettingsPreferences
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public TableScope Scope { get; set; } = TableScope.Solutions;
+
+    /// <summary>Unique names of the solutions whose tables are in scope.</summary>
+    public List<string>? Solutions { get; set; }
+
+    /// <summary>Data lake folders whose links do not count as "linked" - a Fabric link beside the Synapse one, say.</summary>
+    public List<string>? IgnoredLinkFolders { get; set; }
+}
+
 /// <summary>
 /// User settings persisted to %LOCALAPPDATA%\PPObjectSearch\settings.json.
 /// Everything is optional - the app works with an environment URL alone.
@@ -90,6 +112,12 @@ public sealed class AppSettings
     /// one environment from the sidebar, and removes it the same way.
     /// </summary>
     public List<string>? AllowProductionWrites { get; set; }
+
+    /// <summary>
+    /// The table settings review's scope - which solutions' tables it covers - and the link folders
+    /// it leaves out, so a check run regularly is set up once.
+    /// </summary>
+    public TableSettingsPreferences? TableSettings { get; set; }
 
     /// <summary>Light, Dark, or System to follow the Windows app theme.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]

@@ -37,7 +37,7 @@ public sealed class CommandPaletteViewModelTests : IDisposable
 
         Assert.Equal(
         [
-            "Search all environments", "Compare objects", "Compare data", "Readiness check", "Close all details windows",
+            "Search all environments", "Compare objects", "Compare data", "Readiness check", "Table settings", "Close all details windows",
             "New tab", "Theme: light", "Theme: dark", "Theme: follow Windows", "Open log folder", "Switch to fabrikam"
         ], Titles(palette));
         Assert.Same(palette.Results[0], palette.Selected);
@@ -65,7 +65,9 @@ public sealed class CommandPaletteViewModelTests : IDisposable
             Query = "settings"
         };
 
-        Assert.Equal(["Open log folder", "Theme: dark", "Theme: follow Windows", "Theme: light"], Titles(palette).Order(StringComparer.Ordinal));
+        // Table settings matches by its title; the rest only by their group.
+        Assert.Equal(["Open log folder", "Table settings", "Theme: dark", "Theme: follow Windows", "Theme: light"],
+            Titles(palette).Order(StringComparer.Ordinal));
     }
 
     [Fact]

@@ -113,6 +113,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Compare objects", Group = across, Shortcut = "Ctrl+D", Command = shell.CompareCommand },
             new() { Title = "Compare data", Group = across, Shortcut = "Ctrl+Shift+D", Command = shell.CompareDataCommand },
             new() { Title = "Readiness check", Group = across, Shortcut = "Ctrl+Shift+R", Command = shell.ReadinessCommand },
+            new() { Title = "Table settings", Group = across, Detail = "audit, Synapse Link, search", Shortcut = "Ctrl+Shift+A", Command = shell.TableSettingsCommand },
             new() { Title = "Close all details windows", Group = "Window", Shortcut = "Ctrl+Shift+W", Command = shell.CloseAllDetailsCommand },
             new() { Title = "New tab", Group = "Window", Shortcut = "Ctrl+T", Command = shell.AddTabCommand },
             new() { Title = "Theme: light", Group = settings, Command = shell.SetThemeCommand, Parameter = "Light" },

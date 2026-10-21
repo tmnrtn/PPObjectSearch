@@ -1,0 +1,356 @@
+<Window x:Class="PPObjectSearch.Views.TableSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:PPObjectSearch.Core"
+        xmlns:vm="clr-namespace:PPObjectSearch.ViewModels"
+        Title="Table settings"
+        Style="{StaticResource AppWindow}"
+        Height="760" Width="1280"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- A Problem text - wraps, with the whole of it on hover. -->
+        <Style TargetType="TextBlock" x:Key="ProblemCell" BasedOn="{StaticResource Cell}">
+            <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="DifferenceCell" BasedOn="{StaticResource ProblemCell}" />
+
+        <!-- A drop-down of check boxes: the solutions in scope, the link folders counted. -->
+        <Style TargetType="MenuItem" x:Key="CheckItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+            <Setter Property="IsCheckable" Value="True" />
+            <Setter Property="StaysOpenOnClick" Value="True" />
+        </Style>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Audit · change tracking · Synapse Link · Dataverse search" FontSize="11"
+                               Foreground="{DynamicResource Muted}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Table settings" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads every chosen environment - nothing is written" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Export CSV…" Margin="6,0,0,0" Command="{Binding ExportCommand}"
+                            ToolTip="The view on screen, as filtered, for Excel" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ============================================================ what to read -->
+            <StackPanel Grid.Row="1" Margin="18,0,18,0">
+                <!-- Environments, in sidebar order - the order the columns come in. -->
+                <WrapPanel>
+                    <TextBlock Text="Environments" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,6" />
+                    <ItemsControl ItemsSource="{Binding Environments}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:EnvironmentChoice">
+                                <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,6"
+                                              IsChecked="{Binding IsSelected}" Content="{Binding Title}"
+                                              AutomationProperties.Name="{Binding Title}"
+                                              ToolTip="Read this environment - its column in every view" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </WrapPanel>
+
+                <WrapPanel>
+                    <ComboBox Width="230" Height="32" Margin="0,0,8,6" Padding="7,0"
+                              core:Ui.InlineLabel="Tables"
+                              AutomationProperties.Name="Which tables"
+                              ItemsSource="{Binding Source={x:Static vm:TableSettingsViewModel.Scopes}}"
+                              SelectedValuePath="Key" DisplayMemberPath="Value" SelectedValue="{Binding Scope}" />
+
+                    <ComboBox Style="{StaticResource EnvPicker}" Width="240" Margin="0,0,8,6"
+                              core:Ui.InlineLabel="From"
+                              AutomationProperties.Name="Environment the solutions are read in"
+                              ToolTip="The environment whose solution membership decides the tables - the others are measured against it"
+                              ItemsSource="{Binding ScopeSessions}" SelectedItem="{Binding ScopeSession}"
+                              Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}" />
+
+                    <Button Height="32" Margin="0,0,8,6" Padding="10,0" MinWidth="200" HorizontalContentAlignment="Left"
+                            core:Ui.OpensMenu="True"
+                            AutomationProperties.Name="Solutions"
+                            ToolTip="The solutions whose tables are covered"
+                            Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Solutions" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding SolutionsLabel}" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="8,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu ItemsSource="{Binding SolutionChoices}" MaxHeight="420">
+                                <ContextMenu.ItemContainerStyle>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource CheckItem}">
+                                        <Setter Property="Header" Value="{Binding Label}" />
+                                        <Setter Property="IsChecked" Value="{Binding IsSelected}" />
+                                    </Style>
+                                </ContextMenu.ItemContainerStyle>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+
+                    <CheckBox Content="Columns" Margin="4,0,14,6" IsChecked="{Binding IncludeColumns}"
+                              ToolTip="Also compare column-level audit on the audited tables - a read per table per environment" />
+
+                    <Button Style="{StaticResource PrimaryButton}" Content="Check" Height="32" Padding="16,0" Margin="0,0,8,6"
+                            Command="{Binding RunCommand}"
+                            ToolTip="Reads every chosen environment - nothing is written" />
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- Anything that could not be read, so its silence is not read as a pass. -->
+            <Border Grid.Row="2" Style="{StaticResource Banner}" Margin="18,2,18,6"
+                    Visibility="{Binding HasProblems, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding Problems}" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- ============================================================ how to show it -->
+            <Grid Grid.Row="3" Margin="18,4,18,8"
+                  Visibility="{Binding HasResults, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox Height="30" Padding="8,0" core:Ui.Icon="&#xE71C;" core:Ui.Placeholder="Filter tables, columns, environments"
+                         AutomationProperties.Name="Filter"
+                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+
+                <ToggleButton Grid.Column="1" Style="{StaticResource FilterToggle}" Margin="8,0,0,0" Height="30"
+                              Content="Findings only" IsChecked="{Binding FindingsOnly}"
+                              ToolTip="Only what differs between environments, or is not keeping up" />
+
+                <ComboBox Grid.Column="2" Width="230" Height="30" Margin="8,0,0,0" Padding="7,0"
+                          core:Ui.InlineLabel="Show"
+                          AutomationProperties.Name="Setting to show"
+                          ItemsSource="{Binding Source={x:Static vm:TableSettingsViewModel.Kinds}}"
+                          SelectedValuePath="Key" DisplayMemberPath="Value" SelectedValue="{Binding Kind}"
+                          Visibility="{Binding ShowsSetting, Converter={StaticResource BoolToVis}}" />
+
+                <Button Grid.Column="4" Height="30" Padding="10,0" core:Ui.OpensMenu="True"
+                        AutomationProperties.Name="Link folders counted"
+                        ToolTip="Which links count as linked - untick a folder to leave its links out (a Fabric link beside the Synapse one, say)"
+                        Visibility="{Binding HasFolders, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Link folders counted" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="8,1,0,0"
+                                   Foreground="{DynamicResource Muted}" />
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu ItemsSource="{Binding Folders}">
+                            <ContextMenu.ItemContainerStyle>
+                                <Style TargetType="MenuItem" BasedOn="{StaticResource CheckItem}">
+                                    <Setter Property="Header" Value="{Binding Name}" />
+                                    <Setter Property="IsChecked" Value="{Binding IsCounted}" />
+                                </Style>
+                            </ContextMenu.ItemContainerStyle>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </Grid>
+
+            <ProgressBar Grid.Row="4" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
+
+            <!-- ============================================================ views -->
+            <Grid Grid.Row="5">
+                <TabControl SelectedValuePath="Tag" SelectedValue="{Binding SelectedTab}"
+                            Visibility="{Binding HasResults, Converter={StaticResource BoolToVis}}">
+
+                    <TabItem Header="Tables" Tag="{x:Static vm:TableSettingsTab.Tables}"
+                             core:Ui.Count="{Binding TableFindings, StringFormat=N0}"
+                             ToolTip="Tables that differ between environments">
+                        <DataGrid x:Name="TablesGrid" ItemsSource="{Binding TableRows}" IsReadOnly="True"
+                                  AutomationProperties.Name="Table settings by environment"
+                                  BorderThickness="0" FrozenColumnCount="2">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Name}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellMonoFirst}" />
+                                <DataGridTextColumn Header="Display name" Width="180" Binding="{Binding Detail}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Difference" Width="*" MinWidth="200" Binding="{Binding Difference}"
+                                                    ElementStyle="{StaticResource DifferenceCell}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Columns" Tag="{x:Static vm:TableSettingsTab.Columns}"
+                             core:Ui.Count="{Binding ColumnFindings, StringFormat=N0}"
+                             ToolTip="Column-level audit on the audited tables - the columns that differ between environments">
+                        <DataGrid x:Name="ColumnsGrid" ItemsSource="{Binding ColumnRows}" IsReadOnly="True"
+                                  AutomationProperties.Name="Column audit by environment"
+                                  BorderThickness="0" FrozenColumnCount="2">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Column" Width="220" Binding="{Binding Name}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellMonoFirst}" />
+                                <DataGridTextColumn Header="Table" Width="220" Binding="{Binding Detail}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Difference" Width="*" MinWidth="200" Binding="{Binding Difference}"
+                                                    ElementStyle="{StaticResource DifferenceCell}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Audit gaps" Tag="{x:Static vm:TableSettingsTab.Gaps}"
+                             core:Ui.Count="{Binding GapCount, StringFormat=N0}"
+                             ToolTip="Columns not audited on tables that are - changes going unrecorded">
+                        <DataGrid ItemsSource="{Binding GapRows}" IsReadOnly="True" BorderThickness="0"
+                                  AutomationProperties.Name="Unaudited columns on audited tables">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Environment" Width="150" Binding="{Binding Environment}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
+                                <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Table}" ElementStyle="{StaticResource CellMono}" />
+                                <DataGridTextColumn Header="Table name" Width="180" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Column" Width="220" Binding="{Binding Column}" ElementStyle="{StaticResource CellMono}" />
+                                <DataGridTextColumn Header="Column name" Width="*" Binding="{Binding ColumnLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridCheckBoxColumn Header="Managed" Width="80" Binding="{Binding IsManaged, Mode=OneWay}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Synapse Link" Tag="{x:Static vm:TableSettingsTab.Links}"
+                             core:Ui.Count="{Binding LinkProblems, StringFormat=N0}"
+                             ToolTip="Every table in every link profile, and whether it is keeping up">
+                        <DataGrid ItemsSource="{Binding LinkRows}" IsReadOnly="True" BorderThickness="0"
+                                  AutomationProperties.Name="Synapse Link sync state">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Environment" Width="140" Binding="{Binding Environment}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
+                                <DataGridTextColumn Header="Profile" Width="160" Binding="{Binding Profile.Name}" ElementStyle="{StaticResource Cell}" />
+                                <DataGridTextColumn Header="Folder" Width="130" Binding="{Binding Profile.FolderLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Profile state" Width="100" Binding="{Binding Profile.State}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Table" Width="190" Binding="{Binding Table.Table}" ElementStyle="{StaticResource CellMono}" />
+                                <DataGridTextColumn Header="Sync state" Width="120" Binding="{Binding Table.SyncState}" ElementStyle="{StaticResource Cell}" />
+                                <DataGridTextColumn Header="Lake rows" Width="90" Binding="{Binding Table.LakeRecordCount, StringFormat=N0}"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Dataverse rows" Width="100" Binding="{Binding Table.SourceRecordCount, StringFormat=N0}"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding Table.LastSynced, StringFormat=g}"
+                                                    ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridCheckBoxColumn Header="Counted" Width="70" Binding="{Binding IsCounted, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Problem" Width="*" MinWidth="160" Binding="{Binding Problem}"
+                                                    ElementStyle="{StaticResource ProblemCell}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Search index" Tag="{x:Static vm:TableSettingsTab.Search}"
+                             core:Ui.Count="{Binding SearchProblems, StringFormat=N0}"
+                             ToolTip="Each environment's Dataverse search index against which tables are switched on for it">
+                        <DataGrid ItemsSource="{Binding SearchRows}" IsReadOnly="True" BorderThickness="0"
+                                  AutomationProperties.Name="Dataverse search index">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Environment" Width="140" Binding="{Binding Environment}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
+                                <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Table}" ElementStyle="{StaticResource CellMono}" />
+                                <DataGridTextColumn Header="Display name" Width="170" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridCheckBoxColumn Header="Search on" Width="80" Binding="{Binding IsEnabled, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Index status" Width="110" Binding="{Binding StatusLabel}" ElementStyle="{StaticResource Cell}" />
+                                <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding LastSynced, StringFormat=g}"
+                                                    ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Columns" Width="70" Binding="{Binding ColumnCount}" SortMemberPath="ColumnCount"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="ToolTip" Value="{Binding ColumnsLabel}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Problem" Width="*" MinWidth="160" Binding="{Binding Problem}"
+                                                    ElementStyle="{StaticResource ProblemCell}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Environment" Tag="{x:Static vm:TableSettingsTab.Environments}"
+                             core:Ui.Count="{Binding EnvironmentFindings, StringFormat=N0}"
+                             ToolTip="Auditing, retention, search and links, environment by environment">
+                        <DataGrid x:Name="EnvironmentGrid" ItemsSource="{Binding EnvironmentRows}" IsReadOnly="True"
+                                  AutomationProperties.Name="Environment settings"
+                                  BorderThickness="0" FrozenColumnCount="2">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Setting" Width="170" Binding="{Binding Name}"
+                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
+                                <DataGridTextColumn Header="Meaning" Width="220" Binding="{Binding Detail}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                            <Setter Property="ToolTip" Value="{Binding Detail}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Difference" Width="*" MinWidth="200" Binding="{Binding Difference}"
+                                                    ElementStyle="{StaticResource DifferenceCell}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+
+                <!-- Nothing read yet: say what Check will do, or why it cannot. -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460"
+                            Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Nothing checked yet" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                               TextAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="6" Style="{StaticResource StatusBar}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding StatusLine}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" ToolTip="{Binding StatusLine}" />
+                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

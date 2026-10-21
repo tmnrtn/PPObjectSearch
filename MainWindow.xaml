@@ -20,6 +20,7 @@
         <KeyBinding Key="D" Modifiers="Ctrl" Command="{Binding CompareCommand}" />
         <KeyBinding Key="D" Modifiers="Ctrl+Shift" Command="{Binding CompareDataCommand}" />
         <KeyBinding Key="R" Modifiers="Ctrl+Shift" Command="{Binding ReadinessCommand}" />
+        <KeyBinding Key="A" Modifiers="Ctrl+Shift" Command="{Binding TableSettingsCommand}" />
         <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding CommandPaletteCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl+Shift" Command="{Binding CloseAllDetailsCommand}" />
     </Window.InputBindings>
@@ -315,6 +316,10 @@
                             <TextBlock Text="Readiness" VerticalAlignment="Center" />
                         </Button>
                     </UniformGrid>
+                    <Button Style="{StaticResource SidebarAction}" Command="{Binding TableSettingsCommand}"
+                            ToolTip="Audit, change tracking, Synapse Link and Dataverse search, table by table across environments (Ctrl+Shift+A)">
+                        <TextBlock Text="Table settings" VerticalAlignment="Center" />
+                    </Button>
                 </StackPanel>
             </ScrollViewer>
 
