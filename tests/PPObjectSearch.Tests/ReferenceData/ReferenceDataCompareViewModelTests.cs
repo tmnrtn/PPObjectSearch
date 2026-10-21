@@ -740,7 +740,7 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         var settings = Settings(Config(), Config("Other"));
         var vm = Window(Side(SourceRows), Side(TargetRows), settings);
         string? question = null;
-        vm.Confirm = message => { question = message; return false; };
+        vm.Confirm = request => { question = request.Heading; return false; };
 
         vm.DeleteConfigurationCommand.Execute(null);
 

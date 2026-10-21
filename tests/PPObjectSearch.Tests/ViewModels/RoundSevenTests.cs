@@ -1,0 +1,35 @@
+using PPObjectSearch.Models;
+using PPObjectSearch.ViewModels;
+
+namespace PPObjectSearch.Tests.ViewModels;
+
+/// <summary>
+/// What the seventh review round changed behind the views: questions asked in the app's own
+/// dialog rather than a message box, with buttons named for what they do.
+/// </summary>
+public class RoundSevenTests
+{
+    [Fact]
+    public Task Opening_many_details_windows_asks_with_the_count_on_the_button() => EnvironmentSessionThread.Run(async () =>
+    {
+        var (_, session) = await EnvironmentSessionFilterTests.ConnectedAsync();
+        var rows = Enumerable.Range(0, 14).Select(i => new SolutionComponentItem { Name = $"row {i}", ComponentTypeName = "Table" }).ToList();
+        session.SetSelection(rows);
+        AskRequest? asked = null;
+        session.Ask = request => { asked = request; return false; };
+
+        session.OpenSelectionDetailsCommand.Execute(null);
+
+        Assert.NotNull(asked);
+        Assert.Equal("Open 14 details windows?", asked.Heading);
+        Assert.Equal("Open 14 windows", asked.Confirm);
+        Assert.False(asked.ConfirmIsDefault);
+    });
+
+    [Fact]
+    public void Stopping_a_run_names_both_choices()
+    {
+        Assert.Equal("Stop after this change", Asking.StopRun.Confirm);
+        Assert.Equal("Keep running", Asking.StopRun.Cancel);
+    }
+}

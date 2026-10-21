@@ -218,8 +218,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
     internal Func<EntityPickerViewModel, bool> PickEntities { get; set; }
     internal Func<ReferenceEntitySettingsViewModel, bool> EditSettings { get; set; }
 
-    internal Func<string, bool> Confirm { get; set; } = message =>
-        MessageBox.Show(message, "PPObjectSearch", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+    internal Func<AskRequest, bool> Confirm { get; set; } = Asking.Show;
 
     /// <summary>Where to export to, given a suggested file name; null when the user cancels.</summary>
     internal Func<string, string?> PickExportPath { get; set; } = fileName =>
@@ -1021,7 +1020,14 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
     {
         if (SelectedConfiguration is not { } config) return;
 
-        if (!Confirm($"Delete the saved configuration '{config.Name}'?")) return;
+        if (!Confirm(new AskRequest($"Delete the saved configuration '{config.Name}'?",
+                "It is removed from this computer's settings. Nothing in either environment changes.")
+            {
+                Confirm = "Delete configuration"
+            }))
+        {
+            return;
+        }
 
         Configurations.Remove(config);
         _selectedConfiguration = null;

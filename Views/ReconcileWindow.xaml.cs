@@ -38,12 +38,7 @@ public partial class ReconcileWindow : Window
         {
             e.Cancel = true;
 
-            var stop = MessageBox.Show(this,
-                "Changes are still being written. Stop after the current one?\n\n" +
-                "Nothing already written is undone. The window stays open until the run has stopped.",
-                Title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
-
-            if (stop == MessageBoxResult.Yes) running.CancelRunCommand.Execute(null);
+            if (AskWindow.Ask(this, Asking.StopRun)) running.CancelRunCommand.Execute(null);
             return;
         }
 

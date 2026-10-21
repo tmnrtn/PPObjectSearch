@@ -33,6 +33,15 @@ public sealed record AskRequest(string Heading, string Body)
 
 public static class Asking
 {
+    /// <summary>Closing a window while its run is still writing.</summary>
+    public static AskRequest StopRun { get; } = new("Stop the run?",
+        "Changes are still being written. Stopping ends the run after the current one.")
+    {
+        Note = "Nothing already written is undone. The window stays open until the run has stopped.",
+        Confirm = "Stop after this change",
+        Cancel = "Keep running"
+    };
+
     /// <summary>Shows the question over the active window; true when the primary button was chosen.</summary>
     public static bool Show(AskRequest request) => Views.AskWindow.Ask(WriteConfirmation.ActiveWindow(), request);
 }

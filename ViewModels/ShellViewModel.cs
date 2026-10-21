@@ -179,6 +179,9 @@ public sealed class ShellViewModel : ObservableObject
     internal Action<AppTheme> ApplyTheme { get; set; } = ThemeManager.Apply;
 
     /// <summary>Shows a message and returns the button pressed; replaced in tests.</summary>
+    /// <summary>Asks a question in the app's own dialog; replaced in tests.</summary>
+    internal Func<AskRequest, bool> Ask { get; set; } = Asking.Show;
+
     internal Func<string, MessageBoxButton, MessageBoxImage, MessageBoxResult> ShowMessage { get; set; } =
         (message, buttons, image) => MessageBox.Show(message, "PPObjectSearch", buttons, image);
 
@@ -351,11 +354,14 @@ public sealed class ShellViewModel : ObservableObject
 
     private async Task SignOutAllAsync()
     {
-        var confirm = ShowMessage(
-            "Sign out of every account and clear all tabs' data?",
-            MessageBoxButton.OKCancel, MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.OK) return;
+        if (!Ask(new AskRequest("Sign out of every account?",
+                "Every tab's data is cleared, with the cached component lists. The tabs stay, ready to sign in again.")
+            {
+                Confirm = "Sign out of all"
+            }))
+        {
+            return;
+        }
 
         await _auth.SignOutAllAsync();
 

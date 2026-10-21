@@ -234,8 +234,13 @@ public class ReferenceEntitySettingsViewModelTests
         Assert.Equal("Choose what identifies a row.", error);
 
         vm.SelectedKey = vm.KeyOptions[^1];
+        Assert.Equal(string.Empty, vm.KeyError);
         Assert.False(vm.Apply(out error));
         Assert.Equal("Tick at least one column to use as the key.", error);
+        Assert.Equal(error, vm.KeyError);
+
+        vm.SelectedKey = vm.KeyOptions[0];
+        Assert.Equal(string.Empty, vm.KeyError);
     }
 
     private static readonly string[] ExcludedOnApply = ["createdon", "new_region", "new_thingid"];

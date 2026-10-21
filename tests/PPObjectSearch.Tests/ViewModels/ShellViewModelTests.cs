@@ -274,7 +274,7 @@ public sealed class ShellViewModelTests : IDisposable
 
         test.Shell.SignOutAllCommand.Execute(null);
 
-        Assert.Equal(["Sign out of every account and clear all tabs' data?"], test.Messages);
+        Assert.Equal(["Sign out of every account?"], test.Messages);
         Assert.Equal(statuses, test.Shell.Sessions.Select(s => s.Status));
         Assert.Equal(3, test.Shell.Sessions.Count);
     }

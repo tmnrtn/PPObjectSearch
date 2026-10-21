@@ -108,6 +108,9 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                <!-- What stops the settings being saved, said where it is fixed. -->
+                <TextBlock Text="{Binding KeyError}" Foreground="{DynamicResource Red}" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Visibility="{Binding KeyError, Converter={StaticResource EmptyToCollapsed}}" />
 
                 <TextBlock Margin="0,14,0,6">
                     <Run Text="Row filter" FontWeight="SemiBold" />

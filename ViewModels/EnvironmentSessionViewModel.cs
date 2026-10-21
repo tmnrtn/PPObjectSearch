@@ -375,8 +375,10 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         var rows = _selection.ToList();
         if (rows.Count > 10 &&
-            MessageBox.Show($"Open {rows.Count:N0} details windows?", MessageCaption,
-                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+            !Ask(new AskRequest($"Open {rows.Count:N0} details windows?", "Each selected row opens in a window of its own.")
+            {
+                Confirm = $"Open {rows.Count:N0} windows"
+            }))
         {
             return;
         }
@@ -1852,17 +1854,15 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     }
 
     /// <summary>Past the warning threshold, asks before sending one request per object.</summary>
-    private static bool ConfirmLayerCheck(int count)
-    {
-        if (count <= UnmanagedLayerCheckWarningThreshold) return true;
-
-        var proceed = MessageBox.Show(
-            $"This checks {count:N0} objects individually against Dataverse - one request each. " +
-            "Narrowing the filters first is faster and gentler on the environment. Continue anyway?",
-            MessageCaption, MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-        return proceed == MessageBoxResult.Yes;
-    }
+    private bool ConfirmLayerCheck(int count) =>
+        count <= UnmanagedLayerCheckWarningThreshold ||
+        Ask(new AskRequest($"Check {count:N0} objects for an unmanaged layer?",
+            "Each object is checked against Dataverse on its own - one request each.")
+        {
+            Environment = this,
+            Note = "Narrowing the filters first is faster and gentler on the environment.",
+            Confirm = $"Check {count:N0} objects"
+        });
 
     /// <summary>
     /// Marks each checked object with whether it has an unmanaged layer, and counts those of a type
