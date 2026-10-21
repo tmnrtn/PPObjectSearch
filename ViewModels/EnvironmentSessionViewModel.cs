@@ -823,6 +823,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 QueueSyncCommand.RaiseCanExecuteChanged();
                 EnvironmentAdminCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(IsSolutionPickerEnabled));
+                OnPropertyChanged(nameof(CanFilterByLayer));
                 RaiseEmptyState();
             }
         }
@@ -1608,6 +1609,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         LayerFilters.Add(new TypeFilterOption { Name = "Unmanaged layer", Count = _allItems.Count(i => i.HasUnmanagedLayer == true) });
         LayerFilters.Add(new TypeFilterOption { Name = "No unmanaged layer", Count = _allItems.Count(i => i.HasUnmanagedLayer == false) });
         LayerFilters.Add(new TypeFilterOption { Name = "Not checked", Count = _allItems.Count(i => i.HasUnmanagedLayer is null) });
+        OnPropertyChanged(nameof(CanFilterByLayer));
 
         _selectedTypeFilter = TypeFilters.FirstOrDefault(f => f.Name == previousType) ?? TypeFilters[0];
         _selectedStateFilter = StateFilters.FirstOrDefault(f => f.Name == previousState) ?? StateFilters[0];
@@ -1699,6 +1701,12 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         OnPropertyChanged(nameof(HasActiveFilters));
         RaiseEmptyState();
     }
+
+    /// <summary>
+    /// The Layer filter waits for a layer check: before one, "Unmanaged layer" would silently show
+    /// nothing rather than say nothing is known yet.
+    /// </summary>
+    public bool CanFilterByLayer => IsConnected && _allItems.Any(i => i.HasUnmanagedLayer is not null);
 
     /// <summary>Nothing in the grid: why is said in its place.</summary>
     public bool IsListEmpty => ItemsView.IsEmpty;

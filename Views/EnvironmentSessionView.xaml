@@ -397,8 +397,19 @@
                           ItemsSource="{Binding LayerFilters}"
                           SelectedItem="{Binding SelectedLayerFilter}"
                           DisplayMemberPath="Label"
-                          IsEnabled="{Binding IsConnected}"
-                          ToolTip="Whether the object has an unmanaged customization on top of its managed layer. Unknown until 'Check layers' has been run." />
+                          IsEnabled="{Binding CanFilterByLayer}"
+                          ToolTipService.ShowOnDisabled="True">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                            <Setter Property="ToolTip" Value="Whether the object has an unmanaged customization on top of its managed layer." />
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="ToolTip" Value="Run Check layers first" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                </ComboBox>
 
                 <!-- On: the active filter look, like the boxes beside it. -->
                 <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,0" IsChecked="{Binding FavouritesOnly}"
@@ -587,20 +598,27 @@
                     </DataGridTextColumn>
 
                     <DataGridTemplateColumn Header="Layer" Width="126" SortMemberPath="UnmanagedLayerLabel">
+                        <DataGridTemplateColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                <Setter Property="ToolTip" Value="Whether the object has an unmanaged layer. — until Check layers has been run." />
+                            </Style>
+                        </DataGridTemplateColumn.HeaderStyle>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
-                                    <Ellipse x:Name="LayerDot" Style="{StaticResource Dot}" Margin="0,1,6,0" />
-                                    <TextBlock x:Name="LayerText" Text="Not checked" Foreground="{DynamicResource Faint}"
+                                    <Ellipse x:Name="LayerDot" Style="{StaticResource Dot}" Margin="0,1,6,0" Visibility="Collapsed" />
+                                    <TextBlock x:Name="LayerText" Text="—" Foreground="{DynamicResource Faint}"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="True">
+                                        <Setter TargetName="LayerDot" Property="Visibility" Value="Visible" />
                                         <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Amber}" />
                                         <Setter TargetName="LayerText" Property="Text" Value="Unmanaged layer" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Amber}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="False">
+                                        <Setter TargetName="LayerDot" Property="Visibility" Value="Visible" />
                                         <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Green}" />
                                         <Setter TargetName="LayerText" Property="Text" Value="Clean" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Muted}" />
