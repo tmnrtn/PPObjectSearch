@@ -15,12 +15,16 @@ public partial class NamePromptWindow : Window
         };
     }
 
-    /// <summary>The trimmed name, or null if the dialog was cancelled or left blank.</summary>
-    public static string? Ask(Window? owner, string title, string prompt, string initial)
+    /// <summary>
+    /// The trimmed name, or null if the dialog was cancelled or left blank. <paramref name="confirm"/>
+    /// is the button's verb - "Save search", "Rename" - never "OK".
+    /// </summary>
+    public static string? Ask(Window? owner, string title, string prompt, string initial, string confirm)
     {
         var window = new NamePromptWindow { Title = title, Owner = owner };
         window.Prompt.Text = prompt;
         window.NameBox.Text = initial;
+        window.ConfirmButton.Content = confirm;
 
         if (window.ShowDialog() != true) return null;
 

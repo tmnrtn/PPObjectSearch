@@ -203,7 +203,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
         if (Configurations.Count > 0) SelectedConfiguration = Configurations[0];
 
-        AskName = (title, prompt, initial) => Views.NamePromptWindow.Ask(OwnerWindow(), title, prompt, initial);
+        // The button says what it does: "Save configuration", or "Rename".
+        AskName = (title, prompt, initial) => Views.NamePromptWindow.Ask(OwnerWindow(), title, prompt, initial,
+            title.StartsWith("Rename", StringComparison.Ordinal) ? "Rename" : title);
         ShowReconcile = viewModel =>
             new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() }.ShowDialog();
         PickEntities = picker =>

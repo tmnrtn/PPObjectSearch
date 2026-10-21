@@ -221,7 +221,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     private void SaveSearch()
     {
         var name = Views.NamePromptWindow.Ask(Application.Current?.MainWindow, "Save search",
-            "Name this search - its words and filters - so it can be picked again.", SearchText.Trim());
+            "Name this search - its words and filters - so it can be picked again.", SearchText.Trim(), "Save search");
         if (string.IsNullOrWhiteSpace(name)) return;
 
         Library.SaveSearch(EnvironmentUrl, new SavedSearch
