@@ -88,62 +88,106 @@
                          Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
 
             <!-- ============================================================ findings -->
-            <Grid Grid.Row="4" Margin="0,8,0,0">
-                <DataGrid ItemsSource="{Binding Findings}"
-                          SelectedItem="{Binding SelectedFinding}"
-                          IsReadOnly="True"
-                          AutomationProperties.Name="Readiness findings"
-                          BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
-                          Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
-                    <DataGrid.InputBindings>
-                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenFindingCommand}" />
-                        <KeyBinding Key="Enter" Command="{Binding OpenFindingCommand}" />
-                    </DataGrid.InputBindings>
-                    <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Severity" Width="104" SortMemberPath="Severity"
-                                                HeaderStyle="{StaticResource FirstHeader}">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ContentControl Margin="16,0,8,0" Content="{Binding SeverityLabel}">
-                                        <ContentControl.Style>
-                                            <Style TargetType="ContentControl" BasedOn="{StaticResource StatusPill}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Blocker}">
-                                                        <Setter Property="Background" Value="{DynamicResource RedSoft}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource Red}" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Warning}">
-                                                        <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ContentControl.Style>
-                                    </ContentControl>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Area" Width="150" Binding="{Binding Area}" ElementStyle="{StaticResource CellMuted}" />
-                        <DataGridTextColumn Header="Component" Width="260" Binding="{Binding Component}" ElementStyle="{StaticResource Cell}" />
-                        <DataGridTextColumn Header="Finding" Width="*" Binding="{Binding Message}">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-                                    <Setter Property="TextWrapping" Value="Wrap" />
-                                    <Setter Property="ToolTip" Value="{Binding Message}" />
+            <DockPanel Grid.Row="4" Margin="0,8,0,0">
+                <!-- The verdict first - "Not ready · 2 blockers · 5 warnings" - then a toggle per severity. -->
+                <DockPanel DockPanel.Dock="Top" Margin="18,2,18,8"
+                           Visibility="{Binding HasVerdict, Converter={StaticResource BoolToVis}}">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <ToggleButton Style="{StaticResource FilterToggle}" Height="26" Margin="0" IsChecked="{Binding ShowBlockers}"
+                                      ToolTip="Show blockers: the import will fail, or what it brings will not work" AutomationProperties.Name="Blocker">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Blocker" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding BlockerCount}" Style="{StaticResource FaintText}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton Style="{StaticResource FilterToggle}" Height="26" Margin="6,0,0,0" IsChecked="{Binding ShowWarnings}"
+                                      ToolTip="Show warnings: likely trouble after import" AutomationProperties.Name="Warning">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Warning" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding WarningCount}" Style="{StaticResource FaintText}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton Style="{StaticResource FilterToggle}" Height="26" Margin="6,0,0,0" IsChecked="{Binding ShowInfo}"
+                                      ToolTip="Show notes worth knowing" AutomationProperties.Name="Info">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Info" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding InfoCount}" Style="{StaticResource FaintText}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center" FontSize="13" TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding Verdict, Mode=OneWay}" FontWeight="SemiBold">
+                            <Run.Style>
+                                <Style TargetType="Run">
+                                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsReady}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
                                 </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
+                            </Run.Style>
+                        </Run><Run Text="{Binding VerdictBlockers, Mode=OneWay}" Foreground="{DynamicResource Red}"
+                        /><Run Text="{Binding VerdictWarnings, Mode=OneWay}" Foreground="{DynamicResource Amber}" />
+                    </TextBlock>
+                </DockPanel>
+                <Grid>
+                    <DataGrid ItemsSource="{Binding FindingsView}"
+                              SelectedItem="{Binding SelectedFinding}"
+                              IsReadOnly="True"
+                              AutomationProperties.Name="Readiness findings"
+                              BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                              Visibility="{Binding IsEmpty, Converter={StaticResource NotBoolToVis}}">
+                        <DataGrid.InputBindings>
+                            <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenFindingCommand}" />
+                            <KeyBinding Key="Enter" Command="{Binding OpenFindingCommand}" />
+                        </DataGrid.InputBindings>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Severity" Width="104" SortMemberPath="Severity"
+                                                    HeaderStyle="{StaticResource FirstHeader}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Margin="16,0,8,0" Content="{Binding SeverityLabel}">
+                                            <ContentControl.Style>
+                                                <Style TargetType="ContentControl" BasedOn="{StaticResource StatusPill}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Blocker}">
+                                                            <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="{x:Static services:ReadinessSeverity.Warning}">
+                                                            <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ContentControl.Style>
+                                        </ContentControl>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Area" Width="150" Binding="{Binding Area}" ElementStyle="{StaticResource CellMuted}" />
+                            <DataGridTextColumn Header="Component" Width="260" Binding="{Binding Component}" ElementStyle="{StaticResource Cell}" />
+                            <DataGridTextColumn Header="Finding" Width="*" Binding="{Binding Message}">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                        <Setter Property="ToolTip" Value="{Binding Message}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
 
-                <!-- Nothing to list: say why, and what to change. -->
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
-                            Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
-                    <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
-                               TextAlignment="Center" Margin="0,4,0,0" />
-                </StackPanel>
-            </Grid>
+                    <!-- Nothing to list: say why, and what to change. -->
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                                Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
+            </DockPanel>
 
             <Border Grid.Row="5" Style="{StaticResource StatusBar}">
                 <Grid>

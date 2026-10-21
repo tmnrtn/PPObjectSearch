@@ -45,6 +45,56 @@ public sealed class ReadinessViewModel : ObservableObject, IDisposable
     public ObservableCollection<EnvironmentSessionViewModel> Sessions { get; }
     public ObservableCollection<ReadinessFinding> Findings { get; } = new();
 
+    private System.Windows.Data.ListCollectionView? _findingsView;
+    /// <summary>The findings the severity toggles leave in.</summary>
+    public System.Windows.Data.ListCollectionView FindingsView => _findingsView ??= new System.Windows.Data.ListCollectionView(Findings)
+    {
+        Filter = f => f is ReadinessFinding finding && finding.Severity switch
+        {
+            ReadinessSeverity.Blocker => ShowBlockers,
+            ReadinessSeverity.Warning => ShowWarnings,
+            _ => ShowInfo
+        }
+    };
+
+    private bool _showBlockers = true;
+    public bool ShowBlockers
+    {
+        get => _showBlockers;
+        set { if (SetProperty(ref _showBlockers, value)) FindingsView.Refresh(); }
+    }
+
+    private bool _showWarnings = true;
+    public bool ShowWarnings
+    {
+        get => _showWarnings;
+        set { if (SetProperty(ref _showWarnings, value)) FindingsView.Refresh(); }
+    }
+
+    private bool _showInfo = true;
+    public bool ShowInfo
+    {
+        get => _showInfo;
+        set { if (SetProperty(ref _showInfo, value)) FindingsView.Refresh(); }
+    }
+
+    public int BlockerCount => Findings.Count(f => f.Severity == ReadinessSeverity.Blocker);
+    public int WarningCount => Findings.Count(f => f.Severity == ReadinessSeverity.Warning);
+    public int InfoCount => Findings.Count(f => f.Severity == ReadinessSeverity.Info);
+
+    /// <summary>The answer to "will it import?", above the grid once a check has finished.</summary>
+    public bool HasVerdict => Report is not null && !IsRunning;
+
+    public bool IsReady => BlockerCount == 0;
+
+    /// <summary>"Not ready" or "Ready to import" - in Red or Green.</summary>
+    public string Verdict => IsReady ? "Ready to import" : "Not ready";
+
+    public string VerdictBlockers => BlockerCount == 0 ? string.Empty : $" · {Plural(BlockerCount, "blocker")}";
+    public string VerdictWarnings => WarningCount == 0 ? string.Empty : $" · {Plural(WarningCount, "warning")}";
+
+    private static string Plural(int n, string word) => $"{n:N0} {word}{(n == 1 ? string.Empty : "s")}";
+
     public AsyncRelayCommand RunCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand ExportCommand { get; }
@@ -204,6 +254,14 @@ public sealed class ReadinessViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(FindingCountLabel));
         OnPropertyChanged(nameof(EmptyHeading));
         OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(BlockerCount));
+        OnPropertyChanged(nameof(WarningCount));
+        OnPropertyChanged(nameof(InfoCount));
+        OnPropertyChanged(nameof(HasVerdict));
+        OnPropertyChanged(nameof(IsReady));
+        OnPropertyChanged(nameof(Verdict));
+        OnPropertyChanged(nameof(VerdictBlockers));
+        OnPropertyChanged(nameof(VerdictWarnings));
     }
 
     internal static string Describe(ReadinessReport report, int components, TimeSpan took)
