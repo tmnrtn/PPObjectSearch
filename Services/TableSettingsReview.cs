@@ -154,6 +154,26 @@ public sealed class SettingRow
 /// <summary>A column that is not audited on a table that is, in one environment: changes going unrecorded.</summary>
 public sealed record AuditGap(string Environment, string Table, string? TableLabel, string Column, string? ColumnLabel, bool IsManaged);
 
+/// <summary>One environment's link profile: the group its tables are listed under.</summary>
+public sealed class LinkGroup
+{
+    public required string Environment { get; init; }
+    public required SynapseLinkProfile Profile { get; init; }
+
+    /// <summary>Links to this profile's folder count as "linked".</summary>
+    public required bool IsCounted { get; init; }
+
+    public required int TableCount { get; init; }
+    public required int ProblemCount { get; init; }
+
+    /// <summary>For the environment's colour; set by the view, which knows the environments' types.</summary>
+    public Dataverse.EnvironmentSku Sku { get; set; } = Dataverse.EnvironmentSku.Unknown;
+
+    public string StateLabel => (Profile.State ?? "State unknown") + (IsCounted ? string.Empty : " · not counted");
+    public string Summary => $"{TableCount:N0} table{(TableCount == 1 ? string.Empty : "s")}";
+    public string ProblemLabel => ProblemCount switch { 0 => string.Empty, 1 => "1 problem", var n => $"{n:N0} problems" };
+}
+
 /// <summary>One table in one link profile, in one environment.</summary>
 public sealed record LinkRow(
     string Environment,
@@ -161,6 +181,19 @@ public sealed record LinkRow(
     SynapseLinkTable Table,
     bool IsCounted)
 {
+    /// <summary>The environment and profile it is grouped under.</summary>
+    public LinkGroup? Group { get; init; }
+
+    /// <summary>The table's display name, else its logical name.</summary>
+    public string? TableLabel { get; init; }
+
+    /// <summary>Rows Dataverse has that the lake does not yet.</summary>
+    public long? Behind => Table.SourceRecordCount is { } source && Table.LakeRecordCount is { } lake ? source - lake : null;
+
+    public bool IsBehind => Behind > 0;
+
+    public string BehindLabel => IsBehind ? Behind!.Value.ToString("N0") : "—";
+
     /// <summary>Why this row needs a look, or empty when it is keeping up.</summary>
     public string Problem =>
         !Profile.IsActive ? $"Profile is {Profile.State ?? "not active"}"
@@ -458,15 +491,43 @@ public static class TableSettingsReview
     }
 
     /// <summary>Every table in every link profile, environment by environment, profile by profile.</summary>
-    public static IReadOnlyList<LinkRow> Links(IReadOnlyList<TableSettingsSnapshot> snapshots, ISet<string> excludedFolders) =>
-        snapshots
+    public static IReadOnlyList<LinkRow> Links(IReadOnlyList<TableSettingsSnapshot> snapshots, ISet<string> excludedFolders)
+    {
+        var rows = snapshots
             .Where(s => s.Synapse is not null)
             .SelectMany(s => s.Synapse!.Tables.Select(t => (Snapshot: s, Table: t,
                 Profile: s.Synapse.Profiles.FirstOrDefault(p => p.Id == t.ProfileId))))
             .Where(x => x.Profile is not null)
             .Select(x => new LinkRow(x.Snapshot.Environment, x.Profile!, x.Table,
-                x.Profile!.IsActive && !excludedFolders.Contains(x.Profile.FolderLabel)))
+                x.Profile!.IsActive && !excludedFolders.Contains(x.Profile.FolderLabel))
+            {
+                TableLabel = x.Snapshot.Tables.GetValueOrDefault(x.Table.Table)?.Label ?? x.Table.Table
+            })
             .ToList();
+
+        // One group per environment and profile; groups with problems first, and problems first in each.
+        return rows
+            .GroupBy(r => (r.Environment, r.Profile.Id))
+            .Select(g =>
+            {
+                var group = new LinkGroup
+                {
+                    Environment = g.Key.Environment,
+                    Profile = g.First().Profile,
+                    IsCounted = g.First().IsCounted,
+                    TableCount = g.Count(),
+                    ProblemCount = g.Count(r => r.HasProblem)
+                };
+                return (Group: group, Rows: g.Select(r => r with { Group = group })
+                    .OrderByDescending(r => r.HasProblem)
+                    .ThenBy(r => r.TableLabel, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList());
+            })
+            .OrderByDescending(g => g.Group.ProblemCount > 0)
+            .ThenByDescending(g => g.Group.IsCounted)
+            .SelectMany(g => g.Rows)
+            .ToList();
+    }
 
     /// <summary>
     /// Each environment's search index against its configuration: every table either switched on

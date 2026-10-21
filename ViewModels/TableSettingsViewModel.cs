@@ -318,6 +318,17 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     public ObservableCollection<SettingRow> ColumnRows { get; } = new();
     public ObservableCollection<AuditGap> GapRows { get; } = new();
     public ObservableCollection<LinkRow> LinkRows { get; } = new();
+
+    private System.Windows.Data.ListCollectionView? _linkRowsView;
+    /// <summary>The link rows grouped by environment and profile.</summary>
+    public System.Windows.Data.ListCollectionView LinkRowsView => _linkRowsView ??= CreateLinkRowsView();
+
+    private System.Windows.Data.ListCollectionView CreateLinkRowsView()
+    {
+        var view = new System.Windows.Data.ListCollectionView(LinkRows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(LinkRow.Group)));
+        return view;
+    }
     public ObservableCollection<SearchIndexRow> SearchRows { get; } = new();
     public ObservableCollection<SettingRow> EnvironmentRows { get; } = new();
 
@@ -593,6 +604,12 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     private void RebuildLinks()
     {
         _allLinks = TableSettingsReview.Links(_snapshots, IgnoredFolders()).ToList();
+        foreach (var group in _allLinks.Select(l => l.Group).OfType<LinkGroup>().Distinct())
+        {
+            var index = ResultEnvironments.ToList().IndexOf(group.Environment);
+            if (index >= 0 && index < ResultEnvironmentSkus.Count) group.Sku = ResultEnvironmentSkus[index];
+        }
+
         Refill();
     }
 

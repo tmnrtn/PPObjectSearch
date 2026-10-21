@@ -283,17 +283,86 @@
                     <TabItem Header="Synapse Link" Tag="{x:Static vm:TableSettingsTab.Links}"
                              core:Ui.Count="{Binding LinkProblems, StringFormat=N0}"
                              ToolTip="Every table in every link profile, and whether it is keeping up">
-                        <DataGrid ItemsSource="{Binding LinkRows}" IsReadOnly="True" BorderThickness="0"
+                        <!-- Grouped by environment and profile, so neither repeats on every row; problems first. -->
+                        <DataGrid ItemsSource="{Binding LinkRowsView}" IsReadOnly="True" BorderThickness="0"
+                                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                                   AutomationProperties.Name="Synapse Link sync state">
+                            <DataGrid.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                                                    Height="32" Padding="18,0" DataContext="{Binding Name}">
+                                                <DockPanel>
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Muted}" />
+                                                        <TextBlock Text="{Binding ProblemLabel}" Foreground="{DynamicResource Amber}" FontWeight="SemiBold" Margin="10,0,0,0"
+                                                                   Visibility="{Binding ProblemLabel, Converter={StaticResource EmptyToCollapsed}}" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Border Style="{StaticResource EnvBar}" Height="12" Margin="0,0,8,0" Tag="{Binding Sku}" />
+                                                        <TextBlock Text="{Binding Environment}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="·" Style="{StaticResource FaintText}" Margin="8,0" />
+                                                        <TextBlock Text="{Binding Profile.Name}" FontWeight="SemiBold" />
+                                                        <TextBlock x:Name="Folder" Text="{Binding Profile.FolderLabel}" Style="{StaticResource Mono}" FontSize="11"
+                                                                   Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding StateLabel}" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Name.IsCounted}" Value="False">
+                                                    <Setter TargetName="Folder" Property="Foreground" Value="{DynamicResource Faint}" />
+                                                    <Setter TargetName="Folder" Property="FontStyle" Value="Italic" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </DataGrid.GroupStyle>
+                            <!-- Rows in a folder that is not counted: Faint italic. -->
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCounted}" Value="False">
+                                            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                            <Setter Property="FontStyle" Value="Italic" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Environment" Width="140" Binding="{Binding Environment}"
-                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTextColumn Header="Profile" Width="160" Binding="{Binding Profile.Name}" ElementStyle="{StaticResource Cell}" />
-                                <DataGridTextColumn Header="Folder" Width="130" Binding="{Binding Profile.FolderLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Profile state" Width="100" Binding="{Binding Profile.State}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Table" Width="190" Binding="{Binding Table.Table}" ElementStyle="{StaticResource CellMono}" />
-                                <DataGridTextColumn Header="Sync state" Width="120" Binding="{Binding Table.SyncState}" ElementStyle="{StaticResource Cell}" />
-                                <DataGridTextColumn Header="Lake rows" Width="90" Binding="{Binding Table.LakeRecordCount, StringFormat=N0}"
+                                <DataGridTemplateColumn Header="Table" Width="1.3*" MinWidth="200" SortMemberPath="Table.Table"
+                                                        HeaderStyle="{StaticResource FirstHeader}">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="34,0,8,0" VerticalAlignment="Center" ToolTip="{Binding Table.Table}">
+                                                <TextBlock Text="{Binding TableLabel}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Table.Table}" Style="{StaticResource Mono}" FontSize="11"
+                                                           Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Sync state" Width="130" SortMemberPath="Table.SyncState">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
+                                                <Ellipse x:Name="SyncDot" Width="7" Height="7" Margin="0,1,6,0" Fill="{DynamicResource Amber}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Table.SyncState, TargetNullValue=—}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Table.IsHealthy}" Value="True">
+                                                    <Setter TargetName="SyncDot" Property="Fill" Value="{DynamicResource Green}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Table.IsActive}" Value="False">
+                                                    <Setter TargetName="SyncDot" Property="Fill" Value="{DynamicResource Faint}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Dataverse rows" Width="110" Binding="{Binding Table.SourceRecordCount, StringFormat=N0}"
                                                     HeaderStyle="{StaticResource RightHeader}">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
@@ -301,18 +370,33 @@
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Header="Dataverse rows" Width="100" Binding="{Binding Table.SourceRecordCount, StringFormat=N0}"
+                                <DataGridTextColumn Header="Lake rows" Width="100" Binding="{Binding Table.LakeRecordCount, StringFormat=N0}"
                                                     HeaderStyle="{StaticResource RightHeader}">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
                                             <Setter Property="HorizontalAlignment" Value="Right" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <!-- Rows Dataverse has that the lake does not: Amber when above zero. -->
+                                <DataGridTextColumn Header="Behind" Width="90" Binding="{Binding BehindLabel}" SortMemberPath="Behind"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsBehind}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding Table.LastSynced, StringFormat=g}"
                                                     ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Counted" Width="70" SortMemberPath="IsCounted" Binding="{Binding IsCounted, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
-                                <DataGridTextColumn Header="Problem" Width="*" MinWidth="160" Binding="{Binding Problem}"
+                                <DataGridTextColumn Header="Problem" Width="1.4*" MinWidth="160" Binding="{Binding Problem}"
                                                     ElementStyle="{StaticResource ProblemCell}" />
                             </DataGrid.Columns>
                         </DataGrid>

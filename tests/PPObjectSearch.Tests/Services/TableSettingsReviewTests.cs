@@ -242,9 +242,15 @@ public class TableSettingsReviewTests
 
         var rows = TableSettingsReview.Links([dev], NoneIgnored);
 
-        Assert.False(rows[0].HasProblem);
-        Assert.Equal("Sync is InProgress", rows[1].Problem);
+        // Problems first, under one group for the environment and profile.
+        Assert.Equal(["contact", "account"], rows.Select(r => r.Table.Table));
+        Assert.Equal("Sync is InProgress", rows[0].Problem);
+        Assert.False(rows[1].HasProblem);
         Assert.True(rows.All(r => r.IsCounted));
+
+        var group = Assert.Single(rows.Select(r => r.Group).Distinct());
+        Assert.Equal(("Dev", "Lake", "2 tables", "1 problem"), (group!.Environment, group.Profile.Name, group.Summary, group.ProblemLabel));
+        Assert.Equal("—", rows[1].BehindLabel);
     }
 
     [Fact]
