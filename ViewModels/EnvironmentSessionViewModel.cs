@@ -542,29 +542,51 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     private bool HasHost => EnvironmentHost != "Not connected" && !string.IsNullOrWhiteSpace(EnvironmentUrl);
 
-    /// <summary>
-    /// Adds this one environment to the write allowlist, after a confirmation that names it and
-    /// says what type it is. Defaults to No: lifting the production guard is never the easy path.
-    /// </summary>
-    private void AllowWrites()
-    {
-        if (!CanAllowWrites) return;
+    /// <summary>Asks the user a question in the app's own dialog; replaced in tests.</summary>
+    internal Func<AskRequest, bool> Ask { get; set; } = Asking.Show;
 
+    /// <summary>
+    /// The question in front of allowing writes: this environment's line, what it unlocks, and for
+    /// production or an unknown type an acknowledgement that must be ticked first.
+    /// </summary>
+    internal AskRequest AllowWritesRequest()
+    {
         var type = EnvironmentSku switch
         {
             EnvironmentSku.Unknown => "an environment whose type could not be read",
             var sku => "a " + new EnvironmentTypeInfo(sku, null, null).SkuLabel.ToLowerInvariant() + " environment"
         };
 
-        var answer = MessageBox.Show(
-            $"Allow PPObjectSearch to write to {EnvironmentHost}?\n\n" +
-            $"This is {type}. Reconciling reference data and the admin tools will be able to change " +
-            "data and membership here. Every change is still previewed and confirmed first.\n\n" +
-            "Only this environment is affected. You can stop allowing writes from the same menu.",
-            "Allow writes to this environment",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        return new AskRequest($"Allow writes to {Title}", $"This is {type}. Once allowed, these can change data and membership here:")
+        {
+            Title = "Allow writes",
+            Environment = this,
+            Points = new[]
+            {
+                "Reconcile and Undo run",
+                "Entra team sync and Queue membership sync",
+                "Quick actions: turn flows on or off, set variable values"
+            },
+            Note = "Every change is still previewed and confirmed first, and recorded in the run log. " +
+                   "Only this environment is affected. Stop allowing writes from the same menu.",
+            Acknowledgement = EnvironmentSku switch
+            {
+                EnvironmentSku.Production => $"I understand {Title} is production and changes made here affect its users.",
+                EnvironmentSku.Unknown => $"I understand {Title}'s type could not be read, so it may be production.",
+                _ => null
+            },
+            Confirm = "Allow writes"
+        };
+    }
 
-        if (answer != MessageBoxResult.Yes) return;
+    /// <summary>
+    /// Adds this one environment to the write allowlist, after a question that names it and says
+    /// what type it is. Cancel has the focus: lifting the production guard is never the easy path.
+    /// </summary>
+    private void AllowWrites()
+    {
+        if (!CanAllowWrites) return;
+        if (!Ask(AllowWritesRequest())) return;
 
         if (WriteGuard.Allow(_settings, EnvironmentUrl)) _settings.Save();
         RaiseWriteAllowlist();
