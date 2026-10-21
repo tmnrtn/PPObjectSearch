@@ -24,7 +24,12 @@ public sealed class DependencyRef
 
     public string DisplayName => string.IsNullOrWhiteSpace(ResolvedName) ? ObjectId.ToString() : ResolvedName;
 
-    public string DirectionLabel => Direction == DependencyDirection.Dependent ? "Depends on this" : "Required by this";
+    /// <summary>The component in the loaded list, which opens on double-click; null when it is outside the solution.</summary>
+    public SolutionComponentItem? Item { get; set; }
+
+    public bool IsOutside => Item is null;
+
+    public string DirectionLabel => Direction == DependencyDirection.Dependent ? "Needs this" : "This needs";
 }
 
 /// <summary>A solution that contains a given object.</summary>

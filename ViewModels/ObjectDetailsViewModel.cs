@@ -1332,6 +1332,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ContainingSolution> Solutions { get; } = new();
     public ObservableCollection<DependencyRef> Dependents { get; } = new();
+
+    private RelayCommand? _openDependencyCommand;
+    /// <summary>A dependency in the loaded list opens in its own details window, as in the Dependency explorer.</summary>
+    public RelayCommand OpenDependencyCommand => _openDependencyCommand ??= new RelayCommand(
+        p => { if (p is DependencyRef { Item: { } item }) Session?.OpenDetails(item); },
+        p => Session is not null && p is DependencyRef { Item: not null });
     public ObservableCollection<DependencyRef> Required { get; } = new();
     public ObservableCollection<ComponentLayer> Layers { get; } = new();
 
@@ -1600,6 +1606,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
                 if (_known.TryGetValue(dependency.ObjectId, out var match))
                 {
                     dependency.ResolvedName = match.PrimaryLabel;
+                    dependency.Item = match;
                 }
 
                 target.Add(dependency);

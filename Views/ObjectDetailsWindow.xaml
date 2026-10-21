@@ -1251,37 +1251,109 @@
                                             Command="{Binding ExploreDependenciesCommand}"
                                             ToolTip="Expand dependencies level by level, see what breaks if this is removed, and copy it as Mermaid" />
                                     <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
-                                               Text="Depends on this (blocks deletion)"
+                                               Text="Needs this · blocks deletion"
                                                ToolTip="Components that would break if this object were deleted." />
                                     </DockPanel>
                                 </Border>
-                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Dependents}" IsReadOnly="True">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
-                                                            HeaderStyle="{StaticResource PaneFirstHeader}"
-                                                            ElementStyle="{StaticResource CellFullFirst}" />
-                                        <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
-                                                            ElementStyle="{StaticResource CellMuted}" />
-                                    </DataGrid.Columns>
-                                </DataGrid>
+<Grid>
+                                    <DataGrid x:Name="DependentsGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding Dependents}" IsReadOnly="True"
+                                              SelectionMode="Single" ToolTip="Double-click a component in the loaded list to open its details">
+                                        <DataGrid.InputBindings>
+                                            <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenDependencyCommand}"
+                                                          CommandParameter="{Binding SelectedItem, ElementName=DependentsGrid}" />
+                                        </DataGrid.InputBindings>
+                                        <DataGrid.Columns>
+                                            <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="DisplayName"
+                                                                    HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Margin="12,0,8,0" VerticalAlignment="Center">
+                                                            <!-- As the Dependency explorer's tree marks it. -->
+                                                            <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" FontSize="11" VerticalAlignment="Center"
+                                                                       Text="outside this solution" Foreground="{DynamicResource Amber}"
+                                                                       Visibility="{Binding IsOutside, Converter={StaticResource BoolToVis}}" />
+                                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                                       ToolTip="{Binding DisplayName}" VerticalAlignment="Center" />
+                                                        </DockPanel>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
+                                                                ElementStyle="{StaticResource CellMuted}" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <TextBlock Text="Nothing depends on this" Foreground="{DynamicResource Muted}" Margin="12,40,12,0" VerticalAlignment="Top"
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding Dependents.Count}" Value="0" />
+                                                            <Condition Binding="{Binding IsBusy}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
                             </DockPanel>
 
                             <DockPanel Grid.Column="1">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}" BorderThickness="1,0,0,1">
                                     <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
-                                               Text="Required by this"
+                                               Text="This needs"
                                                ToolTip="Components this object needs in order to work." />
                                 </Border>
                                 <Border BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
-                                    <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Required}" IsReadOnly="True">
+<Grid>
+                                    <DataGrid x:Name="RequiredGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding Required}" IsReadOnly="True"
+                                              SelectionMode="Single" ToolTip="Double-click a component in the loaded list to open its details">
+                                        <DataGrid.InputBindings>
+                                            <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenDependencyCommand}"
+                                                          CommandParameter="{Binding SelectedItem, ElementName=RequiredGrid}" />
+                                        </DataGrid.InputBindings>
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="*"
-                                                                HeaderStyle="{StaticResource PaneFirstHeader}"
-                                                                ElementStyle="{StaticResource CellFullFirst}" />
+                                            <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="DisplayName"
+                                                                    HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Margin="12,0,8,0" VerticalAlignment="Center">
+                                                            <!-- As the Dependency explorer's tree marks it. -->
+                                                            <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" FontSize="11" VerticalAlignment="Center"
+                                                                       Text="outside this solution" Foreground="{DynamicResource Amber}"
+                                                                       Visibility="{Binding IsOutside, Converter={StaticResource BoolToVis}}" />
+                                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                                       ToolTip="{Binding DisplayName}" VerticalAlignment="Center" />
+                                                        </DockPanel>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
                                             <DataGridTextColumn Header="Type" Binding="{Binding ComponentTypeName}" Width="150"
                                                                 ElementStyle="{StaticResource CellMuted}" />
                                         </DataGrid.Columns>
                                     </DataGrid>
+                                    <TextBlock Text="This needs nothing" Foreground="{DynamicResource Muted}" Margin="12,40,12,0" VerticalAlignment="Top"
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding Required.Count}" Value="0" />
+                                                            <Condition Binding="{Binding IsBusy}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
                                 </Border>
                             </DockPanel>
                         </Grid>

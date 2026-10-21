@@ -29,8 +29,9 @@ public class ObjectDetailTests
     [Fact]
     public void A_dependency_says_which_way_it_points()
     {
-        Assert.Equal("Depends on this", Dependency(DependencyDirection.Dependent).DirectionLabel);
-        Assert.Equal("Required by this", Dependency(DependencyDirection.Required).DirectionLabel);
+        Assert.Equal("Needs this", Dependency(DependencyDirection.Dependent).DirectionLabel);
+        Assert.Equal("This needs", Dependency(DependencyDirection.Required).DirectionLabel);
+        Assert.True(Dependency(DependencyDirection.Required).IsOutside);
     }
 
     [Fact]
