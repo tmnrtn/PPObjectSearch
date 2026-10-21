@@ -109,12 +109,21 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _selectedKey, value)) return;
 
+            KeyError = string.Empty;
             OnPropertyChanged(nameof(IsCustomKey));
             SyncKeyTicks();
         }
     }
 
     public bool IsCustomKey => SelectedKey?.Source == RecordKeySource.Columns;
+
+    private string _keyError = string.Empty;
+    /// <summary>Why the settings cannot be saved yet, shown under the key choice; empty when they can.</summary>
+    public string KeyError
+    {
+        get => _keyError;
+        private set => SetProperty(ref _keyError, value);
+    }
 
     /// <summary>"38 of 42 columns compared".</summary>
     public string CompareSummary => Columns.Count == 0
@@ -197,6 +206,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         if (key is null)
         {
             error = "Choose what identifies a row.";
+            KeyError = error;
             return false;
         }
 
@@ -206,6 +216,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
             if (picked.Count == 0)
             {
                 error = "Tick at least one column to use as the key.";
+                KeyError = error;
                 return false;
             }
 

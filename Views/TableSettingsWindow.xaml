@@ -15,7 +15,17 @@
             <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
-        <Style TargetType="TextBlock" x:Key="DifferenceCell" BasedOn="{StaticResource ProblemCell}" />
+        <!-- A difference reads as text; Amber SemiBold only where production is involved. -->
+        <Style TargetType="TextBlock" x:Key="DifferenceCell" BasedOn="{StaticResource Cell}">
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding InvolvesProduction}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- A drop-down of check boxes: the solutions in scope, the link folders counted. -->
         <Style TargetType="MenuItem" x:Key="CheckItem" BasedOn="{StaticResource {x:Type MenuItem}}">
@@ -63,8 +73,8 @@
             <!-- ============================================================ what to read -->
             <StackPanel Grid.Row="1" Margin="18,0,18,0">
                 <!-- Environments, in sidebar order - the order the columns come in. -->
-                <WrapPanel>
-                    <TextBlock Text="Environments" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,6" />
+                <DockPanel>
+                    <TextBlock Text="Environments" Foreground="{DynamicResource Muted}" Width="84" VerticalAlignment="Top" Margin="0,5,0,6" />
                     <ItemsControl ItemsSource="{Binding Environments}" Focusable="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -74,58 +84,65 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:EnvironmentChoice">
                                 <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,6"
-                                              IsChecked="{Binding IsSelected}" Content="{Binding Title}"
+                                              IsChecked="{Binding IsSelected}"
                                               AutomationProperties.Name="{Binding Title}"
-                                              ToolTip="Read this environment - its column in every view" />
+                                              ToolTip="Read this environment - its column in every view">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Style="{StaticResource EnvBar}" Height="11" Margin="0,0,6,0" Tag="{Binding EnvironmentSku}" />
+                                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ToggleButton>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </WrapPanel>
+                </DockPanel>
 
-                <WrapPanel>
-                    <ComboBox Width="230" Height="32" Margin="0,0,8,6" Padding="7,0"
-                              core:Ui.InlineLabel="Tables"
-                              AutomationProperties.Name="Which tables"
-                              ItemsSource="{Binding Source={x:Static vm:TableSettingsViewModel.Scopes}}"
-                              SelectedValuePath="Key" DisplayMemberPath="Value" SelectedValue="{Binding Scope}" />
-
-                    <ComboBox Style="{StaticResource EnvPicker}" Width="240" Margin="0,0,8,6"
-                              core:Ui.InlineLabel="From"
-                              AutomationProperties.Name="Environment the solutions are read in"
-                              ToolTip="The environment whose solution membership decides the tables - the others are measured against it"
-                              ItemsSource="{Binding ScopeSessions}" SelectedItem="{Binding ScopeSession}"
-                              Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}" />
-
-                    <Button Height="32" Margin="0,0,8,6" Padding="10,0" MinWidth="200" HorizontalContentAlignment="Left"
-                            core:Ui.OpensMenu="True"
-                            AutomationProperties.Name="Solutions"
-                            ToolTip="The solutions whose tables are covered"
-                            Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Solutions" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
-                            <TextBlock Text="{Binding SolutionsLabel}" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="8,1,0,0"
-                                       Foreground="{DynamicResource Muted}" />
-                        </StackPanel>
-                        <Button.ContextMenu>
-                            <ContextMenu ItemsSource="{Binding SolutionChoices}" MaxHeight="420">
-                                <ContextMenu.ItemContainerStyle>
-                                    <Style TargetType="MenuItem" BasedOn="{StaticResource CheckItem}">
-                                        <Setter Property="Header" Value="{Binding Label}" />
-                                        <Setter Property="IsChecked" Value="{Binding IsSelected}" />
-                                    </Style>
-                                </ContextMenu.ItemContainerStyle>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <CheckBox Content="Columns" Margin="4,0,14,6" IsChecked="{Binding IncludeColumns}"
-                              ToolTip="Also compare column-level audit on the audited tables - a read per table per environment" />
-
-                    <Button Style="{StaticResource PrimaryButton}" Content="Check" Height="32" Padding="16,0" Margin="0,0,8,6"
-                            Command="{Binding RunCommand}"
+                <!-- What to read, on the same 84px label column; Check at the right. -->
+                <DockPanel Margin="84,0,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Content="Check" Height="32" Padding="16,0" Margin="8,0,0,6"
+                            VerticalAlignment="Top" Command="{Binding RunCommand}"
                             ToolTip="Reads every chosen environment - nothing is written" />
-                </WrapPanel>
+                    <WrapPanel>
+                        <ComboBox Width="230" Height="32" Margin="0,0,8,6" Padding="7,0"
+                                  core:Ui.InlineLabel="Tables"
+                                  AutomationProperties.Name="Which tables"
+                                  ItemsSource="{Binding Source={x:Static vm:TableSettingsViewModel.Scopes}}"
+                                  SelectedValuePath="Key" DisplayMemberPath="Value" SelectedValue="{Binding Scope}" />
+
+                        <ComboBox Style="{StaticResource EnvPicker}" Width="240" Margin="0,0,8,6"
+                                  core:Ui.InlineLabel="From"
+                                  AutomationProperties.Name="Environment the solutions are read in"
+                                  ToolTip="The environment whose solution membership decides the tables - the others are measured against it"
+                                  ItemsSource="{Binding ScopeSessions}" SelectedItem="{Binding ScopeSession}"
+                                  Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}" />
+
+                        <Button Height="32" Margin="0,0,8,6" Padding="10,0" MinWidth="200" HorizontalContentAlignment="Left"
+                                core:Ui.OpensMenu="True"
+                                AutomationProperties.Name="Solutions"
+                                ToolTip="The solutions whose tables are covered"
+                                Visibility="{Binding IsSolutionScope, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Solutions" Foreground="{DynamicResource Muted}" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding SolutionsLabel}" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" Margin="8,1,0,0"
+                                           Foreground="{DynamicResource Muted}" />
+                            </StackPanel>
+                            <Button.ContextMenu>
+                                <ContextMenu ItemsSource="{Binding SolutionChoices}" MaxHeight="420">
+                                    <ContextMenu.ItemContainerStyle>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource CheckItem}">
+                                            <Setter Property="Header" Value="{Binding Label}" />
+                                            <Setter Property="IsChecked" Value="{Binding IsSelected}" />
+                                        </Style>
+                                    </ContextMenu.ItemContainerStyle>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <CheckBox Content="Column-level audit" Margin="4,0,14,6" IsChecked="{Binding IncludeColumns}" VerticalAlignment="Center"
+                                  ToolTip="Also compare audit on each column of the audited tables - a read per table per environment" />
+                    </WrapPanel>
+                </DockPanel>
             </StackPanel>
 
             <!-- Anything that could not be read, so its silence is not read as a pass. -->
@@ -159,6 +176,30 @@
                           ItemsSource="{Binding Source={x:Static vm:TableSettingsViewModel.Kinds}}"
                           SelectedValuePath="Key" DisplayMemberPath="Value" SelectedValue="{Binding Kind}"
                           Visibility="{Binding ShowsSetting, Converter={StaticResource BoolToVis}}" />
+
+                <!-- All settings packs four letters into a cell: the key to them. -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center"
+                            TextElement.FontSize="11" TextElement.Foreground="{DynamicResource Muted}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsAllKind}" Value="True" />
+                                        <Condition Binding="{Binding ShowsSetting}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Margin="0,0,10,0" VerticalAlignment="Center"><Run Text="A" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{DynamicResource Text}" /> <Run Text="Audit" /></TextBlock>
+                    <TextBlock Margin="0,0,10,0" VerticalAlignment="Center"><Run Text="C" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{DynamicResource Text}" /> <Run Text="Change tracking" /></TextBlock>
+                    <TextBlock Margin="0,0,10,0" VerticalAlignment="Center"><Run Text="L" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{DynamicResource Text}" /> <Run Text="Synapse Link" /></TextBlock>
+                    <TextBlock Margin="0,0,10,0" VerticalAlignment="Center"><Run Text="S" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{DynamicResource Text}" /> <Run Text="Search" /></TextBlock>
+                    <TextBlock Margin="0,0,10,0" VerticalAlignment="Center"><Run Text="·" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{DynamicResource Text}" /> <Run Text="off" /></TextBlock>
+                </StackPanel>
 
                 <Button Grid.Column="4" Height="30" Padding="10,0" core:Ui.OpensMenu="True"
                         AutomationProperties.Name="Link folders counted"
@@ -225,16 +266,38 @@
                     <TabItem Header="Audit gaps" Tag="{x:Static vm:TableSettingsTab.Gaps}"
                              core:Ui.Count="{Binding GapCount, StringFormat=N0}"
                              ToolTip="Columns not audited on tables that are - changes going unrecorded">
-                        <DataGrid ItemsSource="{Binding GapRows}" IsReadOnly="True" BorderThickness="0"
+                        <!-- A row per column, grouped by table, with a column per environment as the Tables and Columns pivots have. -->
+                        <DataGrid x:Name="GapsGrid" ItemsSource="{Binding GapMatrixView}" IsReadOnly="True" BorderThickness="0"
+                                  VirtualizingPanel.IsVirtualizingWhenGrouping="True" FrozenColumnCount="2"
                                   AutomationProperties.Name="Unaudited columns on audited tables">
+                            <DataGrid.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                                                    Height="32" Padding="18,0" DataContext="{Binding Name}">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Table}" Style="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                               Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Muted}" Margin="12,0,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </DataGrid.GroupStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Environment" Width="150" Binding="{Binding Environment}"
-                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Table}" ElementStyle="{StaticResource CellMono}" />
-                                <DataGridTextColumn Header="Table name" Width="180" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Column" Width="220" Binding="{Binding Column}" ElementStyle="{StaticResource CellMono}" />
-                                <DataGridTextColumn Header="Column name" Width="*" Binding="{Binding ColumnLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Managed" Width="80" Binding="{Binding IsManaged, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Column" Width="220" Binding="{Binding Column}"
+                                                    HeaderStyle="{StaticResource FirstHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellMono}">
+                                            <Setter Property="Margin" Value="34,0,8,0" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Column name" Width="180" Binding="{Binding ColumnLabel}" ElementStyle="{StaticResource CellMuted}" />
+                                <DataGridTextColumn Header="Managed" Width="80" SortMemberPath="IsManaged" Binding="{Binding IsManaged, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </TabItem>
@@ -242,17 +305,86 @@
                     <TabItem Header="Synapse Link" Tag="{x:Static vm:TableSettingsTab.Links}"
                              core:Ui.Count="{Binding LinkProblems, StringFormat=N0}"
                              ToolTip="Every table in every link profile, and whether it is keeping up">
-                        <DataGrid ItemsSource="{Binding LinkRows}" IsReadOnly="True" BorderThickness="0"
+                        <!-- Grouped by environment and profile, so neither repeats on every row; problems first. -->
+                        <DataGrid ItemsSource="{Binding LinkRowsView}" IsReadOnly="True" BorderThickness="0"
+                                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                                   AutomationProperties.Name="Synapse Link sync state">
+                            <DataGrid.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                                                    Height="32" Padding="18,0" DataContext="{Binding Name}">
+                                                <DockPanel>
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Muted}" />
+                                                        <TextBlock Text="{Binding ProblemLabel}" Foreground="{DynamicResource Amber}" FontWeight="SemiBold" Margin="10,0,0,0"
+                                                                   Visibility="{Binding ProblemLabel, Converter={StaticResource EmptyToCollapsed}}" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Border Style="{StaticResource EnvBar}" Height="12" Margin="0,0,8,0" Tag="{Binding Sku}" />
+                                                        <TextBlock Text="{Binding Environment}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="·" Style="{StaticResource FaintText}" Margin="8,0" />
+                                                        <TextBlock Text="{Binding Profile.Name}" FontWeight="SemiBold" />
+                                                        <TextBlock x:Name="Folder" Text="{Binding Profile.FolderLabel}" Style="{StaticResource Mono}" FontSize="11"
+                                                                   Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding StateLabel}" Foreground="{DynamicResource Muted}" Margin="8,0,0,0" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Name.IsCounted}" Value="False">
+                                                    <Setter TargetName="Folder" Property="Foreground" Value="{DynamicResource Faint}" />
+                                                    <Setter TargetName="Folder" Property="FontStyle" Value="Italic" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </DataGrid.GroupStyle>
+                            <!-- Rows in a folder that is not counted: Faint italic. -->
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCounted}" Value="False">
+                                            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                            <Setter Property="FontStyle" Value="Italic" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Environment" Width="140" Binding="{Binding Environment}"
-                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTextColumn Header="Profile" Width="160" Binding="{Binding Profile.Name}" ElementStyle="{StaticResource Cell}" />
-                                <DataGridTextColumn Header="Folder" Width="130" Binding="{Binding Profile.FolderLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Profile state" Width="100" Binding="{Binding Profile.State}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridTextColumn Header="Table" Width="190" Binding="{Binding Table.Table}" ElementStyle="{StaticResource CellMono}" />
-                                <DataGridTextColumn Header="Sync state" Width="120" Binding="{Binding Table.SyncState}" ElementStyle="{StaticResource Cell}" />
-                                <DataGridTextColumn Header="Lake rows" Width="90" Binding="{Binding Table.LakeRecordCount, StringFormat=N0}"
+                                <DataGridTemplateColumn Header="Table" Width="1.3*" MinWidth="200" SortMemberPath="Table.Table"
+                                                        HeaderStyle="{StaticResource FirstHeader}">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="34,0,8,0" VerticalAlignment="Center" ToolTip="{Binding Table.Table}">
+                                                <TextBlock Text="{Binding TableLabel}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Table.Table}" Style="{StaticResource Mono}" FontSize="11"
+                                                           Foreground="{DynamicResource Muted}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Sync state" Width="130" SortMemberPath="Table.SyncState">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
+                                                <Ellipse x:Name="SyncDot" Width="7" Height="7" Margin="0,1,6,0" Fill="{DynamicResource Amber}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Table.SyncState, TargetNullValue=—}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Table.IsHealthy}" Value="True">
+                                                    <Setter TargetName="SyncDot" Property="Fill" Value="{DynamicResource Green}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Table.IsActive}" Value="False">
+                                                    <Setter TargetName="SyncDot" Property="Fill" Value="{DynamicResource Faint}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Dataverse rows" Width="110" Binding="{Binding Table.SourceRecordCount, StringFormat=N0}"
                                                     HeaderStyle="{StaticResource RightHeader}">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
@@ -260,18 +392,33 @@
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Header="Dataverse rows" Width="100" Binding="{Binding Table.SourceRecordCount, StringFormat=N0}"
+                                <DataGridTextColumn Header="Lake rows" Width="100" Binding="{Binding Table.LakeRecordCount, StringFormat=N0}"
                                                     HeaderStyle="{StaticResource RightHeader}">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
                                             <Setter Property="HorizontalAlignment" Value="Right" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <!-- Rows Dataverse has that the lake does not: Amber when above zero. -->
+                                <DataGridTextColumn Header="Behind" Width="90" Binding="{Binding BehindLabel}" SortMemberPath="Behind"
+                                                    HeaderStyle="{StaticResource RightHeader}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                            <Setter Property="HorizontalAlignment" Value="Right" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsBehind}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding Table.LastSynced, StringFormat=g}"
                                                     ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Counted" Width="70" Binding="{Binding IsCounted, Mode=OneWay}" />
-                                <DataGridTextColumn Header="Problem" Width="*" MinWidth="160" Binding="{Binding Problem}"
+                                <DataGridTextColumn Header="Problem" Width="1.4*" MinWidth="160" Binding="{Binding Problem}"
                                                     ElementStyle="{StaticResource ProblemCell}" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -287,7 +434,7 @@
                                                     HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
                                 <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Table}" ElementStyle="{StaticResource CellMono}" />
                                 <DataGridTextColumn Header="Display name" Width="170" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Search on" Width="80" Binding="{Binding IsEnabled, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Search on" Width="80" SortMemberPath="IsEnabled" Binding="{Binding IsEnabled, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                                 <DataGridTextColumn Header="Index status" Width="110" Binding="{Binding StatusLabel}" ElementStyle="{StaticResource Cell}" />
                                 <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding LastSynced, StringFormat=g}"
                                                     ElementStyle="{StaticResource CellMuted}" />
@@ -313,12 +460,11 @@
                                   AutomationProperties.Name="Environment settings"
                                   BorderThickness="0" FrozenColumnCount="2">
                             <DataGrid.Columns>
+                                <!-- What the setting means is its tooltip, so the environments get the width. -->
                                 <DataGridTextColumn Header="Setting" Width="170" Binding="{Binding Name}"
-                                                    HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
-                                <DataGridTextColumn Header="Meaning" Width="220" Binding="{Binding Detail}">
+                                                    HeaderStyle="{StaticResource FirstHeader}">
                                     <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
-                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource CellFirst}">
                                             <Setter Property="ToolTip" Value="{Binding Detail}" />
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>

@@ -97,4 +97,35 @@ public static class Ui
 
     public static System.Windows.Media.Brush? GetDotBrush(DependencyObject d) => (System.Windows.Media.Brush?)d.GetValue(DotBrushProperty);
     public static void SetDotBrush(DependencyObject d, System.Windows.Media.Brush? value) => d.SetValue(DotBrushProperty, value);
+
+    /// <summary>
+    /// A grid drawn at its full height inside a page that scrolls: the wheel scrolls the page,
+    /// rather than stopping at the grid's own scroll viewer, which has nothing to scroll.
+    /// </summary>
+    public static readonly DependencyProperty ScrollsPageProperty = DependencyProperty.RegisterAttached(
+        "ScrollsPage", typeof(bool), typeof(Ui), new PropertyMetadata(false, OnScrollsPageChanged));
+
+    public static bool GetScrollsPage(DependencyObject d) => (bool)d.GetValue(ScrollsPageProperty);
+    public static void SetScrollsPage(DependencyObject d, bool value) => d.SetValue(ScrollsPageProperty, value);
+
+    private static void OnScrollsPageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not UIElement element) return;
+
+        element.PreviewMouseWheel -= PassWheel;
+        if (e.NewValue is true) element.PreviewMouseWheel += PassWheel;
+    }
+
+    private static void PassWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (e.Handled || sender is not DependencyObject element ||
+            System.Windows.Media.VisualTreeHelper.GetParent(element) is not UIElement parent) return;
+
+        e.Handled = true;
+        parent.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+            Source = sender
+        });
+    }
 }

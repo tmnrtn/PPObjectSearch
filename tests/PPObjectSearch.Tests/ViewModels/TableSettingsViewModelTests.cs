@@ -134,6 +134,12 @@ public class TableSettingsViewModelTests
 
         var gap = Assert.Single(o.Vm.GapRows);
         Assert.Equal(o.Prod.Title, gap.Environment);
+
+        // Shown as a pivot: a row per column, a cell per environment, grouped by table.
+        var row = Assert.Single(o.Vm.GapMatrixRows);
+        Assert.Equal("contoso_tier", row.Column);
+        Assert.Equal(["Audited", "Not audited"], row.Cells.Select(c => c.Text));
+        Assert.Equal($"1 column not audited in {o.Prod.Title}", row.Group.Summary);
     }
 
     [Fact]

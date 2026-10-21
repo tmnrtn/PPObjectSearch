@@ -30,6 +30,11 @@ public sealed class TestShell : IDisposable
                 Messages.Add(message);
                 return Answer;
             },
+            Ask = request =>
+            {
+                Messages.Add(request.Heading);
+                return Answer is MessageBoxResult.OK or MessageBoxResult.Yes;
+            },
             ApplyTheme = AppliedThemes.Add
         };
     }

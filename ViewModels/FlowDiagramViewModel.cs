@@ -523,11 +523,17 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         get => _runMismatch;
         private set
         {
-            if (SetProperty(ref _runMismatch, value)) OnPropertyChanged(nameof(HasRunMismatch));
+            if (!SetProperty(ref _runMismatch, value)) return;
+
+            OnPropertyChanged(nameof(HasRunMismatch));
+            OnPropertyChanged(nameof(HasNotes));
         }
     }
 
     public bool HasRunMismatch => RunMismatch is not null;
+
+    /// <summary>The run mismatch and the design's warnings share one banner, rather than stacking two.</summary>
+    public bool HasNotes => HasRunMismatch || HasWarnings;
 
     /// <summary>"Run failed" - the run strip's lead, in the outcome's colour.</summary>
     public string RunOutcomeText => _run is null
@@ -947,6 +953,13 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
             if (version != _selectionVersion) return;
 
             foreach (var repetition in repetitions) SelectedIterations.Add(repetition);
+
+            // In a failed run the iteration worth reading first is the one that failed.
+            if (IsRunFailed && SelectedIteration is null &&
+                repetitions.FirstOrDefault(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut) is { } firstFailed)
+            {
+                SelectedIteration = firstFailed;
+            }
 
             var failed = repetitions.Count(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
             var failedNote = failed > 0 ? $", {failed:N0} failed" : string.Empty;

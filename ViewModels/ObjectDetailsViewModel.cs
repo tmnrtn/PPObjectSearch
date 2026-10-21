@@ -61,6 +61,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         Solutions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
         Layers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
         Dependents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
+        Runs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FailedRunCount));
         Required.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
         ChildGroups.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ComponentCount));
     }
@@ -175,9 +176,41 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private bool CanShowOnDiagram(ProcessRun? run) =>
         IsCloudFlow && FlowDiagram is not null && !string.IsNullOrWhiteSpace(run?.Name);
 
+    /// <summary>The run last asked for on the diagram, to step from with ‹ and ›.</summary>
+    private ProcessRun? _runOnDiagram;
+
+    private AsyncRelayCommand? _showOlderRunCommand;
+    /// <summary>The run before the one on the diagram, without going back to Runs. Runs are newest first.</summary>
+    public AsyncRelayCommand ShowOlderRunCommand => _showOlderRunCommand ??= new AsyncRelayCommand(
+        _ => StepRunAsync(+1), _ => NeighbourRun(+1) is not null);
+
+    private AsyncRelayCommand? _showNewerRunCommand;
+    public AsyncRelayCommand ShowNewerRunCommand => _showNewerRunCommand ??= new AsyncRelayCommand(
+        _ => StepRunAsync(-1), _ => NeighbourRun(-1) is not null);
+
+    private ProcessRun? NeighbourRun(int step)
+    {
+        if (_runOnDiagram is null) return null;
+
+        var index = Runs.IndexOf(_runOnDiagram) + step;
+        return index >= 0 && index < Runs.Count && CanShowOnDiagram(Runs[index]) ? Runs[index] : null;
+    }
+
+    private Task StepRunAsync(int step)
+    {
+        if (NeighbourRun(step) is not { } run) return Task.CompletedTask;
+
+        SelectedRun = run;
+        return ShowRunOnDiagramAsync(run);
+    }
+
     private async Task ShowRunOnDiagramAsync(ProcessRun? run)
     {
         if (run is null || FlowDiagram is not { } diagram) return;
+
+        _runOnDiagram = run;
+        ShowOlderRunCommand.RaiseCanExecuteChanged();
+        ShowNewerRunCommand.RaiseCanExecuteChanged();
 
         SelectedTab = DetailsTab.Design;
 
@@ -430,10 +463,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<OverviewProperty> OverviewProperties { get; } = new();
 
-    /// <summary>Each part as a table whose columns differ by type, so it is handed to the grid as a DataView.</summary>
-    public ObservableCollection<OverviewSection> OverviewSections { get; } = new();
-
-    public sealed record OverviewSection(string Heading, System.Data.DataView Rows);
+    /// <summary>Each part in the shape that suits it - see <see cref="OverviewPart"/>.</summary>
+    public ObservableCollection<OverviewPart> OverviewSections { get; } = new();
 
     private string _overviewStatus = string.Empty;
     public string OverviewStatus
@@ -454,23 +485,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
             foreach (var property in overview.Properties) OverviewProperties.Add(property);
 
-            foreach (var table in overview.Tables)
-            {
-                var data = new System.Data.DataTable();
-                for (var i = 0; i < table.Columns.Count; i++)
-                {
-                    // Column names must be unique and non-empty; the header is what is shown.
-                    var name = string.IsNullOrWhiteSpace(table.Columns[i]) ? $"Column {i + 1}" : table.Columns[i];
-                    data.Columns.Add(UniqueColumnName(data, name), typeof(string));
-                }
-
-                foreach (var row in table.Rows)
-                {
-                    data.Rows.Add(row.Take(table.Columns.Count).Select(v => (object?)v ?? DBNull.Value).ToArray());
-                }
-
-                OverviewSections.Add(new OverviewSection(table.Heading, data.DefaultView));
-            }
+            foreach (var table in overview.Tables) OverviewSections.Add(OverviewPart.From(table));
 
             OverviewStatus = overview.Problems.Count == 0 ? string.Empty : "Some parts could not be read - " + string.Join("; ", overview.Problems);
             problems.AddRange(overview.Problems.Select(p => "overview " + p));
@@ -480,14 +495,6 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             OverviewStatus = "Could not read the overview - " + ex.Message;
             problems.Add("overview: " + ex.Message);
         }
-    }
-
-    /// <summary>The name with as few trailing spaces as make it unique; the header still reads the same.</summary>
-    private static string UniqueColumnName(System.Data.DataTable data, string name)
-    {
-        var padding = 0;
-        while (data.Columns.Contains(name + new string(' ', padding))) padding++;
-        return name + new string(' ', padding);
     }
 
     /// <summary>
@@ -583,6 +590,24 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     {
         get => _connectionsStatus;
         private set => SetProperty(ref _connectionsStatus, value);
+    }
+
+    private RelayCommand? _copyConnectionLogicalNameCommand;
+    public RelayCommand CopyConnectionLogicalNameCommand => _copyConnectionLogicalNameCommand ??= new RelayCommand(
+        p => CopyValue("logical name", (p as ConnectionReferenceRow)?.LogicalName), p => p is ConnectionReferenceRow);
+
+    private RelayCommand? _copyConnectionIdCommand;
+    public RelayCommand CopyConnectionIdCommand => _copyConnectionIdCommand ??= new RelayCommand(
+        p => CopyValue("connection id", (p as ConnectionReferenceRow)?.ConnectionId),
+        p => p is ConnectionReferenceRow { ConnectionId.Length: > 0 });
+
+    private void CopyValue(string what, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+
+        Status = ClipboardText.TryCopy(value, out var failure)
+            ? $"Copied {what}: {value}"
+            : $"Could not copy the {what} - the clipboard is held by another application ({failure}).";
     }
 
     private bool _hasBrokenConnection;
@@ -1073,6 +1098,25 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ProcessRun> Runs { get; } = new();
 
+    private System.Windows.Data.ListCollectionView? _runsView;
+    /// <summary>The runs as the grid shows them: every one, or only those that failed.</summary>
+    public System.Windows.Data.ListCollectionView RunsView => _runsView ??= new System.Windows.Data.ListCollectionView(Runs)
+    {
+        Filter = r => !FailedRunsOnly || r is ProcessRun { Outcome: RunOutcome.Failed }
+    };
+
+    private bool _failedRunsOnly;
+    public bool FailedRunsOnly
+    {
+        get => _failedRunsOnly;
+        set
+        {
+            if (SetProperty(ref _failedRunsOnly, value)) RunsView.Refresh();
+        }
+    }
+
+    public int FailedRunCount => Runs.Count(r => r.Outcome == RunOutcome.Failed);
+
     /// <summary>Opens a run - the one passed, else the selected one - in Power Automate.</summary>
     public RelayCommand OpenRunCommand => _openRunCommand ??= new RelayCommand(
         p => OpenUrl((p as ProcessRun ?? SelectedRun)?.PortalUrl),
@@ -1340,6 +1384,12 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ContainingSolution> Solutions { get; } = new();
     public ObservableCollection<DependencyRef> Dependents { get; } = new();
+
+    private RelayCommand? _openDependencyCommand;
+    /// <summary>A dependency in the loaded list opens in its own details window, as in the Dependency explorer.</summary>
+    public RelayCommand OpenDependencyCommand => _openDependencyCommand ??= new RelayCommand(
+        p => { if (p is DependencyRef { Item: { } item }) Session?.OpenDetails(item); },
+        p => Session is not null && p is DependencyRef { Item: not null });
     public ObservableCollection<DependencyRef> Required { get; } = new();
     public ObservableCollection<ComponentLayer> Layers { get; } = new();
 
@@ -1608,6 +1658,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
                 if (_known.TryGetValue(dependency.ObjectId, out var match))
                 {
                     dependency.ResolvedName = match.PrimaryLabel;
+                    dependency.Item = match;
                 }
 
                 target.Add(dependency);

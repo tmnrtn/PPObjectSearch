@@ -72,6 +72,22 @@ public class ConnectionReferenceTests
     }
 
     [Fact]
+    public void The_ids_move_to_the_row_tooltip_and_the_connection_says_why_it_is_blank()
+    {
+        var connected = new ConnectionInfo { Name = "c1", DisplayName = "svc-flows@contoso.com", Status = "Connected" };
+
+        var bound = new ConnectionReferenceRow { Reference = Reference("new_outlook", "c1"), Connection = connected, ConnectionsKnown = true };
+        Assert.Equal("new_outlook · connection c1", bound.RowToolTip);
+        Assert.Equal("svc-flows@contoso.com", bound.ConnectionShown);
+
+        var unbound = new ConnectionReferenceRow { Reference = Reference("new_teams", null) };
+        Assert.Equal("new_teams", unbound.RowToolTip);
+        Assert.Equal("None", unbound.ConnectionShown);
+
+        Assert.Equal("Not shared with you", new ConnectionReferenceRow { Reference = Reference("a", "c3"), ConnectionsKnown = true }.ConnectionShown);
+    }
+
+    [Fact]
     public void Deployment_settings_are_written_as_pac_expects_them()
     {
         var variables = new[]

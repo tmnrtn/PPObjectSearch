@@ -90,7 +90,14 @@ public sealed class CommandPaletteViewModel : ObservableObject
         Results.Clear();
         foreach (var item in ranked) Results.Add(item);
         Selected = Results.FirstOrDefault();
+        OnPropertyChanged(nameof(NothingMatches));
+        OnPropertyChanged(nameof(NothingMatchesText));
     }
+
+    /// <summary>Said where the list would be, so an empty palette is not mistaken for a broken one.</summary>
+    public bool NothingMatches => Results.Count == 0 && Query.Trim().Length > 0;
+
+    public string NothingMatchesText => $"Nothing matches '{Query.Trim()}'";
 
     private static IEnumerable<PaletteItem> Objects(EnvironmentSessionViewModel session) =>
         session.Items.Select(item => new PaletteItem

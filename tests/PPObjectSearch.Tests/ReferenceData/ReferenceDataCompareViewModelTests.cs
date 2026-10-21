@@ -482,21 +482,21 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
         Assert.Equal("No rows selected", vm.SelectionSummary);
         Assert.Equal(string.Empty, vm.SelectionBreakdown);
-        Assert.Equal("Reconcile...", vm.ReconcileLabel);
+        Assert.Equal("Reconcile…", vm.ReconcileLabel);
         Assert.False(vm.ReconcileCommand.CanExecute(null));
 
         vm.SetSelectedRows(rows);
 
         Assert.Equal("4 rows selected, 3 need a change", vm.SelectionSummary);
         Assert.Equal(" · 1 create, 1 update, 1 delete", vm.SelectionBreakdown);
-        Assert.Equal("Reconcile 4 rows...", vm.ReconcileLabel);
+        Assert.Equal("Reconcile 4 rows…", vm.ReconcileLabel);
         Assert.True(vm.ReconcileCommand.CanExecute(null));
 
         vm.SetSelectedRows(rows.Take(1));
 
         Assert.Equal("1 row selected", vm.SelectionSummary);
         Assert.Equal(" · 1 create", vm.SelectionBreakdown);
-        Assert.Equal("Reconcile 1 row...", vm.ReconcileLabel);
+        Assert.Equal("Reconcile 1 row…", vm.ReconcileLabel);
     }
 
     [Fact]
@@ -740,7 +740,7 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
         var settings = Settings(Config(), Config("Other"));
         var vm = Window(Side(SourceRows), Side(TargetRows), settings);
         string? question = null;
-        vm.Confirm = message => { question = message; return false; };
+        vm.Confirm = request => { question = request.Heading; return false; };
 
         vm.DeleteConfigurationCommand.Execute(null);
 

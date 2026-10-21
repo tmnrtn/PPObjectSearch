@@ -32,7 +32,10 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
-                    <TextBlock Style="{StaticResource WindowHeading}" Text="{Binding ComponentLabel}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource WindowHeading}" Text="{Binding ComponentLabel}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}" Margin="8,2,0,0" ToolTip="Reads both environments - nothing is written" />
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
                         <TextBlock Text="{Binding ComponentTypeName}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
                         <TextBlock Text="·" Foreground="{DynamicResource Faint}" Margin="8,0" VerticalAlignment="Center" />

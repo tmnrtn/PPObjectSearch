@@ -265,6 +265,10 @@
                                Foreground="{DynamicResource Muted}" />
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <!-- What follows writes: Change in {env} · WRITES, as the grid menu and Reconcile mark it. -->
+                        <TextBlock Text="{Binding Session.Title, StringFormat=Change in {0}}" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,10,0" VerticalAlignment="Center" />
                         <Button Content="{Binding RemoveLeftoversLabel}" Height="30" Command="{Binding RemoveLeftoversCommand}"
                                 ToolTip="{Binding RemoveLeftoversHint}" ToolTipService.ShowOnDisabled="True" />
                         <Button Content="{Binding PullInLabel}" Height="30" Margin="6,0,0,0" Command="{Binding PullInCommand}"

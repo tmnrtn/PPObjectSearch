@@ -351,6 +351,35 @@ public class EnvironmentSessionConnectTests
         Assert.Equal(string.Empty, session.WriteAccessDescription);
     });
 
+    [Theory]
+    [InlineData("Production", true)]
+    [InlineData("Default", false)]
+    public Task Allowing_writes_asks_first_and_production_must_be_acknowledged(string sku, bool acknowledged) => EnvironmentSessionThread.Run(async () =>
+    {
+        var settings = new AppSettings();
+        var session = await new FakeEnvironment(sku).ConnectedAsync(settings);
+        await EnvironmentSessionThread.Until(() => session.EnvironmentType is not null, "the environment type");
+        var asked = new List<AskRequest>();
+        var answer = false;
+        session.Ask = request => { asked.Add(request); return answer; };
+
+        session.AllowWritesCommand.Execute(null);
+
+        var request = Assert.Single(asked);
+        Assert.Equal($"Allow writes to {session.Title}", request.Heading);
+        Assert.Equal("Allow writes", request.Confirm);
+        Assert.Same(session, request.Environment);
+        Assert.Equal(3, request.Points!.Count);
+        Assert.Equal(acknowledged, request.Acknowledgement is not null);
+        Assert.False(session.IsWriteAllowlisted);
+
+        answer = true;
+        session.AllowWritesCommand.Execute(null);
+
+        Assert.True(session.IsWriteAllowlisted);
+        Assert.Equal($"Writes to {session.EnvironmentHost} are now allowed.", session.Status);
+    });
+
     [Fact]
     public Task A_remembered_type_shows_before_connecting_and_through_a_failed_read() => EnvironmentSessionThread.Run(async () =>
     {
@@ -472,7 +501,7 @@ public class EnvironmentSessionConnectTests
         Assert.True((await session.EvaluateWritePermissionAsync()).Allowed);
         Assert.True(session.IsWriteAllowlisted);
         Assert.False(session.CanAllowWrites);
-        Assert.Equal("Writes allowed - this environment is in AllowProductionWrites.", session.WriteAccessDescription);
+        Assert.Equal("Writes allowed. Every change is still previewed and confirmed.", session.WriteAccessDescription);
         var changed = 0;
         session.WriteAllowlistChanged += (_, _) => changed++;
 

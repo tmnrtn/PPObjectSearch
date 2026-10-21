@@ -17,39 +17,45 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Sides -->
-            <Grid Grid.Row="0" Margin="16,14,16,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <!-- Heading, then the sides -->
+            <StackPanel Grid.Row="0" Margin="16,14,16,12">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Compare environments" Style="{StaticResource WindowHeading}" />
+                    <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}" Margin="8,2,0,0" ToolTip="Reads the lists already loaded in each tab - nothing is written" />
+                </StackPanel>
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <ComboBox Grid.Column="0" Style="{StaticResource EnvPicker}" Width="270"
-                          core:Ui.InlineLabel="Left"
-                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Left}" />
+                    <ComboBox Grid.Column="0" Style="{StaticResource EnvPicker}" Width="270"
+                              core:Ui.InlineLabel="Left"
+                              ItemsSource="{Binding Sessions}" SelectedItem="{Binding Left}" />
 
-                <Button AutomationProperties.Name="Swap left and right" Grid.Column="1" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
-                        Margin="6,0" FontFamily="{StaticResource IconFont}" FontSize="13"
-                        Foreground="{DynamicResource Muted}" Content="&#xE8AB;"
-                        ToolTip="Swap left and right" Command="{Binding SwapCommand}" />
+                    <Button AutomationProperties.Name="Swap left and right" Grid.Column="1" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
+                            Margin="6,0" FontFamily="{StaticResource IconFont}" FontSize="13"
+                            Foreground="{DynamicResource Muted}" Content="&#xE8AB;"
+                            ToolTip="Swap left and right" Command="{Binding SwapCommand}" />
 
-                <ComboBox Grid.Column="2" Style="{StaticResource EnvPicker}" Width="270"
-                          core:Ui.InlineLabel="Right"
-                          ItemsSource="{Binding Sessions}" SelectedItem="{Binding Right}" />
+                    <ComboBox Grid.Column="2" Style="{StaticResource EnvPicker}" Width="270"
+                              core:Ui.InlineLabel="Right"
+                              ItemsSource="{Binding Sessions}" SelectedItem="{Binding Right}" />
 
-                <Button Grid.Column="3" Style="{StaticResource PrimaryButton}" Content="Compare" Height="32"
-                        Padding="16,0" Margin="8,0,0,0" Command="{Binding CompareCommand}" />
+                    <Button Grid.Column="3" Style="{StaticResource PrimaryButton}" Content="Compare" Height="32"
+                            Padding="16,0" Margin="8,0,0,0" Command="{Binding CompareCommand}" />
 
-                <TextBlock Grid.Column="5" Text="{Binding ComparedAgo}" FontSize="11" Foreground="{DynamicResource Muted}"
-                           VerticalAlignment="Center" Margin="12,0,8,0" />
+                    <TextBlock Grid.Column="5" Text="{Binding ComparedAgo}" FontSize="11" Foreground="{DynamicResource Muted}"
+                               VerticalAlignment="Center" Margin="12,0,8,0" />
 
-                <Button Grid.Column="6" Content="Export CSV" Height="32" Command="{Binding ExportCommand}" />
-            </Grid>
+                    <Button Grid.Column="6" Content="Export CSV…" Height="32" Command="{Binding ExportCommand}" />
+                </Grid>
+            </StackPanel>
 
             <!-- Filters -->
             <Grid Grid.Row="1" Margin="16,0,16,10">
@@ -70,10 +76,15 @@
                         <RadioButton Style="{StaticResource SegmentedToggle}" Content="Only in right" GroupName="CompareStatus"
                                      core:Ui.DotBrush="{DynamicResource Blue}" core:Ui.Count="{Binding CountOnlyRight, StringFormat=N0}"
                                      IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=OnlyRight}" />
-                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="In both" GroupName="CompareStatus"
-                                     core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountBoth, StringFormat=N0}"
-                                     ToolTip="Components present in both environments. Their definitions may still differ - use Diff on a row to see."
-                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=Both}" />
+                        <!-- In both, split by the modified dates already loaded: the ones worth a Diff first. -->
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Modified differs" GroupName="CompareStatus"
+                                     core:Ui.DotBrush="{DynamicResource Amber}" core:Ui.Count="{Binding CountModifiedDiffers, StringFormat=N0}"
+                                     ToolTip="In both environments, last modified at different times. Double-click a row to Diff it."
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=ModifiedDiffers}" />
+                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Same modified" GroupName="CompareStatus"
+                                     core:Ui.DotBrush="{DynamicResource Border2}" core:Ui.Count="{Binding CountSameModified, StringFormat=N0}"
+                                     ToolTip="In both environments, last modified at the same time"
+                                     IsChecked="{Binding StatusFilter, Converter={StaticResource EnumEquals}, ConverterParameter=SameModified}" />
                     </StackPanel>
                 </Border>
 
@@ -93,11 +104,16 @@
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
             </Grid>
 
-            <DataGrid Grid.Row="2"
+            <DataGrid Grid.Row="2" x:Name="RowsGrid"
                       ItemsSource="{Binding RowsView}"
                       SelectedItem="{Binding SelectedRow}"
                       IsReadOnly="True"
                       BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
+                <!-- Double-click: Diff where both sides have it, else open its details. -->
+                <DataGrid.InputBindings>
+                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenRowCommand}"
+                                  CommandParameter="{Binding SelectedItem, ElementName=RowsGrid}" />
+                </DataGrid.InputBindings>
 
                 <DataGrid.Columns>
                     <DataGridTemplateColumn Header="Status" Width="124" SortMemberPath="Status"
@@ -194,6 +210,10 @@
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
+
+            <!-- Nothing to list: say why in its place, and clear the filters where they are the cause. -->
+            <ContentControl Grid.Row="2" Style="{StaticResource EmptyState}"
+                            Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVis}}" />
 
             <Border Grid.Row="3" Style="{StaticResource StatusBar}">
                 <Grid>

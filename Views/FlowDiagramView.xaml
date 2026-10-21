@@ -432,6 +432,15 @@
                         </TextBlock>
                         <TextBlock Text="{Binding RunStripText}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" />
+                        <!-- Step to the run before or after this one, without going back to Runs. -->
+                        <Button AutomationProperties.Name="Show the previous run" Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0" Margin="8,0,0,0"
+                                FontFamily="{StaticResource IconFont}" FontSize="9" Content="&#xE76B;"
+                                Foreground="{DynamicResource Muted}" ToolTip="Show the previous run"
+                                Command="{Binding DataContext.ShowOlderRunCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        <Button AutomationProperties.Name="Show the next run" Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0" Margin="0"
+                                FontFamily="{StaticResource IconFont}" FontSize="9" Content="&#xE76C;"
+                                Foreground="{DynamicResource Muted}" ToolTip="Show the next run"
+                                Command="{Binding DataContext.ShowNewerRunCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                         <Button Style="{StaticResource RowButton}" Content="First failure" Margin="8,0,0,0"
                                 Background="{DynamicResource Surface}"
                                 Command="{Binding JumpToFailureCommand}"
@@ -463,15 +472,25 @@
             </DockPanel>
         </Border>
 
-        <!-- Steps the run names that the flow no longer has. -->
+        <!-- One banner: steps the run names that the flow no longer has, then the design's warnings. -->
         <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="12,8,12,0"
-                Visibility="{Binding HasRunMismatch, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="{Binding RunMismatch}" TextWrapping="Wrap" />
-        </Border>
-
-        <Border Grid.Row="2" Style="{StaticResource Banner}" Margin="12,8,12,0"
-                Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
+                Visibility="{Binding HasNotes, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <TextBlock Text="{Binding RunMismatch}" TextWrapping="Wrap"
+                           Visibility="{Binding HasRunMismatch, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap"
+                           Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasRunMismatch}" Value="True">
+                                    <Setter Property="Margin" Value="0,4,0,0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
         </Border>
 
         <Grid Grid.Row="3">
@@ -581,8 +600,33 @@
                                    TextWrapping="Wrap" Margin="0,0,0,4"
                                    Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
                         <ListBox ItemsSource="{Binding SelectedIterations}" SelectedItem="{Binding SelectedIteration}"
-                                 DisplayMemberPath="Summary" MaxHeight="130" Margin="0,0,0,10"
-                                 Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}" />
+                                 MaxHeight="130" Margin="0,0,0,10"
+                                 Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}">
+                            <ListBox.ItemTemplate>
+                                <!-- The 7px outcome dot the steps use, so a failed iteration stands out. -->
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="OutcomeDot" Width="7" Height="7" Margin="0,1,7,0" VerticalAlignment="Center"
+                                                 Fill="{DynamicResource Faint}" />
+                                        <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:FlowStepOutcome.Succeeded}">
+                                            <Setter TargetName="OutcomeDot" Property="Fill" Value="{DynamicResource Green}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:FlowStepOutcome.Failed}">
+                                            <Setter TargetName="OutcomeDot" Property="Fill" Value="{DynamicResource Red}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:FlowStepOutcome.TimedOut}">
+                                            <Setter TargetName="OutcomeDot" Property="Fill" Value="{DynamicResource Amber}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Outcome}" Value="{x:Static models:FlowStepOutcome.Running}">
+                                            <Setter TargetName="OutcomeDot" Property="Fill" Value="{DynamicResource Blue}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
 
                         <DockPanel Margin="0,0,0,8">
                             <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Copy"
@@ -604,7 +648,7 @@
                             </Border>
                         </DockPanel>
 
-                        <TextBlock Text="Reading..." FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,6"
+                        <TextBlock Text="Reading…" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,6"
                                    Visibility="{Binding IsContentLoading, Converter={StaticResource BoolToVis}}" />
                         <TextBlock Text="{Binding ContentError}" FontSize="11" Foreground="{DynamicResource Red}"
                                    TextWrapping="Wrap" Margin="0,0,0,6"

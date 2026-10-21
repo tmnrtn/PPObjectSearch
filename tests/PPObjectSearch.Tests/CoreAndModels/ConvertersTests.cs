@@ -167,6 +167,15 @@ public class ConvertersTests
         Assert.Equal(expected, Convert(new YesNoConverter(), value));
     }
 
+    [Fact]
+    public void YesNo_with_dash_leaves_an_unset_flag_as_a_gap()
+    {
+        var converter = new YesNoConverter();
+
+        Assert.Equal("—", converter.Convert(false, typeof(string), "dash", System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Yes", converter.Convert(true, typeof(string), "dash", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     public static TheoryData<IValueConverter> OneWayConverters() => new()
     {
         new CountToVisibilityConverter(),

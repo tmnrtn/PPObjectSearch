@@ -255,9 +255,13 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         set
         {
             if (!SetProperty(ref _kind, value)) return;
+            OnPropertyChanged(nameof(IsAllKind));
             RebuildTables();
         }
     }
+
+    /// <summary>All settings packs four into one cell, so it needs its key: A, C, L, S, and a dot for off.</summary>
+    public bool IsAllKind => Kind == TableSettingKind.All;
 
     public static IReadOnlyList<KeyValuePair<TableSettingKind, string>> Kinds { get; } =
     [
@@ -307,10 +311,37 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _resultEnvironments, value);
     }
 
+    /// <summary>The same environments' types, for their colour in the column headers.</summary>
+    public IReadOnlyList<Dataverse.EnvironmentSku> ResultEnvironmentSkus { get; private set; } = [];
+
     public ObservableCollection<SettingRow> TableRows { get; } = new();
     public ObservableCollection<SettingRow> ColumnRows { get; } = new();
     public ObservableCollection<AuditGap> GapRows { get; } = new();
+
+    /// <summary>The gaps as the tab shows them: a row per column, a cell per environment, grouped by table.</summary>
+    public ObservableCollection<GapRow> GapMatrixRows { get; } = new();
+
+    private System.Windows.Data.ListCollectionView? _gapMatrixView;
+    public System.Windows.Data.ListCollectionView GapMatrixView => _gapMatrixView ??= CreateGapMatrixView();
+
+    private System.Windows.Data.ListCollectionView CreateGapMatrixView()
+    {
+        var view = new System.Windows.Data.ListCollectionView(GapMatrixRows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(GapRow.Group)));
+        return view;
+    }
     public ObservableCollection<LinkRow> LinkRows { get; } = new();
+
+    private System.Windows.Data.ListCollectionView? _linkRowsView;
+    /// <summary>The link rows grouped by environment and profile.</summary>
+    public System.Windows.Data.ListCollectionView LinkRowsView => _linkRowsView ??= CreateLinkRowsView();
+
+    private System.Windows.Data.ListCollectionView CreateLinkRowsView()
+    {
+        var view = new System.Windows.Data.ListCollectionView(LinkRows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(LinkRow.Group)));
+        return view;
+    }
     public ObservableCollection<SearchIndexRow> SearchRows { get; } = new();
     public ObservableCollection<SettingRow> EnvironmentRows { get; } = new();
 
@@ -328,7 +359,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     {
         TableSettingsTab.Tables => Count(TableRows.Count, "table"),
         TableSettingsTab.Columns => Count(ColumnRows.Count, "column"),
-        TableSettingsTab.Gaps => Count(GapRows.Count, "gap"),
+        TableSettingsTab.Gaps => Count(GapMatrixRows.Count, "unaudited column"),
         TableSettingsTab.Links => Count(LinkRows.Count, "linked table"),
         TableSettingsTab.Search => Count(SearchRows.Count, "indexed table"),
         _ => Count(EnvironmentRows.Count, "setting")
@@ -452,6 +483,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
 
             _snapshots = snapshots;
             _scopeTables = tables;
+            ResultEnvironmentSkus = chosen.Select(s => s.EnvironmentSku).ToList();
             ResultEnvironments = snapshots.Select(s => s.Environment).ToList();
 
             LoadFolders();
@@ -559,6 +591,8 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         _allGaps = TableSettingsReview.Gaps(_snapshots, _scopeTables).ToList();
         _allSearch = TableSettingsReview.SearchIndex(_snapshots).ToList();
         _allEnvironments = TableSettingsReview.Environments(_snapshots).ToList();
+        MarkProduction(_allColumns);
+        MarkProduction(_allEnvironments);
         RebuildLinks();
         RebuildTables();
     }
@@ -566,12 +600,29 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     private void RebuildTables()
     {
         _allTables = TableSettingsReview.Tables(_snapshots, _scopeTables, Kind, IgnoredFolders()).ToList();
+        MarkProduction(_allTables);
         Refill();
+    }
+
+    /// <summary>A difference is Amber only where production is one of the environments it is about.</summary>
+    private void MarkProduction(IEnumerable<SettingRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            row.InvolvesProduction = row.Difference.Length > 0 && row.Exceptions.Any(i =>
+                i < ResultEnvironmentSkus.Count && ResultEnvironmentSkus[i] == Dataverse.EnvironmentSku.Production);
+        }
     }
 
     private void RebuildLinks()
     {
         _allLinks = TableSettingsReview.Links(_snapshots, IgnoredFolders()).ToList();
+        foreach (var group in _allLinks.Select(l => l.Group).OfType<LinkGroup>().Distinct())
+        {
+            var index = ResultEnvironments.ToList().IndexOf(group.Environment);
+            if (index >= 0 && index < ResultEnvironmentSkus.Count) group.Sku = ResultEnvironmentSkus[index];
+        }
+
         Refill();
     }
 
@@ -586,6 +637,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         Fill(TableRows, _allTables.Where(r => (!FindingsOnly || IsFinding(r)) && Matches(r.Name, r.Detail)));
         Fill(ColumnRows, _allColumns.Where(r => (!FindingsOnly || IsFinding(r)) && Matches(r.Name, r.Detail)));
         Fill(GapRows, _allGaps.Where(g => Matches(g.Environment, g.Table, g.TableLabel, g.Column, g.ColumnLabel)));
+        Fill(GapMatrixRows, TableSettingsReview.GapMatrix(_snapshots, GapRows.ToList()));
         Fill(LinkRows, _allLinks.Where(l => (!FindingsOnly || l.HasProblem) &&
                                             Matches(l.Environment, l.Table.Table, l.Profile.Name, l.Profile.FolderLabel)));
         Fill(SearchRows, _allSearch.Where(s => (!FindingsOnly || s.HasProblem) && Matches(s.Environment, s.Table, s.TableLabel)));

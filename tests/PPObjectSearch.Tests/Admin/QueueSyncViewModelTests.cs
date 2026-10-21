@@ -169,6 +169,18 @@ public sealed class QueueSyncViewModelTests : IDisposable
     // ---------------------------------------------------------------- the plan
 
     [Fact]
+    public async Task Opened_on_a_queue_it_starts_with_that_queue_picked()
+    {
+        var handler = Handler();
+        var sync = new QueueSyncViewModel(AdminSessions.Connected(handler), Fakes.Dataverse(handler)) { StartQueueId = Support };
+
+        await sync.LoadAsync();
+
+        Assert.Equal(Support, sync.SelectedQueue?.QueueId);
+        Assert.Null(sync.SelectedTeam);
+    }
+
+    [Fact]
     public async Task The_preview_adds_missing_team_members_and_removes_queue_members_not_in_the_team()
     {
         var handler = Handler();
@@ -178,6 +190,7 @@ public sealed class QueueSyncViewModelTests : IDisposable
         Assert.True(sync.HasPlan);
         Assert.Equal("Service Desk  →  Support", sync.PlanHeading);
         Assert.Equal((6, 1, 2, 1, 2, 0), (sync.CountAll, sync.CountAdd, sync.CountRemove, sync.CountInBoth, sync.CountSkip, sync.CountKeep));
+        Assert.Equal("Apply 3 changes…", sync.ApplyLabel);
 
         var alice = sync.Rows.Single(r => r.Name == "Alice");
         Assert.Equal("Add", alice.StatusLabel);

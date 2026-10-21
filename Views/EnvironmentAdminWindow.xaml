@@ -37,32 +37,6 @@
             <Setter Property="Margin" Value="16,0,8,0" />
         </Style>
 
-        <!-- How far a privilege reaches: nothing, then User, BU, Parent, Org in deepening colour. -->
-        <Style TargetType="ContentControl" x:Key="DepthPill" BasedOn="{StaticResource StatusPill}">
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Style.Triggers>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.None}">
-                    <Setter Property="Visibility" Value="Hidden" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.User}">
-                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Amber}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.BusinessUnit}">
-                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Blue}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.ParentChild}">
-                    <Setter Property="Background" Value="{DynamicResource BlueSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Link}" />
-                </Trigger>
-                <Trigger Property="Tag" Value="{x:Static models:PrivilegeDepth.Organization}">
-                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
-                    <Setter Property="Foreground" Value="{DynamicResource Green}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- emailrouteraccessapproval: 1 Approved, 2 Pending, 3 Rejected. -->
         <Style TargetType="ContentControl" x:Key="ApprovalPill" BasedOn="{StaticResource StatusPill}">
             <Style.Triggers>
@@ -122,11 +96,6 @@
             <Setter Property="Margin" Value="16,14" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-
-        <!-- A privilege column: its depth as a pill. -->
-        <DataTemplate x:Key="DepthCell">
-            <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding}" Content="{Binding Converter={StaticResource DepthShort}}" />
-        </DataTemplate>
     </Window.Resources>
 
     <Border Style="{StaticResource WindowBody}">
@@ -447,6 +416,23 @@
                                                     <DataGridTextColumn Header="Type" Width="120" Binding="{Binding TypeDisplay}" ElementStyle="{StaticResource CellMuted}" />
                                                     <DataGridTextColumn Header="Business unit" Width="120" Binding="{Binding BusinessUnit}"
                                                                         ElementStyle="{StaticResource CellMuted}" />
+                                                    <!-- A group team: straight to Entra team sync, which writes and asks there. -->
+                                                    <DataGridTemplateColumn Width="170" CanUserSort="False">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
+                                                                        ToolTip="Compare this team with its Entra group, and sync it. Previews and asks before writing."
+                                                                        Visibility="{Binding IsEntraGroupTeam, Converter={StaticResource BoolToVis}}"
+                                                                        Command="{Binding DataContext.EntraTeamSyncCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock Text="Entra team sync…" VerticalAlignment="Center" />
+                                                                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
@@ -622,15 +608,7 @@
                                         <DockPanel Grid.Row="1" Margin="16,0,16,10"
                                                    Visibility="{Binding IsPrivilegesView, Converter={StaticResource BoolToVis}}">
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="Reach" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.User}" Content="User" Margin="0,0,4,0"
-                                                                ToolTip="Records the user owns" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.BusinessUnit}" Content="BU" Margin="0,0,4,0"
-                                                                ToolTip="Records in the user's business unit" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.ParentChild}" Content="Parent" Margin="0,0,4,0"
-                                                                ToolTip="Records in the user's business unit and the units beneath it" />
-                                                <ContentControl Style="{StaticResource DepthPill}" Tag="{x:Static models:PrivilegeDepth.Organization}" Content="Org"
-                                                                ToolTip="Every record in the organization" />
+                                                <ContentControl Style="{StaticResource ReachKey}" />
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBox Width="200" Height="28" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Table"
@@ -711,10 +689,9 @@
                                                                         HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellPaneFirst}" />
                                                     <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
                                                         <DataGridTemplateColumn.CellTemplate>
-                                                            <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding DepthLabel}" /></DataTemplate>
                                                         </DataGridTemplateColumn.CellTemplate>
                                                     </DataGridTemplateColumn>
-                                                    <DataGridTextColumn Header="Reaches" Width="150" Binding="{Binding DepthLabel}" ElementStyle="{StaticResource CellMuted}" />
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
@@ -1199,8 +1176,18 @@
                                         <Border Grid.Row="1" Padding="16,0" Height="34" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,1"
                                                 Background="{DynamicResource Surface2}">
                                             <DockPanel VerticalAlignment="Center">
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Members.Count}" FontSize="11" Foreground="{DynamicResource Muted}" />
-                                                <TextBlock Text="Members" Style="{StaticResource SectionHeading}" />
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Members.Count}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                           VerticalAlignment="Center" />
+                                                <!-- Members are changed in Queue membership sync, which writes and asks there. -->
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Margin="0,0,12,0"
+                                                        Command="{Binding QueueSyncCommand}"
+                                                        ToolTip="Make this queue's members match a team's. Previews and asks before writing.">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" />
+                                                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <TextBlock Text="Members" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
                                             </DockPanel>
                                         </Border>
                                         <Grid Grid.Row="2">

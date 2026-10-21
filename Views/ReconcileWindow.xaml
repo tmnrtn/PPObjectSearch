@@ -52,6 +52,10 @@
                         <Style TargetType="Border">
                             <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
                             <Style.Triggers>
+                                <!-- Allowed, but production or unknown: amber, so green only ever means a sandbox. -->
+                                <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                     <Setter Property="Background" Value="{DynamicResource RedSoft}" />
                                 </DataTrigger>
@@ -70,6 +74,9 @@
                                 <Style TargetType="Border" BasedOn="{StaticResource StatusCircle}">
                                     <Setter Property="Background" Value="{DynamicResource Green}" />
                                     <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Amber}" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Red}" />
                                         </DataTrigger>
@@ -98,9 +105,12 @@
                             <Run FontWeight="SemiBold">
                                 <Run.Style>
                                     <Style TargetType="Run">
-                                        <Setter Property="Text" Value="Writes permitted." />
+                                        <Setter Property="Text" Value="{Binding Permission.AllowedLabel, Mode=OneWay}" />
                                         <Setter Property="Foreground" Value="{DynamicResource Green}" />
                                         <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Permission.IsAllowlisted}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding IsBlocked}" Value="True">
                                                 <Setter Property="Text" Value="Writes blocked." />
                                                 <Setter Property="Foreground" Value="{DynamicResource Red}" />
@@ -187,8 +197,54 @@
                     <Border Margin="0,10,0,0" Padding="12,9" Background="{DynamicResource RedSoft}" CornerRadius="4"
                             Visibility="{Binding HasDeletes, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
-                            <TextBlock Text="{Binding DeleteImpactText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                       Visibility="{Binding HasDeleteImpact, Converter={StaticResource BoolToVis}}" />
+                            <!-- While it reads: Muted, over the busy bar; the acknowledgement waits for it. -->
+                            <TextBlock Text="{Binding DeleteImpactText}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Visibility="{Binding HasDeleteImpact, Converter={StaticResource BoolToVis}}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCheckingImpact}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <ProgressBar Style="{StaticResource BusyBar}" Margin="0,0,0,8"
+                                         Visibility="{Binding IsCheckingImpact, Converter={StaticResource BoolToVis}}" />
+                            <!-- A row per effect: the count right-aligned, then the table and relationship.
+                                 Cascades in Red SemiBold, blocks in Amber. -->
+                            <ItemsControl ItemsSource="{Binding DeleteImpactLines}" Focusable="False" Margin="0,0,0,8"
+                                          Grid.IsSharedSizeScope="True"
+                                          Visibility="{Binding DeleteImpactLines.Count, Converter={StaticResource CountToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="ImpactCount" MinWidth="40" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="Count" Text="{Binding CountLabel}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                            <TextBlock x:Name="Words" Grid.Column="1" Text="{Binding Description}" Margin="10,0,0,0" TextWrapping="Wrap" />
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsCascade}" Value="True">
+                                                <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Red}" />
+                                                <Setter TargetName="Words" Property="Foreground" Value="{DynamicResource Red}" />
+                                                <Setter TargetName="Words" Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsBlocking}" Value="True">
+                                                <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Amber}" />
+                                                <Setter TargetName="Words" Property="Foreground" Value="{DynamicResource Amber}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsUncounted}" Value="True">
+                                                <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Muted}" />
+                                                <Setter TargetName="Words" Property="Foreground" Value="{DynamicResource Muted}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <CheckBox Style="{StaticResource DangerCheckBox}" IsChecked="{Binding DeleteAcknowledged}"
                                       IsEnabled="{Binding CanAcknowledgeDelete}" VerticalContentAlignment="Center">
                                 <TextBlock Text="{Binding DeleteAcknowledgement}" TextWrapping="Wrap" FontWeight="SemiBold" />

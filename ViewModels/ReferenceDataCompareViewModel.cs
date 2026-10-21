@@ -203,7 +203,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
         if (Configurations.Count > 0) SelectedConfiguration = Configurations[0];
 
-        AskName = (title, prompt, initial) => Views.NamePromptWindow.Ask(OwnerWindow(), title, prompt, initial);
+        // The button says what it does: "Save configuration", or "Rename".
+        AskName = (title, prompt, initial) => Views.NamePromptWindow.Ask(OwnerWindow(), title, prompt, initial,
+            title.StartsWith("Rename", StringComparison.Ordinal) ? "Rename" : title);
         ShowReconcile = viewModel =>
             new Views.ReconcileWindow { DataContext = viewModel, Owner = OwnerWindow() }.ShowDialog();
         PickEntities = picker =>
@@ -218,8 +220,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
     internal Func<EntityPickerViewModel, bool> PickEntities { get; set; }
     internal Func<ReferenceEntitySettingsViewModel, bool> EditSettings { get; set; }
 
-    internal Func<string, bool> Confirm { get; set; } = message =>
-        MessageBox.Show(message, "PPObjectSearch", MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
+    internal Func<AskRequest, bool> Confirm { get; set; } = Asking.Show;
 
     /// <summary>Where to export to, given a suggested file name; null when the user cancels.</summary>
     internal Func<string, string?> PickExportPath { get; set; } = fileName =>
@@ -417,9 +418,9 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
     public string ReconcileLabel => SelectedRows.Count switch
     {
-        0 => "Reconcile...",
-        1 => "Reconcile 1 row...",
-        var n => $"Reconcile {n:N0} rows..."
+        0 => "Reconcile…",
+        1 => "Reconcile 1 row…",
+        var n => $"Reconcile {n:N0} rows…"
     };
 
     public string SelectionSummary
@@ -544,6 +545,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
             CancelCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(IsIdle));
+            RaiseEmptyState();
         }
     }
 
@@ -771,6 +773,48 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
         CountDifferent = narrowed.Count(r => r.Status == RecordCompareStatus.Different);
         CountMatches = narrowed.Count(r => r.Status == RecordCompareStatus.Same);
         CountDifferences = CountOnlySource + CountOnlyTarget + CountDifferent;
+        RaiseEmptyState();
+    }
+
+    /// <summary>Before a compare, while one runs, or when nothing is shown: why is said in the grid's place.</summary>
+    public bool IsListEmpty => RowsView.IsEmpty;
+
+    private bool IsFiltered => StatusFilter != RecordStatusFilter.Differences || !string.IsNullOrWhiteSpace(SearchText) ||
+                               !string.Equals(SelectedEntityFilter, AllEntities, StringComparison.Ordinal);
+
+    public bool CanClearFilters => !IsBusy && _all.Count > 0 && IsFiltered;
+
+    public string EmptyHeading =>
+        IsBusy ? "Comparing"
+        : _fetched.Count == 0 ? "Nothing compared yet"
+        : _all.Count == 0 ? "No rows"
+        : IsFiltered ? "Nothing matches"
+        : "No differences";
+
+    public string EmptyText =>
+        IsBusy ? "Reading rows from both environments."
+        : _fetched.Count == 0 ? "Pick a source and a target, add the tables to check, then Compare."
+        : _all.Count == 0 ? "Neither environment has rows in the compared tables."
+        : IsFiltered ? "No row matches the status, table and search filters."
+        : $"All {_all.Count:N0} rows match in both environments.";
+
+    private RelayCommand? _clearFiltersCommand;
+    public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>
+    {
+        _searchText = string.Empty;
+        OnPropertyChanged(nameof(SearchText));
+        _selectedEntityFilter = AllEntities;
+        OnPropertyChanged(nameof(SelectedEntityFilter));
+        StatusFilter = RecordStatusFilter.Differences;
+        RefreshView();
+    });
+
+    private void RaiseEmptyState()
+    {
+        OnPropertyChanged(nameof(IsListEmpty));
+        OnPropertyChanged(nameof(CanClearFilters));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private bool FilterRow(object obj)
@@ -1021,7 +1065,14 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
     {
         if (SelectedConfiguration is not { } config) return;
 
-        if (!Confirm($"Delete the saved configuration '{config.Name}'?")) return;
+        if (!Confirm(new AskRequest($"Delete the saved configuration '{config.Name}'?",
+                "It is removed from this computer's settings. Nothing in either environment changes.")
+            {
+                Confirm = "Delete configuration"
+            }))
+        {
+            return;
+        }
 
         Configurations.Remove(config);
         _selectedConfiguration = null;

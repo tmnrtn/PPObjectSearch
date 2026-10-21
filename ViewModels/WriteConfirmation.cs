@@ -38,7 +38,7 @@ public static class WriteConfirmation
 
     /// <summary>Shown when the guard refuses; replaced in tests.</summary>
     internal static Action<string, string> Refuse { get; set; } = (message, title) =>
-        MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        Asking.Show(new AskRequest("Writes are blocked here", message) { Title = title, Cancel = "Close" });
 
     /// <summary>The tooltip of a button that writes: what it does, where, and that it asks first.</summary>
     public static string ToolTip(string what, string environmentName) =>

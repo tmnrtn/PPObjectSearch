@@ -88,6 +88,10 @@
                                     Content="{Binding EnvironmentSku, Converter={StaticResource SkuBadge}}"
                                     ToolTip="{Binding EnvironmentTypeDescription}"
                                     Visibility="{Binding IsConnected, Converter={StaticResource BoolToVis}}" />
+                    <!-- As every other window's environment line shows it. -->
+                    <ContentControl Style="{StaticResource ChipAmber}" Margin="8,1,0,0" Content="Writes allowed" FontWeight="SemiBold"
+                                    FontSize="10" VerticalAlignment="Center" ToolTip="Writes allowed. Every change is still previewed and confirmed."
+                                    Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
                 <TextBlock Text="{Binding EnvironmentUrl}" FontSize="11" Foreground="{DynamicResource Muted}"
                            Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
@@ -160,9 +164,9 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button AutomationProperties.Name="F5 - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
+                    <Button AutomationProperties.Name="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
-                            ToolTip="F5 - reads the solution list and the solution's objects again, bypassing the cache." />
+                            ToolTip="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." />
                 </StackPanel>
 
                 <!-- Account -->
@@ -185,7 +189,6 @@
                     <Button.ContextMenu>
                         <ContextMenu Opened="AccountMenu_Opened">
                             <!-- Where this environment's links and sign-ins open - the sidebar's menu, here too. -->
-                            <MenuItem Header="{Binding BrowserProfileLabel}" HeaderStringFormat="Links open in {0}" IsEnabled="False" />
                             <MenuItem Header="Open links in" ItemsSource="{Binding BrowserProfileOptions}">
                                 <MenuItem.ItemContainerStyle>
                                     <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
@@ -198,7 +201,7 @@
                                 </MenuItem.ItemContainerStyle>
                             </MenuItem>
                             <Separator />
-                            <MenuItem Header="Switch account..." Command="{Binding SwitchAccountCommand}"
+                            <MenuItem Header="Switch account…" Command="{Binding SwitchAccountCommand}"
                                       ToolTip="Sign this tab in with a different account or tenant." />
                             <MenuItem Header="Copy tenant id" Command="{Binding CopyTenantIdCommand}" />
                             <Separator />
@@ -220,7 +223,7 @@
 
             <WrapPanel Grid.Column="0" Orientation="Horizontal">
                 <!-- Esc, ↑↓ and Enter are handled in code: they drive the dropdown first. -->
-                <TextBox x:Name="SearchBox" Width="220" Margin="0,0,6,0"
+                <TextBox x:Name="SearchBox" Width="280" Margin="0,0,6,0"
                          core:Ui.Icon="&#xE721;" core:Ui.KeyHint="Esc" core:Ui.Placeholder="Search"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                          GotKeyboardFocus="SearchBox_GotKeyboardFocus"
@@ -393,8 +396,19 @@
                           ItemsSource="{Binding LayerFilters}"
                           SelectedItem="{Binding SelectedLayerFilter}"
                           DisplayMemberPath="Label"
-                          IsEnabled="{Binding IsConnected}"
-                          ToolTip="Whether the object has an unmanaged customization on top of its managed layer. Unknown until 'Check layers' has been run." />
+                          IsEnabled="{Binding CanFilterByLayer}"
+                          ToolTipService.ShowOnDisabled="True">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                            <Setter Property="ToolTip" Value="Whether the object has an unmanaged customization on top of its managed layer." />
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="ToolTip" Value="Run Check layers first" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                </ComboBox>
 
                 <!-- On: the active filter look, like the boxes beside it. -->
                 <ToggleButton Style="{StaticResource FilterToggle}" Margin="0,0,6,0" IsChecked="{Binding FavouritesOnly}"
@@ -420,7 +434,7 @@
                         Command="{Binding CancelLayerCheckCommand}"
                         Visibility="{Binding IsCheckingLayers, Converter={StaticResource BoolToVis}}"
                         ToolTip="Stop checking layers" />
-                <Button Content="Export CSV" Margin="6,0,0,0"
+                <Button Content="Export CSV…" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
                 <Button AutomationProperties.Name="Show or hide the detail pane" Content="&#xE8A0;" Margin="6,0,0,0"
@@ -455,6 +469,10 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
+            <!-- Nothing to list: say why in its place, and clear the filters where they are the cause. -->
+            <ContentControl Grid.Column="0" Panel.ZIndex="1" Style="{StaticResource EmptyState}"
+                            Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVis}}" />
+
             <DataGrid Grid.Column="0"
                       ItemsSource="{Binding ItemsView}"
                       SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
@@ -473,7 +491,7 @@
                     -->
                     <ContextMenu>
                         <!-- Open · copy · the selection · then, kept apart at the bottom, what writes. -->
-                        <MenuItem Header="Details…" Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
+                        <MenuItem Header="Open details" Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
                         <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
@@ -578,23 +596,29 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="Layer" Width="126" SortMemberPath="UnmanagedLayerLabel">
+                    <DataGridTemplateColumn Header="Layer" Width="144" SortMemberPath="UnmanagedLayerLabel">
+                        <DataGridTemplateColumn.HeaderStyle>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                <Setter Property="ToolTip" Value="Whether the object has an unmanaged layer. — until Check layers has been run." />
+                            </Style>
+                        </DataGridTemplateColumn.HeaderStyle>
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
-                                    <Ellipse x:Name="LayerDot" Style="{StaticResource Dot}" Margin="0,1,6,0" />
-                                    <TextBlock x:Name="LayerText" Text="Not checked" Foreground="{DynamicResource Faint}"
+                                    <Ellipse x:Name="LayerDot" Style="{StaticResource Dot}" Margin="0,1,6,0" Visibility="Collapsed" />
+                                    <TextBlock x:Name="LayerText" Text="—" Foreground="{DynamicResource Faint}"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="True">
+                                        <Setter TargetName="LayerDot" Property="Visibility" Value="Visible" />
                                         <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Amber}" />
                                         <Setter TargetName="LayerText" Property="Text" Value="Unmanaged layer" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Amber}" />
                                     </DataTrigger>
+                                    <!-- The same words and colours everywhere: Unmanaged layer in Amber, No unmanaged layer neutral. -->
                                     <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="False">
-                                        <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Green}" />
-                                        <Setter TargetName="LayerText" Property="Text" Value="Clean" />
+                                        <Setter TargetName="LayerText" Property="Text" Value="No unmanaged layer" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Muted}" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
@@ -661,9 +685,7 @@
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="False">
                                                             <Setter Property="Content" Value="No unmanaged layer" />
-                                                            <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource GreenSoft}" />
-                                                            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -677,7 +699,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <!-- Details is where the app does its work, so it leads; the portal is a step away. -->
-                                        <Button Style="{StaticResource PrimaryButton}" Content="Details..."
+                                        <Button Style="{StaticResource PrimaryButton}" Content="Open details"
                                                 ToolTip="Solutions, layers and dependencies - and runs, design, source or columns, by type (double-click a row)"
                                                 Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                         <Button Grid.Column="1" Content="Open in maker portal" Margin="6,0,0,0"
@@ -779,13 +801,23 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- What writes is kept apart from what reads: only for types that have such actions. -->
+                            <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
+                            <StackPanel Orientation="Horizontal" Margin="16,6,16,6">
+                                <Button Style="{StaticResource SmallButton}" Content="Name"
+                                        Command="{Binding DataContext.CopyNameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Button Style="{StaticResource SmallButton}" Content="Maker link" Margin="6,0,0,0"
+                                        Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Button Style="{StaticResource SmallButton}" Content="Object id" Margin="6,0,0,0"
+                                        Command="{Binding DataContext.CopyIdCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+
+                            <!-- Writes last, as in the grid menu, apart from what reads: only for types that have such actions. -->
                             <StackPanel Visibility="{Binding DataContext.HasQuickActions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal" Margin="16,6,16,0">
                                     <TextBlock Text="Change" Style="{StaticResource Label}" Margin="0" />
                                     <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="16,6,16,6">
+                                <StackPanel Orientation="Horizontal" Margin="16,6,16,12">
                                     <Button Style="{StaticResource SmallButton}" Margin="0,0,6,0"
                                             Content="{Binding DataContext.SwitchOffLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             ToolTip="{Binding DataContext.SwitchOffToolTip, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -798,16 +830,6 @@
                                             Visibility="{Binding DataContext.ShowSwitchOn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
                                     <TextBlock Text="Asks first" FontSize="11" Foreground="{DynamicResource Faint}" VerticalAlignment="Center" />
                                 </StackPanel>
-                            </StackPanel>
-
-                            <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
-                            <StackPanel Orientation="Horizontal" Margin="16,6,16,12">
-                                <Button Style="{StaticResource SmallButton}" Content="Name"
-                                        Command="{Binding DataContext.CopyNameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Button Style="{StaticResource SmallButton}" Content="Maker link" Margin="6,0,0,0"
-                                        Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Button Style="{StaticResource SmallButton}" Content="Object id" Margin="6,0,0,0"
-                                        Command="{Binding DataContext.CopyIdCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -823,7 +845,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="{Binding Status}" Foreground="{DynamicResource Muted}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Status}" />
                 <TextBlock Grid.Column="1" Text="{Binding ResultSummary}" FontWeight="SemiBold" Margin="12,0,0,0"
                            VerticalAlignment="Center" />
             </Grid>

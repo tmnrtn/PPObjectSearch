@@ -16,7 +16,7 @@
         <!-- Allowlisted: reconciling and the admin tools may change it, production or not. -->
         <ContentControl Style="{StaticResource ChipAmber}" Margin="7,0,0,0" Content="Writes allowed" FontWeight="SemiBold"
                         FontSize="10" VerticalAlignment="Center"
-                        ToolTip="This environment is in AllowProductionWrites, so reconciling and the admin tools may change it."
+                        ToolTip="Writes allowed. Every change is still previewed and confirmed."
                         Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
         <TextBlock Text="{Binding EnvironmentHost}" Foreground="{DynamicResource Muted}"
                    Margin="7,0,0,0" VerticalAlignment="Center" />

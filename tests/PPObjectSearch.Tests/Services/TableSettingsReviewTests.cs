@@ -30,6 +30,19 @@ public class TableSettingsReviewTests
             null, null, 10, 10, null, true)).ToList());
 
     [Fact]
+    public void A_rows_exceptions_are_the_odd_ones_out_and_anything_missing_or_wrong()
+    {
+        var on = SettingCell.Flag(true);
+        var off = SettingCell.Flag(false);
+
+        var row = new SettingRow("t", "t", null, ["Dev", "QA", "UAT", "Prod"], [on, on, SettingCell.Absent("table"), off]);
+
+        Assert.Equal([2, 3], row.Exceptions);
+        Assert.Equal("—", row.Cells[2].Text);
+        Assert.Empty(new SettingRow("t", "t", null, ["Dev", "QA"], [on, on]).Exceptions);
+    }
+
+    [Fact]
     public void A_table_audited_everywhere_is_consistent()
     {
         var rows = TableSettingsReview.Tables([Env("Dev", Table("account")), Env("Prod", Table("account"))],
@@ -229,9 +242,15 @@ public class TableSettingsReviewTests
 
         var rows = TableSettingsReview.Links([dev], NoneIgnored);
 
-        Assert.False(rows[0].HasProblem);
-        Assert.Equal("Sync is InProgress", rows[1].Problem);
+        // Problems first, under one group for the environment and profile.
+        Assert.Equal(["contact", "account"], rows.Select(r => r.Table.Table));
+        Assert.Equal("Sync is InProgress", rows[0].Problem);
+        Assert.False(rows[1].HasProblem);
         Assert.True(rows.All(r => r.IsCounted));
+
+        var group = Assert.Single(rows.Select(r => r.Group).Distinct());
+        Assert.Equal(("Dev", "Lake", "2 tables", "1 problem"), (group!.Environment, group.Profile.Name, group.Summary, group.ProblemLabel));
+        Assert.Equal("—", rows[1].BehindLabel);
     }
 
     [Fact]

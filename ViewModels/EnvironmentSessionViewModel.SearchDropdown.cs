@@ -180,7 +180,7 @@ public sealed partial class EnvironmentSessionViewModel
 
         SearchDropdownOpen = false;
         var name = Views.NamePromptWindow.Ask(Application.Current?.MainWindow, "Rename saved search",
-            "A new name for this search.", search.Name);
+            "A new name for this search.", search.Name, "Rename");
         if (string.IsNullOrWhiteSpace(name) || name == search.Name) return;
 
         var old = search.Name;

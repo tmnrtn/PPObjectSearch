@@ -53,6 +53,17 @@ public sealed class ConnectionReferenceRow
     public string? ConnectionName => Connection?.DisplayName;
     public string? Owner => Connection?.Owner;
 
+    /// <summary>The Connection column: the connection's name, else why there is none to name.</summary>
+    public string ConnectionShown => ConnectionName ?? Health switch
+    {
+        ConnectionHealth.NoConnection => "None",
+        ConnectionHealth.NotVisible => "Not shared with you",
+        _ => ConnectionId ?? "—"
+    };
+
+    /// <summary>The row's tooltip: the two ids the grid no longer has columns for.</summary>
+    public string RowToolTip => ConnectionId is { Length: > 0 } id ? $"{LogicalName} · connection {id}" : LogicalName;
+
     public ConnectionHealth Health => (Reference.HasConnection, Connection) switch
     {
         (false, _) => ConnectionHealth.NoConnection,

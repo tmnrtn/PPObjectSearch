@@ -48,6 +48,20 @@ public static class DeploymentSettings
         return JsonSerializer.Serialize(settings, Options);
     }
 
+    /// <summary>The names still blank, variables then connection references - what to fill in by hand.</summary>
+    public static IReadOnlyList<string> BlankNames(
+        IEnumerable<EnvironmentVariableInfo> variables, IEnumerable<ConnectionReferenceInfo> references, bool withValues) =>
+        [
+            .. variables
+                .Where(v => !withValues || !v.HasCurrentValue || string.IsNullOrEmpty(v.CurrentValue))
+                .Select(v => v.SchemaName)
+                .Order(StringComparer.OrdinalIgnoreCase),
+            .. references
+                .Where(r => !withValues || !r.HasConnection)
+                .Select(r => r.LogicalName)
+                .Order(StringComparer.OrdinalIgnoreCase)
+        ];
+
     /// <summary>What is still blank and has to be filled in by hand before importing.</summary>
     public static (int Variables, int References) Blanks(
         IEnumerable<EnvironmentVariableInfo> variables, IEnumerable<ConnectionReferenceInfo> references, bool withValues) =>

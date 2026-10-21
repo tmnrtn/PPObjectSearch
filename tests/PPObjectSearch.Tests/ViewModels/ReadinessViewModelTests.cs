@@ -245,6 +245,16 @@ public class ReadinessViewModelTests
         Assert.Contains($"{vm.Report.Count(ReadinessSeverity.Blocker)} blockers", vm.ReadSummary);
         Assert.True(vm.ExportCommand.CanExecute(null));
         Assert.Equal("Nothing found", vm.EmptyHeading);
+
+        // The verdict, and a toggle per severity.
+        Assert.True(vm.HasVerdict);
+        Assert.False(vm.IsReady);
+        Assert.Equal("Not ready", vm.Verdict);
+        Assert.Equal($" · {vm.BlockerCount} blocker{(vm.BlockerCount == 1 ? "" : "s")}", vm.VerdictBlockers);
+
+        vm.ShowBlockers = false;
+        Assert.DoesNotContain(vm.FindingsView.Cast<ReadinessFinding>(), f => f.Severity == ReadinessSeverity.Blocker);
+        Assert.Equal(vm.Findings.Count - vm.BlockerCount, vm.FindingsView.Count);
     }
 
     [Fact]

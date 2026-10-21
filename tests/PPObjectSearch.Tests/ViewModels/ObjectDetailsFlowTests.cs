@@ -297,6 +297,15 @@ public class ObjectDetailsFlowTests
         Assert.True(details.FlowDiagram!.IsRunMode);
         Assert.Equal(FlowStepOutcome.Succeeded, details.FlowDiagram.Cards.Single(c => c.Title == "Send").RunOutcome);
         Assert.False(details.FlowDiagram.HasRunNotice);
+
+        // The newest run is on show: ‹ steps back to the one before it, › has nowhere to go.
+        Assert.False(details.ShowNewerRunCommand.CanExecute(null));
+        Assert.True(details.ShowOlderRunCommand.CanExecute(null));
+
+        await details.ShowOlderRunCommand.ExecuteAsync(null);
+
+        Assert.Equal("run-2", details.SelectedRun?.Name);
+        Assert.True(details.ShowNewerRunCommand.CanExecute(null));
     }
 
     [Fact]

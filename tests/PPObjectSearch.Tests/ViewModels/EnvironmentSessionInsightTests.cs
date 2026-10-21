@@ -236,8 +236,11 @@ public class EnvironmentSessionInsightTests
         Assert.True(session.CheckUnmanagedLayersCommand.CanExecute(null));
         var statuses = new List<string>();
         session.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(session.Status)) statuses.Add(session.Status); };
+        Assert.False(session.CanFilterByLayer);
 
         await session.CheckUnmanagedLayersCommand.ExecuteAsync(null);
+
+        Assert.True(session.CanFilterByLayer);
 
         Assert.Equal("Checked 2 object(s) for an unmanaged layer (1 of this type aren't supported by the layers check; " +
                      "1 could not be read - run the check again to retry them).", session.Status);

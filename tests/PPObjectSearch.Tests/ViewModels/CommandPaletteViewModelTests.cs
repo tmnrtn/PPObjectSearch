@@ -55,6 +55,20 @@ public sealed class CommandPaletteViewModelTests : IDisposable
 
         Assert.Equal("Theme: dark", palette.Results[0].Title);
         Assert.Same(palette.Results[0], palette.Selected);
+        Assert.False(palette.NothingMatches);
+    }
+
+    [Fact]
+    public void A_query_that_matches_nothing_says_so()
+    {
+        var palette = new CommandPaletteViewModel(Shell)
+        {
+            Query = "zzqqxx"
+        };
+
+        Assert.Empty(palette.Results);
+        Assert.True(palette.NothingMatches);
+        Assert.Equal("Nothing matches 'zzqqxx'", palette.NothingMatchesText);
     }
 
     [Fact]

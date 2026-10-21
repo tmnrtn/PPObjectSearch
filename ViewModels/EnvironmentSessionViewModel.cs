@@ -221,7 +221,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     private void SaveSearch()
     {
         var name = Views.NamePromptWindow.Ask(Application.Current?.MainWindow, "Save search",
-            "Name this search - its words and filters - so it can be picked again.", SearchText.Trim());
+            "Name this search - its words and filters - so it can be picked again.", SearchText.Trim(), "Save search");
         if (string.IsNullOrWhiteSpace(name)) return;
 
         Library.SaveSearch(EnvironmentUrl, new SavedSearch
@@ -375,8 +375,10 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         var rows = _selection.ToList();
         if (rows.Count > 10 &&
-            MessageBox.Show($"Open {rows.Count:N0} details windows?", MessageCaption,
-                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+            !Ask(new AskRequest($"Open {rows.Count:N0} details windows?", "Each selected row opens in a window of its own.")
+            {
+                Confirm = $"Open {rows.Count:N0} windows"
+            }))
         {
             return;
         }
@@ -440,12 +442,15 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _ = viewModel.LoadAsync();
     }
 
-    /// <summary>Compare an Entra group team with its group, sync it, and remove what the sync leaves behind.</summary>
-    private void ShowEntraTeamSync()
+    /// <summary>
+    /// Compare an Entra group team with its group, sync it, and remove what the sync leaves behind -
+    /// starting on <paramref name="teamId"/> where one is given, as Environment admin does.
+    /// </summary>
+    public void ShowEntraTeamSync(Guid? teamId = null)
     {
         if (_client is null) return;
 
-        var viewModel = new EntraTeamSyncViewModel(this, _client);
+        var viewModel = new EntraTeamSyncViewModel(this, _client) { StartTeamId = teamId };
         Track(new Views.EntraTeamSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
         _ = viewModel.LoadTeamsAsync();
     }
@@ -512,12 +517,12 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _ = selectId is { } select ? viewModel.OpenAtAsync(tab, select) : viewModel.LoadAsync();
     }
 
-    /// <summary>Make a queue's members match a team's, adding and removing.</summary>
-    private void ShowQueueSync()
+    /// <summary>Make a queue's members match a team's, adding and removing - starting on <paramref name="queueId"/> if given.</summary>
+    public void ShowQueueSync(Guid? queueId = null)
     {
         if (_client is null) return;
 
-        var viewModel = new QueueSyncViewModel(this, _client);
+        var viewModel = new QueueSyncViewModel(this, _client) { StartQueueId = queueId };
         Track(new Views.QueueSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
         _ = viewModel.LoadAsync();
     }
@@ -537,34 +542,56 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     /// <summary>For the sidebar tooltip; empty unless writes have been allowed here.</summary>
     public string WriteAccessDescription => IsWriteAllowlisted
-        ? "Writes allowed - this environment is in AllowProductionWrites."
+        ? "Writes allowed. Every change is still previewed and confirmed."
         : string.Empty;
 
     private bool HasHost => EnvironmentHost != "Not connected" && !string.IsNullOrWhiteSpace(EnvironmentUrl);
 
-    /// <summary>
-    /// Adds this one environment to the write allowlist, after a confirmation that names it and
-    /// says what type it is. Defaults to No: lifting the production guard is never the easy path.
-    /// </summary>
-    private void AllowWrites()
-    {
-        if (!CanAllowWrites) return;
+    /// <summary>Asks the user a question in the app's own dialog; replaced in tests.</summary>
+    internal Func<AskRequest, bool> Ask { get; set; } = Asking.Show;
 
+    /// <summary>
+    /// The question in front of allowing writes: this environment's line, what it unlocks, and for
+    /// production or an unknown type an acknowledgement that must be ticked first.
+    /// </summary>
+    internal AskRequest AllowWritesRequest()
+    {
         var type = EnvironmentSku switch
         {
             EnvironmentSku.Unknown => "an environment whose type could not be read",
             var sku => "a " + new EnvironmentTypeInfo(sku, null, null).SkuLabel.ToLowerInvariant() + " environment"
         };
 
-        var answer = MessageBox.Show(
-            $"Allow PPObjectSearch to write to {EnvironmentHost}?\n\n" +
-            $"This is {type}. Reconciling reference data and the admin tools will be able to change " +
-            "data and membership here. Every change is still previewed and confirmed first.\n\n" +
-            "Only this environment is affected. You can stop allowing writes from the same menu.",
-            "Allow writes to this environment",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        return new AskRequest($"Allow writes to {Title}", $"This is {type}. Once allowed, these can change data and membership here:")
+        {
+            Title = "Allow writes",
+            Environment = this,
+            Points = new[]
+            {
+                "Reconcile and Undo run",
+                "Entra team sync and Queue membership sync",
+                "Quick actions: turn flows on or off, set variable values"
+            },
+            Note = "Every change is still previewed and confirmed first, and recorded in the run log. " +
+                   "Only this environment is affected. Stop allowing writes from the same menu.",
+            Acknowledgement = EnvironmentSku switch
+            {
+                EnvironmentSku.Production => $"I understand {Title} is production and changes made here affect its users.",
+                EnvironmentSku.Unknown => $"I understand {Title}'s type could not be read, so it may be production.",
+                _ => null
+            },
+            Confirm = "Allow writes"
+        };
+    }
 
-        if (answer != MessageBoxResult.Yes) return;
+    /// <summary>
+    /// Adds this one environment to the write allowlist, after a question that names it and says
+    /// what type it is. Cancel has the focus: lifting the production guard is never the easy path.
+    /// </summary>
+    private void AllowWrites()
+    {
+        if (!CanAllowWrites) return;
+        if (!Ask(AllowWritesRequest())) return;
 
         if (WriteGuard.Allow(_settings, EnvironmentUrl)) _settings.Save();
         RaiseWriteAllowlist();
@@ -799,6 +826,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 QueueSyncCommand.RaiseCanExecuteChanged();
                 EnvironmentAdminCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(IsSolutionPickerEnabled));
+                OnPropertyChanged(nameof(CanFilterByLayer));
+                RaiseEmptyState();
             }
         }
     }
@@ -812,6 +841,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             if (!SetProperty(ref _isBusy, value)) return;
 
             OnPropertyChanged(nameof(IsSolutionPickerEnabled));
+            RaiseEmptyState();
             CheckUnmanagedLayersCommand?.RaiseCanExecuteChanged();
         }
     }
@@ -1582,6 +1612,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         LayerFilters.Add(new TypeFilterOption { Name = "Unmanaged layer", Count = _allItems.Count(i => i.HasUnmanagedLayer == true) });
         LayerFilters.Add(new TypeFilterOption { Name = "No unmanaged layer", Count = _allItems.Count(i => i.HasUnmanagedLayer == false) });
         LayerFilters.Add(new TypeFilterOption { Name = "Not checked", Count = _allItems.Count(i => i.HasUnmanagedLayer is null) });
+        OnPropertyChanged(nameof(CanFilterByLayer));
 
         _selectedTypeFilter = TypeFilters.FirstOrDefault(f => f.Name == previousType) ?? TypeFilters[0];
         _selectedStateFilter = StateFilters.FirstOrDefault(f => f.Name == previousState) ?? StateFilters[0];
@@ -1671,6 +1702,43 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         ExportCsvCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(HasActiveFilters));
+        RaiseEmptyState();
+    }
+
+    /// <summary>
+    /// The Layer filter waits for a layer check: before one, "Unmanaged layer" would silently show
+    /// nothing rather than say nothing is known yet.
+    /// </summary>
+    public bool CanFilterByLayer => IsConnected && _allItems.Any(i => i.HasUnmanagedLayer is not null);
+
+    /// <summary>Nothing in the grid: why is said in its place.</summary>
+    public bool IsListEmpty => ItemsView.IsEmpty;
+
+    public bool CanClearFilters => _allItems.Count > 0 && HasActiveFilters;
+
+    public string EmptyHeading => (IsConnected, IsBusy, _allItems.Count > 0) switch
+    {
+        (false, _, _) => "Not connected",
+        (_, _, true) => "Nothing matches",
+        (_, true, _) => "Reading objects",
+        _ => "No objects"
+    };
+
+    public string EmptyText => (IsConnected, IsBusy, _allItems.Count > 0) switch
+    {
+        (false, _, _) => "Connect to list this environment's solutions and objects.",
+        (_, _, true) => "No object matches the search and filters.",
+        (_, true, _) => "The selected solution's components are being read.",
+        _ when SelectedSolution is null => "Choose a solution to list its objects.",
+        _ => $"{SelectedSolution.FriendlyName} has no components of the types listed here."
+    };
+
+    private void RaiseEmptyState()
+    {
+        OnPropertyChanged(nameof(IsListEmpty));
+        OnPropertyChanged(nameof(CanClearFilters));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private bool FilterItem(object obj)
@@ -1830,17 +1898,15 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     }
 
     /// <summary>Past the warning threshold, asks before sending one request per object.</summary>
-    private static bool ConfirmLayerCheck(int count)
-    {
-        if (count <= UnmanagedLayerCheckWarningThreshold) return true;
-
-        var proceed = MessageBox.Show(
-            $"This checks {count:N0} objects individually against Dataverse - one request each. " +
-            "Narrowing the filters first is faster and gentler on the environment. Continue anyway?",
-            MessageCaption, MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-        return proceed == MessageBoxResult.Yes;
-    }
+    private bool ConfirmLayerCheck(int count) =>
+        count <= UnmanagedLayerCheckWarningThreshold ||
+        Ask(new AskRequest($"Check {count:N0} objects for an unmanaged layer?",
+            "Each object is checked against Dataverse on its own - one request each.")
+        {
+            Environment = this,
+            Note = "Narrowing the filters first is faster and gentler on the environment.",
+            Confirm = $"Check {count:N0} objects"
+        });
 
     /// <summary>
     /// Marks each checked object with whether it has an unmanaged layer, and counts those of a type

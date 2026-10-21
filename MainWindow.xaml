@@ -27,10 +27,11 @@
 
     <Window.Resources>
         <!-- A group of the selected environment's tools: 10 SemiBold Faint. -->
+        <!-- Every sidebar heading. Muted, not Faint: at 10px Faint is about 3:1 on the sidebar. -->
         <Style TargetType="TextBlock" x:Key="SidebarGroup">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
             <Setter Property="Margin" Value="8,6,8,2" />
         </Style>
 
@@ -58,8 +59,7 @@
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0" Margin="8,8,0,6">
-                <TextBlock Text="Environments" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                <TextBlock Text="ENVIRONMENTS" Style="{StaticResource SidebarGroup}" Margin="0" VerticalAlignment="Center" />
                 <Button AutomationProperties.Name="Open another environment in a new tab (Ctrl+T)" HorizontalAlignment="Right" Style="{StaticResource GhostButton}"
                         Width="22" Height="22" Padding="0" FontFamily="{StaticResource IconFont}" FontSize="11"
                         Foreground="{DynamicResource Muted}" Content="&#xE710;"
@@ -119,11 +119,11 @@
                                             <MenuItem Header="Allow writes to this environment…"
                                                       Command="{Binding AllowWritesCommand}"
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource NotBoolToVis}}"
-                                                      ToolTip="Add this environment to AllowProductionWrites, so reconciling and the admin tools may change it. Only offered where the production guard applies." />
+                                                      ToolTip="Lets Reconcile, the membership tools and quick actions change this environment. Only offered where the production guard applies." />
                                             <MenuItem Header="Stop allowing writes"
                                                       Command="{Binding RevokeWritesCommand}"
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}"
-                                                      ToolTip="Remove this environment from AllowProductionWrites. The production guard applies again." />
+                                                      ToolTip="Blocks writes here again, as the production guard does by default." />
                                             <Separator />
                                             <MenuItem Header="Close tab" InputGestureText="Ctrl+W"
                                                       Click="CloseTab_Click" />
@@ -151,7 +151,7 @@
                                                        TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="1" Style="{StaticResource Icon}" Text="&#xE785;" FontSize="10" Margin="5,1,0,0"
                                                        Foreground="{DynamicResource Amber}"
-                                                       ToolTip="Writes allowed - this environment is in AllowProductionWrites."
+                                                       ToolTip="Writes allowed. Every change is still previewed and confirmed."
                                                        Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}" />
                                             <Ellipse Grid.Column="2" Margin="6,1,0,0">
                                                 <Ellipse.Style>
@@ -274,8 +274,7 @@
                         </Button>
                     </StackPanel>
 
-                    <TextBlock Text="Across environments" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{DynamicResource Muted}" Margin="8,12,8,2" />
+                    <TextBlock Text="ACROSS ENVIRONMENTS" Style="{StaticResource SidebarGroup}" Margin="8,12,8,2" />
 
                     <!-- Everything not listed here - import log, dependencies, documentation, closing windows - is in the palette. -->
                     <Button Height="28" Margin="0,2" Padding="8,0" HorizontalContentAlignment="Stretch"
@@ -358,9 +357,9 @@
                         </Button.Style>
                     </Button>
 
-                    <Button AutomationProperties.Name="Theme" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
+                    <Button AutomationProperties.Name="Theme and logs" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
                             Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
-                            Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
+                            Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme and logs"
                             core:Ui.OpensMenu="True">
                         <Button.ContextMenu>
                             <ContextMenu>

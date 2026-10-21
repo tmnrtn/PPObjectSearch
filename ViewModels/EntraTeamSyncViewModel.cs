@@ -204,6 +204,9 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
 
     public bool HasTeam => SelectedTeam is not null;
 
+    /// <summary>The team to start on, where the window was opened from one - compared as soon as the teams are read.</summary>
+    public Guid? StartTeamId { get; init; }
+
     private DateTimeOffset? _lastRead;
     private System.Windows.Threading.DispatcherTimer? _ageTimer;
 
@@ -341,6 +344,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     {
         IsBusy = true;
         Status = "Loading Entra group teams...";
+        TeamInfo? start = null;
 
         try
         {
@@ -355,6 +359,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
                 : $"{teams.Count:N0} Entra group team(s). Pick one to compare it with its group.";
 
             if (selectedId is { } id) _selectedTeam = Teams.FirstOrDefault(t => t.TeamId == id);
+            else if (StartTeamId is { } startId) start = Teams.FirstOrDefault(t => t.TeamId == startId);
             OnPropertyChanged(nameof(SelectedTeam));
         }
         catch (Exception ex)
@@ -365,6 +370,9 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         {
             IsBusy = false;
         }
+
+        // Opened on a team: compare it once the list is in, as picking it would.
+        if (start is not null) SelectedTeam = start;
     }
 
     /// <summary>Reads both sides afresh - the team from Dataverse, the group from Graph.</summary>

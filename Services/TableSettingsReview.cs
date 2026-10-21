@@ -36,7 +36,7 @@ public enum SettingCellState
 /// <summary>One environment's value in a row of the matrix.</summary>
 public sealed record SettingCell(SettingCellState State, string Text, string? ToolTip = null)
 {
-    public static SettingCell Absent(string what) => new(SettingCellState.Absent, "–", $"No such {what} in this environment");
+    public static SettingCell Absent(string what) => new(SettingCellState.Absent, "—", $"No such {what} in this environment");
     public static SettingCell Unknown(string why) => new(SettingCellState.Unknown, "?", why);
 
     public static SettingCell Flag(bool? value, string? toolTip = null) => value switch
@@ -66,6 +66,30 @@ public sealed class SettingRow
         IsConsistent = present.Count == cells.Count && present.Select(c => c.Text).Distinct().Count() <= 1;
         HasProblem = cells.Any(c => c.State == SettingCellState.Problem);
         Difference = difference ?? Join([.. Minority(environments, cells), .. Missing(environments, cells), .. Problems(environments, cells)]);
+        Exceptions = ExceptionsOf(cells);
+    }
+
+    /// <summary>
+    /// The environments, by column, that the difference is about: the odd ones out among those that
+    /// have the setting, and any where it is missing, unknown or wrong.
+    /// </summary>
+    public IReadOnlyList<int> Exceptions { get; }
+
+    /// <summary>Set by the view, which knows the environments' types: a production one is among <see cref="Exceptions"/>.</summary>
+    public bool InvolvesProduction { get; set; }
+
+    private static IReadOnlyList<int> ExceptionsOf(IReadOnlyList<SettingCell> cells)
+    {
+        var present = cells.Where(c => c.State is not (SettingCellState.Absent or SettingCellState.Unknown)).ToList();
+        var usual = present.GroupBy(c => c.Text).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key;
+        var differs = present.Select(c => c.Text).Distinct().Count() > 1;
+
+        return cells
+            .Select((cell, i) => (cell, i))
+            .Where(x => x.cell.State is SettingCellState.Absent or SettingCellState.Unknown or SettingCellState.Problem ||
+                        (differs && x.cell.Text != usual))
+            .Select(x => x.i)
+            .ToList();
     }
 
     /// <summary>The table, or table|column - what an export is keyed on.</summary>
@@ -130,6 +154,42 @@ public sealed class SettingRow
 /// <summary>A column that is not audited on a table that is, in one environment: changes going unrecorded.</summary>
 public sealed record AuditGap(string Environment, string Table, string? TableLabel, string Column, string? ColumnLabel, bool IsManaged);
 
+/// <summary>A table with columns going unaudited somewhere: the group they are listed under.</summary>
+public sealed class GapGroup
+{
+    public required string Table { get; init; }
+    public required string Label { get; init; }
+    public required int ColumnCount { get; init; }
+    public required IReadOnlyList<string> Environments { get; init; }
+
+    /// <summary>"3 columns not audited in Prod, UAT".</summary>
+    public string Summary =>
+        $"{ColumnCount:N0} column{(ColumnCount == 1 ? string.Empty : "s")} not audited in {string.Join(", ", Environments)}";
+}
+
+/// <summary>A column not audited somewhere on an audited table, with a cell per environment.</summary>
+public sealed record GapRow(GapGroup Group, string Column, string? ColumnLabel, bool IsManaged, IReadOnlyList<SettingCell> Cells);
+
+/// <summary>One environment's link profile: the group its tables are listed under.</summary>
+public sealed class LinkGroup
+{
+    public required string Environment { get; init; }
+    public required SynapseLinkProfile Profile { get; init; }
+
+    /// <summary>Links to this profile's folder count as "linked".</summary>
+    public required bool IsCounted { get; init; }
+
+    public required int TableCount { get; init; }
+    public required int ProblemCount { get; init; }
+
+    /// <summary>For the environment's colour; set by the view, which knows the environments' types.</summary>
+    public Dataverse.EnvironmentSku Sku { get; set; } = Dataverse.EnvironmentSku.Unknown;
+
+    public string StateLabel => (Profile.State ?? "State unknown") + (IsCounted ? string.Empty : " · not counted");
+    public string Summary => $"{TableCount:N0} table{(TableCount == 1 ? string.Empty : "s")}";
+    public string ProblemLabel => ProblemCount switch { 0 => string.Empty, 1 => "1 problem", var n => $"{n:N0} problems" };
+}
+
 /// <summary>One table in one link profile, in one environment.</summary>
 public sealed record LinkRow(
     string Environment,
@@ -137,6 +197,19 @@ public sealed record LinkRow(
     SynapseLinkTable Table,
     bool IsCounted)
 {
+    /// <summary>The environment and profile it is grouped under.</summary>
+    public LinkGroup? Group { get; init; }
+
+    /// <summary>The table's display name, else its logical name.</summary>
+    public string? TableLabel { get; init; }
+
+    /// <summary>Rows Dataverse has that the lake does not yet.</summary>
+    public long? Behind => Table.SourceRecordCount is { } source && Table.LakeRecordCount is { } lake ? source - lake : null;
+
+    public bool IsBehind => Behind > 0;
+
+    public string BehindLabel => IsBehind ? Behind!.Value.ToString("N0") : "—";
+
     /// <summary>Why this row needs a look, or empty when it is keeping up.</summary>
     public string Problem =>
         !Profile.IsActive ? $"Profile is {Profile.State ?? "not active"}"
@@ -433,16 +506,88 @@ public static class TableSettingsReview
             .ToList();
     }
 
+    /// <summary>
+    /// The gaps as a pivot: a row per column that is not audited somewhere, grouped by table, with
+    /// a cell per environment - "Not audited", "Audited", or "—" where the table is not audited or
+    /// the column is not there.
+    /// </summary>
+    public static IReadOnlyList<GapRow> GapMatrix(IReadOnlyList<TableSettingsSnapshot> snapshots, IReadOnlyList<AuditGap> gaps)
+    {
+        var rows = new List<GapRow>();
+
+        foreach (var table in gaps.GroupBy(g => g.Table, StringComparer.OrdinalIgnoreCase))
+        {
+            var columns = table.GroupBy(g => g.Column, StringComparer.OrdinalIgnoreCase).ToList();
+            var group = new GapGroup
+            {
+                Table = table.Key,
+                Label = table.Select(g => g.TableLabel).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? table.Key,
+                ColumnCount = columns.Count,
+                Environments = snapshots.Select(s => s.Environment)
+                    .Where(e => table.Any(g => g.Environment == e)).ToList()
+            };
+
+            foreach (var column in columns)
+            {
+                var cells = snapshots.Select(s =>
+                {
+                    if (column.Any(g => g.Environment == s.Environment))
+                        return new SettingCell(SettingCellState.Problem, "Not audited", "Changes to this column are not recorded here");
+                    if (s.Tables.GetValueOrDefault(table.Key)?.IsAuditEnabled != true)
+                        return new SettingCell(SettingCellState.Absent, "—", "The table is not audited here");
+                    var audit = s.Columns.GetValueOrDefault(table.Key)?
+                        .FirstOrDefault(c => string.Equals(c.LogicalName, column.Key, StringComparison.OrdinalIgnoreCase));
+                    return audit is null
+                        ? SettingCell.Absent("column")
+                        : new SettingCell(SettingCellState.Off, "Audited");
+                }).ToList();
+
+                var first = column.First();
+                rows.Add(new GapRow(group, first.Column, first.ColumnLabel, first.IsManaged, cells));
+            }
+        }
+
+        return rows;
+    }
+
     /// <summary>Every table in every link profile, environment by environment, profile by profile.</summary>
-    public static IReadOnlyList<LinkRow> Links(IReadOnlyList<TableSettingsSnapshot> snapshots, ISet<string> excludedFolders) =>
-        snapshots
+    public static IReadOnlyList<LinkRow> Links(IReadOnlyList<TableSettingsSnapshot> snapshots, ISet<string> excludedFolders)
+    {
+        var rows = snapshots
             .Where(s => s.Synapse is not null)
             .SelectMany(s => s.Synapse!.Tables.Select(t => (Snapshot: s, Table: t,
                 Profile: s.Synapse.Profiles.FirstOrDefault(p => p.Id == t.ProfileId))))
             .Where(x => x.Profile is not null)
             .Select(x => new LinkRow(x.Snapshot.Environment, x.Profile!, x.Table,
-                x.Profile!.IsActive && !excludedFolders.Contains(x.Profile.FolderLabel)))
+                x.Profile!.IsActive && !excludedFolders.Contains(x.Profile.FolderLabel))
+            {
+                TableLabel = x.Snapshot.Tables.GetValueOrDefault(x.Table.Table)?.Label ?? x.Table.Table
+            })
             .ToList();
+
+        // One group per environment and profile; groups with problems first, and problems first in each.
+        return rows
+            .GroupBy(r => (r.Environment, r.Profile.Id))
+            .Select(g =>
+            {
+                var group = new LinkGroup
+                {
+                    Environment = g.Key.Environment,
+                    Profile = g.First().Profile,
+                    IsCounted = g.First().IsCounted,
+                    TableCount = g.Count(),
+                    ProblemCount = g.Count(r => r.HasProblem)
+                };
+                return (Group: group, Rows: g.Select(r => r with { Group = group })
+                    .OrderByDescending(r => r.HasProblem)
+                    .ThenBy(r => r.TableLabel, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList());
+            })
+            .OrderByDescending(g => g.Group.ProblemCount > 0)
+            .ThenByDescending(g => g.Group.IsCounted)
+            .SelectMany(g => g.Rows)
+            .ToList();
+    }
 
     /// <summary>
     /// Each environment's search index against its configuration: every table either switched on

@@ -384,6 +384,23 @@ public class SecurityLookupViewModelTests
     // ---------------------------------------------------------------- secured columns
 
     [Fact]
+    public void Choosing_a_table_offers_its_columns_secured_first() => AdminUiThread.Run(async () =>
+    {
+        var handler = Handler().OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='contact')/Attributes", Rows(
+            new { LogicalName = "firstname", IsSecured = false },
+            new { LogicalName = "new_salary", IsSecured = true },
+            new { LogicalName = "new_salary_base", IsSecured = true, AttributeOf = "new_salary" }));
+        var lookup = Lookup(handler);
+        await lookup.EnsureListsAsync();
+        lookup.Tab = SecurityLookupTab.SecuredColumn;
+
+        lookup.TableName = "contact";
+        await AdminSessions.Until(() => lookup.Columns.Count == 2);
+
+        Assert.Equal([("new_salary", true), ("firstname", false)], lookup.Columns.Select(c => (c.LogicalName, c.IsSecured)));
+    });
+
+    [Fact]
     public void A_secured_column_lists_the_profiles_granting_it_and_who_holds_them() => AdminUiThread.Run(async () =>
     {
         var handler = Handler();
@@ -449,6 +466,9 @@ public class SecurityLookupViewModelTests
         Assert.Equal(("Read", PrivilegeDepth.Organization, PrivilegeDepth.None), (difference.Action, difference.Left, difference.Right));
         Assert.Contains(prodHandler.Requests, r => r.Url.Contains($"RoleId={Salesperson}"));
         Assert.Equal("No differences", lookup.EmptyHeading);
+        Assert.Equal($"Sales Manager · {lookup.Session.Title}", lookup.LeftColumn.Header);
+        Assert.Equal($"sales manager · {prod.Title}", lookup.RightColumn.Header);
+        Assert.Equal(prod.EnvironmentSku, lookup.RightColumn.Sku);
     });
 
     [Fact]

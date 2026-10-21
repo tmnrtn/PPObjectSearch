@@ -137,6 +137,10 @@ public sealed class EnvironmentVariableInfo
     /// <summary>What a flow or app actually gets: the current value, else the default.</summary>
     public string? EffectiveValue => HasCurrentValue ? CurrentValue : DefaultValue;
 
+    /// <summary>Which of the two boxes holds the value in effect - marked "Applies", the other dimmed.</summary>
+    public bool CurrentApplies => HasCurrentValue;
+    public bool DefaultApplies => !HasCurrentValue && DefaultValue is not null;
+
     public string EffectiveSource => (HasCurrentValue, DefaultValue) switch
     {
         (true, _) => "The current value set in this environment is in effect.",

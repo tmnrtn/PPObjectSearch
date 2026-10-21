@@ -703,6 +703,7 @@ public class ReferenceDataComparerTests
 
         Assert.Equal("Thing (new_thing)", row.EntityLabel);
         Assert.Equal("new_thing", row.EntityLogicalName);
+        Assert.Equal("Thing", row.EntityDisplayName);
         Assert.Equal("Code key", row.KeyLabel);
     }
 }
