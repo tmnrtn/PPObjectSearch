@@ -416,6 +416,23 @@
                                                     <DataGridTextColumn Header="Type" Width="120" Binding="{Binding TypeDisplay}" ElementStyle="{StaticResource CellMuted}" />
                                                     <DataGridTextColumn Header="Business unit" Width="120" Binding="{Binding BusinessUnit}"
                                                                         ElementStyle="{StaticResource CellMuted}" />
+                                                    <!-- A group team: straight to Entra team sync, which writes and asks there. -->
+                                                    <DataGridTemplateColumn Width="170" CanUserSort="False">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
+                                                                        ToolTip="Compare this team with its Entra group, and sync it. Previews and asks before writing."
+                                                                        Visibility="{Binding IsEntraGroupTeam, Converter={StaticResource BoolToVis}}"
+                                                                        Command="{Binding DataContext.EntraTeamSyncCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock Text="Entra team sync…" VerticalAlignment="Center" />
+                                                                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
@@ -672,10 +689,9 @@
                                                                         HeaderStyle="{StaticResource PaneFirstHeader}" ElementStyle="{StaticResource CellPaneFirst}" />
                                                     <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
                                                         <DataGridTemplateColumn.CellTemplate>
-                                                            <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" /></DataTemplate>
+                                                            <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding DepthLabel}" /></DataTemplate>
                                                         </DataGridTemplateColumn.CellTemplate>
                                                     </DataGridTemplateColumn>
-                                                    <DataGridTextColumn Header="Reaches" Width="150" Binding="{Binding DepthLabel}" ElementStyle="{StaticResource CellMuted}" />
                                                 </DataGrid.Columns>
                                             </DataGrid>
 
@@ -1160,8 +1176,18 @@
                                         <Border Grid.Row="1" Padding="16,0" Height="34" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,1"
                                                 Background="{DynamicResource Surface2}">
                                             <DockPanel VerticalAlignment="Center">
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Members.Count}" FontSize="11" Foreground="{DynamicResource Muted}" />
-                                                <TextBlock Text="Members" Style="{StaticResource SectionHeading}" />
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Members.Count}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                           VerticalAlignment="Center" />
+                                                <!-- Members are changed in Queue membership sync, which writes and asks there. -->
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Margin="0,0,12,0"
+                                                        Command="{Binding QueueSyncCommand}"
+                                                        ToolTip="Make this queue's members match a team's. Previews and asks before writing.">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" />
+                                                        <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <TextBlock Text="Members" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
                                             </DockPanel>
                                         </Border>
                                         <Grid Grid.Row="2">

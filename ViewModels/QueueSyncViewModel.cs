@@ -153,6 +153,9 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
 
     public bool HasPlan => _planFor is not null;
 
+    /// <summary>The queue to start on, where the window was opened from one.</summary>
+    public Guid? StartQueueId { get; init; }
+
     /// <summary>"Apply 7 changes…" once previewed - disabled at zero - else "Apply changes…".</summary>
     public string ApplyLabel => !HasPlan ? "Apply changes…"
         : (CountAdd + CountRemove) switch
@@ -253,7 +256,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
             var queues = await queuesTask;
 
             var teamId = SelectedTeam?.TeamId;
-            var queueId = SelectedQueue?.QueueId;
+            var queueId = SelectedQueue?.QueueId ?? StartQueueId;
 
             Teams.Clear();
             foreach (var team in teams) Teams.Add(team);

@@ -286,7 +286,13 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         View.Filter = o => o is UserInfo u && Include(u);
         ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
         ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedUser?.DefaultMailboxId is not null);
+        EntraTeamSyncCommand = new RelayCommand(
+            p => { if (p is TeamInfo { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
+            p => p is TeamInfo { IsEntraGroupTeam: true });
     }
+
+    /// <summary>A group team the user is in, opened in Entra team sync - which writes, so it asks there first.</summary>
+    public RelayCommand EntraTeamSyncCommand { get; }
 
     public ObservableCollection<UserInfo> Items { get; } = new();
     public ListCollectionView View { get; }
@@ -948,7 +954,13 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         View.Filter = o => o is QueueDetail q && Include(q);
         ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedQueue?.MailboxId is not null);
         ShowMemberCommand = new RelayCommand(p => Owner.Work.Track(ShowMemberAsync(p as MemberUser)), p => p is MemberUser);
+        QueueSyncCommand = new RelayCommand(
+            _ => { if (SelectedQueue is { } queue) Owner.Session.ShowQueueSync(queue.QueueId); },
+            _ => SelectedQueue is not null);
     }
+
+    /// <summary>The selected queue, opened in Queue membership sync - which writes, so it asks there first.</summary>
+    public RelayCommand QueueSyncCommand { get; }
 
     public ObservableCollection<QueueDetail> Items { get; } = new();
     public ListCollectionView View { get; }
@@ -1040,6 +1052,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         {
             if (!SetProperty(ref _selectedQueue, value)) return;
             ShowMailboxCommand.RaiseCanExecuteChanged();
+            QueueSyncCommand.RaiseCanExecuteChanged();
             Owner.Work.Track(LoadDetailsAsync(value));
         }
     }

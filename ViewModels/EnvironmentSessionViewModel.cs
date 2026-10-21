@@ -442,12 +442,15 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _ = viewModel.LoadAsync();
     }
 
-    /// <summary>Compare an Entra group team with its group, sync it, and remove what the sync leaves behind.</summary>
-    private void ShowEntraTeamSync()
+    /// <summary>
+    /// Compare an Entra group team with its group, sync it, and remove what the sync leaves behind -
+    /// starting on <paramref name="teamId"/> where one is given, as Environment admin does.
+    /// </summary>
+    public void ShowEntraTeamSync(Guid? teamId = null)
     {
         if (_client is null) return;
 
-        var viewModel = new EntraTeamSyncViewModel(this, _client);
+        var viewModel = new EntraTeamSyncViewModel(this, _client) { StartTeamId = teamId };
         Track(new Views.EntraTeamSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
         _ = viewModel.LoadTeamsAsync();
     }
@@ -514,12 +517,12 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _ = selectId is { } select ? viewModel.OpenAtAsync(tab, select) : viewModel.LoadAsync();
     }
 
-    /// <summary>Make a queue's members match a team's, adding and removing.</summary>
-    private void ShowQueueSync()
+    /// <summary>Make a queue's members match a team's, adding and removing - starting on <paramref name="queueId"/> if given.</summary>
+    public void ShowQueueSync(Guid? queueId = null)
     {
         if (_client is null) return;
 
-        var viewModel = new QueueSyncViewModel(this, _client);
+        var viewModel = new QueueSyncViewModel(this, _client) { StartQueueId = queueId };
         Track(new Views.QueueSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
         _ = viewModel.LoadAsync();
     }

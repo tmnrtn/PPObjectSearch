@@ -355,6 +355,28 @@ public sealed class EntraTeamSyncViewModelTests : IDisposable
     });
 
     [Fact]
+    public void Opened_on_a_team_it_compares_that_team_once_the_teams_are_read() => AdminUiThread.Run(async () =>
+    {
+        var world = new World();
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/teams?", Rows(new Dictionary<string, object?>
+            {
+                ["teamid"] = SalesTeam, ["name"] = "Sales", ["teamtype"] = 2, ["azureactivedirectoryobjectid"] = Group
+            }))
+            .OnError(HttpMethod.Get, "teammembership_association", HttpStatusCode.InternalServerError, "Team is locked.");
+        using var sync = new EntraTeamSyncViewModel(AdminSessions.Connected(handler), Fakes.Dataverse(handler), Fakes.Graph(world.Handler))
+        {
+            StartTeamId = SalesTeam
+        };
+
+        await sync.LoadTeamsAsync();
+        await AdminSessions.Until(() => !sync.IsBusy);
+
+        Assert.Equal(SalesTeam, sync.SelectedTeam?.TeamId);
+        Assert.StartsWith("Could not compare - ", sync.Status);
+    });
+
+    [Fact]
     public void A_failed_comparison_says_why() => AdminUiThread.Run(async () =>
     {
         var world = new World();
