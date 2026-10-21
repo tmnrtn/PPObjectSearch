@@ -117,7 +117,18 @@
                                                         ElementStyle="{StaticResource CellFirst}" />
                                     <DataGridTextColumn Header="Type" Width="180" Binding="{Binding TypeName}" ElementStyle="{StaticResource CellMuted}" />
                                     <DataGridTextColumn Header="Level" Width="60" Binding="{Binding Level}" />
-                                    <DataGridTextColumn Header="Where" Width="170" Binding="{Binding Where}" />
+                                    <!-- Outside this solution in Amber, as the tree marks it. -->
+                                    <DataGridTextColumn Header="Where" Width="170" Binding="{Binding Where}">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOutside}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Amber}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
                                     <DataGridTextColumn Header="State" Width="100" Binding="{Binding ManagedLabel}" ElementStyle="{StaticResource CellMuted}" />
                                 </DataGrid.Columns>
                             </DataGrid>
