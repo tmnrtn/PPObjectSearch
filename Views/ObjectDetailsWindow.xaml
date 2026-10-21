@@ -898,9 +898,24 @@
                                     <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Text="{Binding Description}"
                                                Visibility="{Binding Description, Converter={StaticResource EmptyToCollapsed}}" />
 
-                                    <TextBlock Grid.Row="3" Text="Current value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                    <StackPanel Grid.Row="3" Margin="0,8,10,6">
+                                        <TextBlock Text="Current value" Style="{StaticResource DetailKey}" Margin="0" />
+                                        <ContentControl Style="{StaticResource ChipGreen}" Content="Applies" Margin="0,4,0,0" FontSize="10"
+                                                        ToolTip="{Binding EffectiveSource}"
+                                                        Visibility="{Binding CurrentApplies, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
                                     <Border Grid.Row="3" Grid.Column="1" Margin="0,6,0,8" BorderBrush="{DynamicResource Border2}"
                                             BorderThickness="1" CornerRadius="4">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <!-- The value that does not apply is dimmed. -->
+                                                    <DataTrigger Binding="{Binding CurrentApplies}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.55" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
                                         <Grid>
                                             <TextBox Style="{StaticResource CodeBox}" Text="{Binding CurrentValue, Mode=OneWay}"
                                                      TextWrapping="Wrap" MaxHeight="220" Background="Transparent"
@@ -910,9 +925,24 @@
                                         </Grid>
                                     </Border>
 
-                                    <TextBlock Grid.Row="4" Text="Default value" Style="{StaticResource DetailKey}" Margin="0,8,10,6" />
+                                    <StackPanel Grid.Row="4" Margin="0,8,10,6">
+                                        <TextBlock Text="Default value" Style="{StaticResource DetailKey}" Margin="0" />
+                                        <ContentControl Style="{StaticResource ChipGreen}" Content="Applies" Margin="0,4,0,0" FontSize="10"
+                                                        ToolTip="{Binding EffectiveSource}"
+                                                        Visibility="{Binding DefaultApplies, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
                                     <Border Grid.Row="4" Grid.Column="1" Margin="0,6,0,8" BorderBrush="{DynamicResource Border2}"
                                             BorderThickness="1" CornerRadius="4">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <!-- The value that does not apply is dimmed. -->
+                                                    <DataTrigger Binding="{Binding DefaultApplies}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.55" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
                                         <Grid>
                                             <TextBox Style="{StaticResource CodeBox}" Text="{Binding DefaultValue, Mode=OneWay}"
                                                      TextWrapping="Wrap" MaxHeight="220" Background="Transparent"

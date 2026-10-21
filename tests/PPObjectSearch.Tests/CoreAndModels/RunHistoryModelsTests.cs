@@ -80,6 +80,10 @@ public class RunHistoryModelsTests
         Assert.StartsWith("No current value is set", fallback.EffectiveSource);
         Assert.Null(nothing.EffectiveValue);
         Assert.StartsWith("Neither a current value nor a default", nothing.EffectiveSource);
+
+        Assert.Equal((true, false), (current.CurrentApplies, current.DefaultApplies));
+        Assert.Equal((false, true), (fallback.CurrentApplies, fallback.DefaultApplies));
+        Assert.Equal((false, false), (nothing.CurrentApplies, nothing.DefaultApplies));
     }
 
     /// <summary>When a history entry ran: its total seconds, its start and end, or any of them.</summary>
