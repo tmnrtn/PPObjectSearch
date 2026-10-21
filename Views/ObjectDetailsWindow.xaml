@@ -104,7 +104,7 @@
                                     <Setter Property="Content" Value="No unmanaged layer" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="True">
-                                            <Setter Property="Content" Value="Has unmanaged layer" />
+                                            <Setter Property="Content" Value="Unmanaged layer" />
                                             <Setter Property="Background" Value="{DynamicResource AmberSoft}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource AmberSoft}" />
                                             <Setter Property="Foreground" Value="{DynamicResource Amber}" />
@@ -133,9 +133,21 @@
                             </ContentControl.Style>
                         </ContentControl>
 
-                        <!-- A process or plug-in step: activated/draft, enabled/disabled. -->
-                        <ContentControl Margin="0,0,4,0" Style="{StaticResource Chip}" Content="{Binding OtherSwitchStateLabel}"
-                                        Visibility="{Binding OtherSwitchStateLabel, Converter={StaticResource EmptyToCollapsed}}" />
+                        <!-- A process or plug-in step: activated/draft, enabled/disabled - green when on, as a flow's On is. -->
+                        <ContentControl Margin="0,0,4,0" Content="{Binding OtherSwitchStateLabel}"
+                                        Visibility="{Binding OtherSwitchStateLabel, Converter={StaticResource EmptyToCollapsed}}">
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl" BasedOn="{StaticResource Chip}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSwitchedOn}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource GreenSoft}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
 
                         <TextBlock Text="{Binding Item.ObjectId}" FontFamily="{StaticResource MonoFont}" FontSize="11"
                                    Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />

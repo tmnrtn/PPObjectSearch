@@ -597,7 +597,7 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="Layer" Width="126" SortMemberPath="UnmanagedLayerLabel">
+                    <DataGridTemplateColumn Header="Layer" Width="144" SortMemberPath="UnmanagedLayerLabel">
                         <DataGridTemplateColumn.HeaderStyle>
                             <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                                 <Setter Property="ToolTip" Value="Whether the object has an unmanaged layer. — until Check layers has been run." />
@@ -617,10 +617,9 @@
                                         <Setter TargetName="LayerText" Property="Text" Value="Unmanaged layer" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Amber}" />
                                     </DataTrigger>
+                                    <!-- The same words and colours everywhere: Unmanaged layer in Amber, No unmanaged layer neutral. -->
                                     <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="False">
-                                        <Setter TargetName="LayerDot" Property="Visibility" Value="Visible" />
-                                        <Setter TargetName="LayerDot" Property="Fill" Value="{DynamicResource Green}" />
-                                        <Setter TargetName="LayerText" Property="Text" Value="Clean" />
+                                        <Setter TargetName="LayerText" Property="Text" Value="No unmanaged layer" />
                                         <Setter TargetName="LayerText" Property="Foreground" Value="{DynamicResource Muted}" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
@@ -687,9 +686,7 @@
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding HasUnmanagedLayer}" Value="False">
                                                             <Setter Property="Content" Value="No unmanaged layer" />
-                                                            <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource GreenSoft}" />
-                                                            <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
