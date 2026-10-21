@@ -83,9 +83,20 @@
                                       ItemsSource="{Binding Actions}" SelectedItem="{Binding Action}" />
                             <ComboBox Width="320" Height="32" Margin="0,0,8,6" IsEditable="True" core:Ui.InlineLabel="Table"
                                       core:Ui.Placeholder="logical name, e.g. contoso_invoice"
-                                      AutomationProperties.Name="Table"
-                                      ItemsSource="{Binding Tables}" DisplayMemberPath="LogicalName"
-                                      Text="{Binding TableName, UpdateSourceTrigger=PropertyChanged}" />
+                                      AutomationProperties.Name="Table" TextSearch.TextPath="LogicalName"
+                                      ItemsSource="{Binding Tables}"
+                                      Text="{Binding TableName, UpdateSourceTrigger=PropertyChanged}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" Margin="0,0,8,0"
+                                                       Visibility="{Binding DisplayName, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <TextBlock Text="{Binding LogicalName}" Style="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <Button Style="{StaticResource PrimaryButton}" Content="Look up" Height="32" Padding="16,0" Margin="0,0,8,6"
                                     Command="{Binding RunCommand}" />
                         </WrapPanel>
@@ -194,12 +205,38 @@
                     <DockPanel>
                         <WrapPanel DockPanel.Dock="Top" Margin="16,12,16,10">
                             <ComboBox Width="300" Height="32" Margin="0,0,8,6" IsEditable="True" core:Ui.InlineLabel="Table"
-                                      AutomationProperties.Name="Table"
-                                      ItemsSource="{Binding Tables}" DisplayMemberPath="LogicalName"
-                                      Text="{Binding TableName, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBox Width="260" Height="32" Margin="0,0,8,6" core:Ui.Placeholder="column logical name"
-                                     AutomationProperties.Name="Column"
-                                     Text="{Binding ColumnName, UpdateSourceTrigger=PropertyChanged}" />
+                                      AutomationProperties.Name="Table" TextSearch.TextPath="LogicalName"
+                                      ItemsSource="{Binding Tables}"
+                                      Text="{Binding TableName, UpdateSourceTrigger=PropertyChanged}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" Margin="0,0,8,0"
+                                                       Visibility="{Binding DisplayName, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <TextBlock Text="{Binding LogicalName}" Style="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <!-- The table's columns, secured ones first and tagged; any name can still be typed. -->
+                            <ComboBox Width="300" Height="32" Margin="0,0,8,6" IsEditable="True" core:Ui.InlineLabel="Column"
+                                      AutomationProperties.Name="Column" TextSearch.TextPath="LogicalName"
+                                      ItemsSource="{Binding Columns}"
+                                      Text="{Binding ColumnName, UpdateSourceTrigger=PropertyChanged}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" Margin="0,0,8,0"
+                                                       Visibility="{Binding DisplayName, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <TextBlock Text="{Binding LogicalName}" Style="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                            <ContentControl Style="{StaticResource ChipAmber}" Content="Secured" FontSize="10" Margin="8,0,0,0"
+                                                            Visibility="{Binding IsSecured, Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <Button Style="{StaticResource PrimaryButton}" Content="Look up" Height="32" Padding="16,0" Margin="0,0,8,6"
                                     Command="{Binding RunCommand}" />
                         </WrapPanel>

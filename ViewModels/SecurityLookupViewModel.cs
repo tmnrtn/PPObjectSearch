@@ -73,6 +73,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _tab, value)) return;
             OnPropertyChanged(nameof(TabIndex));
+            _ = LoadColumnsAsync();
             if (!IsBusy) Status = string.Empty;
             RaiseCommands();
             _ = EnsureListsAsync();
@@ -199,7 +200,40 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         get => _tableName;
         set
         {
-            if (SetProperty(ref _tableName, value)) RunCommand.RaiseCanExecuteChanged();
+            if (!SetProperty(ref _tableName, value)) return;
+            RunCommand.RaiseCanExecuteChanged();
+            _ = LoadColumnsAsync();
+        }
+    }
+
+    /// <summary>The chosen table's columns, secured ones first, for the Secured column tab's picker.</summary>
+    public ObservableCollection<SecurableColumn> Columns { get; } = new();
+
+    private string? _columnsFor;
+
+    /// <summary>
+    /// Reads the columns once a known table is chosen, on the Secured column tab only. A table
+    /// whose columns cannot be read leaves the picker empty; the column can still be typed.
+    /// </summary>
+    private async Task LoadColumnsAsync()
+    {
+        var table = TableName.Trim();
+        if (Tab != SecurityLookupTab.SecuredColumn || _session.Client is null ||
+            string.Equals(table, _columnsFor, StringComparison.OrdinalIgnoreCase) ||
+            !Tables.Any(t => string.Equals(t.LogicalName, table, StringComparison.OrdinalIgnoreCase))) return;
+
+        _columnsFor = table;
+        Columns.Clear();
+
+        try
+        {
+            var columns = await Client.GetSecurableColumnsAsync(table);
+            if (!string.Equals(_columnsFor, table, StringComparison.OrdinalIgnoreCase)) return;
+            foreach (var column in columns) Columns.Add(column);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Services.Log.Warn($"The columns of {table} could not be read for the secured column picker", ex);
         }
     }
 

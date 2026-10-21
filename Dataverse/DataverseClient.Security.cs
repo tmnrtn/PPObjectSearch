@@ -17,8 +17,34 @@ public sealed record FieldPermissionGrant(
     public string TeamsLabel => string.Join(", ", Teams);
 }
 
+/// <summary>A column offered in the secured-column picker, and whether it is secured.</summary>
+public sealed record SecurableColumn(string LogicalName, string? DisplayName, bool IsSecured);
+
 public sealed partial class DataverseClient
 {
+    /// <summary>A table's columns for the secured-column picker: secured ones first, then by name.</summary>
+    public async Task<IReadOnlyList<SecurableColumn>> GetSecurableColumnsAsync(string table, CancellationToken ct = default)
+    {
+        var url = EnvironmentUrl + ApiPath +
+                  $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(table.ToLowerInvariant())}')/Attributes" +
+                  "?$select=LogicalName,DisplayName,IsSecured,AttributeOf";
+
+        var columns = new List<SecurableColumn>();
+        await ForEachRowAsync(url, null, row =>
+        {
+            // A column derived from another - a lookup's name, a money column's base - is secured with it.
+            if (JsonHelper.GetString(row, "LogicalName") is not { Length: > 0 } name ||
+                !string.IsNullOrWhiteSpace(JsonHelper.GetString(row, "AttributeOf"))) return;
+
+            columns.Add(new SecurableColumn(name, ReadLabel(row, "DisplayName"), JsonHelper.GetBool(row, "IsSecured") ?? false));
+        }, ct).ConfigureAwait(false);
+
+        return columns
+            .OrderByDescending(c => c.IsSecured)
+            .ThenBy(c => c.LogicalName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     /// <summary>PrivilegeType codes as entity metadata reports them.</summary>
     private static readonly Dictionary<int, string> PrivilegeActions = new()
     {
