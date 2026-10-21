@@ -604,7 +604,7 @@
                             </Border>
                         </DockPanel>
 
-                        <TextBlock Text="Reading..." FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,6"
+                        <TextBlock Text="Reading…" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,6"
                                    Visibility="{Binding IsContentLoading, Converter={StaticResource BoolToVis}}" />
                         <TextBlock Text="{Binding ContentError}" FontSize="11" Foreground="{DynamicResource Red}"
                                    TextWrapping="Wrap" Margin="0,0,0,6"

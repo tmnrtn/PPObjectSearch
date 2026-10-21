@@ -625,7 +625,7 @@
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Style="{StaticResource SmallButton}" Content="Copy" Command="{Binding CopySourceCommand}" />
-                                        <Button Style="{StaticResource SmallButton}" Content="Save as..." Margin="6,0,0,0"
+                                        <Button Style="{StaticResource SmallButton}" Content="Save as…" Margin="6,0,0,0"
                                                 Command="{Binding SaveSourceCommand}" />
                                     </StackPanel>
                                     <TextBlock Text="{Binding SourceStatus}" Foreground="{DynamicResource Muted}"
@@ -1162,7 +1162,7 @@
                             <DockPanel Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
                                     <DockPanel>
-                                    <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Explore graph…"
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Explore graph"
                                             Command="{Binding ExploreDependenciesCommand}"
                                             ToolTip="Expand dependencies level by level, see what breaks if this is removed, and copy it as Mermaid" />
                                     <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"

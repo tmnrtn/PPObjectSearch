@@ -202,7 +202,7 @@
                                 </MenuItem.ItemContainerStyle>
                             </MenuItem>
                             <Separator />
-                            <MenuItem Header="Switch account..." Command="{Binding SwitchAccountCommand}"
+                            <MenuItem Header="Switch account…" Command="{Binding SwitchAccountCommand}"
                                       ToolTip="Sign this tab in with a different account or tenant." />
                             <MenuItem Header="Copy tenant id" Command="{Binding CopyTenantIdCommand}" />
                             <Separator />
@@ -424,7 +424,7 @@
                         Command="{Binding CancelLayerCheckCommand}"
                         Visibility="{Binding IsCheckingLayers, Converter={StaticResource BoolToVis}}"
                         ToolTip="Stop checking layers" />
-                <Button Content="Export CSV" Margin="6,0,0,0"
+                <Button Content="Export CSV…" Margin="6,0,0,0"
                         Command="{Binding ExportCsvCommand}"
                         ToolTip="Exports the rows currently on screen, filters and all." />
                 <Button AutomationProperties.Name="Show or hide the detail pane" Content="&#xE8A0;" Margin="6,0,0,0"
@@ -481,7 +481,7 @@
                     -->
                     <ContextMenu>
                         <!-- Open · copy · the selection · then, kept apart at the bottom, what writes. -->
-                        <MenuItem Header="Details…" Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
+                        <MenuItem Header="Open details" Command="{Binding ShowDetailsCommand}" FontWeight="SemiBold"
                                   InputGestureText="Double-click" />
                         <MenuItem Header="Open in maker portal" Command="{Binding OpenLinkCommand}" />
                         <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
@@ -685,7 +685,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <!-- Details is where the app does its work, so it leads; the portal is a step away. -->
-                                        <Button Style="{StaticResource PrimaryButton}" Content="Details..."
+                                        <Button Style="{StaticResource PrimaryButton}" Content="Open details"
                                                 ToolTip="Solutions, layers and dependencies - and runs, design, source or columns, by type (double-click a row)"
                                                 Command="{Binding DataContext.ShowDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                         <Button Grid.Column="1" Content="Open in maker portal" Margin="6,0,0,0"

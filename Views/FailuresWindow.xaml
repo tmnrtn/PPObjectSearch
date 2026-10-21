@@ -269,7 +269,7 @@
                                         <Button Style="{StaticResource PrimaryButton}" Content="Open latest failed run"
                                                 Command="{Binding OpenLatestFailedRunCommand}"
                                                 ToolTip="The newest failure, in the details window: a flow's or workflow's runs, a plug-in's trace log" />
-                                        <Button Grid.Column="1" Content="Details…" Margin="6,0,0,0"
+                                        <Button Grid.Column="1" Content="Open details" Margin="6,0,0,0"
                                                 Command="{Binding OpenComponentDetailsCommand}" />
                                     </Grid>
                                 </StackPanel>

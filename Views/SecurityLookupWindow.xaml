@@ -46,7 +46,7 @@
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
                     <Button AutomationProperties.Name="Look up again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
                             Command="{Binding RunCommand}" ToolTip="Look up again" />
-                    <Button Content="Export CSV" Margin="6,0,0,0" Command="{Binding ExportCommand}"
+                    <Button Content="Export CSV…" Margin="6,0,0,0" Command="{Binding ExportCommand}"
                             ToolTip="Export what this tab shows" />
                 </StackPanel>
             </Grid>

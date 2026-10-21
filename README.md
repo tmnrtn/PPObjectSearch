@@ -45,7 +45,7 @@ straight into the maker portal.
   for the same copy actions; the pane can be hidden from the toolbar. Select several rows
   (Shift/Ctrl+click) and the menu copies all their names, links or ids - one per line - or copies
   them as a table for Excel, opens details for each, checks their layers or exports just them.
-- **Object details** (*Details…*, or double-click a row) — solutions, layers and dependencies for
+- **Object details** (*Open details*, or double-click a row) — solutions, layers and dependencies for
   any object, with the type's own tabs first. Each window names the environment it came from. Open
   as many as you like: each opens a step down and right from the last, and **Close all details**
   (`Ctrl+Shift+W`) in the sidebar closes them together. By type, details also show:
@@ -76,7 +76,7 @@ straight into the maker portal.
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
     one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
 - **Solution history** (in the sidebar, under the selected environment) — every import, upgrade,
-  uninstall and export in an environment, with the error for any that failed. **Import log…** on
+  uninstall and export in an environment, with the error for any that failed. **Import log** on
   a row opens that import's log (`importjob.data`) as a grid: each component's type, result
   (success, warning, failure), error and timing - filtered to failures and warnings when there are
   any. Double-click a component in the loaded list to open it; **Copy failures as Markdown** and
@@ -649,7 +649,7 @@ users, teams and business units.
 
 ## Dependency graph
 
-**Explore graph…** on a component's Dependencies tab opens its dependencies as a tree in both
+**Explore graph** on a component's Dependencies tab opens its dependencies as a tree in both
 directions - *what depends on this* and *what this needs* - read a level at a time as each node is
 expanded. Each node shows its type, whether it is managed, and whether it is **outside the
 solution** being viewed, since those are the dependencies that surprise people at import.

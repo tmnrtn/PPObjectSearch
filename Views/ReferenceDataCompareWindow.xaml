@@ -105,7 +105,7 @@
                     <Button.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="New configuration" Command="{Binding NewConfigurationCommand}" />
-                            <MenuItem Header="Rename..." Command="{Binding RenameConfigurationCommand}" />
+                            <MenuItem Header="Rename…" Command="{Binding RenameConfigurationCommand}" />
                             <Separator />
                             <MenuItem Header="Delete" Command="{Binding DeleteConfigurationCommand}" />
                         </ContextMenu>
@@ -235,7 +235,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Button Content="Settings..." Command="{Binding EditEntityCommand}"
+                            <Button Content="Settings…" Command="{Binding EditEntityCommand}"
                                     ToolTip="Key, row filter and which columns take part, for the selected table." />
                             <Button Grid.Column="1" Content="Remove" Margin="6,0,0,0"
                                     Command="{Binding RemoveEntityCommand}" />
@@ -560,7 +560,7 @@
                                    Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Summary}" />
                     </StackPanel>
 
-                    <Button Grid.Column="1" Content="Export CSV" Height="30" Margin="12,0,0,0"
+                    <Button Grid.Column="1" Content="Export CSV…" Height="30" Margin="12,0,0,0"
                             Command="{Binding ExportCommand}" />
                     <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" Height="30" Margin="8,0,0,0"
                             Content="{Binding ReconcileLabel}"

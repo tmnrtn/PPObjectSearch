@@ -48,7 +48,7 @@
                 <TextBlock Grid.Column="5" Text="{Binding ComparedAgo}" FontSize="11" Foreground="{DynamicResource Muted}"
                            VerticalAlignment="Center" Margin="12,0,8,0" />
 
-                <Button Grid.Column="6" Content="Export CSV" Height="32" Command="{Binding ExportCommand}" />
+                <Button Grid.Column="6" Content="Export CSV…" Height="32" Command="{Binding ExportCommand}" />
             </Grid>
 
             <!-- Filters -->
