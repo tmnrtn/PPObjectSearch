@@ -413,6 +413,30 @@ public class FlowDiagramStepDetailsTests
     }
 
     [Fact]
+    public async Task In_a_failed_run_the_first_failed_iteration_is_picked()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/actions/Inner/repetitions", JsonSerializer.Serialize(new
+        {
+            value = new[] { "Succeeded", "Failed", "Failed" }.Select((status, i) => new
+            {
+                properties = new { status, repetitionIndexes = new[] { new { scopeName = "Loop", itemIndex = i } } }
+            })
+        }));
+        var d = Diagram(LoopSample);
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult>
+        {
+            ["Loop"] = Result("Loop", FlowStepOutcome.Failed),
+            ["Inner"] = Result("Inner", FlowStepOutcome.Failed)
+        }, FlowStepOutcome.Failed), Client(handler));
+
+        d.Selected = Card(d, "Inner");
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal(3, d.SelectedIterations.Count);
+        Assert.Same(d.SelectedIterations[1], d.SelectedIteration);
+    }
+
+    [Fact]
     public async Task Iterations_that_cannot_be_read_say_why()
     {
         var handler = new FakeHttpHandler().OnError(HttpMethod.Get, "/actions/Inner/repetitions", HttpStatusCode.BadRequest, "throttled");

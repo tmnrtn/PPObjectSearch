@@ -176,9 +176,41 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private bool CanShowOnDiagram(ProcessRun? run) =>
         IsCloudFlow && FlowDiagram is not null && !string.IsNullOrWhiteSpace(run?.Name);
 
+    /// <summary>The run last asked for on the diagram, to step from with ‹ and ›.</summary>
+    private ProcessRun? _runOnDiagram;
+
+    private AsyncRelayCommand? _showOlderRunCommand;
+    /// <summary>The run before the one on the diagram, without going back to Runs. Runs are newest first.</summary>
+    public AsyncRelayCommand ShowOlderRunCommand => _showOlderRunCommand ??= new AsyncRelayCommand(
+        _ => StepRunAsync(+1), _ => NeighbourRun(+1) is not null);
+
+    private AsyncRelayCommand? _showNewerRunCommand;
+    public AsyncRelayCommand ShowNewerRunCommand => _showNewerRunCommand ??= new AsyncRelayCommand(
+        _ => StepRunAsync(-1), _ => NeighbourRun(-1) is not null);
+
+    private ProcessRun? NeighbourRun(int step)
+    {
+        if (_runOnDiagram is null) return null;
+
+        var index = Runs.IndexOf(_runOnDiagram) + step;
+        return index >= 0 && index < Runs.Count && CanShowOnDiagram(Runs[index]) ? Runs[index] : null;
+    }
+
+    private Task StepRunAsync(int step)
+    {
+        if (NeighbourRun(step) is not { } run) return Task.CompletedTask;
+
+        SelectedRun = run;
+        return ShowRunOnDiagramAsync(run);
+    }
+
     private async Task ShowRunOnDiagramAsync(ProcessRun? run)
     {
         if (run is null || FlowDiagram is not { } diagram) return;
+
+        _runOnDiagram = run;
+        ShowOlderRunCommand.RaiseCanExecuteChanged();
+        ShowNewerRunCommand.RaiseCanExecuteChanged();
 
         SelectedTab = DetailsTab.Design;
 
