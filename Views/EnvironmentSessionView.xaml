@@ -805,13 +805,23 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- What writes is kept apart from what reads: only for types that have such actions. -->
+                            <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
+                            <StackPanel Orientation="Horizontal" Margin="16,6,16,6">
+                                <Button Style="{StaticResource SmallButton}" Content="Name"
+                                        Command="{Binding DataContext.CopyNameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Button Style="{StaticResource SmallButton}" Content="Maker link" Margin="6,0,0,0"
+                                        Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <Button Style="{StaticResource SmallButton}" Content="Object id" Margin="6,0,0,0"
+                                        Command="{Binding DataContext.CopyIdCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+
+                            <!-- Writes last, as in the grid menu, apart from what reads: only for types that have such actions. -->
                             <StackPanel Visibility="{Binding DataContext.HasQuickActions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal" Margin="16,6,16,0">
                                     <TextBlock Text="Change" Style="{StaticResource Label}" Margin="0" />
                                     <TextBlock Style="{StaticResource WritesTag}" Margin="6,0,0,0" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="16,6,16,6">
+                                <StackPanel Orientation="Horizontal" Margin="16,6,16,12">
                                     <Button Style="{StaticResource SmallButton}" Margin="0,0,6,0"
                                             Content="{Binding DataContext.SwitchOffLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             ToolTip="{Binding DataContext.SwitchOffToolTip, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -824,16 +834,6 @@
                                             Visibility="{Binding DataContext.ShowSwitchOn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
                                     <TextBlock Text="Asks first" FontSize="11" Foreground="{DynamicResource Faint}" VerticalAlignment="Center" />
                                 </StackPanel>
-                            </StackPanel>
-
-                            <TextBlock Text="Copy" Style="{StaticResource Label}" Margin="16,6,16,0" />
-                            <StackPanel Orientation="Horizontal" Margin="16,6,16,12">
-                                <Button Style="{StaticResource SmallButton}" Content="Name"
-                                        Command="{Binding DataContext.CopyNameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Button Style="{StaticResource SmallButton}" Content="Maker link" Margin="6,0,0,0"
-                                        Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <Button Style="{StaticResource SmallButton}" Content="Object id" Margin="6,0,0,0"
-                                        Command="{Binding DataContext.CopyIdCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
