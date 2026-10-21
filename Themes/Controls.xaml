@@ -1768,7 +1768,10 @@
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
                             </Border.Effect>
-                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            <!-- Scrolls, so a menu held to a MaxHeight - or the screen - still reaches every item. -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </ScrollViewer>
                         </Border>
                     </Grid>
                 </ControlTemplate>
@@ -1813,7 +1816,9 @@
                                     <Border.Effect>
                                         <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
                                     </Border.Effect>
-                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                    </ScrollViewer>
                                 </Border>
                             </Grid>
                         </Popup>
