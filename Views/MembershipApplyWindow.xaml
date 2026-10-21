@@ -289,6 +289,18 @@
                             <Button Content="Open run log" Height="30"
                                     Command="{Binding OpenRunLogCommand}"
                                     ToolTip="Each change is recorded under %LOCALAPPDATA%\PPObjectSearch\writes" />
+
+                            <!-- Undoing writes too, so it stands apart, marked as a write. -->
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding CanUndo, Converter={StaticResource BoolToVis}}">
+                                <Rectangle Style="{StaticResource VDivider}" Margin="12,0" />
+                                <Button Height="30" Command="{Binding UndoCommand}"
+                                        ToolTip="Add back who this run removed and remove who it added. Asks first; recorded in the run log.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Undo run…" VerticalAlignment="Center" />
+                                        <TextBlock Style="{StaticResource WritesTag}" Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">

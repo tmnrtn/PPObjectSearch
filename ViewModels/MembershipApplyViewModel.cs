@@ -142,6 +142,13 @@ public sealed class MembershipApplyRequest
     public Func<MembershipChange, CancellationToken, Task>? ApplyEach { get; init; }
 
     /// <summary>
+    /// Reverses one change made by <see cref="ApplyEach"/> - adds back someone removed, removes
+    /// someone added. Only where membership is the app's to change both ways; without it a run has
+    /// no Undo.
+    /// </summary>
+    public Func<MembershipChange, CancellationToken, Task>? UndoEach { get; init; }
+
+    /// <summary>
     /// One call that makes all the changes itself (SyncGroupMembersToTeam). The rows are then a
     /// forecast, cannot be ticked individually, and are checked against <see cref="ReadMemberIds"/>.
     /// </summary>
@@ -204,6 +211,10 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
 
         ApplyCommand = new AsyncRelayCommand(_ => ApplyAsync(), _ => CanApply);
         CancelRunCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsRunning);
+        UndoCommand = new AsyncRelayCommand(_ => UndoAsync(), _ => CanUndo);
+        Confirm = undo => Views.WriteConfirmWindow.Ask(
+            System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive),
+            TargetLine, "Undo run", undo.Action, undo.Counts, undo.Caveat, undo.ConfirmLabel);
         ExportPlanCommand = new RelayCommand(_ => ExportPlan());
         OpenRunLogCommand = new RelayCommand(_ => OpenRunLog());
 
@@ -220,6 +231,94 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
     public RelayCommand ExportPlanCommand { get; }
 
     public RelayCommand OpenRunLogCommand { get; }
+
+    // ---------------------------------------------------------------- undo
+
+    public AsyncRelayCommand UndoCommand { get; }
+
+    /// <summary>Asks before undoing, in the confirmation every other write uses. Replaced in tests.</summary>
+    internal Func<UndoConfirmation, bool> Confirm { get; set; }
+
+    /// <summary>The target as the confirmation's environment line shows it.</summary>
+    private EnvironmentLineInfo TargetLine => new(
+        EnvironmentName, Permission.Type.Sku, EnvironmentHost, Permission.IsAllowlisted, Permission.Type.SkuLabel);
+
+    private bool _hasUndone;
+
+    /// <summary>The changes this run made, which Undo reverses.</summary>
+    private List<MembershipChangeRow> Undoable => _request.UndoEach is null
+        ? new()
+        : Rows.Where(r => r.Succeeded == true).ToList();
+
+    public bool CanUndo => Permission.Allowed && HasRun && !IsRunning && !_hasUndone && Undoable.Count > 0;
+
+    private void RaiseUndoState()
+    {
+        OnPropertyChanged(nameof(CanUndo));
+        UndoCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>Who undoing would add back and who it would remove again.</summary>
+    internal UndoConfirmation DescribeUndo()
+    {
+        var rows = Undoable;
+        var readded = rows.Count(r => r.IsRemove);
+        var removed = rows.Count - readded;
+        var counts = new List<WriteCount>();
+        if (readded > 0) counts.Add(new WriteCount(readded, $"removed from {TargetName} are added back"));
+        if (removed > 0) counts.Add(new WriteCount(removed, $"added to {TargetName} are removed again"));
+
+        return new UndoConfirmation(
+            $"Reverse the {rows.Count:N0} change(s) this run made to the {TargetKind} {TargetName}:",
+            counts,
+            "Only this run's changes are reversed, one person at a time. Anyone changed by hand since is changed back too.",
+            $"Undo {rows.Count:N0} change(s)");
+    }
+
+    private async Task UndoAsync()
+    {
+        if (!CanUndo || _request.UndoEach is not { } undoEach) return;
+        if (!Confirm(DescribeUndo())) return;
+
+        var rows = Undoable;
+        IsRunning = true;
+        var done = 0;
+        var failed = 0;
+
+        try
+        {
+            // Newest first, as the run made them.
+            foreach (var row in Enumerable.Reverse(rows))
+            {
+                done++;
+                Status = $"Undoing ({done}/{rows.Count}) - {(row.IsRemove ? "adding back" : "removing")} {row.Name}...";
+
+                try
+                {
+                    await undoEach(row.Change, CancellationToken.None);
+                    row.Result = row.IsRemove ? "Added back" : "Removed again";
+                    Record(row.IsRemove ? "Undo remove" : "Undo add", row, true, row.Result);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    failed++;
+                    row.Succeeded = false;
+                    row.Result = "Undo failed - " + ex.Message;
+                    Record(row.IsRemove ? "Undo remove" : "Undo add", row, false, ex.Message);
+                }
+            }
+
+            _hasUndone = true;
+            Status = failed == 0
+                ? $"Undone - {rows.Count:N0} change(s) to {TargetName} reversed."
+                : $"Undo finished with problems - {failed:N0} of {rows.Count:N0} could not be reversed. Each is on its own row.";
+        }
+        finally
+        {
+            IsRunning = false;
+            RaiseUndoState();
+        }
+    }
 
     /// <summary>Where this window's changes are recorded; null until something has been attempted.</summary>
     public string? RunLogPath => _log?.Path;
@@ -449,6 +548,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
 
             IsRunning = false;
             HasRun = true;
+            RaiseUndoState();
             if (_log?.Problem is { } problem) Status += " " + problem;
         }
     }

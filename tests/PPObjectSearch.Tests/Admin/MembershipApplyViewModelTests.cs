@@ -88,6 +88,50 @@ public class MembershipApplyViewModelTests
         return Task.CompletedTask;
     };
 
+    // ---------------------------------------------------------------- undo
+
+    [Fact]
+    public async Task A_run_whose_changes_reverse_can_be_undone_after_asking()
+    {
+        var undone = new List<(MembershipChangeKind, Guid)>();
+        var vm = new MembershipApplyViewModel(new MembershipApplyRequest
+        {
+            Operation = "Sync queue members from team", TargetKind = "queue", TargetName = "Q", SourceKind = "team", SourceName = "T",
+            EnvironmentName = "Env", EnvironmentHost = "env.crm11.dynamics.com", WriteLogFolder = LogFolder, Permission = Allowed,
+            Changes = Changes(),
+            ApplyEach = (_, _) => Task.CompletedTask,
+            UndoEach = (change, _) => { undone.Add((change.Kind, change.SystemUserId)); return Task.CompletedTask; },
+            ReadMemberIds = _ => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>())
+        });
+        UndoConfirmation? asked = null;
+        vm.Confirm = undo => { asked = undo; return true; };
+        Assert.False(vm.CanUndo);
+        vm.RemoveAcknowledged = true;
+
+        await RunAsync(vm);
+
+        Assert.True(vm.CanUndo);
+        await vm.UndoCommand.ExecuteAsync(null);
+
+        Assert.NotNull(asked);
+        Assert.Equal([(1, "removed from Q are added back"), (1, "added to Q are removed again")], asked.Counts.Select(c => (c.Count, c.Label)));
+        Assert.Equal("Undo 2 change(s)", asked.ConfirmLabel);
+        Assert.Equal([(MembershipChangeKind.Remove, B), (MembershipChangeKind.Add, A)], undone);
+        Assert.False(vm.CanUndo);
+        Assert.Equal("Undone - 2 change(s) to Q reversed.", vm.Status);
+    }
+
+    [Fact]
+    public async Task A_run_without_a_way_back_offers_no_undo()
+    {
+        var vm = PerRow(Allowed, (_, _) => Task.CompletedTask);
+        vm.RemoveAcknowledged = true;
+
+        await RunAsync(vm);
+
+        Assert.False(vm.CanUndo);
+    }
+
     // ---------------------------------------------------------------- the guard
 
     [Fact]

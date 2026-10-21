@@ -394,6 +394,10 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
                 if (additive) throw new InvalidOperationException("This sync is additive only; nobody is removed.");
                 return _client.RemoveQueueMemberAsync(queue.QueueId, change.SystemUserId, ct);
             },
+            // A queue's members are the app's to change both ways, so a run can be reversed.
+            UndoEach = (change, ct) => change.Kind == MembershipChangeKind.Add
+                ? _client.RemoveQueueMemberAsync(queue.QueueId, change.SystemUserId, ct)
+                : _client.AddQueueMemberAsync(queue.QueueId, change.SystemUserId, ct),
             ReadMemberIds = async ct => (await _client.GetQueueMembersAsync(queue.QueueId, ct)).Select(u => u.SystemUserId).ToHashSet(),
             Note = ApplyNote()
         });
