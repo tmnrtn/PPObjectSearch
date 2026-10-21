@@ -133,44 +133,32 @@ public sealed partial class EnvironmentSessionViewModel
             return;
         }
 
-        var answer = MessageBox.Show(
-            $"Fill the settings file with {Title}'s current values?\n\n" +
-            "Yes - each variable's current value here and each connection reference's connection here.\n" +
-            "No - a template with every value blank.",
-            "Deployment settings", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-        if (answer == MessageBoxResult.Cancel) return;
-        var withValues = answer == MessageBoxResult.Yes;
-
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Filter = "JSON file (*.json)|*.json",
-            FileName = $"{SelectedSolution.UniqueName}-deployment-settings.json"
-        };
-        if (dialog.ShowDialog() != true) return;
-
-        Status = "Reading environment variables and connection references...";
-
-        try
+        var client = _client;
+        var viewModel = new DeploymentSettingsViewModel(this, SelectedSolution, variables.Count, references.Count, async ct =>
         {
             var variableInfo = new List<EnvironmentVariableInfo>();
             foreach (var variable in variables)
             {
-                variableInfo.Add(await _client.GetEnvironmentVariableAsync(variable.ObjectId, isValueRecord: false, CancellationToken.None));
+                variableInfo.Add(await client.GetEnvironmentVariableAsync(variable.ObjectId, isValueRecord: false, ct));
             }
 
-            var referenceInfo = await _client.GetConnectionReferencesAsync(references.Select(r => r.ObjectId), CancellationToken.None);
+            var referenceInfo = await client.GetConnectionReferencesAsync(references.Select(r => r.ObjectId), ct);
+            return (variableInfo, referenceInfo);
+        });
 
-            await File.WriteAllTextAsync(dialog.FileName, DeploymentSettings.Build(variableInfo, referenceInfo, withValues), CancellationToken.None);
+        await ShowDeploymentSettings(viewModel);
 
-            var (blankVariables, blankReferences) = DeploymentSettings.Blanks(variableInfo, referenceInfo, withValues);
-            Status = $"Wrote {variableInfo.Count:N0} variable(s) and {referenceInfo.Count:N0} connection reference(s) to {dialog.FileName}" +
-                     (blankVariables + blankReferences > 0
-                         ? $" - {blankVariables:N0} value(s) and {blankReferences:N0} connection(s) are blank and need filling in."
-                         : ".");
-        }
-        catch (Exception ex)
+        if (viewModel.SavedPath is { } path)
         {
-            Status = "Could not write the deployment settings - " + ex.Message;
+            Status = $"Wrote the deployment settings to {path}" +
+                     (viewModel.HasBlanks ? $" - {viewModel.BlankNames.Count:N0} blank(s) need filling in." : ".");
         }
     }
+
+    /// <summary>Shows the deployment settings dialog until it is closed; replaced in tests.</summary>
+    internal Func<DeploymentSettingsViewModel, Task> ShowDeploymentSettings { get; set; } = viewModel =>
+    {
+        new Views.DeploymentSettingsWindow { DataContext = viewModel, Owner = Application.Current?.MainWindow }.ShowDialog();
+        return Task.CompletedTask;
+    };
 }

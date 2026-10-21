@@ -1,0 +1,102 @@
+<Window x:Class="PPObjectSearch.Views.DeploymentSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:PPObjectSearch.Views"
+        Title="Deployment settings"
+        Style="{StaticResource DialogWindow}"
+        Width="480" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <!-- Choose the values, save; then where the file went, what it holds, and what is still blank. -->
+    <Border Style="{StaticResource WindowBody}">
+        <StackPanel>
+            <StackPanel Margin="18,16,18,16">
+                <local:EnvironmentLine DataContext="{Binding Environment}" />
+                <TextBlock Text="Deployment settings" Style="{StaticResource WindowHeading}" Margin="0,0,0,4" />
+
+                <!-- ============================================================ choosing -->
+                <StackPanel Visibility="{Binding IsChoosing, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding SolutionLine}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,10,0,0">
+                        <Run Text="The settings file" />
+                        <Run Text="pac solution import --settings-file" FontFamily="{StaticResource MonoFont}" FontSize="11" />
+                        <Run Text="takes. Values:" />
+                    </TextBlock>
+                    <RadioButton GroupName="Values" IsChecked="{Binding WithValues}" Margin="2,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="{Binding CurrentValuesLabel}" FontWeight="SemiBold" />
+                            <TextBlock Text="Each variable's current value here, and each connection reference's connection here."
+                                       Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Values" IsChecked="{Binding IsTemplate}" Margin="2,8,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Blank template" FontWeight="SemiBold" />
+                            <TextBlock Text="Every name listed, every value empty." Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </RadioButton>
+                    <TextBlock Text="For another environment's values, open its tab and run this from there."
+                               Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                </StackPanel>
+
+                <!-- ============================================================ saved -->
+                <StackPanel Visibility="{Binding IsSaved, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding SavedPath}" Style="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding SavedPath}" />
+                    <ItemsControl ItemsSource="{Binding Written}" Margin="4,8,0,0" Focusable="False" Grid.IsSharedSizeScope="True">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="Count" MinWidth="24" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Count, StringFormat=N0}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="8,0,0,0" TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border Style="{StaticResource Banner}" Margin="0,10,0,0"
+                            Visibility="{Binding HasBlanks, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding BlanksHeading}" FontWeight="SemiBold" Foreground="{DynamicResource Amber}" />
+                            <ItemsControl ItemsSource="{Binding BlankNames}" Margin="0,3,0,0" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Style="{StaticResource Mono}" FontSize="11" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,10,0,0"
+                           Visibility="{Binding Status, Converter={StaticResource EmptyToCollapsed}}" />
+                <ProgressBar Style="{StaticResource BusyBar}" Margin="0,6,0,0"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+
+            <Border Style="{StaticResource Footer}">
+                <Grid>
+                    <!-- Choosing: Cancel and Save…. -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                Visibility="{Binding IsChoosing, Converter={StaticResource BoolToVis}}">
+                        <Button Content="Cancel" Height="30" IsCancel="True" />
+                        <Button Content="Save…" Height="30" Margin="8,0,0,0" IsDefault="True"
+                                Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" />
+                    </StackPanel>
+                    <!-- Saved: what to do with the file, then Close. -->
+                    <DockPanel Visibility="{Binding IsSaved, Converter={StaticResource BoolToVis}}">
+                        <Button DockPanel.Dock="Right" Content="Close" Height="30" Style="{StaticResource PrimaryButton}" Click="Close_Click" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Open folder" Height="30" Command="{Binding OpenFolderCommand}" />
+                            <Button Content="Copy path" Height="30" Margin="8,0,0,0" Command="{Binding CopyPathCommand}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</Window>
