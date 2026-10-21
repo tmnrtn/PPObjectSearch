@@ -142,7 +142,8 @@ public sealed class YesNoConverter : IValueConverter
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
         true => "Yes",
-        false => "No",
+        // "dash": a read-only flag in a grid, where an unset one is better as a gap than a word.
+        false => parameter as string == "dash" ? "—" : "No",
         _ => "—"
     };
 

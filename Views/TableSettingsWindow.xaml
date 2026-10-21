@@ -234,7 +234,7 @@
                                 <DataGridTextColumn Header="Table name" Width="180" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
                                 <DataGridTextColumn Header="Column" Width="220" Binding="{Binding Column}" ElementStyle="{StaticResource CellMono}" />
                                 <DataGridTextColumn Header="Column name" Width="*" Binding="{Binding ColumnLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Managed" Width="80" Binding="{Binding IsManaged, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Managed" Width="80" SortMemberPath="IsManaged" Binding="{Binding IsManaged, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </TabItem>
@@ -270,7 +270,7 @@
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding Table.LastSynced, StringFormat=g}"
                                                     ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Counted" Width="70" Binding="{Binding IsCounted, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Counted" Width="70" SortMemberPath="IsCounted" Binding="{Binding IsCounted, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                                 <DataGridTextColumn Header="Problem" Width="*" MinWidth="160" Binding="{Binding Problem}"
                                                     ElementStyle="{StaticResource ProblemCell}" />
                             </DataGrid.Columns>
@@ -287,7 +287,7 @@
                                                     HeaderStyle="{StaticResource FirstHeader}" ElementStyle="{StaticResource CellFirst}" />
                                 <DataGridTextColumn Header="Table" Width="200" Binding="{Binding Table}" ElementStyle="{StaticResource CellMono}" />
                                 <DataGridTextColumn Header="Display name" Width="170" Binding="{Binding TableLabel}" ElementStyle="{StaticResource CellMuted}" />
-                                <DataGridCheckBoxColumn Header="Search on" Width="80" Binding="{Binding IsEnabled, Mode=OneWay}" />
+                                <DataGridTextColumn Header="Search on" Width="80" SortMemberPath="IsEnabled" Binding="{Binding IsEnabled, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                                 <DataGridTextColumn Header="Index status" Width="110" Binding="{Binding StatusLabel}" ElementStyle="{StaticResource Cell}" />
                                 <DataGridTextColumn Header="Last synced" Width="150" Binding="{Binding LastSynced, StringFormat=g}"
                                                     ElementStyle="{StaticResource CellMuted}" />

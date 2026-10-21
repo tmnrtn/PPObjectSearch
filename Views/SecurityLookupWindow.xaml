@@ -189,9 +189,9 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Profile" Width="240" Binding="{Binding ProfileName}" HeaderStyle="{StaticResource FirstHeader}"
                                                         ElementStyle="{StaticResource CellFirst}" />
-                                    <DataGridCheckBoxColumn Header="Read" Width="60" Binding="{Binding CanRead, Mode=OneWay}" />
-                                    <DataGridCheckBoxColumn Header="Create" Width="60" Binding="{Binding CanCreate, Mode=OneWay}" />
-                                    <DataGridCheckBoxColumn Header="Update" Width="60" Binding="{Binding CanUpdate, Mode=OneWay}" />
+                                    <DataGridTextColumn Header="Read" Width="60" SortMemberPath="CanRead" Binding="{Binding CanRead, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
+                                    <DataGridTextColumn Header="Create" Width="60" SortMemberPath="CanCreate" Binding="{Binding CanCreate, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
+                                    <DataGridTextColumn Header="Update" Width="60" SortMemberPath="CanUpdate" Binding="{Binding CanUpdate, Mode=OneWay, Converter={StaticResource YesNo}, ConverterParameter=dash}" ElementStyle="{StaticResource Cell}" />
                                     <DataGridTextColumn Header="Users" Width="*" Binding="{Binding UsersLabel}" />
                                     <DataGridTextColumn Header="Teams" Width="*" Binding="{Binding TeamsLabel}" />
                                 </DataGrid.Columns>
