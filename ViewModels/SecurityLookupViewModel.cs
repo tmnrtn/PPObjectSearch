@@ -291,6 +291,23 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
     public ObservableCollection<FieldPermissionGrant> FieldGrants { get; } = new();
     public ObservableCollection<RoleDifference> Differences { get; } = new();
 
+    /// <summary>A compared role's column: "{role} · {env}", with the environment's colour.</summary>
+    public sealed record RoleColumn(string Header, Dataverse.EnvironmentSku Sku);
+
+    private RoleColumn _leftColumn = new("First role", Dataverse.EnvironmentSku.Unknown);
+    public RoleColumn LeftColumn
+    {
+        get => _leftColumn;
+        private set => SetProperty(ref _leftColumn, value);
+    }
+
+    private RoleColumn _rightColumn = new("Second role", Dataverse.EnvironmentSku.Unknown);
+    public RoleColumn RightColumn
+    {
+        get => _rightColumn;
+        private set => SetProperty(ref _rightColumn, value);
+    }
+
     /// <summary>A role granting the privilege looked up, and how far.</summary>
     public sealed record RoleGrantRow(string Role, PrivilegeDepth Depth)
     {
@@ -495,6 +512,12 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         var b = await right.GetRolePrivilegesAsync(RightRole!.RoleId, ct);
 
         foreach (var difference in SecurityLookup.Diff(a, b)) Differences.Add(difference);
+
+        // The columns are named for what was compared, not for the pickers, which may move on.
+        var leftSession = LeftSession ?? _session;
+        var rightSession = RightSession ?? _session;
+        LeftColumn = new RoleColumn($"{LeftRole.Name} · {leftSession.Title}", leftSession.EnvironmentSku);
+        RightColumn = new RoleColumn($"{RightRole.Name} · {rightSession.Title}", rightSession.EnvironmentSku);
 
         _reads[Tab] = new TabRead(
             $"Read {Plural(a.Count + b.Count, "privilege")} of {LeftRole.Name} and {RightRole.Name} in {Seconds(clock)}",

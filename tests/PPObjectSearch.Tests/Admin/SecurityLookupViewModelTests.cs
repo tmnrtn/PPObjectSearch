@@ -449,6 +449,9 @@ public class SecurityLookupViewModelTests
         Assert.Equal(("Read", PrivilegeDepth.Organization, PrivilegeDepth.None), (difference.Action, difference.Left, difference.Right));
         Assert.Contains(prodHandler.Requests, r => r.Url.Contains($"RoleId={Salesperson}"));
         Assert.Equal("No differences", lookup.EmptyHeading);
+        Assert.Equal($"Sales Manager · {lookup.Session.Title}", lookup.LeftColumn.Header);
+        Assert.Equal($"sales manager · {prod.Title}", lookup.RightColumn.Header);
+        Assert.Equal(prod.EnvironmentSku, lookup.RightColumn.Sku);
     });
 
     [Fact]

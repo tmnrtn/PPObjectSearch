@@ -9,9 +9,21 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
-        <!-- A matrix cell: the depth, with the roles that grant it on hover. -->
+        <!-- A matrix cell: the depth as a pill, with the roles that grant it on hover. -->
         <DataTemplate x:Key="EffectiveCellTemplate">
-            <TextBlock Style="{StaticResource Cell}" Text="{Binding Label}" ToolTip="{Binding GrantedByLabel}" />
+            <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding Depth}"
+                            Content="{Binding Depth, Converter={StaticResource DepthShort}}" ToolTip="{Binding GrantedByLabel}" />
+        </DataTemplate>
+
+        <!-- DataGrid columns are outside the visual tree; this carries the view model to their headers. -->
+        <core:BindingProxy x:Key="Proxy" Data="{Binding}" />
+
+        <!-- A compared role's column header: the environment's colour, then "{role} · {env}". -->
+        <DataTemplate x:Key="RoleColumnHeader">
+            <StackPanel Orientation="Horizontal">
+                <Border Style="{StaticResource EnvBar}" Height="12" Margin="0,0,6,0" Tag="{Binding Sku}" />
+                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
         </DataTemplate>
     </Window.Resources>
 
@@ -88,7 +100,11 @@
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Role" Width="*" Binding="{Binding Role}" HeaderStyle="{StaticResource FirstHeader}"
                                                             ElementStyle="{StaticResource CellFirst}" />
-                                        <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
+                                        <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding DepthLabel}" /></DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                                 <DataGrid Grid.Column="1" ItemsSource="{Binding Holders}" IsReadOnly="True" AutomationProperties.Name="Who holds it"
@@ -97,7 +113,11 @@
                                         <DataGridTextColumn Header="Name" Width="220" Binding="{Binding Name}" HeaderStyle="{StaticResource FirstHeader}"
                                                             ElementStyle="{StaticResource CellFirst}" />
                                         <DataGridTextColumn Header="Kind" Width="70" Binding="{Binding Kind}" />
-                                        <DataGridTextColumn Header="Depth" Width="120" Binding="{Binding DepthLabel}" SortMemberPath="Depth" />
+                                        <DataGridTemplateColumn Header="Reach" Width="80" SortMemberPath="Depth">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate><ContentPresenter Content="{Binding Depth}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding DepthLabel}" /></DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTextColumn Header="Via" Width="*" Binding="{Binding Via}" ElementStyle="{StaticResource CellMuted}" />
                                     </DataGrid.Columns>
                                 </DataGrid>
@@ -123,6 +143,7 @@
                             <Button Style="{StaticResource PrimaryButton}" Content="Show" Height="32" Padding="16,0" Margin="0,0,8,6"
                                     Command="{Binding RunCommand}"
                                     ToolTip="The widest depth across every role the user holds, directly and through their teams" />
+                            <ContentControl Style="{StaticResource ReachKey}" Margin="8,0,0,6" />
                         </WrapPanel>
                         <Grid>
                             <DataGrid ItemsSource="{Binding EffectiveRows}" IsReadOnly="True" AutomationProperties.Name="Effective privileges"
@@ -226,6 +247,7 @@
                             <Button Style="{StaticResource PrimaryButton}" Content="Compare" Height="32" Padding="16,0" Margin="0,0,8,6"
                                     Command="{Binding RunCommand}"
                                     ToolTip="Two roles side by side - or the same role in two environments" />
+                            <ContentControl Style="{StaticResource ReachKey}" Margin="8,0,0,6" />
                         </WrapPanel>
                         <Grid>
                             <DataGrid ItemsSource="{Binding Differences}" IsReadOnly="True" AutomationProperties.Name="Privileges that differ"
@@ -235,10 +257,18 @@
                                     <DataGridTextColumn Header="Table" Width="240" Binding="{Binding Table}" HeaderStyle="{StaticResource FirstHeader}"
                                                         ElementStyle="{StaticResource CellFirst}" />
                                     <DataGridTextColumn Header="Privilege" Width="200" Binding="{Binding Action}" />
-                                    <DataGridTextColumn Width="*" Binding="{Binding LeftLabel}" SortMemberPath="Left"
-                                                        Header="First role" />
-                                    <DataGridTextColumn Width="*" Binding="{Binding RightLabel}" SortMemberPath="Right"
-                                                        Header="Second role" />
+                                    <DataGridTemplateColumn Width="*" SortMemberPath="Left" Header="{Binding Data.LeftColumn, Source={StaticResource Proxy}}"
+                                                            HeaderTemplate="{StaticResource RoleColumnHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><ContentPresenter Content="{Binding Left}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding LeftLabel}" HorizontalAlignment="Left" Margin="12,0,0,0" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Width="*" SortMemberPath="Right" Header="{Binding Data.RightColumn, Source={StaticResource Proxy}}"
+                                                            HeaderTemplate="{StaticResource RoleColumnHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><ContentPresenter Content="{Binding Right}" ContentTemplate="{StaticResource DepthCell}" ToolTip="{Binding RightLabel}" HorizontalAlignment="Left" Margin="12,0,0,0" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                             <!-- Nothing to list: say why, and what to change. -->
