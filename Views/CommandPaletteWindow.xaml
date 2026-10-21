@@ -49,6 +49,9 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+            <TextBlock Text="{Binding NothingMatchesText}" Foreground="{DynamicResource Muted}" Margin="14,10,14,8"
+                       TextTrimming="CharacterEllipsis"
+                       Visibility="{Binding NothingMatches, Converter={StaticResource BoolToVis}}" />
             <TextBlock Margin="14,4,14,0" FontSize="11" Foreground="{DynamicResource Faint}"
                        Text="↑ ↓ to choose · Enter to run · Esc to close" />
         </StackPanel>
