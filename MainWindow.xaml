@@ -357,9 +357,9 @@
                         </Button.Style>
                     </Button>
 
-                    <Button AutomationProperties.Name="Theme" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
+                    <Button AutomationProperties.Name="Theme and logs" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
                             Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
-                            Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme"
+                            Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Theme and logs"
                             core:Ui.OpensMenu="True">
                         <Button.ContextMenu>
                             <ContextMenu>

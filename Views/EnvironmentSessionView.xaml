@@ -164,9 +164,9 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button AutomationProperties.Name="F5 - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
+                    <Button AutomationProperties.Name="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
-                            ToolTip="F5 - reads the solution list and the solution's objects again, bypassing the cache." />
+                            ToolTip="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." />
                 </StackPanel>
 
                 <!-- Account -->
@@ -189,7 +189,6 @@
                     <Button.ContextMenu>
                         <ContextMenu Opened="AccountMenu_Opened">
                             <!-- Where this environment's links and sign-ins open - the sidebar's menu, here too. -->
-                            <MenuItem Header="{Binding BrowserProfileLabel}" HeaderStringFormat="Links open in {0}" IsEnabled="False" />
                             <MenuItem Header="Open links in" ItemsSource="{Binding BrowserProfileOptions}">
                                 <MenuItem.ItemContainerStyle>
                                     <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
@@ -224,7 +223,7 @@
 
             <WrapPanel Grid.Column="0" Orientation="Horizontal">
                 <!-- Esc, ↑↓ and Enter are handled in code: they drive the dropdown first. -->
-                <TextBox x:Name="SearchBox" Width="220" Margin="0,0,6,0"
+                <TextBox x:Name="SearchBox" Width="280" Margin="0,0,6,0"
                          core:Ui.Icon="&#xE721;" core:Ui.KeyHint="Esc" core:Ui.Placeholder="Search"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                          GotKeyboardFocus="SearchBox_GotKeyboardFocus"
@@ -846,7 +845,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="{Binding Status}" Foreground="{DynamicResource Muted}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Status}" />
                 <TextBlock Grid.Column="1" Text="{Binding ResultSummary}" FontWeight="SemiBold" Margin="12,0,0,0"
                            VerticalAlignment="Center" />
             </Grid>
