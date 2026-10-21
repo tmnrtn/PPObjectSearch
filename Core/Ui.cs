@@ -99,6 +99,41 @@ public static class Ui
     public static void SetDotBrush(DependencyObject d, System.Windows.Media.Brush? value) => d.SetValue(DotBrushProperty, value);
 
     /// <summary>
+    /// A grid's fixed-width columns keep their width. Laid out narrower than its columns need -
+    /// a window not yet at its size, say - a DataGrid squeezes its fixed columns down to their
+    /// minimum and never widens them again; held to their width as a minimum, the grid scrolls
+    /// sideways instead. A column with a MinWidth of its own keeps it. Set on every grid by the theme.
+    /// </summary>
+    public static readonly DependencyProperty KeepsColumnWidthsProperty = DependencyProperty.RegisterAttached(
+        "KeepsColumnWidths", typeof(bool), typeof(Ui), new PropertyMetadata(false, OnKeepsColumnWidthsChanged));
+
+    public static bool GetKeepsColumnWidths(DependencyObject d) => (bool)d.GetValue(KeepsColumnWidthsProperty);
+    public static void SetKeepsColumnWidths(DependencyObject d, bool value) => d.SetValue(KeepsColumnWidthsProperty, value);
+
+    private static void OnKeepsColumnWidthsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not System.Windows.Controls.DataGrid grid) return;
+
+        grid.Columns.CollectionChanged -= KeepAddedColumnWidths;
+        if (e.NewValue is not true) return;
+
+        grid.Columns.CollectionChanged += KeepAddedColumnWidths;
+        foreach (var column in grid.Columns) KeepColumnWidth(column);
+    }
+
+    private static void KeepAddedColumnWidths(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        foreach (var column in e.NewItems?.OfType<System.Windows.Controls.DataGridColumn>() ?? []) KeepColumnWidth(column);
+    }
+
+    private static void KeepColumnWidth(System.Windows.Controls.DataGridColumn column)
+    {
+        if (column.Width.IsAbsolute &&
+            column.ReadLocalValue(System.Windows.Controls.DataGridColumn.MinWidthProperty) == DependencyProperty.UnsetValue)
+            column.MinWidth = column.Width.Value;
+    }
+
+    /// <summary>
     /// A grid drawn at its full height inside a page that scrolls: the wheel scrolls the page,
     /// rather than stopping at the grid's own scroll viewer, which has nothing to scroll.
     /// </summary>
