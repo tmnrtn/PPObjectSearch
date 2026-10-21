@@ -61,6 +61,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         Solutions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
         Layers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(SolutionsTabCount));
         Dependents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
+        Runs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(FailedRunCount));
         Required.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DependencyCount));
         ChildGroups.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ComponentCount));
     }
@@ -1064,6 +1065,25 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private readonly string? _environmentId;
 
     public ObservableCollection<ProcessRun> Runs { get; } = new();
+
+    private System.Windows.Data.ListCollectionView? _runsView;
+    /// <summary>The runs as the grid shows them: every one, or only those that failed.</summary>
+    public System.Windows.Data.ListCollectionView RunsView => _runsView ??= new System.Windows.Data.ListCollectionView(Runs)
+    {
+        Filter = r => !FailedRunsOnly || r is ProcessRun { Outcome: RunOutcome.Failed }
+    };
+
+    private bool _failedRunsOnly;
+    public bool FailedRunsOnly
+    {
+        get => _failedRunsOnly;
+        set
+        {
+            if (SetProperty(ref _failedRunsOnly, value)) RunsView.Refresh();
+        }
+    }
+
+    public int FailedRunCount => Runs.Count(r => r.Outcome == RunOutcome.Failed);
 
     /// <summary>Opens a run - the one passed, else the selected one - in Power Automate.</summary>
     public RelayCommand OpenRunCommand => _openRunCommand ??= new RelayCommand(

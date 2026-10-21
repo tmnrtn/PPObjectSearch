@@ -40,6 +40,21 @@ public class RoundSevenTests
     }
 
     [Fact]
+    public void The_runs_pane_can_show_only_the_failed_runs()
+    {
+        var details = DetailsHarness.Details(new Infrastructure.FakeHttpHandler().Quiet(), DetailsHarness.CloudFlow());
+        details.Runs.Add(new ProcessRun { Name = "a", Status = "Succeeded", Outcome = RunOutcome.Succeeded });
+        details.Runs.Add(new ProcessRun { Name = "b", Status = "Failed", Outcome = RunOutcome.Failed });
+
+        Assert.Equal(1, details.FailedRunCount);
+        Assert.Equal(2, details.RunsView.Count);
+
+        details.FailedRunsOnly = true;
+
+        Assert.Equal("b", Assert.Single(details.RunsView.Cast<ProcessRun>()).Name);
+    }
+
+    [Fact]
     public void Stopping_a_run_names_both_choices()
     {
         Assert.Equal("Stop after this change", Asking.StopRun.Confirm);

@@ -458,12 +458,28 @@
 
                             <DockPanel Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
-                                    <TextBlock Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
-                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding RunsStatus}" />
+                                    <DockPanel>
+                                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource FilterToggle}" Height="24" Margin="8,0,0,0"
+                                                      IsChecked="{Binding FailedRunsOnly}" ToolTip="Show only the runs that failed"
+                                                      AutomationProperties.Name="Failed runs only">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Failed" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding FailedRunCount}" Style="{StaticResource FaintText}" Margin="5,0,0,0"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </ToggleButton>
+                                        <TextBlock Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding RunsStatus}" />
+                                    </DockPanel>
                                 </Border>
-                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Runs}"
+                                <!-- A double-click shows the run on the diagram; the pane beside has both actions. -->
+                                <DataGrid x:Name="RunsGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding RunsView}"
                                           SelectedItem="{Binding SelectedRun}" SelectionMode="Single" IsReadOnly="True">
+                                    <DataGrid.InputBindings>
+                                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ShowRunOnDiagramCommand}"
+                                                      CommandParameter="{Binding SelectedItem, ElementName=RunsGrid}" />
+                                    </DataGrid.InputBindings>
                                     <DataGrid.Columns>
                                         <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="Status"
                                                                 HeaderStyle="{StaticResource PaneFirstHeader}">
@@ -493,38 +509,6 @@
                                                 </Style>
                                             </DataGridTextColumn.ElementStyle>
                                         </DataGridTextColumn>
-                                        <DataGridTemplateColumn Width="86" CanUserSort="False"
-                                                                Visibility="{Binding Data.IsCloudFlow, Source={StaticResource WindowProxy}, Converter={StaticResource BoolToVis}}">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
-                                                            ToolTip="Show this run on the flow's diagram, step by step"
-                                                            Command="{Binding DataContext.ShowRunOnDiagramCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                            CommandParameter="{Binding}">
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="Diagram" />
-                                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A9;" FontSize="9" Margin="5,1,0,0" />
-                                                        </StackPanel>
-                                                    </Button>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Width="72" CanUserSort="False">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <Button Style="{StaticResource RowButton}" Margin="8,0" HorizontalAlignment="Left"
-                                                            ToolTip="Open this run in Power Automate"
-                                                            Visibility="{Binding HasPortalUrl, Converter={StaticResource BoolToVis}}"
-                                                            Command="{Binding DataContext.OpenRunCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                            CommandParameter="{Binding}">
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="Open" />
-                                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" FontSize="9" Margin="5,1,0,0" />
-                                                        </StackPanel>
-                                                    </Button>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </DockPanel>
