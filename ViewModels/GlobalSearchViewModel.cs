@@ -244,11 +244,13 @@ public sealed class GlobalSearchViewModel : ObservableObject
 
     public string EmptyHeading => _all.Count == 0 ? "Nothing to search" : "Nothing matches";
 
-    public string EmptyText => _all.Count > 0
-        ? (SelectedScope.IsAll ? $"No object in any environment matches '{SearchText.Trim()}'."
-            : $"No object in {SelectedScope.Label} matches '{SearchText.Trim()}'.")
-        : SkippedMessage.Length > 0 ? "No tab is connected. Connect one to search its objects."
-        : "The connected tabs list no objects.";
+    public string EmptyText => (_all.Count > 0, SelectedScope.IsAll) switch
+    {
+        (true, true) => $"No object in any environment matches '{SearchText.Trim()}'.",
+        (true, false) => $"No object in {SelectedScope.Label} matches '{SearchText.Trim()}'.",
+        _ when SkippedMessage.Length > 0 => "No tab is connected. Connect one to search its objects.",
+        _ => "The connected tabs list no objects."
+    };
 
     private RelayCommand? _clearFiltersCommand;
     public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>

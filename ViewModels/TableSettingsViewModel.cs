@@ -68,6 +68,8 @@ public sealed class FolderChoice : ObservableObject
 /// </summary>
 public sealed class TableSettingsViewModel : ObservableObject, IDisposable
 {
+    private const string TableHeader = "Table";
+
     private readonly AppSettings _settings;
     private readonly Action<AppSettings> _save;
     private CancellationTokenSource? _cts;
@@ -116,7 +118,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         _scope = preferences.Scope;
 
         _scopeSession = (current is not null && connected.Contains(current) ? current : null)
-                        ?? connected.FirstOrDefault(s => s.SelectedSolution is { IsDefaultSolution: false })
+                        ?? connected.Find(s => s.SelectedSolution is { IsDefaultSolution: false })
                         ?? connected.FirstOrDefault();
         LoadSolutionChoices(preferences.Solutions);
     }
@@ -632,7 +634,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         var words = FilterText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         bool Matches(params string?[] fields) =>
-            words.All(w => fields.Any(f => f?.Contains(w, StringComparison.CurrentCultureIgnoreCase) == true));
+            Array.TrueForAll(words, w => Array.Exists(fields, f => f?.Contains(w, StringComparison.CurrentCultureIgnoreCase) == true));
 
         Fill(TableRows, _allTables.Where(r => (!FindingsOnly || IsFinding(r)) && Matches(r.Name, r.Detail)));
         Fill(ColumnRows, _allColumns.Where(r => (!FindingsOnly || IsFinding(r)) && Matches(r.Name, r.Detail)));
@@ -703,17 +705,17 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
 
         return SelectedTab switch
         {
-            TableSettingsTab.Tables => Matrix(TableRows, "Table", "Display name").ToList(),
-            TableSettingsTab.Columns => Matrix(ColumnRows, "Column", "Table").ToList(),
+            TableSettingsTab.Tables => Matrix(TableRows, TableHeader, "Display name").ToList(),
+            TableSettingsTab.Columns => Matrix(ColumnRows, "Column", TableHeader).ToList(),
             TableSettingsTab.Environments => Matrix(EnvironmentRows, "Setting", "Meaning").ToList(),
             TableSettingsTab.Gaps =>
             [
-                CsvExporter.Line("Environment", "Table", "Table display name", "Column", "Column display name", "Managed"),
+                CsvExporter.Line("Environment", TableHeader, "Table display name", "Column", "Column display name", "Managed"),
                 .. GapRows.Select(g => CsvExporter.Line(g.Environment, g.Table, g.TableLabel, g.Column, g.ColumnLabel, g.IsManaged ? "Yes" : "No"))
             ],
             TableSettingsTab.Links =>
             [
-                CsvExporter.Line("Environment", "Profile", "Folder", "Profile state", "Table", "Sync state", "Initial sync",
+                CsvExporter.Line("Environment", "Profile", "Folder", "Profile state", TableHeader, "Sync state", "Initial sync",
                     "Lake rows", "Dataverse rows", "Last synced", "Counted", "Problem"),
                 .. LinkRows.Select(l => CsvExporter.Line(l.Environment, l.Profile.Name, l.Profile.FolderLabel, l.Profile.State,
                     l.Table.Table, l.Table.SyncState, l.Table.InitialSyncState, l.Table.LakeRecordCount?.ToString(),
@@ -721,7 +723,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
             ],
             _ =>
             [
-                CsvExporter.Line("Environment", "Table", "Display name", "Search on", "Index status", "Last synced",
+                CsvExporter.Line("Environment", TableHeader, "Display name", "Search on", "Index status", "Last synced",
                     "Indexed columns", "Problem"),
                 .. SearchRows.Select(s => CsvExporter.Line(s.Environment, s.Table, s.TableLabel,
                     s.IsEnabled switch { true => "Yes", false => "No", null => "" }, s.StatusLabel,

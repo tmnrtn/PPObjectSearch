@@ -487,14 +487,14 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _ => AdminTab.Users
     };
 
+    /// <summary>A security role in Environment admin's role view, from its details.</summary>
+    internal void ShowRoleInAdmin(Guid roleId) => ShowEnvironmentAdmin(AdminTab.Roles, roleId);
+
     /// <summary>
     /// Users, roles, mailboxes and queues - read-only. One window per tab: asking again brings it
     /// forward on the tab asked for.
     /// </summary>
     private void ShowEnvironmentAdmin(AdminTab tab) => ShowEnvironmentAdmin(tab, null);
-
-    /// <summary>A security role in Environment admin's role view, from its details.</summary>
-    internal void ShowRoleInAdmin(Guid roleId) => ShowEnvironmentAdmin(AdminTab.Roles, roleId);
 
     private void ShowEnvironmentAdmin(AdminTab tab, Guid? selectId)
     {
@@ -1709,7 +1709,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     /// The Layer filter waits for a layer check: before one, "Unmanaged layer" would silently show
     /// nothing rather than say nothing is known yet.
     /// </summary>
-    public bool CanFilterByLayer => IsConnected && _allItems.Any(i => i.HasUnmanagedLayer is not null);
+    public bool CanFilterByLayer => IsConnected && _allItems.Exists(i => i.HasUnmanagedLayer is not null);
 
     /// <summary>Nothing in the grid: why is said in its place.</summary>
     public bool IsListEmpty => ItemsView.IsEmpty;

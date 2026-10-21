@@ -366,11 +366,19 @@ public sealed class CompareViewModel : ObservableObject, IDisposable
 
     public bool CanClearFilters => HasCompared && _all.Count > 0;
 
-    public string EmptyHeading => !HasCompared ? "Nothing compared yet" : _all.Count == 0 ? "Both sides are empty" : "Nothing matches";
+    public string EmptyHeading => (HasCompared, _all.Count == 0) switch
+    {
+        (false, _) => "Nothing compared yet",
+        (_, true) => "Both sides are empty",
+        _ => "Nothing matches"
+    };
 
-    public string EmptyText => !HasCompared ? "Choose two environments above, then Compare."
-        : _all.Count == 0 ? "Neither environment has components in its selected solution."
-        : "No component matches the status, type and name filters.";
+    public string EmptyText => (HasCompared, _all.Count == 0) switch
+    {
+        (false, _) => "Choose two environments above, then Compare.",
+        (_, true) => "Neither environment has components in its selected solution.",
+        _ => "No component matches the status, type and name filters."
+    };
 
     private RelayCommand? _clearFiltersCommand;
     public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>

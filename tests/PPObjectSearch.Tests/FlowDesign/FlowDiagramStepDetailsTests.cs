@@ -140,6 +140,8 @@ public class FlowDiagramStepDetailsTests
         Assert.Equal(1, changes.Count(c => c == nameof(FlowCardViewModel.DetailTooltip)));
     }
 
+    private static readonly string[] OneSucceededTwoFailed = ["Succeeded", "Failed", "Failed"];
+
     private static readonly string[] OneStepOfEachKind = ["Route", "Call api", "Run child", "Stop", "Pause", "Odd one"];
 
     [Fact]
@@ -417,7 +419,7 @@ public class FlowDiagramStepDetailsTests
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/actions/Inner/repetitions", JsonSerializer.Serialize(new
         {
-            value = new[] { "Succeeded", "Failed", "Failed" }.Select((status, i) => new
+            value = OneSucceededTwoFailed.Select((status, i) => new
             {
                 properties = new { status, repetitionIndexes = new[] { new { scopeName = "Loop", itemIndex = i } } }
             })

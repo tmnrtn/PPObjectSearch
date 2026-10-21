@@ -94,9 +94,7 @@ public sealed class OverviewStepsPart : OverviewPart
             if (condition)
             {
                 keyword = step.Kind;
-                text = step.Text == step.Kind ? string.Empty
-                    : step.Text.StartsWith(step.Kind + " ", StringComparison.Ordinal) ? step.Text[(step.Kind.Length + 1)..]
-                    : step.Text;
+                text = ConditionText(step);
             }
             else
             {
@@ -112,6 +110,13 @@ public sealed class OverviewStepsPart : OverviewPart
         }
 
         return lines;
+    }
+
+    /// <summary>A condition's text without its leading keyword, which the line shows on its own.</summary>
+    private static string ConditionText(BusinessRuleStep step)
+    {
+        if (step.Text == step.Kind) return string.Empty;
+        return step.Text.StartsWith(step.Kind + " ", StringComparison.Ordinal) ? step.Text[(step.Kind.Length + 1)..] : step.Text;
     }
 }
 

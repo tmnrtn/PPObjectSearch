@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;

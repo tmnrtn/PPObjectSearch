@@ -15,6 +15,10 @@ public sealed partial class DataverseClient
     private const string UniqueNameColumn = "uniquename";
     private const string DescriptionHeading = "Description";
     private const string TableHeading = "Table";
+    private const string TableKind = "Table";
+    private const string TitleName = "Title";
+    private const string ValueProperty = "value";
+    private const string ComponentTypeColumn = "componenttype";
 
     /// <summary>The kind of Overview a component gets, or Other where it has none.</summary>
     public static ObjectKind OverviewKindOf(SolutionComponentItem item)
@@ -170,7 +174,7 @@ public sealed partial class DataverseClient
         // The app's sitemap shares its unique name.
         using var sitemaps = await GetOneAsync(
             $"sitemaps?$select=sitemapxml&$filter=sitemapnameunique eq '{Escape(unique)}'", ct).ConfigureAwait(false);
-        if (sitemaps.RootElement.TryGetProperty("value", out var rows) && rows.GetArrayLength() > 0 &&
+        if (sitemaps.RootElement.TryGetProperty(ValueProperty, out var rows) && rows.GetArrayLength() > 0 &&
             JsonHelper.GetString(rows[0], "sitemapxml") is { Length: > 0 } xml)
         {
             overview.Tables.Add(new OverviewTable
@@ -197,10 +201,6 @@ public sealed partial class DataverseClient
             return rows;
         }
 
-        static string? Title(XElement e) =>
-            e.Element("Titles")?.Elements("Title").FirstOrDefault()?.Attribute("Title")?.Value
-            ?? (string?)e.Attribute("Title") ?? (string?)e.Attribute("Id");
-
         // What a subarea opens: a table, else a URL.
         static string? Opens(XElement sub)
         {
@@ -215,7 +215,7 @@ public sealed partial class DataverseClient
             {
                 foreach (var sub in group.Elements("SubArea"))
                 {
-                    rows.Add([Title(area), Title(group), Title(sub), Opens(sub)]);
+                    rows.Add([SitemapTitle(area), SitemapTitle(group), SitemapTitle(sub), Opens(sub)]);
                 }
             }
         }
@@ -244,9 +244,7 @@ public sealed partial class DataverseClient
             return rows;
         }
 
-        static string Title(XElement e) =>
-            e.Element("Titles")?.Elements("Title").FirstOrDefault()?.Attribute("Title")?.Value
-            ?? (string?)e.Attribute("Title") ?? (string?)e.Attribute("Id") ?? "(untitled)";
+        static string Title(XElement e) => SitemapTitle(e) ?? "(untitled)";
 
         foreach (var area in root.Descendants("Area"))
         {
@@ -256,16 +254,25 @@ public sealed partial class DataverseClient
                 rows.Add(new(1, Title(group), null));
                 foreach (var sub in group.Elements("SubArea"))
                 {
-                    var opens = (string?)sub.Attribute("Entity") is { Length: > 0 } entity ? $"Table: {entity}"
-                        : (string?)sub.Attribute("DashboardId") is { Length: > 0 } dashboard ? $"Dashboard: {dashboard}"
-                        : (string?)sub.Attribute("Url") is { Length: > 0 } url ? url
-                        : null;
-                    rows.Add(new(2, Title(sub), opens));
+                    rows.Add(new(2, Title(sub), ItemOpens(sub)));
                 }
             }
         }
 
         return rows;
+    }
+
+    /// <summary>A sitemap entry's title: its first localised title, else its own title or id.</summary>
+    private static string? SitemapTitle(XElement e) =>
+        e.Element("Titles")?.Elements(TitleName).FirstOrDefault()?.Attribute(TitleName)?.Value
+        ?? (string?)e.Attribute(TitleName) ?? (string?)e.Attribute("Id");
+
+    /// <summary>What a sitemap item opens: a table, a dashboard or a web address.</summary>
+    private static string? ItemOpens(XElement sub)
+    {
+        if ((string?)sub.Attribute("Entity") is { Length: > 0 } entity) return $"Table: {entity}";
+        if ((string?)sub.Attribute("DashboardId") is { Length: > 0 } dashboard) return $"Dashboard: {dashboard}";
+        return (string?)sub.Attribute("Url") is { Length: > 0 } url ? url : null;
     }
 
     /// <summary>App component types by what a maker calls them, and where each one's name is read.</summary>
@@ -283,7 +290,7 @@ public sealed partial class DataverseClient
         var components = await ReadRowsAsync(
             EnvironmentUrl + ApiPath + $"appmodulecomponents?$select=componenttype,objectid&$filter=_appmoduleidunique_value eq {await AppUniqueIdAsync(id, ct).ConfigureAwait(false)}",
             row => Guid.TryParse(JsonHelper.GetString(row, "objectid"), out var objectId)
-                ? Tuple.Create(JsonHelper.GetInt(row, "componenttype") ?? 0, objectId, AppComponentKind(JsonHelper.GetInt(row, "componenttype") ?? 0, Label(row, "componenttype")))
+                ? Tuple.Create(JsonHelper.GetInt(row, ComponentTypeColumn) ?? 0, objectId, AppComponentKind(JsonHelper.GetInt(row, ComponentTypeColumn) ?? 0, Label(row, ComponentTypeColumn)))
                 : null,
             ct).ConfigureAwait(false);
 
@@ -299,7 +306,7 @@ public sealed partial class DataverseClient
                 {
                     foreach (var (metadataId, logicalName, display) in await TableNamesAsync(ct).ConfigureAwait(false))
                     {
-                        names[metadataId] = ("Table", display ?? logicalName, logicalName);
+                        names[metadataId] = (TableKind, display ?? logicalName, logicalName);
                     }
                     continue;
                 }
@@ -313,13 +320,7 @@ public sealed partial class DataverseClient
 
                     var rows = await ReadRowsAsync(
                         EnvironmentUrl + ApiPath + $"{source.Set}?$select={select}&$filter=" + InFilter(source.Id, chunk.Select(c => c.ToString())),
-                        row => Guid.TryParse(JsonHelper.GetString(row, source.Id), out var rowId)
-                            ? Tuple.Create(rowId,
-                                // A dashboard is a form of type Dashboard.
-                                group.Key == 60 && JsonHelper.GetInt(row, "type") is 0 or 10 ? "Dashboard" : source.Kind,
-                                JsonHelper.GetString(row, source.Name) ?? rowId.ToString(),
-                                source.Table is null ? null : JsonHelper.GetString(row, source.Table))
-                            : null,
+                        row => AppComponentName(row, group.Key, source),
                         ct).ConfigureAwait(false);
 
                     foreach (var (rowId, kind, name, table) in rows) names[rowId] = (kind, name, table == "none" ? null : table);
@@ -334,11 +335,11 @@ public sealed partial class DataverseClient
 
         if (unnamed.Count > 0) overview.Problems.Add("component names: " + string.Join("; ", unnamed));
 
-        var order = new[] { "Table", "Form", "View", "Dashboard", "Chart", "Business process flow", "Sitemap" };
+        var order = new[] { TableKind, "Form", "View", "Dashboard", "Chart", "Business process flow", "Sitemap" };
         overview.Tables.Add(new OverviewTable
         {
             Title = "Tables, forms, views and dashboards in the app",
-            Columns = ["Kind", "Name", "Table"],
+            Columns = ["Kind", "Name", TableHeading],
             Rows = components
                 .Select(c => names.TryGetValue(c.Item2, out var n)
                     ? (IReadOnlyList<string?>)[n.Kind, n.Name, n.Table]
@@ -351,10 +352,23 @@ public sealed partial class DataverseClient
         });
     }
 
-    private static string AppComponentKind(int type, string? label) =>
-        type == 1 ? "Table"
-        : AppComponentSources.TryGetValue(type, out var source) ? source.Kind
-        : label ?? ComponentTypes.GetName(type);
+    /// <summary>One component's id, kind, name and table from a row of its type's names; null without an id.</summary>
+    private static Tuple<Guid, string, string, string?>? AppComponentName(
+        JsonElement row, int type, (string Kind, string Set, string Id, string Name, string? Table) source)
+    {
+        if (!Guid.TryParse(JsonHelper.GetString(row, source.Id), out var rowId)) return null;
+
+        // A dashboard is a form of type Dashboard.
+        var kind = type == 60 && JsonHelper.GetInt(row, "type") is 0 or 10 ? "Dashboard" : source.Kind;
+        var table = source.Table is null ? null : JsonHelper.GetString(row, source.Table);
+        return Tuple.Create(rowId, kind, JsonHelper.GetString(row, source.Name) ?? rowId.ToString(), table);
+    }
+
+    private static string AppComponentKind(int type, string? label)
+    {
+        if (type == 1) return TableKind;
+        return AppComponentSources.TryGetValue(type, out var source) ? source.Kind : label ?? ComponentTypes.GetName(type);
+    }
 
     /// <summary>Every table's metadata id, logical name and display name - app components name tables by metadata id.</summary>
     private async Task<IReadOnlyList<(Guid MetadataId, string LogicalName, string? DisplayName)>> TableNamesAsync(CancellationToken ct)
@@ -362,7 +376,7 @@ public sealed partial class DataverseClient
         using var doc = await GetOneAsync("EntityDefinitions?$select=MetadataId,LogicalName,DisplayName", ct).ConfigureAwait(false);
         var tables = new List<(Guid, string, string?)>();
 
-        if (doc.RootElement.TryGetProperty("value", out var value))
+        if (doc.RootElement.TryGetProperty(ValueProperty, out var value))
         {
             foreach (var row in value.EnumerateArray())
             {
@@ -412,7 +426,7 @@ public sealed partial class DataverseClient
 
         var components = await ReadRowsAsync(
             EnvironmentUrl + ApiPath + $"botcomponents?$select=name,componenttype,schemaname&$filter=_parentbotid_value eq {id}",
-            row => (IReadOnlyList<string?>)[Shown(row, "componenttype"), JsonHelper.GetString(row, "name"), JsonHelper.GetString(row, "schemaname")],
+            row => (IReadOnlyList<string?>)[Shown(row, ComponentTypeColumn), JsonHelper.GetString(row, "name"), JsonHelper.GetString(row, "schemaname")],
             ct).ConfigureAwait(false);
 
         await AgentChannelsAsync(id, overview, ct).ConfigureAwait(false);
@@ -528,7 +542,7 @@ public sealed partial class DataverseClient
                                 ? channel.GetString()
                                 : JsonHelper.GetString(channel, "channelId") ?? JsonHelper.GetString(channel, "id") ??
                                   JsonHelper.GetString(channel, "name");
-                            if (!string.IsNullOrWhiteSpace(name) && !found.Contains(name!, StringComparer.OrdinalIgnoreCase)) found.Add(name!);
+                            if (!string.IsNullOrWhiteSpace(name) && !found.Contains(name, StringComparer.OrdinalIgnoreCase)) found.Add(name);
                         }
                     }
                     else
@@ -569,7 +583,7 @@ public sealed partial class DataverseClient
             while (url.Length > 0)
             {
                 using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
-                if (doc.RootElement.TryGetProperty("value", out var value))
+                if (doc.RootElement.TryGetProperty(ValueProperty, out var value))
                 {
                     foreach (var component in value.EnumerateArray())
                     {
@@ -628,7 +642,7 @@ public sealed partial class DataverseClient
             overview.Tables.Add(new OverviewTable
             {
                 Title = "Columns that use this choice",
-                Columns = ["Table", "Column", "Display name"],
+                Columns = [TableHeading, "Column", "Display name"],
                 Rows = await ChoiceColumnsAsync(id, ct).ConfigureAwait(false)
             });
         }
@@ -653,7 +667,7 @@ public sealed partial class DataverseClient
         if (columnIds.Count == 0) return Array.Empty<IReadOnlyList<string?>>();
 
         using var solution = await GetOneAsync("solutions?$select=solutionid&$filter=uniquename eq 'Default'", ct).ConfigureAwait(false);
-        var defaultId = solution.RootElement.TryGetProperty("value", out var found) && found.GetArrayLength() > 0
+        var defaultId = solution.RootElement.TryGetProperty(ValueProperty, out var found) && found.GetArrayLength() > 0
             ? JsonHelper.GetString(found[0], "solutionid")
             : null;
 

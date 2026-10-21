@@ -211,13 +211,15 @@ public sealed record LinkRow(
     public string BehindLabel => IsBehind ? Behind!.Value.ToString("N0") : "—";
 
     /// <summary>Why this row needs a look, or empty when it is keeping up.</summary>
-    public string Problem =>
-        !Profile.IsActive ? $"Profile is {Profile.State ?? "not active"}"
-        : !Table.IsActive ? "Table is inactive in the profile"
-        : !Table.IsHealthy ? $"Sync is {Table.SyncState ?? "unknown"}"
-        : Table.LakeRecordCount is { } lake && Table.SourceRecordCount is { } source && lake != source
-            ? $"Lake has {lake:N0} rows, Dataverse {source:N0}"
-            : string.Empty;
+    public string Problem => (Profile.IsActive, Table.IsActive, Table.IsHealthy) switch
+    {
+        (false, _, _) => $"Profile is {Profile.State ?? "not active"}",
+        (_, false, _) => "Table is inactive in the profile",
+        (_, _, false) => $"Sync is {Table.SyncState ?? "unknown"}",
+        _ when Table.LakeRecordCount is { } lake && Table.SourceRecordCount is { } source && lake != source =>
+            $"Lake has {lake:N0} rows, Dataverse {source:N0}",
+        _ => string.Empty
+    };
 
     public bool HasProblem => Problem.Length > 0;
 }
@@ -231,11 +233,13 @@ public sealed record SearchIndexRow(string Environment, string Table, string? Ta
     public string ColumnsLabel => Indexed is null ? string.Empty : string.Join(", ", Indexed.IndexedColumns);
 
     /// <summary>Why this row needs a look, or empty when the index matches the configuration.</summary>
-    public string Problem =>
-        IsEnabled == true && Indexed is null ? "Search is on for the table, but it is not in the index"
-        : IsEnabled != true && Indexed is not null ? "Search is off for the table, but it is still in the index"
-        : Indexed is { IsComplete: false } ? $"Sync is {Indexed.StatusLabel.ToLowerInvariant()}"
-        : string.Empty;
+    public string Problem => (IsEnabled == true, Indexed) switch
+    {
+        (true, null) => "Search is on for the table, but it is not in the index",
+        (false, not null) => "Search is off for the table, but it is still in the index",
+        (_, { IsComplete: false } indexed) => $"Sync is {indexed.StatusLabel.ToLowerInvariant()}",
+        _ => string.Empty
+    };
 
     public bool HasProblem => Problem.Length > 0;
 }
@@ -307,11 +311,7 @@ public static class TableSettingsReview
             .Order(StringComparer.OrdinalIgnoreCase)
             .Select(table =>
             {
-                var cells = snapshots.Select(s =>
-                        !s.TablesRead ? SettingCell.Unknown("The tables could not be read here")
-                        : s.Tables.TryGetValue(table, out var setting) ? TableCell(s, setting, kind, excludedFolders)
-                        : SettingCell.Absent("table"))
-                    .ToList();
+                var cells = snapshots.Select(s => CellOf(s, table, kind, excludedFolders, "The tables could not be read here")).ToList();
 
                 var label = snapshots.Select(s => s.Tables.GetValueOrDefault(table)?.DisplayName)
                     .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
@@ -344,10 +344,7 @@ public static class TableSettingsReview
 
         foreach (var (kind, name) in Packed)
         {
-            var setting = snapshots.Select(s =>
-                    !s.TablesRead ? SettingCell.Unknown("") :
-                    s.Tables.TryGetValue(table, out var t) ? TableCell(s, t, kind, excludedFolders) : SettingCell.Absent("table"))
-                .ToList();
+            var setting = snapshots.Select(s => CellOf(s, table, kind, excludedFolders, "")).ToList();
 
             parts.AddRange(SettingRow.Minority(environments, setting).Select(p => $"{name} {p}"));
             parts.AddRange(SettingRow.Problems(environments, setting));
@@ -355,6 +352,13 @@ public static class TableSettingsReview
 
         parts.AddRange(SettingRow.Missing(environments, cells));
         return SettingRow.Join(parts);
+    }
+
+    /// <summary>A table's setting in one environment: unknown where its tables were not read, absent where it has no such table.</summary>
+    private static SettingCell CellOf(TableSettingsSnapshot snapshot, string table, TableSettingKind kind, ISet<string> excludedFolders, string unread)
+    {
+        if (!snapshot.TablesRead) return SettingCell.Unknown(unread);
+        return snapshot.Tables.TryGetValue(table, out var setting) ? TableCell(snapshot, setting, kind, excludedFolders) : SettingCell.Absent("table");
     }
 
     private static SettingCell TableCell(TableSettingsSnapshot snapshot, TableSetting table, TableSettingKind kind, ISet<string> excludedFolders)
@@ -468,10 +472,10 @@ public static class TableSettingsReview
                     if (byEnvironment[i] is not { } columns) return SettingCell.Unknown("Columns were not read here");
                     if (!columns.TryGetValue(column, out var audit)) return SettingCell.Absent("column");
 
-                    return setting.IsAuditEnabled == false || s.Settings?.AuditEnabled == false
-                        ? new SettingCell(SettingCellState.Inactive, audit.IsAuditEnabled == true ? "On" : "Off",
-                            setting.IsAuditEnabled == false ? "The table is not audited here, so this has no effect" : "Auditing is off for the environment")
-                        : SettingCell.Flag(audit.IsAuditEnabled);
+                    if (setting.IsAuditEnabled != false && s.Settings?.AuditEnabled != false) return SettingCell.Flag(audit.IsAuditEnabled);
+
+                    var why = setting.IsAuditEnabled == false ? "The table is not audited here, so this has no effect" : "Auditing is off for the environment";
+                    return new SettingCell(SettingCellState.Inactive, audit.IsAuditEnabled == true ? "On" : "Off", why);
                 }).ToList();
 
                 var label = byEnvironment.Select(d => d?.GetValueOrDefault(column)?.DisplayName)
@@ -641,6 +645,13 @@ public static class TableSettingsReview
         static SettingCell FromLinks(TableSettingsSnapshot s, Func<SynapseLinkSetup, SettingCell> cell) =>
             s.Synapse is { } links ? cell(links) : SettingCell.Unknown("Synapse Link could not be read");
 
+        static SettingCellState IndexState(SearchIndexStatus search) => search switch
+        {
+            { IsProvisioned: true } => SettingCellState.On,
+            { Status: "provisioninginprogress" } => SettingCellState.Problem,
+            _ => SettingCellState.Off
+        };
+
         static SettingCell Count(long? value) =>
             value is { } n ? new SettingCell(SettingCellState.Text, n.ToString("N0")) : SettingCell.Unknown("Not reported");
 
@@ -657,9 +668,7 @@ public static class TableSettingsReview
             Row("Change-tracked tables", "Tables with change tracking on", s => new SettingCell(SettingCellState.Text,
                 s.Tables.Values.Count(t => t.ChangeTrackingEnabled == true).ToString("N0"))),
             Row("Dataverse search", "The environment's search switch", s => FromSettings(s, x => SettingCell.Flag(x.SearchEnabled))),
-            Row("Search index", "Provisioning state of the index", s => FromSearch(s, x => new SettingCell(
-                x.IsProvisioned ? SettingCellState.On : x.Status == "provisioninginprogress" ? SettingCellState.Problem : SettingCellState.Off,
-                x.StatusLabel))),
+            Row("Search index", "Provisioning state of the index", s => FromSearch(s, x => new SettingCell(IndexState(x), x.StatusLabel))),
             Row("Searchable tables", "Tables with search on", s => new SettingCell(SettingCellState.Text,
                 s.Tables.Values.Count(t => t.SearchEnabled == true).ToString("N0"))),
             Row("Indexed tables", "Tables in the index / of them fully synced", s => FromSearch(s, x => new SettingCell(

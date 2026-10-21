@@ -246,11 +246,12 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
     private bool _hasUndone;
 
     /// <summary>The changes this run made, which Undo reverses.</summary>
-    private List<MembershipChangeRow> Undoable => _request.UndoEach is null
+    private List<MembershipChangeRow> Undoable() => _request.UndoEach is null
         ? new()
         : Rows.Where(r => r.Succeeded == true).ToList();
 
-    public bool CanUndo => Permission.Allowed && HasRun && !IsRunning && !_hasUndone && Undoable.Count > 0;
+    public bool CanUndo => Permission.Allowed && HasRun && !IsRunning && !_hasUndone &&
+                           _request.UndoEach is not null && Rows.Any(r => r.Succeeded == true);
 
     private void RaiseUndoState()
     {
@@ -261,7 +262,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
     /// <summary>Who undoing would add back and who it would remove again.</summary>
     internal UndoConfirmation DescribeUndo()
     {
-        var rows = Undoable;
+        var rows = Undoable();
         var readded = rows.Count(r => r.IsRemove);
         var removed = rows.Count - readded;
         var counts = new List<WriteCount>();
@@ -280,7 +281,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
         if (!CanUndo || _request.UndoEach is not { } undoEach) return;
         if (!Confirm(DescribeUndo())) return;
 
-        var rows = Undoable;
+        var rows = Undoable();
         IsRunning = true;
         var done = 0;
         var failed = 0;

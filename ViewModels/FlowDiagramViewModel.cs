@@ -956,7 +956,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 
             // In a failed run the iteration worth reading first is the one that failed.
             if (IsRunFailed && SelectedIteration is null &&
-                repetitions.FirstOrDefault(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut) is { } firstFailed)
+                repetitions.Find(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut) is { } firstFailed)
             {
                 SelectedIteration = firstFailed;
             }
