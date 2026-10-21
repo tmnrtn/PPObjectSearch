@@ -27,6 +27,10 @@ public static partial class BusinessRuleReader
     public const string Action = "Action";
     public const string Other = "Other";
 
+    private const string ResultArgument = "Result";
+    private const string AnyField = "a field";
+    private const string ConditionBranchType = "ConditionBranch";
+
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
     /// <summary>Activities that only move values about - never steps of their own.</summary>
@@ -88,7 +92,7 @@ public static partial class BusinessRuleReader
 
             foreach (var e in all.Where(e => ReferenceType(e) == "EvaluateExpression"))
             {
-                if (Var(Argument(e, "Result")) is not { } v)
+                if (Var(Argument(e, ResultArgument)) is not { } v)
                     continue;
                 var parameters = Argument(e, "Parameters") ?? string.Empty;
                 if (Quoted(parameters).FirstOrDefault() is { } literal)
@@ -102,10 +106,10 @@ public static partial class BusinessRuleReader
             {
                 switch (ReferenceType(e))
                 {
-                    case "EvaluateCondition" when Var(Argument(e, "Result")) is { } result:
+                    case "EvaluateCondition" when Var(Argument(e, ResultArgument)) is { } result:
                         _conditions[result] = Condition(e);
                         break;
-                    case "EvaluateLogicalCondition" when Var(Argument(e, "Result")) is { } result:
+                    case "EvaluateLogicalCondition" when Var(Argument(e, ResultArgument)) is { } result:
                         _conditions[result] = Logical(e);
                         break;
                 }
@@ -147,7 +151,7 @@ public static partial class BusinessRuleReader
                     if (_lastSetField is { } defaulted && _lastSetIndex == Steps.Count - 1 && Steps[^1].Depth == depth)
                         Steps[^1] = Steps[^1] with { Text = "Set default value of " + defaulted + _lastSetValue };
                     else
-                        Add(depth, Action, "Set default value of " + (FieldOf(e) ?? "a field"));
+                        Add(depth, Action, "Set default value of " + (FieldOf(e) ?? AnyField));
                     return;
 
                 case "SetAttributeValue":
@@ -160,7 +164,7 @@ public static partial class BusinessRuleReader
 
                 case "SetEntityProperty":
                 {
-                    var field = Attr(e, "Attribute") ?? "a field";
+                    var field = Attr(e, "Attribute") ?? AnyField;
                     var value = ValueOf(Attr(e, "Value")) is { } v ? " to " + v : string.Empty;
                     Add(depth, Action, $"Set {field} value{value}");
                     _lastSetField = field;
@@ -170,7 +174,7 @@ public static partial class BusinessRuleReader
                 }
 
                 case "Recommendation":
-                    Add(depth, Action, "Recommendation on " + (FieldOf(e) ?? "a field")
+                    Add(depth, Action, "Recommendation on " + (FieldOf(e) ?? AnyField)
                         + (Attr(e, "Title") is { Length: > 0 } title ? ": " + title : string.Empty));
                     Walk(Activities(e), depth + 1);
                     return;
@@ -197,7 +201,7 @@ public static partial class BusinessRuleReader
                 case "ConditionSequence":
                     Sequence(e, depth);
                     return;
-                case "ConditionBranch":
+                case ConditionBranchType:
                     Branch(e, depth, If);
                     return;
                 case { } type when PlumbingReferences.Contains(type):
@@ -217,7 +221,7 @@ public static partial class BusinessRuleReader
             var first = true;
             foreach (var child in Activities(e))
             {
-                if (ReferenceType(child) == "ConditionBranch")
+                if (ReferenceType(child) == ConditionBranchType)
                 {
                     Branch(child, depth, first ? If : ElseIf);
                     first = false;
@@ -251,10 +255,10 @@ public static partial class BusinessRuleReader
                 var body = BodyOf(otherwise).ToList();
 
                 // Else holding just another condition reads as Else if.
-                if (body.Count == 1 && ReferenceType(body[0]) is "ConditionSequence" or "ConditionBranch")
+                if (body.Count == 1 && ReferenceType(body[0]) is "ConditionSequence" or ConditionBranchType)
                 {
                     Steps.RemoveAt(at);
-                    if (ReferenceType(body[0]) == "ConditionBranch")
+                    if (ReferenceType(body[0]) == ConditionBranchType)
                         Branch(body[0], depth, ElseIf);
                     else
                         ElseIfSequence(body[0], depth);
@@ -272,7 +276,7 @@ public static partial class BusinessRuleReader
         {
             foreach (var child in Activities(e))
             {
-                if (ReferenceType(child) == "ConditionBranch")
+                if (ReferenceType(child) == ConditionBranchType)
                     Branch(child, depth, ElseIf);
                 else
                     Visit(child, depth);
@@ -320,9 +324,7 @@ public static partial class BusinessRuleReader
         }
 
         private string? FieldOrLiteral(string name) =>
-            _fields.TryGetValue(name, out var field) ? field
-            : _literals.TryGetValue(name, out var literal) ? literal
-            : null;
+            _fields.TryGetValue(name, out var field) ? field : _literals.GetValueOrDefault(name);
 
         private string? ValueOf(string? reference) =>
             Var(reference) is { } v ? FieldOrLiteral(v) : null;
@@ -333,9 +335,9 @@ public static partial class BusinessRuleReader
             switch (e.Name.LocalName)
             {
                 case "SetDisplayMode":
-                    return (IsTrue(Attr(e, "IsReadOnly")) ? "Lock " : "Unlock ") + (FieldOf(e) ?? "a field");
+                    return (IsTrue(Attr(e, "IsReadOnly")) ? "Lock " : "Unlock ") + (FieldOf(e) ?? AnyField);
                 case "SetVisibility":
-                    return (IsTrue(Attr(e, "IsVisible")) ? "Show " : "Hide ") + (FieldOf(e) ?? "a field");
+                    return (IsTrue(Attr(e, "IsVisible")) ? "Show " : "Hide ") + (FieldOf(e) ?? AnyField);
                 case "SetFieldRequiredLevel":
                 {
                     var level = (Attr(e, "RequiredLevel") ?? Argument(e, "RequiredLevel") ?? string.Empty).Trim();
@@ -346,11 +348,11 @@ public static partial class BusinessRuleReader
                         "none" => "not required",
                         _ => level.Length > 0 ? level : "required"
                     };
-                    return $"Make {FieldOf(e) ?? "a field"} {words}";
+                    return $"Make {FieldOf(e) ?? AnyField} {words}";
                 }
                 case "SetMessage":
                 {
-                    var text = "Show error message on " + (FieldOf(e) ?? "a field");
+                    var text = "Show error message on " + (FieldOf(e) ?? AnyField);
                     return MessageOf(e) is { } message ? $"{text}: \"{message}\"" : text;
                 }
                 default:
@@ -374,7 +376,7 @@ public static partial class BusinessRuleReader
             foreach (var before in e.ElementsBeforeSelf().Reverse())
             {
                 if (ReferenceType(before) == "EvaluateExpression")
-                    return Var(Argument(before, "Result")) is { } v && _literals.TryGetValue(v, out var literal) ? literal : null;
+                    return Var(Argument(before, ResultArgument)) is { } v && _literals.TryGetValue(v, out var literal) ? literal : null;
                 if (before.Name.LocalName is not ("Assign" or "GetEntityProperty" or "ActivityReference"))
                     break;
             }
@@ -397,10 +399,11 @@ public static partial class BusinessRuleReader
     private static string? DisplayName(XElement e) =>
         Attr(e, "DisplayName") is { Length: > 0 } shown ? shown : null;
 
-    private static string? FieldOf(XElement e) =>
-        Attr(e, "ControlId") is { Length: > 0 } control ? control
-        : Attr(e, "Attribute") is { Length: > 0 } attribute ? attribute
-        : null;
+    private static string? FieldOf(XElement e)
+    {
+        if (Attr(e, "ControlId") is { Length: > 0 } control) return control;
+        return Attr(e, "Attribute") is { Length: > 0 } attribute ? attribute : null;
+    }
 
     private static bool IsTrue(string? value) =>
         value is not null && Unbracket(value).Equals("True", StringComparison.OrdinalIgnoreCase);

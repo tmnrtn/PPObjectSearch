@@ -257,9 +257,13 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     /// How many of the trace logs held an exception - most entries are plug-ins that ran fine, so
     /// without it a count of trace logs and no plug-in failures reads like a missed read.
     /// </summary>
-    private static string TraceExceptions(FailureData data) => data.TraceLogsRead == 0
-        ? string.Empty
-        : $" ({(data.TraceExceptionsRead == 0 ? "none" : data.TraceExceptionsRead.ToString("N0"))} with an exception)";
+    private static string TraceExceptions(FailureData data)
+    {
+        if (data.TraceLogsRead == 0) return string.Empty;
+
+        var exceptions = data.TraceExceptionsRead == 0 ? "none" : data.TraceExceptionsRead.ToString("N0");
+        return $" ({exceptions} with an exception)";
+    }
 
     // ---------------------------------------------------------------- the selected component
 

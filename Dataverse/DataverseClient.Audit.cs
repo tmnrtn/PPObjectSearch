@@ -9,9 +9,12 @@ public sealed partial class DataverseClient
     /// The configuration rows whose audit history the timeline offers, by component type: a flow's
     /// on/off state, a plug-in step's enabled state, an environment variable's values.
     /// </summary>
+    private const string WorkflowTable = "workflow";
+    private const string StateColumn = "statecode";
+
     private static readonly Dictionary<int, string> AuditedTables = new()
     {
-        [29] = "workflow",
+        [29] = WorkflowTable,
         [92] = "sdkmessageprocessingstep",
         [380] = "environmentvariabledefinition",
         [381] = "environmentvariablevalue"
@@ -145,26 +148,28 @@ public sealed partial class DataverseClient
         }
     }
 
-    private static string? AuditValue(JsonElement attribute, string name) =>
-        attribute.TryGetProperty(name, out var value)
-            ? value.ValueKind switch
-            {
-                JsonValueKind.Null or JsonValueKind.Undefined => null,
-                JsonValueKind.String => value.GetString() is { Length: > 0 } s ? s : null,
-                _ => value.ToString()
-            }
-            : null;
+    private static string? AuditValue(JsonElement attribute, string name)
+    {
+        if (!attribute.TryGetProperty(name, out var value)) return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => value.GetString() is { Length: > 0 } s ? s : null,
+            _ => value.ToString()
+        };
+    }
 
     private static string? NameValue(string table, string column, string? value) => (table, column, value) switch
     {
         (_, _, null) => null,
-        ("workflow", "statecode", "0") => "Off (draft)",
-        ("workflow", "statecode", "1") => "On (activated)",
-        ("workflow", "statecode", "2") => "Suspended",
-        ("sdkmessageprocessingstep", "statecode", "0") => "Enabled",
-        ("sdkmessageprocessingstep", "statecode", "1") => "Disabled",
-        (_, "statecode", "0") => "Active",
-        (_, "statecode", "1") => "Inactive",
+        (WorkflowTable, StateColumn, "0") => "Off (draft)",
+        (WorkflowTable, StateColumn, "1") => "On (activated)",
+        (WorkflowTable, StateColumn, "2") => "Suspended",
+        ("sdkmessageprocessingstep", StateColumn, "0") => "Enabled",
+        ("sdkmessageprocessingstep", StateColumn, "1") => "Disabled",
+        (_, StateColumn, "0") => "Active",
+        (_, StateColumn, "1") => "Inactive",
         _ => value
     };
 }

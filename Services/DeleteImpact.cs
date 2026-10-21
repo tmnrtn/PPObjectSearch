@@ -9,7 +9,12 @@ public sealed record DeleteImpactLine(string Table, string Via, string Behaviour
     /// <summary>Dataverse stops counting here, so the count is a floor.</summary>
     public const int CountCap = 5000;
 
-    public string CountLabel => Count < 0 ? "?" : Count >= CountCap ? $"{CountCap:N0}+" : Count.ToString("N0");
+    public string CountLabel => Count switch
+    {
+        < 0 => "?",
+        >= CountCap => $"{CountCap:N0}+",
+        _ => Count.ToString("N0")
+    };
 
     /// <summary>Deleted along with the rows: the gravest effect, in Red.</summary>
     public bool IsCascade => Behaviour == "Cascade" && Count > 0;
@@ -78,9 +83,17 @@ public static class DeleteImpact
     /// <summary>The lines worth a row each - counted ones, cascades first, then blocks - and the uncounted.</summary>
     public static IReadOnlyList<DeleteImpactLine> Shown(IReadOnlyList<DeleteImpactLine> lines) =>
         lines.Where(l => l.Count != 0)
-            .OrderBy(l => l.IsCascade ? 0 : l.IsBlocking ? 1 : l.IsUncounted ? 3 : 2)
+            .OrderBy(Rank)
             .ThenByDescending(l => l.Count)
             .ToList();
+
+    private static int Rank(DeleteImpactLine line) => (line.IsCascade, line.IsBlocking, line.IsUncounted) switch
+    {
+        (true, _, _) => 0,
+        (_, true, _) => 1,
+        (_, _, true) => 3,
+        _ => 2
+    };
 
     /// <summary>One sentence per kind of effect, or a plain "nothing else" when there is none.</summary>
     public static string Describe(IReadOnlyList<DeleteImpactLine> lines)

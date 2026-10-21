@@ -10,7 +10,7 @@ namespace PPObjectSearch.ViewModels;
 /// Who changed a configuration row and how - a flow turned off, a step disabled, a variable's
 /// value replaced - from Dataverse auditing, where it is on.
 /// </summary>
-public sealed class AuditHistoryViewModel : ObservableObject
+public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 {
     private readonly DataverseClient _client;
     private readonly SolutionComponentItem _item;
@@ -128,7 +128,7 @@ public sealed class AuditHistoryViewModel : ObservableObject
         if (DataverseClient.AuditTable(_item.ComponentType) is not { } table) return;
         _table = table;
 
-        _cts?.Cancel();
+        if (_cts is { } running) await running.CancelAsync();
         var cts = _cts = new CancellationTokenSource();
         _readFailed = false;
         IsBusy = true;
@@ -170,7 +170,12 @@ public sealed class AuditHistoryViewModel : ObservableObject
         }
         finally
         {
-            if (ReferenceEquals(_cts, cts)) IsBusy = false;
+            if (ReferenceEquals(_cts, cts))
+            {
+                _cts = null;
+                IsBusy = false;
+            }
+            cts.Dispose();
         }
     }
 
@@ -194,5 +199,11 @@ public sealed class AuditHistoryViewModel : ObservableObject
         return state.IsOn ? missing : state.Describe(table) + " " + missing;
     }
 
-    public void Detach() => _cts?.Cancel();
+    /// <summary>Stops a read still running when the window closes; nobody is left to see it.</summary>
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
 }

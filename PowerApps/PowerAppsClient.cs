@@ -111,7 +111,7 @@ public sealed class PowerAppsClient : IDisposable
         }
 
         return permissions
-            .OrderBy(p => p.Role == "Owner" ? 0 : p.Role == "Co-owner" ? 1 : 2)
+            .OrderBy(p => p.Role switch { "Owner" => 0, "Co-owner" => 1, _ => 2 })
             .ThenBy(p => p.Principal, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }

@@ -784,19 +784,23 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
     public bool CanClearFilters => !IsBusy && _all.Count > 0 && IsFiltered;
 
-    public string EmptyHeading =>
-        IsBusy ? "Comparing"
-        : _fetched.Count == 0 ? "Nothing compared yet"
-        : _all.Count == 0 ? "No rows"
-        : IsFiltered ? "Nothing matches"
-        : "No differences";
+    public string EmptyHeading => (IsBusy, _fetched.Count == 0, _all.Count == 0) switch
+    {
+        (true, _, _) => "Comparing",
+        (_, true, _) => "Nothing compared yet",
+        (_, _, true) => "No rows",
+        _ when IsFiltered => "Nothing matches",
+        _ => "No differences"
+    };
 
-    public string EmptyText =>
-        IsBusy ? "Reading rows from both environments."
-        : _fetched.Count == 0 ? "Pick a source and a target, add the tables to check, then Compare."
-        : _all.Count == 0 ? "Neither environment has rows in the compared tables."
-        : IsFiltered ? "No row matches the status, table and search filters."
-        : $"All {_all.Count:N0} rows match in both environments.";
+    public string EmptyText => (IsBusy, _fetched.Count == 0, _all.Count == 0) switch
+    {
+        (true, _, _) => "Reading rows from both environments.",
+        (_, true, _) => "Pick a source and a target, add the tables to check, then Compare.",
+        (_, _, true) => "Neither environment has rows in the compared tables.",
+        _ when IsFiltered => "No row matches the status, table and search filters.",
+        _ => $"All {_all.Count:N0} rows match in both environments."
+    };
 
     private RelayCommand? _clearFiltersCommand;
     public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>

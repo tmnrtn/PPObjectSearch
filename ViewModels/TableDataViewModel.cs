@@ -173,9 +173,12 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     public string TableHeading => SelectedTable?.Label ?? "Choose a table";
 
     /// <summary>The heading's name: the table's display name, else its logical name.</summary>
-    public string TableDisplayName => SelectedTable is { } table
-        ? string.IsNullOrWhiteSpace(table.DisplayName) ? table.LogicalName : table.DisplayName
-        : "Choose a table";
+    public string TableDisplayName => SelectedTable switch
+    {
+        null => "Choose a table",
+        { DisplayName: { } name } when !string.IsNullOrWhiteSpace(name) => name,
+        { } table => table.LogicalName
+    };
 
     /// <summary>Beside the display name; empty when the display name already is the logical name.</summary>
     public string TableLogicalName => SelectedTable is { DisplayName: { Length: > 0 } display } table && display.Trim().Length > 0
@@ -397,7 +400,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         try
         {
             Status = $"Reading which tables {column.Header} points at...";
-            var names = await client.GetLookupNavigationsAsync(table.LogicalName, column.LogicalName);
+            var names = await client.GetLookupNavigationsAsync(table.LogicalName, column.LogicalName, CancellationToken.None);
             _lookupNames[column.LogicalName] = names;
             Status = string.Empty;
             return names;
@@ -530,8 +533,10 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     public int ShownCount => RowsView.Count;
 
     public string CountLabel => ShownCount == Rows.Count
-        ? $"{Rows.Count:N0} row{(Rows.Count == 1 ? string.Empty : "s")}"
+        ? Plural(Rows.Count, "row")
         : $"{ShownCount:N0} of {Rows.Count:N0} rows";
+
+    private static string Plural(int count, string word) => $"{count:N0} {word}{(count == 1 ? string.Empty : "s")}";
 
     public bool HasRows => ShownCount > 0;
 
@@ -682,15 +687,16 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         BuildRows(columns);
         IsColumnPickerOpen = false;
 
+        var more = filter is null ? string.Empty : " that match the filter";
         Warnings = result.IsTruncated
-            ? $"Only the first {RowCap:N0} rows were read - {table.Label} has more{(filter is null ? string.Empty : " that match the filter")}. " +
+            ? $"Only the first {RowCap:N0} rows were read - {table.Label} has more{more}. " +
               "Add a server filter, or raise the row limit, to see the rest."
             : string.Empty;
 
         // The heading names the table; the summary says how the rows were chosen.
         var filters = ServerFilters.Count + (ActiveOnly && HasStateCode ? 1 : 0);
-        var filtered = filters == 0 ? string.Empty : $" matching {filters} filter{(filters == 1 ? string.Empty : "s")}";
-        ReadSummary = $"Read {result.Rows.Count:N0} row{(result.Rows.Count == 1 ? string.Empty : "s")}{filtered} " +
+        var filtered = filters == 0 ? string.Empty : $" matching {Plural(filters, "filter")}";
+        ReadSummary = $"Read {Plural(result.Rows.Count, "row")}{filtered} " +
                       $"in {clock.Elapsed.TotalSeconds:0.0} s";
         Status = string.Empty;
     }
