@@ -19,7 +19,10 @@ public partial class AskWindow : Window
     }
 
     /// <summary>True when the primary button was chosen; always false for a notice.</summary>
-    public static bool Ask(Window? owner, AskRequest request)
+    public static bool Ask(Window? owner, AskRequest request) => Create(owner, request).ShowDialog() == true;
+
+    /// <summary>The window, filled in from the request but not yet shown.</summary>
+    internal static AskWindow Create(Window? owner, AskRequest request)
     {
         var window = new AskWindow { Title = request.Title ?? request.Heading };
         if (owner is { IsLoaded: true }) window.Owner = owner;
@@ -70,7 +73,7 @@ public partial class AskWindow : Window
             System.Windows.Controls.ToolTipService.SetShowOnDisabled(window.ConfirmButton, true);
         }
 
-        return window.ShowDialog() == true;
+        return window;
     }
 
     private void Acknowledge_Changed(object sender, RoutedEventArgs e)
