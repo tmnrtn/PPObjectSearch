@@ -1160,7 +1160,17 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
+                            <!-- A type without layers leaves no right-hand column, so the solutions take the width. -->
                             <DockPanel Grid.Column="0">
+                                <DockPanel.Style>
+                                    <Style TargetType="DockPanel">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LayersSupported}" Value="False">
+                                                <Setter Property="Grid.ColumnSpan" Value="2" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DockPanel.Style>
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
                                     <TextBlock Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
                                                Text="Solutions containing this object" />
