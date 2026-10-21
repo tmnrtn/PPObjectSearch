@@ -823,6 +823,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 QueueSyncCommand.RaiseCanExecuteChanged();
                 EnvironmentAdminCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(IsSolutionPickerEnabled));
+                RaiseEmptyState();
             }
         }
     }
@@ -836,6 +837,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             if (!SetProperty(ref _isBusy, value)) return;
 
             OnPropertyChanged(nameof(IsSolutionPickerEnabled));
+            RaiseEmptyState();
             CheckUnmanagedLayersCommand?.RaiseCanExecuteChanged();
         }
     }
@@ -1695,6 +1697,37 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         ExportCsvCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(HasActiveFilters));
+        RaiseEmptyState();
+    }
+
+    /// <summary>Nothing in the grid: why is said in its place.</summary>
+    public bool IsListEmpty => ItemsView.IsEmpty;
+
+    public bool CanClearFilters => _allItems.Count > 0 && HasActiveFilters;
+
+    public string EmptyHeading => (IsConnected, IsBusy, _allItems.Count > 0) switch
+    {
+        (false, _, _) => "Not connected",
+        (_, _, true) => "Nothing matches",
+        (_, true, _) => "Reading objects",
+        _ => "No objects"
+    };
+
+    public string EmptyText => (IsConnected, IsBusy, _allItems.Count > 0) switch
+    {
+        (false, _, _) => "Connect to list this environment's solutions and objects.",
+        (_, _, true) => "No object matches the search and filters.",
+        (_, true, _) => "The selected solution's components are being read.",
+        _ when SelectedSolution is null => "Choose a solution to list its objects.",
+        _ => $"{SelectedSolution.FriendlyName} has no components of the types listed here."
+    };
+
+    private void RaiseEmptyState()
+    {
+        OnPropertyChanged(nameof(IsListEmpty));
+        OnPropertyChanged(nameof(CanClearFilters));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private bool FilterItem(object obj)

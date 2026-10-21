@@ -231,7 +231,34 @@ public sealed class GlobalSearchViewModel : ObservableObject
             : $"{shown:N0} matches across {environments} of {EnvironmentCount} environment(s)";
 
         ExportCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(IsListEmpty));
+        OnPropertyChanged(nameof(CanClearFilters));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
+
+    /// <summary>Nothing listed: why is said in the grid's place.</summary>
+    public bool IsListEmpty => RowsView.IsEmpty;
+
+    public bool CanClearFilters => _all.Count > 0;
+
+    public string EmptyHeading => _all.Count == 0 ? "Nothing to search" : "Nothing matches";
+
+    public string EmptyText => _all.Count > 0
+        ? (SelectedScope.IsAll ? $"No object in any environment matches '{SearchText.Trim()}'."
+            : $"No object in {SelectedScope.Label} matches '{SearchText.Trim()}'.")
+        : SkippedMessage.Length > 0 ? "No tab is connected. Connect one to search its objects."
+        : "The connected tabs list no objects.";
+
+    private RelayCommand? _clearFiltersCommand;
+    public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>
+    {
+        _debounce.Stop();
+        _searchText = string.Empty;
+        OnPropertyChanged(nameof(SearchText));
+        if (!ReferenceEquals(SelectedScope, Scopes[0])) SelectedScope = Scopes[0];
+        else Apply();
+    });
 
     /// <summary>Only meaningful while the list is sorted by name; any other order clears it.</summary>
     private void MarkGroupEnds()

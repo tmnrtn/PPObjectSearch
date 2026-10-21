@@ -459,6 +459,10 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
+            <!-- Nothing to list: say why in its place, and clear the filters where they are the cause. -->
+            <ContentControl Grid.Column="0" Panel.ZIndex="1" Style="{StaticResource EmptyState}"
+                            Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVis}}" />
+
             <DataGrid Grid.Column="0"
                       ItemsSource="{Binding ItemsView}"
                       SelectedItem="{Binding SelectedItem, Mode=TwoWay}"

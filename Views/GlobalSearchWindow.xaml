@@ -200,6 +200,10 @@
                 </DataGrid.Columns>
             </DataGrid>
 
+            <!-- Nothing to list: say why in its place, and clear the filters where they are the cause. -->
+            <ContentControl Grid.Row="2" Style="{StaticResource EmptyState}"
+                            Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVis}}" />
+
             <Border Grid.Row="3" Style="{StaticResource StatusBar}">
                 <Grid>
                     <Grid.ColumnDefinitions>

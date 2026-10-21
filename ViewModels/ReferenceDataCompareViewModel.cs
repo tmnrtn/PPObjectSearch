@@ -543,6 +543,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
             CancelCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(IsIdle));
+            RaiseEmptyState();
         }
     }
 
@@ -770,6 +771,48 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
         CountDifferent = narrowed.Count(r => r.Status == RecordCompareStatus.Different);
         CountMatches = narrowed.Count(r => r.Status == RecordCompareStatus.Same);
         CountDifferences = CountOnlySource + CountOnlyTarget + CountDifferent;
+        RaiseEmptyState();
+    }
+
+    /// <summary>Before a compare, while one runs, or when nothing is shown: why is said in the grid's place.</summary>
+    public bool IsListEmpty => RowsView.IsEmpty;
+
+    private bool IsFiltered => StatusFilter != RecordStatusFilter.Differences || !string.IsNullOrWhiteSpace(SearchText) ||
+                               !string.Equals(SelectedEntityFilter, AllEntities, StringComparison.Ordinal);
+
+    public bool CanClearFilters => !IsBusy && _all.Count > 0 && IsFiltered;
+
+    public string EmptyHeading =>
+        IsBusy ? "Comparing"
+        : _fetched.Count == 0 ? "Nothing compared yet"
+        : _all.Count == 0 ? "No rows"
+        : IsFiltered ? "Nothing matches"
+        : "No differences";
+
+    public string EmptyText =>
+        IsBusy ? "Reading rows from both environments."
+        : _fetched.Count == 0 ? "Pick a source and a target, add the tables to check, then Compare."
+        : _all.Count == 0 ? "Neither environment has rows in the compared tables."
+        : IsFiltered ? "No row matches the status, table and search filters."
+        : $"All {_all.Count:N0} rows match in both environments.";
+
+    private RelayCommand? _clearFiltersCommand;
+    public RelayCommand ClearFiltersCommand => _clearFiltersCommand ??= new RelayCommand(_ =>
+    {
+        _searchText = string.Empty;
+        OnPropertyChanged(nameof(SearchText));
+        _selectedEntityFilter = AllEntities;
+        OnPropertyChanged(nameof(SelectedEntityFilter));
+        StatusFilter = RecordStatusFilter.Differences;
+        RefreshView();
+    });
+
+    private void RaiseEmptyState()
+    {
+        OnPropertyChanged(nameof(IsListEmpty));
+        OnPropertyChanged(nameof(CanClearFilters));
+        OnPropertyChanged(nameof(EmptyHeading));
+        OnPropertyChanged(nameof(EmptyText));
     }
 
     private bool FilterRow(object obj)

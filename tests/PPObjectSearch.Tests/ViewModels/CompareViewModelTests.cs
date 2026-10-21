@@ -67,6 +67,36 @@ public class CompareViewModelTests
     private static readonly string[] OnBothSides = ["Notify", "account"];
 
     [Fact]
+    public void An_empty_result_says_why_and_clears_its_filters()
+    {
+        var (dev, prod) = Pair();
+        using var vm = new CompareViewModel([dev, prod]);
+
+        vm.StatusFilter = CompareStatusFilter.OnlyLeft;
+        vm.SelectedTypeFilter = vm.TypeFilters.Single(t => t.Name == "Process");
+
+        Assert.True(vm.IsListEmpty);
+        Assert.Equal("Nothing matches", vm.EmptyHeading);
+        Assert.True(vm.CanClearFilters);
+
+        vm.ClearFiltersCommand.Execute(null);
+
+        Assert.False(vm.IsListEmpty);
+        Assert.Equal(4, Shown(vm).Count());
+        Assert.Equal(CompareStatusFilter.All, vm.StatusFilter);
+    }
+
+    [Fact]
+    public void Before_the_first_compare_the_grid_says_what_to_do()
+    {
+        using var vm = new CompareViewModel([TestSessions.Disconnected()]);
+
+        Assert.True(vm.IsListEmpty);
+        Assert.Equal("Nothing compared yet", vm.EmptyHeading);
+        Assert.False(vm.CanClearFilters);
+    }
+
+    [Fact]
     public void The_status_filter_shows_one_side_or_both()
     {
         var (dev, prod) = Pair();

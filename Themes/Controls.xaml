@@ -1615,6 +1615,32 @@
         <Setter Property="ColumnHeaderHeight" Value="26" />
     </Style>
 
+    <!--
+        In place of a grid with no rows: why it is empty, centred, and a Clear filters link where
+        filters are the cause. Binds EmptyHeading, EmptyText, CanClearFilters and ClearFiltersCommand.
+    -->
+    <Style TargetType="ContentControl" x:Key="EmptyState">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="MaxWidth" Value="380" />
+        <Setter Property="Margin" Value="16,36,16,16" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <StackPanel>
+                        <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="0,4,0,0" />
+                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}"
+                                HorizontalAlignment="Center" Margin="0,6,0,0"
+                                Visibility="{Binding CanClearFilters, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============================================================ list box -->
 
     <Style TargetType="ListBox">

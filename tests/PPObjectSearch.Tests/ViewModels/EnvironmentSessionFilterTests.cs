@@ -50,6 +50,34 @@ public class EnvironmentSessionFilterTests
     });
 
     [Fact]
+    public Task A_search_that_matches_nothing_says_so_and_offers_to_clear() => EnvironmentSessionThread.Run(async () =>
+    {
+        var (_, session) = await ConnectedAsync();
+        Assert.False(session.IsListEmpty);
+
+        session.SearchText = "no such thing";
+        EnvironmentSessionThread.Elapse(session, SearchDebounce);
+
+        Assert.True(session.IsListEmpty);
+        Assert.Equal("Nothing matches", session.EmptyHeading);
+        Assert.True(session.CanClearFilters);
+
+        session.ClearFiltersCommand.Execute(null);
+
+        Assert.False(session.IsListEmpty);
+    });
+
+    [Fact]
+    public void A_tab_that_never_connected_says_so_in_the_grid()
+    {
+        var session = new FakeEnvironment().Session();
+
+        Assert.True(session.IsListEmpty);
+        Assert.Equal("Not connected", session.EmptyHeading);
+        Assert.False(session.CanClearFilters);
+    }
+
+    [Fact]
     public Task Choosing_a_type_narrows_the_list_and_its_sub_types() => EnvironmentSessionThread.Run(async () =>
     {
         var (_, session) = await ConnectedAsync();
