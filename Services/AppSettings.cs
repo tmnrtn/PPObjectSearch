@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PPObjectSearch.Auth;
+using PPObjectSearch.Models;
 
 namespace PPObjectSearch.Services;
 
@@ -158,6 +159,47 @@ public sealed class AppSettings
         (BrowserProfiles ??= new Dictionary<string, BrowserProfileSetting>(StringComparer.OrdinalIgnoreCase))[host] = profile;
     }
 
+    /// <summary>
+    /// The Application Insights resources chosen for each environment, keyed by host - one per
+    /// kind of telemetry (and per app, for canvas apps). An environment without an entry has none.
+    /// </summary>
+    public Dictionary<string, List<TelemetryBinding>>? AppInsights { get; set; }
+
+    /// <summary>The environment's resource for one kind of telemetry, if one has been chosen.</summary>
+    public TelemetryBinding? GetTelemetryBinding(string environmentUrl, TelemetryKind kind)
+    {
+        if (AppInsights is null || TryGetHost(environmentUrl) is not { } host) return null;
+        return AppInsights.TryGetValue(host, out var bindings) ? bindings.Find(b => b.KnownKind == kind && b.AppName is null) : null;
+    }
+
+    /// <summary>
+    /// Sets - or, with null, clears - the environment's resource for one kind of telemetry. Other
+    /// kinds, and kinds this version does not know, are left as they were. The caller saves.
+    /// </summary>
+    public void SetTelemetryBinding(string environmentUrl, TelemetryKind kind, TelemetryBinding? binding)
+    {
+        if (TryGetHost(environmentUrl) is not { } host) return;
+
+        var bindings = AppInsights?.GetValueOrDefault(host) ?? [];
+        bindings.RemoveAll(b => b.KnownKind == kind && b.AppName is null);
+
+        if (binding is not null)
+        {
+            binding.Kind = kind.ToString();
+            binding.AppName = null;
+            bindings.Add(binding);
+        }
+
+        if (bindings.Count == 0)
+        {
+            // An empty section is left out of the file rather than written as {}.
+            if (AppInsights?.Remove(host) == true && AppInsights.Count == 0) AppInsights = null;
+            return;
+        }
+
+        (AppInsights ??= new Dictionary<string, List<TelemetryBinding>>(StringComparer.OrdinalIgnoreCase))[host] = bindings;
+    }
+
     public string? GetEnvironmentId(string environmentUrl)
     {
         if (EnvironmentIds is null) return null;
@@ -192,6 +234,11 @@ public sealed class AppSettings
                     settings.BrowserProfiles, StringComparer.OrdinalIgnoreCase);
             }
             settings.MakerLinkTemplates = Rekey(settings.MakerLinkTemplates);
+            if (settings.AppInsights is not null)
+            {
+                settings.AppInsights = new Dictionary<string, List<TelemetryBinding>>(
+                    settings.AppInsights, StringComparer.OrdinalIgnoreCase);
+            }
             return settings;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)

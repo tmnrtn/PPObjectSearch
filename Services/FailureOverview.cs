@@ -162,13 +162,56 @@ public static partial class FailureOverview
             FlowRunsRead = data.FlowRunsRead,
             SystemJobsRead = data.SystemJobsRead,
             TraceLogsRead = data.TraceLogsRead,
-            TraceExceptionsRead = data.TraceExceptionsRead
+            TraceExceptionsRead = data.TraceExceptionsRead,
+            TelemetryRowsRead = data.TelemetryRowsRead
         };
 
         only.Events.AddRange(data.Events.Where(e => sources.Contains(e.Source)));
         only.Notes.AddRange(data.Notes);
         foreach (var (key, count) in data.RunCounts) only.RunCounts[key] = count;
         return only;
+    }
+
+    /// <summary>How far apart the trace log and App Insights can time one plug-in failure and still be one.</summary>
+    internal static readonly TimeSpan SameFailureWindow = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Marks each App Insights plug-in failure the trace log also holds: the same plug-in type,
+    /// failing within <see cref="SameFailureWindow"/>. Each trace entry pairs with one failure at
+    /// most. Returns how many were marked.
+    /// </summary>
+    public static int MarkTraceLogOverlaps(FailureData data)
+    {
+        var traces = data.Events
+            .Where(e => e.Source == FailureSource.Plugin)
+            .GroupBy(e => e.ComponentKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.When).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var marked = 0;
+        foreach (var failure in data.Events.Where(e => e is { Source: FailureSource.AppInsights, IsPlugin: true }))
+        {
+            failure.AlsoInTraceLog = false;
+            if (!traces.TryGetValue(failure.ComponentKey, out var times)) continue;
+
+            var match = times.FindIndex(t => (t - failure.When).Duration() <= SameFailureWindow);
+            if (match < 0) continue;
+
+            times.RemoveAt(match);
+            failure.AlsoInTraceLog = true;
+            marked++;
+        }
+
+        return marked;
+    }
+
+    /// <summary>
+    /// The failures to count: every one, less App Insights plug-in failures the trace log also
+    /// holds when the trace log's are among them - so one failure is not counted twice.
+    /// </summary>
+    public static int Counted(FailureData data)
+    {
+        var tracesShown = data.Events.Any(e => e.Source == FailureSource.Plugin);
+        return data.Events.Count(e => !(tracesShown && e.AlsoInTraceLog));
     }
 
     /// <summary>
@@ -192,7 +235,7 @@ public static partial class FailureOverview
             .AppendLine($"# Failures in {environment}")
             .AppendLine()
             .AppendLine($"{from.ToLocalTime():yyyy-MM-dd HH:mm} to {to.ToLocalTime():yyyy-MM-dd HH:mm}: " +
-                        $"{data.Events.Count:N0} failure(s) across {rows.Count:N0} component(s).")
+                        $"{Counted(data):N0} failure(s) across {rows.Count:N0} component(s).")
             .AppendLine()
             .AppendLine("| Component | Kind | Failures | Runs | Rate | Last | Most common error |")
             .AppendLine("| --- | --- | ---: | ---: | ---: | --- | --- |");

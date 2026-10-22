@@ -31,7 +31,7 @@ public sealed class ComponentList : List<SolutionComponentItem>
 }
 
 /// <summary>Identity of the connected environment, from RetrieveCurrentOrganization.</summary>
-public sealed record OrganizationDetails(string? FriendlyName, string? UniqueName, string? EnvironmentId);
+public sealed record OrganizationDetails(string? FriendlyName, string? UniqueName, string? EnvironmentId, Guid? OrganizationId = null);
 
 /// <summary>The bits of a table's metadata that maker portal links need.</summary>
 public sealed record TableMetadata(Guid MetadataId, string? EntitySetName);
@@ -298,7 +298,8 @@ public sealed partial class DataverseClient : IDisposable
             return new OrganizationDetails(
                 JsonHelper.FindStringDeep(doc.RootElement, "FriendlyName"),
                 JsonHelper.FindStringDeep(doc.RootElement, "UniqueName"),
-                JsonHelper.FindStringDeep(doc.RootElement, "EnvironmentId"));
+                JsonHelper.FindStringDeep(doc.RootElement, "EnvironmentId"),
+                Guid.TryParse(JsonHelper.FindStringDeep(doc.RootElement, "OrganizationId"), out var organizationId) ? organizationId : null);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

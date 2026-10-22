@@ -200,6 +200,10 @@
                                     </Style>
                                 </MenuItem.ItemContainerStyle>
                             </MenuItem>
+                            <MenuItem Header="App Insights resource…" Command="{Binding ChooseAppInsightsCommand}"
+                                      ToolTip="Choose the Application Insights resource this environment's Dataverse data export writes to." />
+                            <MenuItem Header="Check Azure access…" Command="{Binding CheckAzureAccessCommand}"
+                                      ToolTip="Tries the Azure APIs the App Insights features use, as this tab's account, and says what worked." />
                             <Separator />
                             <MenuItem Header="Switch account…" Command="{Binding SwitchAccountCommand}"
                                       ToolTip="Sign this tab in with a different account or tenant." />

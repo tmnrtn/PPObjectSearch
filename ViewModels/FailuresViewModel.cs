@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using PPObjectSearch.AzureMonitor;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
@@ -11,7 +12,8 @@ namespace PPObjectSearch.ViewModels;
 
 /// <summary>
 /// "What is failing here?" Cloud flow runs, classic workflow jobs and plug-in trace entries that
-/// ended in error over a period - a summary band with the trend and each source's count, then the
+/// ended in error over a period - and, where the environment has an App Insights resource chosen,
+/// the failed plug-ins, requests and exceptions its telemetry holds - a summary band with the trend and each source's count, then the
 /// failing components, each with its failures grouped by error and its latest ones a click away.
 /// </summary>
 public sealed class FailuresViewModel : ObservableObject, IDisposable
@@ -53,6 +55,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
             _ => OpenDetails(SelectedComponent), _ => SelectedComponent is not null);
 
         _session.PropertyChanged += OnSessionChanged;
+        _session.AppInsightsChanged += OnAppInsightsChanged;
     }
 
     public string Title => $"Failures — {_session.Title}";
@@ -70,6 +73,9 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     public RelayCommand OpenEventCommand { get; }
     public RelayCommand OpenLatestFailedRunCommand { get; }
     public RelayCommand OpenComponentDetailsCommand { get; }
+
+    /// <summary>Opens the environment's App Insights picker - offered when none is chosen yet.</summary>
+    public RelayCommand ChooseAppInsightsCommand => _session.ChooseAppInsightsCommand;
 
     // ---------------------------------------------------------------- period
 
@@ -163,10 +169,29 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool _includeAppInsights = true;
+    public bool IncludeAppInsights
+    {
+        get => _includeAppInsights;
+        set
+        {
+            if (SetProperty(ref _includeAppInsights, value)) Show();
+        }
+    }
+
+    /// <summary>The environment has an App Insights resource chosen, so its pill is offered.</summary>
+    public bool HasAppInsights => _session.HasAppInsights;
+
+    /// <summary>"App Insights: contoso-dataverse (Contoso Prod)" for the pill's tooltip.</summary>
+    public string AppInsightsToolTip => _session.AppInsightsBinding is { } binding
+        ? $"Failed plug-ins, failed requests and exceptions from {binding.Label}"
+        : string.Empty;
+
     /// <summary>Each source's failures in the read, whichever pills are on.</summary>
     public int FlowFailureCount => Count(FailureSource.CloudFlow);
     public int WorkflowFailureCount => Count(FailureSource.ClassicWorkflow);
     public int PluginFailureCount => Count(FailureSource.Plugin);
+    public int AppInsightsFailureCount => Count(FailureSource.AppInsights);
 
     private int Count(FailureSource source) => _data?.Events.Count(e => e.Source == source) ?? 0;
 
@@ -176,6 +201,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         if (IncludeFlows) sources.Add(FailureSource.CloudFlow);
         if (IncludeClassicWorkflows) sources.Add(FailureSource.ClassicWorkflow);
         if (IncludePlugins) sources.Add(FailureSource.Plugin);
+        if (IncludeAppInsights && HasAppInsights) sources.Add(FailureSource.AppInsights);
         return sources;
     }
 
@@ -202,6 +228,14 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SolutionLabel));
     }
 
+    /// <summary>A resource chosen or removed while the window is open: offer it, and read again with or without it.</summary>
+    private void OnAppInsightsChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(HasAppInsights));
+        OnPropertyChanged(nameof(AppInsightsToolTip));
+        if (_data is not null) _ = LoadAsync();
+    }
+
     private FailureQuery BuildQuery()
     {
         if (!SolutionOnly || !HasSolution) return new FailureQuery();
@@ -218,7 +252,8 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
 
     // ---------------------------------------------------------------- summary
 
-    public int TotalFailures => _shown?.Events.Count ?? 0;
+    /// <summary>The failures shown, counting once a plug-in failure both the trace log and App Insights hold.</summary>
+    public int TotalFailures => _shown is { } shown ? FailureOverview.Counted(shown) : 0;
 
     public string TotalLabel => $"failure{(TotalFailures == 1 ? string.Empty : "s")} in {Components.Count:N0} " +
                                 $"component{(Components.Count == 1 ? string.Empty : "s")}";
@@ -232,7 +267,9 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
 
     public string EmptyText => (Sources().Count == 0, SolutionOnly && HasSolution) switch
     {
-        (true, _) => "Include flow runs, workflow jobs or plug-ins above.",
+        (true, _) => HasAppInsights
+            ? "Include flow runs, workflow jobs, plug-ins or App Insights above."
+            : "Include flow runs, workflow jobs or plug-ins above.",
         (_, true) => $"Nothing in {_session.SelectedSolution?.DisplayLabel} failed in this period. Try a longer period, or the whole environment.",
         _ => "Nothing failed in this period. Try a longer period, or include more sources."
     };
@@ -248,10 +285,18 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         }
     }
 
-    internal static string Describe(FailureData data, TimeSpan took) =>
-        $"Read {data.FlowRunsRead:N0} flow run{(data.FlowRunsRead == 1 ? string.Empty : "s")}, " +
-        $"{data.SystemJobsRead:N0} system job{(data.SystemJobsRead == 1 ? string.Empty : "s")} and " +
-        $"{data.TraceLogsRead:N0} trace log{(data.TraceLogsRead == 1 ? string.Empty : "s")}{TraceExceptions(data)} in {took.TotalSeconds:0.0} s";
+    internal static string Describe(FailureData data, TimeSpan took, bool readAppInsights = false)
+    {
+        var flows = $"{data.FlowRunsRead:N0} flow run{(data.FlowRunsRead == 1 ? string.Empty : "s")}";
+        var jobs = $"{data.SystemJobsRead:N0} system job{(data.SystemJobsRead == 1 ? string.Empty : "s")}";
+        var traces = $"{data.TraceLogsRead:N0} trace log{(data.TraceLogsRead == 1 ? string.Empty : "s")}{TraceExceptions(data)}";
+
+        var read = readAppInsights
+            ? $"{flows}, {jobs}, {traces} and {data.TelemetryRowsRead:N0} App Insights row{(data.TelemetryRowsRead == 1 ? string.Empty : "s")}"
+            : $"{flows}, {jobs} and {traces}";
+
+        return $"Read {read} in {took.TotalSeconds:0.0} s";
+    }
 
     /// <summary>
     /// How many of the trace logs held an exception - most entries are plug-ins that ran fine, so
@@ -416,12 +461,20 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
             var data = await client.GetFailuresAsync(from, to, query, progress, cts.Token);
             if (cts.IsCancellationRequested) return;
 
+            var binding = _session.AppInsightsBinding;
+            if (binding is not null)
+            {
+                using var azure = client.CreateAzureMonitorClient();
+                await AppInsightsFailures.ReadAsync(azure, binding, _session.TelemetryScope, from, to, query, data, progress, cts.Token);
+                if (cts.IsCancellationRequested) return;
+            }
+
             _data = data;
             _from = from;
             _to = to;
 
             Notes = string.Join(Environment.NewLine, data.Notes);
-            ReadSummary = Describe(data, clock.Elapsed);
+            ReadSummary = Describe(data, clock.Elapsed, readAppInsights: binding is not null);
             Status = string.Empty;
             Show();
         }
@@ -465,6 +518,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(FlowFailureCount));
         OnPropertyChanged(nameof(WorkflowFailureCount));
         OnPropertyChanged(nameof(PluginFailureCount));
+        OnPropertyChanged(nameof(AppInsightsFailureCount));
         ExportCsvCommand.RaiseCanExecuteChanged();
         ExportMarkdownCommand.RaiseCanExecuteChanged();
     }
@@ -474,6 +528,14 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     /// <summary>The loaded row a failure belongs to: its plug-in step or type, or its workflow.</summary>
     private SolutionComponentItem? ItemFor(FailureEvent failure)
     {
+        if (failure.Source == FailureSource.AppInsights)
+        {
+            return failure.IsPlugin
+                ? _session.AllItems.FirstOrDefault(i => i.ComponentType == PluginTypeType &&
+                                                        string.Equals(i.Name, failure.ComponentKey, StringComparison.OrdinalIgnoreCase))
+                : null;
+        }
+
         if (failure.Source == FailureSource.Plugin)
         {
             return (failure.StepId is { } stepId
@@ -486,16 +548,26 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         return failure.WorkflowId is { } workflowId ? _session.FindLoaded(workflowId) : null;
     }
 
-    /// <summary>A failure, where it can be seen: a flow's or workflow's runs, a plug-in's trace log.</summary>
+    /// <summary>
+    /// A failure, where it can be seen: a flow's or workflow's runs, a plug-in's trace log or App
+    /// Insights tab - or, for a request or exception App Insights holds, its operation in the portal.
+    /// </summary>
     private void OpenEvent(FailureEvent? failure)
     {
         if (failure is null) return;
 
         if (ItemFor(failure) is { } item)
         {
-            _session.OpenDetails(item, failure.Source == FailureSource.Plugin ? DetailsTab.TraceLog : DetailsTab.Runs);
+            _session.OpenDetails(item, failure.Source switch
+            {
+                FailureSource.AppInsights => DetailsTab.Telemetry,
+                FailureSource.Plugin => DetailsTab.TraceLog,
+                _ => DetailsTab.Runs
+            });
             return;
         }
+
+        if (failure.Source == FailureSource.AppInsights && OpenInPortal(failure)) return;
 
         NotLoaded(failure);
     }
@@ -505,7 +577,23 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         if (row is null) return;
 
         if (ItemFor(row.Events[0]) is { } item) _session.OpenDetails(item);
+        else if (row.Source == FailureSource.AppInsights && OpenInPortal(row.Events[0])) return;
         else NotLoaded(row.Events[0]);
+    }
+
+    /// <summary>An App Insights failure's whole operation, in the resource's Logs in the Azure portal.</summary>
+    private bool OpenInPortal(FailureEvent failure)
+    {
+        if (_session.AppInsightsBinding is not { } binding || _session.Client is not { } client ||
+            string.IsNullOrWhiteSpace(failure.OperationId))
+        {
+            return false;
+        }
+
+        _session.OpenUrl(AppInsightsLinks.Logs(client.Cloud.Azure, _session.TenantId, binding.ResourceId,
+            AppInsightsLinks.OperationQuery(failure.OperationId), TimeSpan.FromDays(30)));
+        Status = $"Opened operation {failure.OperationId} in the Azure portal.";
+        return true;
     }
 
     private void NotLoaded(FailureEvent failure) =>
@@ -516,6 +604,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     public void Detach()
     {
         _session.PropertyChanged -= OnSessionChanged;
+        _session.AppInsightsChanged -= OnAppInsightsChanged;
         _cts?.Cancel();
     }
 
@@ -552,8 +641,10 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
                 var events = data.Events.OrderByDescending(e => e.When).ToList();
                 CsvExporter.WriteLines(dialog.FileName,
                     events.Select(e => CsvExporter.Line(e.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), e.SourceLabel,
-                            e.ComponentName, e.ErrorCode, e.ErrorMessage, e.Context, e.Regarding, e.RunName))
-                        .Prepend(CsvExporter.Line("When", "Kind", "Component", "Error code", "Error", "Context", "Regarding", "Run")));
+                            e.ComponentName, e.ErrorCode, e.ErrorMessage, e.Context, e.Regarding, e.RunName, e.OperationId,
+                            e.AlsoInTraceLog ? "yes" : string.Empty))
+                        .Prepend(CsvExporter.Line("When", "Kind", "Component", "Error code", "Error", "Context", "Regarding", "Run",
+                            "Operation", "Also in trace log")));
                 Status = $"Exported {events.Count:N0} failure(s) to {dialog.FileName}.";
             }
         }

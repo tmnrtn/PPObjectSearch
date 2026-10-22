@@ -96,6 +96,9 @@
                                             <TextBlock Text="{Binding BrowserProfileDescription}" Margin="0,3,0,0"
                                                        TextWrapping="Wrap" MaxWidth="400"
                                                        Visibility="{Binding BrowserProfileDescription, Converter={StaticResource EmptyToCollapsed}}" />
+                                            <TextBlock Text="{Binding AppInsightsDescription}" Margin="0,3,0,0"
+                                                       TextWrapping="Wrap" MaxWidth="400"
+                                                       Visibility="{Binding AppInsightsDescription, Converter={StaticResource EmptyToCollapsed}}" />
                                             <TextBlock Text="{Binding WriteAccessDescription}" Margin="0,3,0,0"
                                                        TextWrapping="Wrap" MaxWidth="400" FontWeight="SemiBold"
                                                        Visibility="{Binding WriteAccessDescription, Converter={StaticResource EmptyToCollapsed}}" />
@@ -115,6 +118,10 @@
                                                     </Style>
                                                 </MenuItem.ItemContainerStyle>
                                             </MenuItem>
+                                            <MenuItem Header="App Insights resource…" Command="{Binding ChooseAppInsightsCommand}"
+                                                      ToolTip="Choose the Application Insights resource this environment's Dataverse data export writes to." />
+                                            <MenuItem Header="Check Azure access…" Command="{Binding CheckAzureAccessCommand}"
+                                                      ToolTip="Tries the Azure APIs the App Insights features use, as this tab's account, and says what worked." />
                                             <Separator />
                                             <MenuItem Header="Allow writes to this environment…"
                                                       Command="{Binding AllowWritesCommand}"
