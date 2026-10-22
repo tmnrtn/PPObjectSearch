@@ -172,8 +172,9 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
   - README: *Failures* feature bullet (the window was undocumented), App Insights tab under object details, a new *Application Insights* section, the `AppInsights` block in the settings example, and the extra delegated permissions under *Authentication*.
 - [ ] **5.3 [USER] End-to-end check on Windows** against the real environment: picker, Failures with
       and without a solution, a plug-in's tab, portal links, and a user without Azure access.
-- [ ] **5.4 Release.** Run the full test suite on Windows CI, check SonarQube is clean, bump the version
+- [x] **5.4 Release.** Run the full test suite on Windows CI, check SonarQube is clean, bump the version
       (minor) and open the PR.
+  - Version 1.19.0; Windows CI green (2,862 tests); opened as a **draft** PR while 0.3, 2.1 and 5.3 are outstanding. SonarQube only analyses main, so it runs on merge. Delete TRACKER.md before merging.
 
 ### Later (not in this plan)
 
