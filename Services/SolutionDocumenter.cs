@@ -14,6 +14,30 @@ public sealed class DocumentationOptions
     public bool SecurityRoles { get; set; } = true;
     public bool Dependencies { get; set; } = true;
 
+    /// <summary>Processes by category, business rules per table, and every workflow and flow with what starts it.</summary>
+    public bool Processes { get; set; } = true;
+
+    /// <summary>Plug-in assemblies and classes, steps per table, and custom APIs.</summary>
+    public bool PluginsAndApis { get; set; } = true;
+
+    /// <summary>Service endpoints and webhooks, connection references, connectors and custom connectors.</summary>
+    public bool Integrations { get; set; } = true;
+
+    /// <summary>Custom tables, out-of-box tables extended, custom columns and record counts.</summary>
+    public bool DataVolumes { get; set; } = true;
+
+    /// <summary>Classic workflow and cloud flow runs over the last 30 days.</summary>
+    public bool ExecutionVolumes { get; set; } = true;
+
+    /// <summary>
+    /// With the inventory sections, what belongs to the environment rather than any solution:
+    /// application users, SharePoint and email, records across every table, and system jobs.
+    /// </summary>
+    public bool EnvironmentWide { get; set; } = true;
+
+    /// <summary>Whether any of the support-scoping inventory sections is asked for.</summary>
+    public bool AnyInventory => Processes || PluginsAndApis || Integrations || DataVolumes || ExecutionVolumes;
+
     /// <summary>One Markdown file per component under a folder, with an index - for a docs repository.</summary>
     public bool FilePerComponent { get; set; }
 }
@@ -40,9 +64,11 @@ public sealed record DocPage(string Section, string Title, string Markdown)
 }
 
 /// <summary>
-/// A readable inventory of a solution - for a handover, an audit or a wiki: its tables, flows,
-/// environment variables, plug-in steps, security roles and dependencies. Read-only, and each
-/// section is read on its own, so one that cannot be read is said rather than failing the rest.
+/// A readable inventory of one or more solutions - for a handover, an audit, support scoping or a
+/// wiki: their tables, flows, environment variables, plug-in steps, security roles and
+/// dependencies, and how much automation, integration, data and activity they amount to.
+/// Read-only, and each section is read on its own, so one that cannot be read is said rather than
+/// failing the rest.
 /// </summary>
 public sealed class SolutionDocumenter
 {
@@ -55,9 +81,17 @@ public sealed class SolutionDocumenter
 
     public SolutionDocumenter(DataverseClient client) => _client = client;
 
-    public async Task<IReadOnlyList<DocPage>> BuildAsync(
+    public Task<IReadOnlyList<DocPage>> BuildAsync(
         SolutionInfo solution,
         IReadOnlyList<SolutionComponentItem> items,
+        string environment,
+        DocumentationOptions options,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default) =>
+        BuildAsync(new DocumentationScope(solution, items), environment, options, progress, ct);
+
+    public async Task<IReadOnlyList<DocPage>> BuildAsync(
+        DocumentationScope scope,
         string environment,
         DocumentationOptions options,
         IProgress<string>? progress = null,
@@ -65,6 +99,7 @@ public sealed class SolutionDocumenter
     {
         var pages = new List<DocPage>();
         var problems = new List<string>();
+        var items = scope.Items;
 
         async Task Section(string name, Func<Task> build)
         {
@@ -88,14 +123,23 @@ public sealed class SolutionDocumenter
         if (options.PluginSteps) await Section("plug-in steps", () => StepsAsync(items, pages, ct)).ConfigureAwait(false);
         if (options.SecurityRoles) await Section("security roles", () => RolesAsync(items, tables, pages, ct)).ConfigureAwait(false);
 
+        var inventory = new SolutionInventory(_client, scope, options.EnvironmentWide);
+        if (options.Processes) await Section("processes", () => inventory.ProcessesPageAsync(pages, ct)).ConfigureAwait(false);
+        if (options.PluginsAndApis) await Section("plug-ins and custom APIs", () => inventory.PluginsPageAsync(pages, ct)).ConfigureAwait(false);
+        if (options.Integrations) await Section("integrations", () => inventory.IntegrationsPageAsync(pages, ct)).ConfigureAwait(false);
+        if (options.DataVolumes) await Section("data volumes", () => inventory.DataVolumesPageAsync(pages, ct)).ConfigureAwait(false);
+        if (options.ExecutionVolumes) await Section("execution volumes", () => inventory.ExecutionVolumesPageAsync(pages, ct)).ConfigureAwait(false);
+
         string? dependencies = null;
         if (options.Dependencies)
         {
-            await Section("dependencies", async () => dependencies = await DependenciesAsync(solution, ct).ConfigureAwait(false))
+            await Section("dependencies", async () => dependencies = await DependenciesAsync(scope, ct).ConfigureAwait(false))
                 .ConfigureAwait(false);
         }
 
-        pages.Insert(0, new DocPage("index", solution.FriendlyName, Summary(solution, items, environment, dependencies, problems)));
+        var metrics = options.AnyInventory ? ScopeMetrics(scope, inventory.Metrics) : null;
+        var title = scope.IsMultiple ? "Solution documentation" : scope.Solutions[0].FriendlyName;
+        pages.Insert(0, new DocPage("index", title, Summary(scope, environment, dependencies, metrics, problems)));
         return pages;
     }
 
@@ -143,30 +187,36 @@ public sealed class SolutionDocumenter
     private static string Demote(string markdown) =>
         string.Join("\n", markdown.Replace("\r\n", "\n").Split('\n').Select(l => l.StartsWith('#') ? "##" + l : l));
 
-    private static string Summary(
-        SolutionInfo solution, IReadOnlyList<SolutionComponentItem> items, string environment,
-        string? dependencies, List<string> problems)
+    /// <summary>The scope summary: the solutions and their components first, then each section's headline numbers.</summary>
+    private static List<ScopeMetric> ScopeMetrics(DocumentationScope scope, IReadOnlyList<ScopeMetric> sections)
     {
-        var md = new StringBuilder()
-            .AppendLine($"# {solution.FriendlyName}")
-            .AppendLine()
-            .AppendLine("| | |")
-            .AppendLine("| --- | --- |")
-            .AppendLine($"| Unique name | `{solution.UniqueName}` |")
-            .AppendLine($"| Version | {solution.Version} |")
-            .AppendLine($"| Publisher | {Cell(solution.PublisherName)} |")
-            .AppendLine($"| Managed | {(solution.IsManaged ? "Yes" : "No")} |")
-            .AppendLine($"| Read from | {Cell(environment)} |")
-            .AppendLine($"| Generated | {DateTimeOffset.Now:yyyy-MM-dd HH:mm} |")
-            .AppendLine()
-            .AppendLine("## Components")
-            .AppendLine()
-            .AppendLine("| Type | Count |")
-            .AppendLine("| --- | ---: |");
+        var patches = scope.Solutions.Count(s => s.ParentSolutionId is not null);
+        var prefixes = scope.Solutions.Select(s => s.PublisherPrefix).OfType<string>().Where(p => p.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
+        var topTypes = scope.Items.GroupBy(i => i.ComponentTypeName).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).Take(12)
+            .Select(g => $"{g.Key}: {g.Count():N0}");
 
-        foreach (var type in items.GroupBy(i => i.ComponentTypeName).OrderByDescending(g => g.Count()).ThenBy(g => g.Key))
+        return
+        [
+            new ScopeMetric("Solutions", "Solutions in scope", $"{scope.Solutions.Count:N0}",
+                $"{(patches > 0 ? $"{patches:N0} of them patches; " : string.Empty)}publisher prefix(es): {string.Join(", ", prefixes)}"),
+            new ScopeMetric("Solutions", "Components", $"{scope.Items.Count:N0}", string.Join(", ", topTypes)),
+            .. sections
+        ];
+    }
+
+    private static string Summary(
+        DocumentationScope scope, string environment, string? dependencies, IReadOnlyList<ScopeMetric>? metrics, List<string> problems)
+    {
+        var md = new StringBuilder();
+        if (scope.IsMultiple) AppendSolutionsHeader(md, scope, environment);
+        else AppendSolutionHeader(md, scope.Solutions[0], scope.Items, environment);
+
+        if (metrics is not null)
         {
-            md.AppendLine($"| {Cell(type.Key)} | {type.Count():N0} |");
+            md.AppendLine().AppendLine("## Scope summary").AppendLine()
+              .AppendLine("| Area | Measure | Value | Notes |")
+              .AppendLine("| --- | --- | ---: | --- |");
+            foreach (var m in metrics) md.AppendLine($"| {Cell(m.Area)} | {Cell(m.Metric)} | {Cell(m.Value)} | {Cell(m.Notes)} |");
         }
 
         if (dependencies is not null) md.AppendLine().Append(dependencies);
@@ -178,6 +228,62 @@ public sealed class SolutionDocumenter
         }
 
         return md.ToString();
+    }
+
+    /// <summary>One solution: its details, and its components counted by type.</summary>
+    private static void AppendSolutionHeader(StringBuilder md, SolutionInfo solution, IReadOnlyList<SolutionComponentItem> items, string environment)
+    {
+        md.AppendLine($"# {solution.FriendlyName}")
+          .AppendLine()
+          .AppendLine("| | |")
+          .AppendLine("| --- | --- |")
+          .AppendLine($"| Unique name | `{solution.UniqueName}` |")
+          .AppendLine($"| Version | {solution.Version} |")
+          .AppendLine($"| Publisher | {Cell(solution.PublisherName)} |")
+          .AppendLine($"| Managed | {(solution.IsManaged ? "Yes" : "No")} |")
+          .AppendLine($"| Read from | {Cell(environment)} |")
+          .AppendLine($"| Generated | {DateTimeOffset.Now:yyyy-MM-dd HH:mm} |")
+          .AppendLine()
+          .AppendLine("## Components")
+          .AppendLine()
+          .AppendLine("| Type | Count |")
+          .AppendLine("| --- | ---: |");
+
+        foreach (var type in items.GroupBy(i => i.ComponentTypeName).OrderByDescending(g => g.Count()).ThenBy(g => g.Key))
+        {
+            md.AppendLine($"| {Cell(type.Key)} | {type.Count():N0} |");
+        }
+    }
+
+    /// <summary>Several solutions: a row each, and their components counted by type - distinct, and per solution.</summary>
+    private static void AppendSolutionsHeader(StringBuilder md, DocumentationScope scope, string environment)
+    {
+        md.AppendLine("# Solution documentation")
+          .AppendLine()
+          .AppendLine($"{scope.Solutions.Count:N0} solutions, read from {Cell(environment)} on {DateTimeOffset.Now:yyyy-MM-dd HH:mm}.")
+          .AppendLine()
+          .AppendLine("| Solution | Unique name | Version | Publisher | Managed | Patch |")
+          .AppendLine("| --- | --- | --- | --- | --- | --- |");
+
+        foreach (var s in scope.Solutions)
+        {
+            md.AppendLine($"| {Cell(s.FriendlyName)} | `{s.UniqueName}` | {Cell(s.Version)} | {Cell(s.PublisherName)} | " +
+                          $"{(s.IsManaged ? "Yes" : "No")} | {(s.ParentSolutionId is null ? "No" : "Yes")} |");
+        }
+
+        // Distinct counts a component held by two solutions once.
+        md.AppendLine()
+          .AppendLine("## Components")
+          .AppendLine()
+          .AppendLine("| Type | Distinct | " + string.Join(" | ", scope.Solutions.Select(s => Cell(s.UniqueName))) + " |")
+          .AppendLine("| --- | ---: | " + string.Join(" | ", scope.Solutions.Select(_ => "---:")) + " |");
+
+        foreach (var type in scope.Items.GroupBy(i => i.ComponentTypeName).OrderByDescending(g => g.Count()).ThenBy(g => g.Key))
+        {
+            var counts = scope.Solutions.Select(s =>
+                (scope.Components.GetValueOrDefault(s.SolutionId) ?? []).Count(i => i.ComponentTypeName == type.Key).ToString("N0"));
+            md.AppendLine($"| {Cell(type.Key)} | {type.Count():N0} | {string.Join(" | ", counts)} |");
+        }
     }
 
     internal static string Cell(string? text) =>
@@ -360,18 +466,27 @@ public sealed class SolutionDocumenter
         }
     }
 
-    private async Task<string> DependenciesAsync(SolutionInfo solution, CancellationToken ct)
+    private async Task<string> DependenciesAsync(DocumentationScope scope, CancellationToken ct)
     {
-        var missing = await _client.GetMissingDependenciesAsync(solution.UniqueName, ct).ConfigureAwait(false);
+        // What one solution needs and another of them holds is not missing from the set.
+        var missing = new List<MissingDependency>();
+        foreach (var solution in scope.Solutions)
+        {
+            missing.AddRange((await _client.GetMissingDependenciesAsync(solution.UniqueName, ct).ConfigureAwait(false))
+                .Where(m => !scope.ObjectIds.Contains(m.RequiredId)));
+        }
 
+        var them = scope.IsMultiple ? "the solutions" : "the solution";
         var md = new StringBuilder().AppendLine("## Depends on").AppendLine();
         if (missing.Count == 0)
         {
-            md.AppendLine("Nothing outside the solution beyond what every environment has.");
+            md.AppendLine($"Nothing outside {them} beyond what every environment has.");
             return md.ToString();
         }
 
-        md.AppendLine("Components the solution needs but does not contain - they must already be in an environment it is imported into:")
+        md.AppendLine(scope.IsMultiple
+                ? "Components the solutions need but do not contain - they must already be in an environment they are imported into:"
+                : "Components the solution needs but does not contain - they must already be in an environment it is imported into:")
           .AppendLine()
           .AppendLine("| Type | Component id | Needed by (type) |")
           .AppendLine("| --- | --- | --- |");

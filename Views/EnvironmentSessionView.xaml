@@ -153,8 +153,8 @@
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Document solution…" Command="{Binding DocumentSolutionCommand}"
-                                          ToolTip="Write a readable inventory of the selected solution as Markdown - tables, flows with diagrams, environment variables, plug-in steps, roles and dependencies" />
+                                <MenuItem Header="Document solutions…" Command="{Binding DocumentSolutionCommand}"
+                                          ToolTip="Write a readable inventory of the selected solution, and any others you tick, as Markdown - tables, flows with diagrams, environment variables, plug-in steps, roles and dependencies, and a support-scoping summary of their processes, plug-ins, integrations, data and run volumes" />
                                 <MenuItem Header="Deployment settings…" Command="{Binding ExportDeploymentSettingsCommand}"
                                           ToolTip="Write the settings file pac solution import --settings-file takes for the selected solution: a value for each environment variable and a connection for each connection reference - this environment's, or blank as a template." />
                                 <MenuItem Header="Readiness check…" InputGestureText="Ctrl+Shift+R"

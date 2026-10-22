@@ -22,6 +22,7 @@ public class SolutionDocumenterSectionsTests
 
     private static readonly DocumentationOptions Nothing = new()
     {
+        Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false,
         Tables = false, Flows = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false
     };
 
@@ -56,7 +57,7 @@ public class SolutionDocumenterSectionsTests
         };
 
         var pages = await Build(handler, items, new DocumentationOptions
-        {
+        { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, 
             Flows = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false
         });
 
@@ -82,7 +83,7 @@ public class SolutionDocumenterSectionsTests
             .OnJson(HttpMethod.Get, $"EntityDefinitions({Table})?", """{"LogicalName":"new_widget"}""");
 
         var pages = await Build(handler, [Item("new_widget", 1, Table, "Entity")], new DocumentationOptions
-        {
+        { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, 
             Flows = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false
         });
 
@@ -118,7 +119,7 @@ public class SolutionDocumenterSectionsTests
             Item("Abandoned", 29, FlowUnknown, "Process", category: 5)
         };
 
-        var pages = await Build(handler, items, new DocumentationOptions { Tables = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false });
+        var pages = await Build(handler, items, new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, Tables = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false });
 
         var flows = pages.Where(p => p.Section == "Cloud flows").ToList();
         Assert.Equal(["Abandoned", "Daily digest"], flows.Select(p => p.Title));
@@ -136,7 +137,7 @@ public class SolutionDocumenterSectionsTests
             Workflow(1, """{"definition":{"actions":{"Only":{"type":"Compose","inputs":1}}}}"""));
 
         var pages = await Build(handler, [Item("Bare", 29, FlowOff, "Process", category: 5)],
-            new DocumentationOptions { Tables = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false });
+            new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, Tables = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false, Dependencies = false });
 
         var flow = pages.Single(p => p.Section == "Cloud flows").Markdown;
         Assert.Contains("**Trigger:** none", flow);
@@ -158,7 +159,7 @@ public class SolutionDocumenterSectionsTests
         var items = new[] { Item("new_widget", 1, Table, "Entity", schema: "new_Widget"), Item("Widget manager", 20, Role, "Role") };
 
         var pages = await Build(handler, items, new DocumentationOptions
-        {
+        { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, 
             Tables = false, Flows = false, EnvironmentVariables = false, PluginSteps = false, Dependencies = false
         });
 
@@ -175,7 +176,7 @@ public class SolutionDocumenterSectionsTests
             .OnJson(HttpMethod.Get, $"RetrieveRolePrivilegesRole(RoleId={Role})", Privileges);
 
         var pages = await Build(handler, [Item("Widget manager", 20, Role, "Role")], new DocumentationOptions
-        {
+        { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, 
             Flows = false, EnvironmentVariables = false, PluginSteps = false, Dependencies = false
         });
 
@@ -196,7 +197,7 @@ public class SolutionDocumenterSectionsTests
             }
             """);
 
-        var pages = await Build(handler, [], new DocumentationOptions { Tables = false, Flows = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false });
+        var pages = await Build(handler, [], new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, Tables = false, Flows = false, EnvironmentVariables = false, PluginSteps = false, SecurityRoles = false });
 
         var index = Assert.Single(pages).Markdown;
         Assert.Contains("## Depends on", index);
@@ -210,7 +211,7 @@ public class SolutionDocumenterSectionsTests
         var handler = new FakeHttpHandler()
             .On(HttpMethod.Get, "RetrieveMissingDependencies", _ => throw new OperationCanceledException());
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Build(handler, [], new DocumentationOptions(), new SyncProgress(progress)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Build(handler, [], new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false }, new SyncProgress(progress)));
 
         Assert.Equal(
             ["Documenting tables...", "Documenting cloud flows...", "Documenting environment variables...", "Documenting plug-in steps...",

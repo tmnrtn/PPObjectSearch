@@ -388,10 +388,11 @@ public class DataverseClientCoreTests
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var handler = new FakeHttpHandler()
-            .OnJson(HttpMethod.Get, "skiptoken=p2", Page($"{{\"solutionid\":\"{b}\",\"uniquename\":\"Beta\",\"ismanaged\":\"true\"}}"))
+            .OnJson(HttpMethod.Get, "skiptoken=p2", Page(
+                $"{{\"solutionid\":\"{b}\",\"uniquename\":\"Beta\",\"ismanaged\":\"true\",\"_parentsolutionid_value\":\"{a}\"}}"))
             .OnJson(HttpMethod.Get, "solutions?$select", Page(
                 $"{{\"solutionid\":\"{a}\",\"uniquename\":\"Alpha\",\"friendlyname\":\"Alpha Solution\",\"ismanaged\":false," +
-                "\"version\":\"1.0.0.1\",\"publisherid\":{\"friendlyname\":\"Contoso\"}}," +
+                "\"version\":\"1.0.0.1\",\"publisherid\":{\"friendlyname\":\"Contoso\",\"customizationprefix\":\"contoso\"}}," +
                 "{\"solutionid\":\"not-a-guid\",\"uniquename\":\"Broken\"}",
                 Api + "solutions?$skiptoken=p2"));
         using var client = Fakes.Dataverse(handler);
@@ -404,15 +405,20 @@ public class DataverseClientCoreTests
         Assert.False(solutions[0].IsManaged);
         Assert.Equal("1.0.0.1", solutions[0].Version);
         Assert.Equal("Contoso", solutions[0].PublisherName);
+        Assert.Equal("contoso", solutions[0].PublisherPrefix);
+        Assert.Null(solutions[0].ParentSolutionId);
 
         Assert.Equal("Beta", solutions[1].FriendlyName);
         Assert.True(solutions[1].IsManaged);
         Assert.Null(solutions[1].PublisherName);
+        Assert.Null(solutions[1].PublisherPrefix);
+        Assert.Equal(a, solutions[1].ParentSolutionId);
 
         var first = handler.Requests[0].Url;
         Assert.Contains("$filter=isvisible eq true", first);
         Assert.Contains("$orderby=friendlyname asc", first);
-        Assert.Contains("$expand=publisherid($select=friendlyname)", first);
+        Assert.Contains("$expand=publisherid($select=friendlyname,customizationprefix)", first);
+        Assert.Contains("_parentsolutionid_value", first);
         Assert.Equal(Api + "solutions?$skiptoken=p2", handler.Requests[1].Url);
     }
 

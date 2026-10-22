@@ -91,7 +91,7 @@ public class EnvironmentSessionGuardTests
         var session = await FailedAsync();
 
         session.DocumentSolutionCommand.Execute(null);
-        Assert.Equal("Choose a solution first - the documentation is of one solution.", session.Status);
+        Assert.Equal("Choose a solution first - the documentation starts from it, and others can be added.", session.Status);
 
         session.ContentSearchCommand.Execute(null);
         Assert.Equal("Connect first.", session.Status);

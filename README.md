@@ -556,16 +556,46 @@ and on an environment variable (Value tab) runs the same search for that name.
 
 ## Solution documentation
 
-**Document** (toolbar, with a solution selected) writes a readable inventory of the solution as
-Markdown, for a handover, an audit or a wiki:
+**Document solutions** (*Solution tools*, with a solution selected) writes a readable inventory as
+Markdown, for a handover, an audit, support scoping or a wiki. The selected solution is ticked;
+tick others from the dialog's list (filter it by name) to document several together, and **Include
+the patches** to bring each ticked solution's patches with it. A component in more than one of
+them is documented once, and tables carry a column saying which solutions hold each row.
 
-- the solution's name, version, publisher and managed state, and a count of components by type;
+**Components**:
+
+- the solutions' names, versions, publishers and managed state, and a count of components by type
+  (with several solutions, a column per solution and a distinct total);
 - **tables** - custom columns with type and requirement, relationships and alternate keys;
 - **cloud flows** - on or off, trigger, connectors used, action count and a Mermaid diagram;
 - **environment variables** - type, default and the value in this environment, secrets redacted;
 - **plug-in steps** - message, table, stage, mode, rank and filtering attributes;
-- **security roles** - their privileges on the solution's tables;
-- **dependencies** on components outside the solution.
+- **security roles** - their privileges on the solutions' tables;
+- **dependencies** on components outside the solutions - what one needs and another holds is not
+  counted as missing.
+
+**Inventory - for support scoping**, each a page, with its headline numbers in a **Scope summary** on
+the index:
+
+- **processes** - classic workflows, business rules, actions, business process flows and cloud flows
+  by category (active / total), business rules per table, and each definition with what starts it;
+- **plug-ins and custom APIs** - assemblies, plug-in and custom workflow activity classes (every class
+  in an assembly the solutions hold), steps per table (sync / async, enabled), and custom APIs;
+- **integrations** - service endpoints and webhooks (addresses without their query string) with the
+  steps posting to them, connection references, connectors the cloud flows use, custom connectors,
+  and the count of environment variables;
+- **data volumes** - custom tables with their record counts and custom columns, and out-of-box tables
+  the solutions hold or add columns to. Counts are Dataverse's stored snapshot, about a day behind;
+  storage in GB is in the Power Platform admin center, not here;
+- **execution volumes** - classic workflow runs and cloud flow runs per process over the last 30 days.
+
+**Add environment-wide facts** adds what belongs to the environment rather than any solution:
+application users (Microsoft's own service identities left out) and their roles, SharePoint sites,
+email server profiles and mailboxes by delivery method, records across every table, note and email
+attachment volumes, and system jobs by type over the last 30 days.
+
+Aggregates over more than Dataverse's 50,000-row limit are split by date and added up; cloud flow
+runs are counted row by row where the flowrun table will not aggregate.
 
 Choose the sections, and either one Markdown file or a folder with an index and one file per
 component - for a docs repository. A section that cannot be read is listed under *Not documented*.

@@ -35,9 +35,12 @@ public sealed class DocumentationViewModelTests : IDisposable
     private readonly List<string> _suggested = new();
 
     /// <summary>The documentation dialog, answering the file or folder question with the given path.</summary>
-    private DocumentationViewModel Documentation(FakeHttpHandler handler, string? target)
+    private DocumentationViewModel Documentation(FakeHttpHandler handler, string? target) =>
+        Documentation(TestSessions.Connected(handler, [], solution: _solution), target);
+
+    private DocumentationViewModel Documentation(EnvironmentSessionViewModel session, string? target)
     {
-        var documentation = new DocumentationViewModel(TestSessions.Connected(handler, [], solution: _solution))
+        var documentation = new DocumentationViewModel(session)
         {
             PickFile = suggested =>
             {
@@ -52,6 +55,11 @@ public sealed class DocumentationViewModelTests : IDisposable
         documentation.Options.PluginSteps = false;
         documentation.Options.SecurityRoles = false;
         documentation.Options.Dependencies = false;
+        documentation.Options.Processes = false;
+        documentation.Options.PluginsAndApis = false;
+        documentation.Options.Integrations = false;
+        documentation.Options.DataVolumes = false;
+        documentation.Options.ExecutionVolumes = false;
         return documentation;
     }
 
@@ -187,5 +195,105 @@ public sealed class DocumentationViewModelTests : IDisposable
         Assert.Single(handler.Requests);
         Assert.False(documentation.IsBusy);
         Assert.False(documentation.CancelCommand.CanExecute(null));
+    }
+
+    // ---------------------------------------------------------------- several solutions
+
+    /// <summary>The dialog over a tab listing Contoso Core (on screen), Contoso Extra and a patch of Core.</summary>
+    private (DocumentationViewModel Documentation, DocumentedSolution Extra, SolutionInfo Patch) Several(FakeHttpHandler handler, string? target)
+    {
+        var session = TestSessions.Connected(handler, [], solution: _solution);
+        var extra = TestSessions.Solution("Contoso Extra", "contoso_extra");
+        var patch = new SolutionInfo
+        {
+            SolutionId = Guid.NewGuid(), UniqueName = "contoso_core_patch", FriendlyName = "Contoso Core patch", Version = "1.0.1.0",
+            ParentSolutionId = _solution.SolutionId
+        };
+
+        session.Solutions.Add(extra);
+        session.Solutions.Add(patch);
+
+        // The dialog lists the tab's solutions as they are when it opens.
+        var documentation = Documentation(session, target);
+        return (documentation, documentation.Choices.Single(c => c.Solution == extra), patch);
+    }
+
+    [Fact]
+    public void Every_solution_is_listed_with_the_one_on_screen_ticked()
+    {
+        var (documentation, extra, _) = Several(new FakeHttpHandler(), target: null);
+
+        Assert.Equal(3, documentation.Choices.Count);
+        Assert.Equal([_solution], documentation.Chosen);
+        Assert.False(extra.IsChosen);
+        Assert.Equal("contoso_core_patch  1.0.1.0  (patch)", documentation.Choices[2].Detail);
+    }
+
+    [Fact]
+    public void Ticking_a_second_solution_retitles_the_dialog_and_clear_unticks_them_all()
+    {
+        var (documentation, extra, _) = Several(new FakeHttpHandler(), target: null);
+        var changed = new List<string?>();
+        documentation.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        extra.IsChosen = true;
+
+        Assert.Equal("Document 2 solutions", documentation.Title);
+        Assert.Equal("2 solutions: Contoso Core, Contoso Extra", documentation.SolutionLabel);
+        Assert.Contains(nameof(DocumentationViewModel.Title), changed);
+        Assert.True(documentation.ClearCommand.CanExecute(null));
+
+        documentation.ClearCommand.Execute(null);
+
+        Assert.Empty(documentation.Chosen);
+        Assert.Equal("No solution selected", documentation.SolutionLabel);
+        Assert.False(documentation.ExportCommand.CanExecute(null));
+        Assert.False(documentation.ClearCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void The_filter_narrows_the_list_by_either_name_and_keeps_hidden_ticks()
+    {
+        var (documentation, extra, _) = Several(new FakeHttpHandler(), target: null);
+        extra.IsChosen = true;
+
+        documentation.SolutionFilter = "EXTRA";
+
+        Assert.Equal([extra], documentation.ChoicesView.Cast<DocumentedSolution>());
+        Assert.Equal(2, documentation.Chosen.Count);
+
+        documentation.SolutionFilter = "core_patch";
+        Assert.Equal("contoso_core_patch", Assert.Single(documentation.ChoicesView.Cast<DocumentedSolution>()).Solution.UniqueName);
+    }
+
+    [Fact]
+    public void Patches_of_the_ticked_solutions_come_with_them_when_asked_for()
+    {
+        var (documentation, _, patch) = Several(new FakeHttpHandler(), target: null);
+
+        documentation.IncludePatches = true;
+
+        Assert.Equal([_solution, patch], documentation.Chosen);
+        Assert.Equal("Document 2 solutions", documentation.Title);
+    }
+
+    [Fact]
+    public async Task Several_solutions_are_read_one_by_one_and_written_as_one_document()
+    {
+        var handler = Handler();
+        var path = Path.Combine(_folder, "both.md");
+        var (documentation, extra, _) = Several(handler, path);
+        extra.IsChosen = true;
+
+        await documentation.ExportCommand.ExecuteAsync(null);
+
+        var markdown = await File.ReadAllTextAsync(path);
+        Assert.StartsWith("# Solution documentation", markdown);
+        Assert.Contains("| Contoso Extra | `contoso_extra` |", markdown);
+        Assert.Contains("| Type | Distinct | contoso_core | contoso_extra |", markdown);
+        Assert.Equal([$"contoso-solutions-{DateTime.Now:yyyy-MM-dd}.md"], _suggested);
+        Assert.Contains(handler.Requests, r => r.Url.Contains($"msdyn_solutionid eq {extra.Solution.SolutionId}"));
+        Assert.Contains(handler.Requests, r => r.Url.Contains($"msdyn_solutionid eq {_solution.SolutionId}"));
+        Assert.StartsWith("Wrote ", documentation.Status);
     }
 }

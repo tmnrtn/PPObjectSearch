@@ -13,7 +13,7 @@ public class EnvironmentSessionDeploymentTests
         var session = new FakeEnvironment().Session();
 
         session.DocumentSolutionCommand.Execute(null);
-        Assert.Equal("Choose a solution first - the documentation is of one solution.", session.Status);
+        Assert.Equal("Choose a solution first - the documentation starts from it, and others can be added.", session.Status);
 
         session.ContentSearchCommand.Execute(null);
         Assert.Equal("Connect first.", session.Status);
@@ -57,7 +57,7 @@ public class EnvironmentSessionDeploymentTests
         var session = await new FakeEnvironment().ConnectedAsync();
 
         session.DocumentSolutionCommand.Execute(null);
-        Assert.Equal("Choose a solution first - the documentation is of one solution.", session.Status);
+        Assert.Equal("Choose a solution first - the documentation starts from it, and others can be added.", session.Status);
 
         await session.ExportDeploymentSettingsCommand.ExecuteAsync(null);
         Assert.Equal("Choose a solution first - the settings file is for one solution.", session.Status);
