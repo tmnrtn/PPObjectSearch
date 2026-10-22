@@ -83,18 +83,17 @@ public class CloudsTests
     }
 
     [Theory]
-    [InlineData("Public", "management.azure.com", "api.applicationinsights.io", "api.loganalytics.io", "portal.azure.com")]
-    [InlineData("US Government (GCC)", "management.azure.com", "api.applicationinsights.io", "api.loganalytics.io", "portal.azure.com")]
-    [InlineData("US Government (GCC High)", "management.usgovcloudapi.net", "api.applicationinsights.us", "api.loganalytics.us", "portal.azure.us")]
-    [InlineData("US Government (DoD)", "management.usgovcloudapi.net", "api.applicationinsights.us", "api.loganalytics.us", "portal.azure.us")]
-    [InlineData("China (21Vianet)", "management.chinacloudapi.cn", "api.applicationinsights.azure.cn", "api.loganalytics.azure.cn", "portal.azure.cn")]
-    public void Azure_is_reached_in_the_clouds_own_hosts(string cloud, string resourceManager, string appInsights, string logAnalytics, string portal)
+    [InlineData("Public", "management.azure.com", "api.applicationinsights.io", "portal.azure.com")]
+    [InlineData("US Government (GCC)", "management.azure.com", "api.applicationinsights.io", "portal.azure.com")]
+    [InlineData("US Government (GCC High)", "management.usgovcloudapi.net", "api.applicationinsights.us", "portal.azure.us")]
+    [InlineData("US Government (DoD)", "management.usgovcloudapi.net", "api.applicationinsights.us", "portal.azure.us")]
+    [InlineData("China (21Vianet)", "management.chinacloudapi.cn", "api.applicationinsights.azure.cn", "portal.azure.cn")]
+    public void Azure_is_reached_in_the_clouds_own_hosts(string cloud, string resourceManager, string appInsights, string portal)
     {
         var azure = Clouds.All.Single(c => c.Name == cloud).Azure;
 
         Assert.Equal("https://" + resourceManager, azure.ResourceManager);
         Assert.Equal("https://" + appInsights, azure.AppInsightsApi);
-        Assert.Equal("https://" + logAnalytics, azure.LogAnalyticsApi);
         Assert.Equal("https://" + portal, azure.Portal);
     }
 

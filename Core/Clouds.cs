@@ -28,29 +28,25 @@ public sealed record Cloud(
 /// </summary>
 /// <param name="ResourceManager">Azure Resource Manager, which lists subscriptions and resources.</param>
 /// <param name="AppInsightsApi">The Application Insights query API, which takes an app id.</param>
-/// <param name="LogAnalyticsApi">The Log Analytics query API, which takes a workspace or resource id.</param>
 /// <param name="Portal">The Azure portal, for links to a resource or a query.</param>
-public sealed record AzureEndpoints(string ResourceManager, string AppInsightsApi, string LogAnalyticsApi, string Portal);
+public sealed record AzureEndpoints(string ResourceManager, string AppInsightsApi, string Portal);
 
 public static class Clouds
 {
     private static readonly AzureEndpoints PublicAzure = new(
         "https://management.azure.com",
         "https://api.applicationinsights.io",
-        "https://api.loganalytics.io",
         "https://portal.azure.com");
 
     // GCC High and DoD both sit in Azure Government; DoD regions share its endpoints.
     private static readonly AzureEndpoints GovernmentAzure = new(
         "https://management.usgovcloudapi.net",
         "https://api.applicationinsights.us",
-        "https://api.loganalytics.us",
         "https://portal.azure.us");
 
     private static readonly AzureEndpoints ChinaAzure = new(
         "https://management.chinacloudapi.cn",
         "https://api.applicationinsights.azure.cn",
-        "https://api.loganalytics.azure.cn",
         "https://portal.azure.cn");
 
     public static readonly Cloud Public = new(

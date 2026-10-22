@@ -828,7 +828,7 @@ the account the environment's tab is signed in with. Resources in Azure Governme
 are read through those clouds' own endpoints; a GCC environment is taken to use commercial Azure.
 
 **Check Azure access…**, on the same menus, tries each Azure API the feature uses - Resource
-Manager to list resources, the Application Insights and Log Analytics query APIs - as the tab's
+Manager to list resources, and the Application Insights query API - as the tab's
 account, and says what worked and, for what did not, whether the sign-in client or the account's
 Azure role is the reason. The results can be copied, and are written to the log.
 

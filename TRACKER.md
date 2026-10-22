@@ -64,10 +64,11 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
       beside *Open links in*) shows the result in a copyable message and writes it to the log.
       Tests: AADSTS65001/65002-style failures and 401/403 become the right plain-English results.
   - New `AzureMonitor/AzureMonitorClient.cs` (token classification into `AzureFailure`, ARM subscription/component listing with paging, App Insights query by app id returning `TelemetryTable`) and `AzureAccessProbe.cs`; `DataverseClient.CreateAzureMonitorClient()` passes the test handler through. *Check Azure access…* is in both environment menus (`EnvironmentSessionViewModel.Telemetry.cs`) and shows the results in the Ask dialog with *Copy results*. ARM listing and query were built here too, ahead of 1.2/2.2, because the probe needs them.
-- [ ] **0.3 [USER] Run the probe on Windows** against the environment with the Dataverse export,
+- [x] **0.3 [USER] Run the probe on Windows** against the environment with the Dataverse export,
       first with the default client, then (only if that fails) with a `ClientId` app registration.
       Record which tokens and calls succeed, with error codes, under *Findings*. Then decide
       questions 1 and 2, and remove the losing query endpoint from 0.1.
+  - Run 2026-10-22 on ECT-Prod (crm11, public cloud) with the built-in client: ARM, component listing, App Insights API token and a query all OK; Log Analytics refused with AADSTS65002. Decision: App Insights API by app id, no app registration needed; Log Analytics removed from `AzureEndpoints` and the probe.
 
 ### Phase 1: Resource picker and per-environment setting
 
@@ -188,11 +189,11 @@ _Results from the [USER] checkpoints go here._
 
 ### 0.3 Access probe
 
-- Default client, ARM: _
-- Default client, App Insights API: _
-- Default client, Log Analytics API: _
-- Own app registration (only if needed): _
-- Decision on question 1 and question 2: _
+- Default client, ARM: OK - 1 subscription visible, 1 App Insights resource found (appi-d365analytics-prd-uks-001)
+- Default client, App Insights API: OK - token issued, `print ok = 1` ran against the resource
+- Default client, Log Analytics API: FAILED - AADSTS65002 (first-party pre-authorization missing)
+- Own app registration (only if needed): not needed
+- Decision on question 1 and question 2: the built-in client is enough; query through the App Insights API by app id with classic table names. Log Analytics dropped.
 
 ### 2.1 Schema capture
 

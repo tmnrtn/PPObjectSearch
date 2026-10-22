@@ -17,7 +17,6 @@ public static class AzureAccessProbe
 {
     public const string ResourceManagerCheck = "Azure Resource Manager";
     public const string AppInsightsCheck = "Application Insights query API";
-    public const string LogAnalyticsCheck = "Log Analytics query API";
 
     /// <summary>
     /// Runs every check. <paramref name="appId"/> is the chosen resource's app id; without one the
@@ -75,9 +74,6 @@ public static class AzureAccessProbe
                 results.Add(new("Query", false, $"against {queryTargetName}: {ex.Message}"));
             }
         }
-
-        progress?.Report("Checking the Log Analytics query API...");
-        results.Add(await TokenCheckAsync(client, LogAnalyticsCheck, client.Azure.LogAnalyticsApi, ct).ConfigureAwait(false));
 
         return results;
     }

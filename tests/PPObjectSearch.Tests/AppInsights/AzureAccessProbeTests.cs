@@ -19,20 +19,18 @@ public class AzureAccessProbeTests
 
         Assert.All(results, r => Assert.True(r.Ok, r.Line));
         Assert.Contains(results, r => r is { Check: "Query", Detail: "ran against contoso-dataverse" });
-        Assert.Contains(results, r => r.Check == AzureAccessProbe.LogAnalyticsCheck);
     }
 
     [Fact]
     public async Task A_refused_query_api_is_reported_without_hiding_what_worked()
     {
-        var auth = TestAuth.TokensFor(Arm, "https://api.loganalytics.io");
+        var auth = TestAuth.TokensFor(Arm);
         using var client = Client(OnOneComponent(new FakeHttpHandler()), auth);
 
         var results = await AzureAccessProbe.RunAsync(client, appId: null);
 
         Assert.True(results.Single(r => r.Check == AzureAccessProbe.ResourceManagerCheck).Ok);
         Assert.False(results.Single(r => r.Check == AzureAccessProbe.AppInsightsCheck).Ok);
-        Assert.True(results.Single(r => r.Check == AzureAccessProbe.LogAnalyticsCheck).Ok);
         Assert.DoesNotContain(results, r => r.Check == "Query");
     }
 
