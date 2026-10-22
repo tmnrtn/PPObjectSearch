@@ -55,6 +55,19 @@ public class AppInsightsFailuresTests
         Assert.StartsWith("App Insights (contoso-dataverse) could not be read: Application Insights: 403", note);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "Choose the resource again")]
+    [InlineData(HttpStatusCode.Forbidden, "Check Azure access")]
+    public async Task A_note_says_what_to_do_next(HttpStatusCode status, string advice)
+    {
+        using var client = Client(new FakeHttpHandler().OnError(HttpMethod.Post, "/query", status, "PathNotFoundError"));
+        var data = new FailureData();
+
+        await AppInsightsFailures.ReadAsync(client, Binding(), Scope, From, From.AddDays(7), new FailureQuery(), data);
+
+        Assert.Contains(advice, Assert.Single(data.Notes));
+    }
+
     [Fact]
     public async Task A_kind_this_version_cannot_read_is_said_and_not_queried()
     {

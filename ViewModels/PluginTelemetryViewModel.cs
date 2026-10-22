@@ -195,7 +195,7 @@ public sealed class PluginTelemetryViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Log.Warn("A plug-in's App Insights telemetry could not be read", ex);
-            Status = $"App Insights ({_binding.Name}) could not be read - {ex.Message}";
+            Status = $"App Insights ({_binding.Name}) could not be read - {ex.Message}{(ex as AzureMonitorException)?.Advice}";
         }
         finally
         {

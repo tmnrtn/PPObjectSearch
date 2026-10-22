@@ -73,10 +73,17 @@ straight into the maker portal.
   - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files, with
     syntax highlighting in both themes, line numbers and Ctrl+F search. Very large or minified
     files are shown as plain text, since highlighting them would make the viewer crawl.
+  - **Plug-in assemblies, types and steps** also get an **App Insights** tab where the environment
+    has an [Application Insights](#application-insights) resource chosen.
   - **Environment variables**: the current value in this environment, the default, and which applies.
   - **Tables**: their columns, relationships, keys, forms and views; Dataverse's stored row count
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
     one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
+- **Failures** (in the sidebar, under the selected environment) — cloud flow runs, classic
+  workflow jobs and plug-in trace log entries that ended in error over a period, with the trend,
+  each failing component and its errors grouped, optionally narrowed to the solution on screen.
+  With an [Application Insights](#application-insights) resource chosen, the failed plug-ins,
+  failed requests and exceptions it holds join them as a fourth source.
 - **Solution history** (in the sidebar, under the selected environment) — every import, upgrade,
   uninstall and export in an environment, with the error for any that failed. **Import log** on
   a row opens that import's log (`importjob.data`) as a grid: each component's type, result
@@ -794,6 +801,37 @@ Each goes through the [production guard](#the-production-guard) and is confirmed
 names the environment and its type. Each is recorded in the run log under
 `%LOCALAPPDATA%\PPObjectSearch\writes\` with the state it replaced and the write that reverses it.
 
+## Application Insights
+
+If an environment's telemetry goes to Azure Application Insights - the Power Platform admin
+center's **Data export > App Insights** for Dataverse - the app can read it beside what Dataverse
+holds. Nothing is written to Azure.
+
+1. Right-click the environment in the sidebar (or open the account menu at the top right) and
+   choose **App Insights resource…**. Every Application Insights resource your account can see in
+   Azure is listed, by subscription and resource group. Picking one checks the last day of its
+   telemetry and says whether this environment's rows are arriving there.
+2. **Only this environment's telemetry** keeps the rows that name this environment - by its
+   organization id, environment id or host - since one resource can receive several environments'
+   export. Untick it for a resource that receives this environment alone.
+3. **Failures** then has an **App Insights** source: failed plug-in executions with the exception
+   each threw, failed Web API requests, and exceptions neither of those claims. A plug-in failure
+   both the trace log and App Insights hold is listed under each but counted once. Opening a
+   request or exception takes you to its operation in the resource's Logs in the Azure portal.
+4. A plug-in assembly, type or step's details get an **App Insights** tab: executions, failures,
+   average and 95th-percentile duration over a period, its latest failures and the selected
+   exception in full. It is read only when the tab is shown.
+
+The choice is saved per environment under `AppInsights` in `settings.json`. Reading needs
+**Reader** (or **Monitoring Reader**) on the resource, or its resource group or subscription, for
+the account the environment's tab is signed in with. Resources in Azure Government and Azure China
+are read through those clouds' own endpoints; a GCC environment is taken to use commercial Azure.
+
+**Check Azure access…**, on the same menus, tries each Azure API the feature uses - Resource
+Manager to list resources, the Application Insights and Log Analytics query APIs - as the tab's
+account, and says what worked and, for what did not, whether the sign-in client or the account's
+Azure role is the reason. The results can be copied, and are written to the log.
+
 ## Updates
 
 Once a day the app asks GitHub whether a newer release exists, and if so shows a link to it under
@@ -814,6 +852,11 @@ By default the app uses Microsoft's pre-consented public client for Dataverse to
 registration is needed**. If your tenant blocks it, register your own public client with the
 `http://localhost` redirect URI and the Dynamics CRM `user_impersonation` delegated permission,
 then set `ClientId` in settings (below).
+
+[Application Insights](#application-insights) is read through Azure Resource Manager and the
+Application Insights query API, as the same client. If **Check Azure access…** says the client is
+not allowed those APIs in your tenant, give your own registration the **Azure Service Management**
+`user_impersonation` and **Application Insights API** `Data.Read` delegated permissions as well.
 
 ### Government and China clouds
 
@@ -857,6 +900,22 @@ fixed and the app restarted.
 
   // Whether the main window's object detail pane is showing.
   "IsDetailPaneOpen": true,
+
+  // The Application Insights resource each environment's telemetry is read from, keyed by host.
+  // Set with "App Insights resource…" on the environment's menu. Kind is what the resource holds;
+  // only "DataverseExport" is read so far.
+  "AppInsights": {
+    "contoso.crm11.dynamics.com": [
+      {
+        "Kind": "DataverseExport",
+        "ResourceId": "/subscriptions/<id>/resourceGroups/rg-telemetry/providers/microsoft.insights/components/contoso-dataverse",
+        "AppId": "00000000-0000-0000-0000-000000000000",
+        "Name": "contoso-dataverse",
+        "SubscriptionName": "Contoso Production",
+        "OnlyThisEnvironment": true
+      }
+    ]
+  },
 
   // Power Platform environment ids for maker portal links, keyed by host. Only needed if
   // automatic discovery is blocked in your tenant.

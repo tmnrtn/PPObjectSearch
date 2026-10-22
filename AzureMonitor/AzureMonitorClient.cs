@@ -42,6 +42,15 @@ public sealed class AzureMonitorException : Exception
     public AzureFailure Failure { get; }
     public HttpStatusCode? StatusCode { get; }
 
+    /// <summary>What to do next about a chosen resource that failed this way, or nothing to add.</summary>
+    public string Advice => Failure switch
+    {
+        AzureFailure.NotFound => " Choose the resource again with 'App Insights resource…' on the environment's menu.",
+        AzureFailure.ClientNotAllowed or AzureFailure.SignIn or AzureFailure.Forbidden =>
+            " 'Check Azure access…' on the environment's menu shows what this account can reach.",
+        _ => string.Empty
+    };
+
     /// <summary>The AADSTS code of a refused sign-in, or the API's own error code.</summary>
     public string? ErrorCode { get; }
 }

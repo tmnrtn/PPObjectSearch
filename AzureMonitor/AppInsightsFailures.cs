@@ -30,7 +30,7 @@ public static class AppInsightsFailures
         catch (Exception ex)
         {
             Log.Warn("App Insights failures could not be read", ex);
-            data.Notes.Add($"App Insights ({binding.Name}) could not be read: {ex.Message}");
+            data.Notes.Add($"App Insights ({binding.Name}) could not be read: {ex.Message}{(ex as AzureMonitorException)?.Advice}");
             return;
         }
 

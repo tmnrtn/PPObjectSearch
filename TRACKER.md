@@ -160,14 +160,16 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
 
 ### Phase 5: Finish
 
-- [ ] **5.1 Errors and auth fallback.** Turn the outcomes from 0.3 into the final messages: missing
+- [x] **5.1 Errors and auth fallback.** Turn the outcomes from 0.3 into the final messages: missing
       Azure RBAC (Reader or Monitoring Reader on the resource), a token refused for the default client
       (pointing to the `ClientId` app registration and its permissions), and a resource deleted or
       moved (offer to pick again). Each is logged via `Log`.
-- [ ] **5.2 Docs.** Add a README feature bullet and an *Application Insights* section: what's read,
+  - `AzureMonitorException.Advice` adds the next step to notes and the tab status: choose the resource again (404) or run *Check Azure access…* (sign-in, client or role). Messages for AADSTS client refusals and 403s were built in 0.2; failures are logged via `Log.Warn`. Revisit wording once 0.3 results are in.
+- [x] **5.2 Docs.** Add a README feature bullet and an *Application Insights* section: what's read,
       required Azure roles, choosing the resource, sovereign clouds, and the app-registration
       permissions if 0.3 needs them. Document `AppInsights` under *Settings* and add the Azure
       permissions to *Authentication*.
+  - README: *Failures* feature bullet (the window was undocumented), App Insights tab under object details, a new *Application Insights* section, the `AppInsights` block in the settings example, and the extra delegated permissions under *Authentication*.
 - [ ] **5.3 [USER] End-to-end check on Windows** against the real environment: picker, Failures with
       and without a solution, a plug-in's tab, portal links, and a user without Azure access.
 - [ ] **5.4 Release.** Run the full test suite on Windows CI, check SonarQube is clean, bump the version
