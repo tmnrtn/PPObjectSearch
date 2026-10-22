@@ -221,5 +221,5 @@ union requests, dependencies, exceptions
 | project itemType, cloud_RoleName, cloud_RoleInstance, operation_Name, customDimensions
 ```
 
-- Organization/environment id field: none; the request `url` host is the only marker (assumed to be absolute, per the docs - confirm with the picker's check)
+- Organization/environment id field: none; the request `url` host is the only marker. Confirmed absolute (`https://ect-prod.crm11.dynamics.com/api/data/v9.0/…`); the export redacts query-string values to `[REDACTED-QueryParamKey]`/`[REDACTED-QueryParamValue]`.
 - Plug-in type / step / message / entity fields: documented, see above
