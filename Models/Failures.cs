@@ -4,7 +4,10 @@ public enum FailureSource
 {
     CloudFlow,
     ClassicWorkflow,
-    Plugin
+    Plugin,
+
+    /// <summary>The environment's Application Insights resource: plug-ins, failed requests, exceptions.</summary>
+    AppInsights
 }
 
 /// <summary>One failure: a flow run, a system job or a plug-in trace entry that ended in error.</summary>
@@ -35,10 +38,26 @@ public sealed class FailureEvent
     /// <summary>The plug-in step that failed, where the trace says.</summary>
     public Guid? StepId { get; init; }
 
+    /// <summary>An App Insights failure of a plug-in, whose component key is the plug-in type name.</summary>
+    public bool IsPlugin { get; init; }
+
+    /// <summary>An App Insights failure's operation id, which ties its request, plug-ins and exceptions together.</summary>
+    public string? OperationId { get; init; }
+
+    /// <summary>An App Insights exception's full text - type, messages and dimensions - where there is one.</summary>
+    public string? Details { get; init; }
+
+    /// <summary>
+    /// An App Insights plug-in failure the trace log also holds - the same plug-in failing at the
+    /// same moment. Both are listed, but it is counted once.
+    /// </summary>
+    public bool AlsoInTraceLog { get; set; }
+
     public string SourceLabel => Source switch
     {
         FailureSource.CloudFlow => "Cloud flow",
         FailureSource.ClassicWorkflow => "Classic workflow",
+        FailureSource.AppInsights => "App Insights",
         _ => "Plug-in"
     };
 
@@ -54,6 +73,8 @@ public sealed class FailureEvent
     {
         FailureSource.Plugin => string.IsNullOrWhiteSpace(Context) ? "Plug-in" : Context,
         FailureSource.CloudFlow => string.IsNullOrWhiteSpace(ErrorCode) ? "Flow run" : ErrorCode,
+        FailureSource.AppInsights when !string.IsNullOrWhiteSpace(Context) => Context,
+        FailureSource.AppInsights => IsPlugin ? "Plug-in" : "Request",
         _ => "System job"
     };
 }
@@ -74,6 +95,9 @@ public sealed class FailureData
     public int SystemJobsRead { get; set; }
     public int TraceLogsRead { get; set; }
 
+    /// <summary>App Insights rows read - failed plug-ins, failed requests and exceptions - before any were matched up.</summary>
+    public int TelemetryRowsRead { get; set; }
+
     /// <summary>
     /// The trace log entries read that held an exception, in scope or not. Entries with an empty
     /// exception are read too, so this can be far fewer than <see cref="TraceLogsRead"/>.
@@ -87,6 +111,7 @@ public sealed class FailureQuery
     public bool CloudFlows { get; init; } = true;
     public bool ClassicWorkflows { get; init; } = true;
     public bool Plugins { get; init; } = true;
+    public bool AppInsights { get; init; } = true;
 
     /// <summary>Only these workflows (flows and classic) - a solution's - when set.</summary>
     public IReadOnlySet<Guid>? WorkflowIds { get; init; }

@@ -71,27 +71,31 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
 
 ### Phase 1: Resource picker and per-environment setting
 
-- [ ] **1.1 Settings model.** Add `AppSettings.AppInsights: Dictionary<host, List<TelemetryBinding>>`.
+- [x] **1.1 Settings model.** Add `AppSettings.AppInsights: Dictionary<host, List<TelemetryBinding>>`.
       `TelemetryBinding` holds `ResourceId`, `AppId`, `Name`, `SubscriptionName` and a
       `TelemetryKind` enum (`DataverseExport` now; `PowerAutomateExport`, `CanvasApp` and `Custom`
       reserved). Use a list per environment so later kinds and several canvas apps fit without a
       schema change. `Get`/`Set` follow the browser-profile pattern; the dictionary is re-keyed
       case-insensitively on load. Tests: round-trip, re-keying, clearing, unknown kinds kept.
-- [ ] **1.2 ARM listing in `AzureMonitorClient`.** Add `ListSubscriptionsAsync` and
+  - `Models/Telemetry.cs` (`TelemetryKind`, `TelemetryBinding` with `Kind` stored as text and `KnownKind` parsed from it) and `AppSettings.AppInsights` with `Get/SetTelemetryBinding`; an emptied section is dropped. Tests in `tests/.../AppInsights/TelemetrySettingsTests.cs`.
+- [x] **1.2 ARM listing in `AzureMonitorClient`.** Add `ListSubscriptionsAsync` and
       `ListAppInsightsComponentsAsync`. Use ARM `providers/Microsoft.Insights/components` per
       subscription, or one Resource Graph query if 0.3 shows it's allowed. Handle paging via
       `nextLink`, return name, resource group, location, app id and workspace id, and skip
       subscriptions that refuse with a note. Tests against the fake, including paging and a 403
       subscription.
-- [ ] **1.3 Picker window.** Add *App Insights resource…* to the environment's sidebar context menu.
+  - Done in 0.2 (`ListSubscriptionsAsync`, `ListComponentsAsync`, `ListAllComponentsAsync`, tested in `AzureMonitorClientTests`). Per-subscription ARM listing rather than Resource Graph, since it needs nothing beyond Reader.
+- [x] **1.3 Picker window.** Add *App Insights resource…* to the environment's sidebar context menu.
       It opens a list of components (filterable by name or subscription) with the current choice
       ticked, plus *None*. Saving stores a `DataverseExport` binding for the environment. The
       session exposes `AppInsightsBinding` / `HasAppInsights` and raises changes like
       `RaiseBrowserProfile`. Tests: view model selection, save and clear (Windows CI for the VM tests).
-- [ ] **1.4 Connection check.** After a pick, run one query (`<table> | take 1` over the last day)
+  - `ViewModels/AppInsightsPickerViewModel.cs` + `Views/AppInsightsPickerWindow.xaml`, opened from *App Insights resource…* in both environment menus; the session (`EnvironmentSessionViewModel.Telemetry.cs`) exposes `AppInsightsBinding`, `HasAppInsights`, `TelemetryScope`, `AppInsightsChanged`, and keeps `OrganizationId` from RetrieveCurrentOrganization. Added `TelemetryBinding.OnlyThisEnvironment` (a picker checkbox) as an escape hatch in case the environment filter does not match the real export. VM tests in `tests/.../ViewModels/AppInsightsPickerViewModelTests.cs` (Windows CI only).
+- [x] **1.4 Connection check.** After a pick, run one query (`<table> | take 1` over the last day)
       and count rows for this environment's organization id. The picker then says either "Receiving
       telemetry from this environment" or "Nothing from this environment in the last day — is the
       export pointed here?". Uses the filter from 2.2.
+  - Selecting a resource (or toggling the checkbox) runs `TelemetryProfiles.CheckAsync` - one `union … | summarize Total, Matching` over the last day - and `TelemetryCheck.Describe` words the result; the newest pick cancels an older check.
 
 ### Phase 2: Query layer and the Dataverse export schema
 
@@ -99,19 +103,21 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
       capture* (a few rows each of exceptions, plug-in dependencies, failed requests, with
       `customDimensions`), redact anything sensitive, and paste the results. Turn them into
       JSON fixtures under `tests/PPObjectSearch.Tests/AppInsights/`. This answers question 3.
-- [ ] **2.2 `AzureMonitorClient.QueryAsync`.** POST a KQL query with a `timespan`, get a typed table
+- [x] **2.2 `AzureMonitorClient.QueryAsync`.** POST a KQL query with a `timespan`, get a typed table
       back (columns plus rows, with `dynamic` columns parsed), and cancel through the token. Cap rows
       with `| take` (reuse `DataverseClient.MaxFailureRows` semantics) and report when the result was
       cut short. API errors (`BadArgumentError`, throttling, partial results) become messages. Use the
       shared `RetryHandler` pipeline and the internal handler constructor for tests. Tests: parsing,
       partial-error note, 403 message, cancellation.
-- [ ] **2.3 `TelemetryProfile` per `TelemetryKind`.** The KQL templates and column mapping for one
+  - Built in 0.2; the row cap (`| take 5000`) and the "cut short"/partial-result notes live in `DataverseExportProfile.ReadFailuresAsync`. Query goes to the App Insights API by app id with classic table names (pending confirmation at 0.3).
+- [x] **2.3 `TelemetryProfile` per `TelemetryKind`.** The KQL templates and column mapping for one
       kind of export, kept pure and testable. `DataverseExportProfile` gives the
       failures query (plug-in exceptions and failed Dataverse requests), filtered to the
       environment's organization id. It also gives the per-plug-in queries (exceptions; executions
       with count, failures and p95 duration). The other kinds are left as stubs only, so adding them
       later means adding a profile and nothing else. Tests: generated KQL for the given time,
       environment and scope. KQL string literals are escaped (no injection from names).
+  - `AzureMonitor/TelemetryProfiles.cs` (`ITelemetryProfile`, `TelemetryScope`, environment filter matching org id / env id / host as text in customDimensions, cloud_RoleInstance and cloud_RoleName) and `DataverseExportProfile.cs` (failed plug-in dependencies, exceptions and failed requests joined in C# by operation/parent id; plug-in summary query). `Kql.Literal` escapes values. Fixtures in `tests/.../AppInsights/TelemetryFixtures.cs` are provisional until 2.1.
 
 ### Phase 3: App Insights in the Failures window
 

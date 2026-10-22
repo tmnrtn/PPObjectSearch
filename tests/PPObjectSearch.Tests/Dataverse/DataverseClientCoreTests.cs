@@ -269,13 +269,13 @@ public class DataverseClientCoreTests
     public async Task Current_organization_reads_nested_identity()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "RetrieveCurrentOrganization",
-            "{\"Detail\":{\"OrganizationId\":\"o\",\"FriendlyName\":\"Contoso Dev\",\"UniqueName\":\"unq123\"," +
+            "{\"Detail\":{\"OrganizationId\":\"6f3b2c1a-0000-4000-8000-00000000c0de\",\"FriendlyName\":\"Contoso Dev\",\"UniqueName\":\"unq123\"," +
             "\"EnvironmentId\":\"env-42\",\"Endpoints\":{\"Count\":1}}}");
         using var client = Fakes.Dataverse(handler);
 
         var org = await client.RetrieveCurrentOrganizationAsync();
 
-        Assert.Equal(new OrganizationDetails("Contoso Dev", "unq123", "env-42"), org);
+        Assert.Equal(new OrganizationDetails("Contoso Dev", "unq123", "env-42", Guid.Parse("6f3b2c1a-0000-4000-8000-00000000c0de")), org);
         Assert.Contains("AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default'", handler.Requests[0].Url);
     }
 

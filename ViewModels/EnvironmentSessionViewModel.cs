@@ -1197,6 +1197,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             Status = "Resolving environment...";
             var organization = await _client.RetrieveCurrentOrganizationAsync(cts.Token);
 
+            OrganizationId = organization?.OrganizationId;
             Title = !string.IsNullOrWhiteSpace(organization?.FriendlyName)
                 ? organization.FriendlyName
                 : DeriveTitle(_client.EnvironmentUrl);
@@ -1387,6 +1388,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         _client?.Dispose();
         _client = null;
         _linkBuilder = null;
+        OrganizationId = null;
         EnvironmentType = null;
         _authContext = NewAuthContext();
 
