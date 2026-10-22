@@ -2,7 +2,7 @@ namespace PPObjectSearch.Core;
 
 /// <summary>
 /// The endpoints of one Microsoft cloud. Sign-in, Graph, Power Automate, the Power Platform API,
-/// discovery and the maker portals all live at different hosts in the government and China
+/// discovery, the maker portals and Azure all live at different hosts in the government and China
 /// clouds, so nothing that leaves Dataverse may assume the public one.
 /// </summary>
 public sealed record Cloud(
@@ -16,13 +16,43 @@ public sealed record Cloud(
     string MakerPortal,
     string FlowPortal,
     IReadOnlyList<string> EnvironmentHostSuffixes,
+    AzureEndpoints Azure,
     string? PowerAppsResource = null,
     string? PowerAppsApi = null,
     string? PlayPortal = null,
     string? CopilotStudioPortal = null);
 
+/// <summary>
+/// The Azure side of a cloud, where an environment's Application Insights resource lives. Each
+/// API's base URL is also the resource its tokens are asked for.
+/// </summary>
+/// <param name="ResourceManager">Azure Resource Manager, which lists subscriptions and resources.</param>
+/// <param name="AppInsightsApi">The Application Insights query API, which takes an app id.</param>
+/// <param name="LogAnalyticsApi">The Log Analytics query API, which takes a workspace or resource id.</param>
+/// <param name="Portal">The Azure portal, for links to a resource or a query.</param>
+public sealed record AzureEndpoints(string ResourceManager, string AppInsightsApi, string LogAnalyticsApi, string Portal);
+
 public static class Clouds
 {
+    private static readonly AzureEndpoints PublicAzure = new(
+        "https://management.azure.com",
+        "https://api.applicationinsights.io",
+        "https://api.loganalytics.io",
+        "https://portal.azure.com");
+
+    // GCC High and DoD both sit in Azure Government; DoD regions share its endpoints.
+    private static readonly AzureEndpoints GovernmentAzure = new(
+        "https://management.usgovcloudapi.net",
+        "https://api.applicationinsights.us",
+        "https://api.loganalytics.us",
+        "https://portal.azure.us");
+
+    private static readonly AzureEndpoints ChinaAzure = new(
+        "https://management.chinacloudapi.cn",
+        "https://api.applicationinsights.azure.cn",
+        "https://api.loganalytics.azure.cn",
+        "https://portal.azure.cn");
+
     public static readonly Cloud Public = new(
         "Public",
         "https://login.microsoftonline.com",
@@ -34,12 +64,16 @@ public static class Clouds
         "https://make.powerapps.com",
         "https://make.powerautomate.com",
         [".dynamics.com"],
+        PublicAzure,
         PowerAppsResource: "https://service.powerapps.com/",
         PowerAppsApi: "https://api.powerapps.com",
         PlayPortal: "https://apps.powerapps.com",
         CopilotStudioPortal: "https://copilotstudio.microsoft.com");
 
-    /// <summary>GCC: the commercial directory and Graph, the government Power Platform services.</summary>
+    /// <summary>
+    /// GCC: the commercial directory and Graph, the government Power Platform services. A GCC
+    /// tenant signs in to commercial Azure, so its Azure resources are taken to be there.
+    /// </summary>
     public static readonly Cloud UsGcc = new(
         "US Government (GCC)",
         "https://login.microsoftonline.com",
@@ -51,6 +85,7 @@ public static class Clouds
         "https://make.gov.powerapps.us",
         "https://make.gov.powerautomate.us",
         [".crm9.dynamics.com"],
+        PublicAzure,
         PowerAppsResource: "https://gov.service.powerapps.us/",
         PowerAppsApi: "https://gov.api.powerapps.us",
         PlayPortal: "https://apps.gov.powerapps.us");
@@ -66,6 +101,7 @@ public static class Clouds
         "https://make.high.powerapps.us",
         "https://make.high.powerautomate.us",
         [".microsoftdynamics.us"],
+        GovernmentAzure,
         PowerAppsResource: "https://high.service.powerapps.us/",
         PowerAppsApi: "https://high.api.powerapps.us",
         PlayPortal: "https://apps.high.powerapps.us");
@@ -81,6 +117,7 @@ public static class Clouds
         "https://make.apps.appsplatform.us",
         "https://make.powerautomate.appsplatform.us",
         [".appsplatform.us"],
+        GovernmentAzure,
         PowerAppsResource: "https://service.apps.appsplatform.us/",
         PowerAppsApi: "https://api.apps.appsplatform.us",
         PlayPortal: "https://play.apps.appsplatform.us");
@@ -96,6 +133,7 @@ public static class Clouds
         "https://make.powerapps.cn",
         "https://make.powerautomate.cn",
         [".dynamics.cn"],
+        ChinaAzure,
         PowerAppsResource: "https://service.powerapps.cn/",
         PowerAppsApi: "https://api.powerapps.cn",
         PlayPortal: "https://apps.powerapps.cn");
