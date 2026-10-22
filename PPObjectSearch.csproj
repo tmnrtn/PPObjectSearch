@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.90.1" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.91.1" />
   </ItemGroup>
 
   <ItemGroup>
