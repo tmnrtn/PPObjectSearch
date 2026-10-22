@@ -121,25 +121,29 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
 
 ### Phase 3: App Insights in the Failures window
 
-- [ ] **3.1 Model.** Add `FailureSource.AppInsights` with a `TelemetryKind` and an `OperationId` /
+- [x] **3.1 Model.** Add `FailureSource.AppInsights` with a `TelemetryKind` and an `OperationId` /
       `ItemId` on `FailureEvent` for linking. Set `SourceLabel` to "App Insights" and `StepLabel` to
       the plug-in message and entity or the request operation. The component key is the plug-in type
       name (the key the trace log uses) or the request's operation name. Add `FailureData.TelemetryRowsRead`.
-- [ ] **3.2 Reading.** `AppInsightsFailures.ReadAsync(binding, profile, from, to, query, data)` runs
+  - `Models/Failures.cs`: `FailureSource.AppInsights`, `FailureEvent.IsPlugin/OperationId/Details/AlsoInTraceLog`, `FailureData.TelemetryRowsRead`, `FailureQuery.AppInsights`; request and exception component keys are prefixed `request:`/`exception:` so they never collide with a plug-in type name. `DetailsTab.Telemetry` added here as OpenEvent targets it.
+- [x] **3.2 Reading.** `AppInsightsFailures.ReadAsync(binding, profile, from, to, query, data)` runs
       next to `DataverseClient.GetFailuresAsync`. Its failures go through the same `Source(...)` note
       handling, so a missing resource, a refused token or a 403 becomes a note rather than an error.
       Solution scoping maps `FailureQuery.PluginTypeNames` into the KQL. Tests against the fake with the
       2.1 fixtures, including scoping and the notes.
-- [ ] **3.3 Window.** Add an *App Insights* include toggle in `FailuresViewModel`, shown only when the
+  - `AzureMonitor/AppInsightsFailures.ReadAsync` runs after `GetFailuresAsync` in `FailuresViewModel.LoadAsync` whenever a binding exists (every source is read; pills only filter). Failures to read, and kinds without a profile, become notes. Tests in `AppInsightsFailuresTests.cs`.
+- [x] **3.3 Window.** Add an *App Insights* include toggle in `FailuresViewModel`, shown only when the
       environment has a binding. Without one, show a hint linking to the picker. `EmptyText` and the
       notes pick it up. `OpenEvent` on an App Insights event opens the plug-in's details
       (via `ItemFor`), or failing that the Azure portal: a Logs deep link scoped to the resource,
       querying the event's operation id. Exports include the new source. Tests: VM toggling,
       component grouping, export rows.
-- [ ] **3.4 Overlap with the trace log.** When both sources report the same plug-in failure (same
+  - *App Insights* pill (shown only with a binding) and an *Add App Insights…* link otherwise; the window re-reads when the session raises `AppInsightsChanged`. A plug-in failure opens the loaded plug-in on its App Insights tab; a request/exception opens its operation in the portal Logs (`AzureMonitor/AppInsightsLinks.cs`, gzip+base64 share-link format - verify at 5.3). CSV export gains Operation and Also-in-trace-log columns. VM tests in `tests/.../ViewModels/FailuresAppInsightsTests.cs`.
+- [x] **3.4 Overlap with the trace log.** When both sources report the same plug-in failure (same
       type, within a second, same message), keep both but mark the App Insights one, so the counts
       on the summary band are honest. Say so in the notes, for example "n failures also in the
       trace log". Tests on `FailureOverview`.
+  - `FailureOverview.MarkTraceLogOverlaps` (same type, within 2 s, one-to-one) and `FailureOverview.Counted` (drops marked failures only while trace-log failures are shown); `TotalFailures` and the Markdown total use it, and a note says how many overlapped.
 
 ### Phase 4: App Insights tab in object details
 

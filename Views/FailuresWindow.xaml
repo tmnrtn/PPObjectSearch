@@ -164,6 +164,13 @@
                         <ToggleButton Style="{StaticResource SourcePill}" Content="Plug-ins" Tag="{Binding PluginFailureCount}"
                                       IsChecked="{Binding IncludePlugins}"
                                       ToolTip="Plug-in trace log entries with an exception - only where plug-in trace logging is on" />
+                        <ToggleButton Style="{StaticResource SourcePill}" Content="App Insights" Tag="{Binding AppInsightsFailureCount}"
+                                      IsChecked="{Binding IncludeAppInsights}" ToolTip="{Binding AppInsightsToolTip}"
+                                      Visibility="{Binding HasAppInsights, Converter={StaticResource BoolToVis}}" />
+                        <Button Style="{StaticResource LinkButton}" Content="Add App Insights…" Height="24" Margin="6,0,0,0"
+                                Command="{Binding ChooseAppInsightsCommand}"
+                                ToolTip="Choose the Application Insights resource this environment's Dataverse data export writes to"
+                                Visibility="{Binding HasAppInsights, Converter={StaticResource NotBoolToVis}}" />
                         <CheckBox Content="This solution only" Margin="14,0,0,0" VerticalAlignment="Center" IsChecked="{Binding SolutionOnly}"
                                   ToolTip="{Binding SolutionLabel}"
                                   Visibility="{Binding HasSolution, Converter={StaticResource BoolToVis}}" />

@@ -10,6 +10,9 @@ public enum DetailsTab
     Runs,
     Source,
     TraceLog,
+
+    /// <summary>The object's telemetry in the environment's App Insights resource.</summary>
+    Telemetry,
     Value,
     Connections,
     Components,
