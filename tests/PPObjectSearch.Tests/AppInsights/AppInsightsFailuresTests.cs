@@ -89,7 +89,7 @@ public class AppInsightsFailuresTests
 
         await AppInsightsFailures.ReadAsync(client, Binding(onlyThis: false), Scope, From, From.AddDays(7), new FailureQuery(), new FailureData());
 
-        Assert.All(handler.Requests, r => Assert.DoesNotContain("cloud_RoleInstance", r.Body));
+        Assert.All(handler.Requests, r => Assert.DoesNotContain("url contains", r.Body));
     }
 
     // ---------------------------------------------------------------- the trace log and App Insights together

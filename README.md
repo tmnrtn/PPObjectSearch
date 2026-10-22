@@ -811,9 +811,13 @@ holds. Nothing is written to Azure.
    choose **App Insights resource…**. Every Application Insights resource your account can see in
    Azure is listed, by subscription and resource group. Picking one checks the last day of its
    telemetry and says whether this environment's rows are arriving there.
-2. **Only this environment's telemetry** keeps the rows that name this environment - by its
-   organization id, environment id or host - since one resource can receive several environments'
-   export. Untick it for a resource that receives this environment alone.
+2. **Only this environment's telemetry** keeps this environment's rows, since one resource can
+   receive several environments' export. The export names the environment only in a request's
+   URL, so a request is kept when it was made to this environment's host, and a plug-in run or
+   exception when it belongs to the same operation as one of those requests. Plug-ins that run
+   outside a request - asynchronous ones, for instance - are only seen with the box unticked, which
+   is right for a resource that receives this environment alone; the check after picking says
+   when every request it found was this environment's.
 3. **Failures** then has an **App Insights** source: failed plug-in executions with the exception
    each threw, failed Web API requests, and exceptions neither of those claims. A plug-in failure
    both the trace log and App Insights hold is listed under each but counted once. Opening a

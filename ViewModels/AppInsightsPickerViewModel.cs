@@ -200,7 +200,7 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
             if (cts.IsCancellationRequested) return;
 
             CheckText = check.Describe(OnlyThisEnvironment);
-            CheckFoundTelemetry = OnlyThisEnvironment ? check.Matching > 0 : check.Total > 0;
+            CheckFoundTelemetry = check.Found(OnlyThisEnvironment);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {

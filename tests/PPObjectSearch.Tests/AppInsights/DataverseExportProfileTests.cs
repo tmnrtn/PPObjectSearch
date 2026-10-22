@@ -24,21 +24,35 @@ public class DataverseExportProfileTests
         Assert.Equal(literal, Kql.Literal(value));
 
     [Fact]
-    public void The_environment_filter_matches_each_id_in_the_common_columns()
+    public void Requests_are_this_environments_by_the_host_in_their_url()
     {
-        var filter = TelemetryProfiles.EnvironmentFilter(Scope);
+        Assert.Equal("| where url contains '//contoso.crm11.dynamics.com/'\n",
+            DataverseExportProfile.EnvironmentFilter(Scope, "requests"));
+    }
 
-        Assert.StartsWith("| where ", filter);
-        Assert.Contains($"tostring(customDimensions) contains '{OrganizationId}'", filter);
-        Assert.Contains("cloud_RoleInstance contains 'env-1'", filter);
-        Assert.Contains("cloud_RoleName contains 'contoso.crm11.dynamics.com'", filter);
+    [Theory]
+    [InlineData("dependencies")]
+    [InlineData("exceptions")]
+    public void Plug_ins_and_exceptions_are_this_environments_by_sharing_an_operation_with_its_requests(string table)
+    {
+        Assert.Equal("| where operation_Id in (requests | where url contains '//contoso.crm11.dynamics.com/' | distinct operation_Id)\n",
+            DataverseExportProfile.EnvironmentFilter(Scope, table));
     }
 
     [Fact]
     public void A_resource_for_this_environment_alone_is_not_filtered()
     {
-        Assert.Empty(TelemetryProfiles.EnvironmentFilter(Scope with { OnlyThisEnvironment = false }));
-        Assert.Empty(TelemetryProfiles.EnvironmentFilter(new TelemetryScope(null, null, null)));
+        Assert.Empty(DataverseExportProfile.EnvironmentFilter(Scope with { OnlyThisEnvironment = false }, "requests"));
+        Assert.Empty(DataverseExportProfile.EnvironmentFilter(new TelemetryScope(null, null, null), "dependencies"));
+    }
+
+    [Fact]
+    public void Every_failures_query_is_narrowed_to_the_environment()
+    {
+        Assert.Contains("operation_Id in (requests", DataverseExportProfile.FailedPluginsQuery(Scope, null));
+        Assert.Contains("operation_Id in (requests", DataverseExportProfile.ExceptionsQuery(Scope));
+        Assert.Contains("| where url contains", DataverseExportProfile.FailedRequestsQuery(Scope));
+        Assert.Contains("operation_Id in (requests", DataverseExportProfile.PluginSummaryQuery(Scope, ["Contoso.A"]));
     }
 
     [Fact]
@@ -201,24 +215,32 @@ public class DataverseExportProfileTests
     public async Task The_check_counts_rows_and_this_environments_share()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Post, "/query",
-            """{"tables":[{"name":"PrimaryResult","columns":[{"name":"Total","type":"long"},{"name":"Matching","type":"long"}],"rows":[[1200,300]]}]}""");
+            """{"tables":[{"name":"PrimaryResult","columns":[{"name":"Total","type":"long"},{"name":"Requests","type":"long"},{"name":"Matching","type":"long"}],"rows":[[1200,400,300]]}]}""");
         using var client = AzureMonitorClientTests.Client(handler);
         var now = new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
 
         var check = await TelemetryProfiles.CheckAsync(client, DataverseExportProfile.Instance, AzureMonitorClientTests.AppId, Scope, now);
 
-        Assert.Equal(new TelemetryCheck(1200, 300), check);
+        Assert.Equal(new TelemetryCheck(1200, 400, 300), check);
         Assert.StartsWith("union requests", Query(handler.Requests[0]));
+        Assert.Contains("Matching = countif(itemType == 'request' and url contains '//contoso.crm11.dynamics.com/')", Query(handler.Requests[0]));
         Assert.Contains("2026-10-21T12:00:00Z/2026-10-22T12:00:00Z", handler.Requests[0].Body);
     }
 
     [Theory]
-    [InlineData(0, 0, true, "Nothing has arrived")]
-    [InlineData(500, 0, true, "none mention this environment")]
-    [InlineData(500, 120, true, "120 of 500 rows")]
-    [InlineData(500, 0, false, "all read as this environment's")]
-    public void The_check_says_what_it_found(long total, long matching, bool only, string says) =>
-        Assert.Contains(says, new TelemetryCheck(total, matching).Describe(only));
+    [InlineData(0, 0, 0, true, "Nothing has arrived", false)]
+    [InlineData(500, 0, 0, true, "but no requests", false)]
+    [InlineData(500, 200, 0, true, "None of the 200 requests", false)]
+    [InlineData(500, 200, 120, true, "120 of 200 requests", true)]
+    [InlineData(500, 200, 200, true, "all 200 requests in the last day were made to it", true)]
+    [InlineData(500, 200, 0, false, "all read as this environment's", true)]
+    public void The_check_says_what_it_found(long total, long requests, long matching, bool only, string says, bool found)
+    {
+        var check = new TelemetryCheck(total, requests, matching);
+
+        Assert.Contains(says, check.Describe(only));
+        Assert.Equal(found, check.Found(only));
+    }
 
     private static string Query(RecordedRequest request) =>
         JsonDocument.Parse(request.Body!).RootElement.GetProperty("query").GetString()!;

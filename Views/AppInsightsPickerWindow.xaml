@@ -88,7 +88,7 @@
 
             <StackPanel Grid.Row="4" Margin="16,10,16,12">
                 <CheckBox Content="Only this environment's telemetry" IsChecked="{Binding OnlyThisEnvironment}"
-                          ToolTip="Keeps rows that name this environment, for a resource that receives several environments' export. Untick for a resource that receives this one alone." />
+                          ToolTip="Keeps requests made to this environment's host, and the plug-ins and exceptions in the same operations - for a resource that receives several environments' export. Untick for a resource that receives this one alone, to include plug-ins run outside a request." />
                 <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding CheckText}"
                            Visibility="{Binding CheckText, Converter={StaticResource EmptyToCollapsed}}">
                     <TextBlock.Style>

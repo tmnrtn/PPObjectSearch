@@ -16,7 +16,7 @@ public class AppInsightsPickerViewModelTests
 {
     private static readonly TelemetryScope Scope = new(Guid.Parse(TelemetryFixtures.OrganizationId), "env-1", "contoso.crm11.dynamics.com");
 
-    private static FakeHttpHandler Handler(long total = 900, long matching = 40) =>
+    private static FakeHttpHandler Handler(long total = 900, long matching = 40, long requests = 300) =>
         OnOneComponent(new FakeHttpHandler())
             .OnJson(HttpMethod.Post, "/query", JsonSerializer.Serialize(new
             {
@@ -25,8 +25,8 @@ public class AppInsightsPickerViewModelTests
                     new
                     {
                         name = "PrimaryResult",
-                        columns = new[] { new { name = "Total", type = "long" }, new { name = "Matching", type = "long" } },
-                        rows = new[] { new object[] { total, matching } }
+                        columns = new[] { new { name = "Total", type = "long" }, new { name = "Requests", type = "long" }, new { name = "Matching", type = "long" } },
+                        rows = new[] { new object[] { total, requests, matching } }
                     }
                 }
             }));
@@ -64,7 +64,7 @@ public class AppInsightsPickerViewModelTests
 
         Assert.True(vm.CanSave);
         Assert.True(vm.CheckFoundTelemetry);
-        Assert.Contains("40 of 900 rows", vm.CheckText);
+        Assert.Contains("40 of 300 requests", vm.CheckText);
 
         var binding = vm.Result()!;
         Assert.Equal(AppId, binding.AppId);
@@ -83,7 +83,7 @@ public class AppInsightsPickerViewModelTests
         await vm.CheckAsync();
 
         Assert.False(vm.CheckFoundTelemetry);
-        Assert.Contains("none mention this environment", vm.CheckText);
+        Assert.Contains("None of the 300 requests", vm.CheckText);
     }
 
     [Fact]

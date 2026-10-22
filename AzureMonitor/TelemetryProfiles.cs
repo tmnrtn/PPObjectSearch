@@ -4,31 +4,39 @@ namespace PPObjectSearch.AzureMonitor;
 
 /// <summary>
 /// Which environment's telemetry to read. One App Insights resource can receive several
-/// environments' export, so queries are narrowed to rows that name this one - by organization id,
-/// environment id or host - unless <see cref="OnlyThisEnvironment"/> is off.
+/// environments' export, so queries are narrowed to this one's rows unless
+/// <see cref="OnlyThisEnvironment"/> is off. How a row is told to be this environment's is the
+/// profile's business: the Dataverse export names the environment only in a request's URL.
 /// </summary>
 public sealed record TelemetryScope(Guid? OrganizationId, string? EnvironmentId, string? Host, bool OnlyThisEnvironment = true)
 {
-    /// <summary>The values a row is matched on, most specific first.</summary>
-    public IReadOnlyList<string> Terms =>
-        new[] { OrganizationId is { } org && org != Guid.Empty ? org.ToString() : null, EnvironmentId, Host }
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Select(t => t!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+    /// <summary>Whether rows are narrowed at all: asked to, and with a host to narrow by.</summary>
+    public bool Narrows => OnlyThisEnvironment && !string.IsNullOrWhiteSpace(Host);
 }
 
-/// <summary>What the connection check found: rows in the resource, and how many were this environment's.</summary>
-public sealed record TelemetryCheck(long Total, long Matching)
+/// <summary>
+/// What the connection check found over the last day: rows in the resource, the requests among
+/// them, and how many of those were made to this environment.
+/// </summary>
+public sealed record TelemetryCheck(long Total, long Requests, long Matching)
 {
-    public string Describe(bool onlyThisEnvironment) => (Total, Matching) switch
+    /// <summary>Whether this environment's telemetry is arriving, as far as the setting reads it.</summary>
+    public bool Found(bool onlyThisEnvironment) => onlyThisEnvironment ? Matching > 0 : Total > 0;
+
+    public string Describe(bool onlyThisEnvironment) => this switch
     {
-        (0, _) => "Nothing has arrived in this resource in the last day. Is the export switched on and pointed here?",
-        (_, 0) when onlyThisEnvironment =>
-            $"{Total:N0} rows arrived in the last day, but none mention this environment. Is this environment's export " +
-            "pointed here? If the resource only receives this environment, untick 'Only this environment's telemetry'.",
+        { Total: 0 } => "Nothing has arrived in this resource in the last day. Is the export switched on and pointed here?",
         _ when !onlyThisEnvironment => $"Receiving telemetry: {Total:N0} rows in the last day, all read as this environment's.",
-        _ => $"Receiving telemetry from this environment: {Matching:N0} of {Total:N0} rows in the last day."
+        { Requests: 0 } =>
+            $"{Total:N0} rows arrived in the last day but no requests, and only a request says which environment it was " +
+            "made to. If the resource only receives this environment, untick 'Only this environment's telemetry'.",
+        { Matching: 0 } =>
+            $"None of the {Requests:N0} requests in the last day were made to this environment. Is this environment's " +
+            "export pointed here?",
+        _ when Matching == Requests =>
+            $"Receiving telemetry from this environment: all {Requests:N0} requests in the last day were made to it. " +
+            "If no other environment's export comes here, untick to include plug-ins that ran outside a request, such as asynchronous ones.",
+        _ => $"Receiving telemetry from this environment: {Matching:N0} of {Requests:N0} requests in the last day were made to it."
     };
 }
 
@@ -40,7 +48,7 @@ public interface ITelemetryProfile
 {
     TelemetryKind Kind { get; }
 
-    /// <summary>A query over the last day: <c>Total</c> rows, and <c>Matching</c> rows that name the environment.</summary>
+    /// <summary>A query over the last day: <c>Total</c> rows, <c>Requests</c> among them, and <c>Matching</c> requests to the environment.</summary>
     string CheckQuery(TelemetryScope scope);
 
     /// <summary>
@@ -61,35 +69,12 @@ public static class TelemetryProfiles
         _ => null
     };
 
-    /// <summary>
-    /// A <c>where</c> clause that keeps rows naming the environment, or nothing when the scope does
-    /// not narrow. The columns are the ones every App Insights table has; the values are matched
-    /// as text anywhere in them, because which dimension the export puts them in is not fixed.
-    /// </summary>
-    public static string EnvironmentFilter(TelemetryScope scope) =>
-        !scope.OnlyThisEnvironment || scope.Terms.Count == 0
-            ? string.Empty
-            : $"| where {MatchExpression(scope)}\n";
-
-    /// <summary>True for a row that names the environment, for a filter or a <c>countif</c>.</summary>
-    public static string MatchExpression(TelemetryScope scope)
-    {
-        if (scope.Terms.Count == 0) return "true";
-
-        return string.Join(" or ", scope.Terms.SelectMany(term => new[]
-        {
-            $"tostring(customDimensions) contains {Kql.Literal(term)}",
-            $"cloud_RoleInstance contains {Kql.Literal(term)}",
-            $"cloud_RoleName contains {Kql.Literal(term)}"
-        }));
-    }
-
     /// <summary>Runs the profile's check over the last day.</summary>
     public static async Task<TelemetryCheck> CheckAsync(AzureMonitorClient client, ITelemetryProfile profile, string appId,
         TelemetryScope scope, DateTimeOffset now, CancellationToken ct = default)
     {
         using var table = await client.QueryAsync(appId, profile.CheckQuery(scope), now.AddDays(-1), now, ct).ConfigureAwait(false);
         var row = table.Rows.FirstOrDefault();
-        return new TelemetryCheck((long)(row?.Number("Total") ?? 0), (long)(row?.Number("Matching") ?? 0));
+        return new TelemetryCheck((long)(row?.Number("Total") ?? 0), (long)(row?.Number("Requests") ?? 0), (long)(row?.Number("Matching") ?? 0));
     }
 }

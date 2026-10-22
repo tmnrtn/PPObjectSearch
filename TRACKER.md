@@ -100,10 +100,11 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
 
 ### Phase 2: Query layer and the Dataverse export schema
 
-- [ ] **2.1 [USER] Capture the real schema.** In the portal, run the KQL listed under *Findings → schema
+- [x] **2.1 [USER] Capture the real schema.** In the portal, run the KQL listed under *Findings → schema
       capture* (a few rows each of exceptions, plug-in dependencies, failed requests, with
       `customDimensions`), redact anything sensitive, and paste the results. Turn them into
       JSON fixtures under `tests/PPObjectSearch.Tests/AppInsights/`. This answers question 3.
+  - Table shapes from Microsoft's docs; the environment marker from a real sample (see *Findings*): no row names the environment except a request's URL, so `DataverseExportProfile.EnvironmentFilter` matches requests by host and everything else by operation, and `TelemetryCheck` now counts requests.
 - [x] **2.2 `AzureMonitorClient.QueryAsync`.** POST a KQL query with a `timespan`, get a typed table
       back (columns plus rows, with `dynamic` columns parsed), and cancel through the token. Cap rows
       with `| take` (reuse `DataverseClient.MaxFailureRows` semantics) and report when the result was
@@ -205,8 +206,14 @@ documents most of it, and the profile now follows it (2026-10-22):
 - Requests: `name` is only "Web API Request" / "Organization Service Request"; `operation_Name` says what it was.
 - Exceptions: `type`/`problemId`, `outerMessage`, dimensions `exceptionSource`, `pluginName`, `entityName`.
 
-Still undocumented - **where the environment is named**. Run in the resource's *Logs* over the last
-day and paste the output (redact as needed):
+Where the environment is named - captured from ECT-Prod's resource on 2026-10-22: **nowhere but a
+request's URL**. `cloud_RoleName` and `cloud_RoleInstance` are always "CDS Data Export", and request
+`customDimensions` hold only `userAgent` (sometimes `RoleIds`); `operation_Name` is "GET /api/data/v9.0/…"
+with no host. So the filter now keeps requests whose `url` contains `//<host>/`, and plug-ins and
+exceptions whose `operation_Id` is one of those requests'. The check counts requests to this host
+against all requests.
+
+Query that was run:
 
 ```kusto
 union requests, dependencies, exceptions
@@ -214,5 +221,5 @@ union requests, dependencies, exceptions
 | project itemType, cloud_RoleName, cloud_RoleInstance, operation_Name, customDimensions
 ```
 
-- Organization/environment id field: _
+- Organization/environment id field: none; the request `url` host is the only marker (assumed to be absolute, per the docs - confirm with the picker's check)
 - Plug-in type / step / message / entity fields: documented, see above

@@ -18,9 +18,11 @@ public sealed record PluginTelemetrySummary(long Executions, long Failures, doub
 /// execution is a dependency of type <c>Plugin</c> named by its fully qualified type, with
 /// <c>PluginType</c>, <c>StepName</c> and <c>EntityName</c> among its dimensions; a request is named
 /// only "Web API Request" or "Organization Service Request", so <c>operation_Name</c> says what it
-/// was; an exception carries <c>exceptionSource</c>, <c>pluginName</c> and <c>entityName</c>. Where
-/// the export names the environment is not documented, so it is not assumed - see
-/// <see cref="TelemetryProfiles.EnvironmentFilter"/>.
+/// was; an exception carries <c>exceptionSource</c>, <c>pluginName</c> and <c>entityName</c>.
+///
+/// No row names its environment - every one is the role "CDS Data Export", and the dimensions hold
+/// only the user agent - except a request, whose URL holds the environment's host. A plug-in or an
+/// exception is this environment's when a request to it shares its operation: see <see cref="EnvironmentFilter"/>.
 /// </summary>
 public sealed class DataverseExportProfile : ITelemetryProfile
 {
@@ -47,35 +49,53 @@ public sealed class DataverseExportProfile : ITelemetryProfile
     // ---------------------------------------------------------------- queries
 
     public string CheckQuery(TelemetryScope scope) =>
-        "union requests, dependencies, exceptions, traces, pageViews\n" +
-        $"| summarize Total = count(), Matching = countif({TelemetryProfiles.MatchExpression(scope)})";
+        "union requests, dependencies, exceptions\n" +
+        "| summarize Total = count(), Requests = countif(itemType == 'request'), " +
+        $"Matching = countif(itemType == 'request' and {RequestMatch(scope)})";
+
+    /// <summary>True for a request made to the environment: its URL holds the host.</summary>
+    private static string RequestMatch(TelemetryScope scope) =>
+        string.IsNullOrWhiteSpace(scope.Host) ? "true" : $"url contains {Kql.Literal("//" + scope.Host.Trim() + "/")}";
+
+    /// <summary>
+    /// A <c>where</c> clause keeping the environment's rows of one table, or nothing when the scope
+    /// does not narrow: requests by their URL, anything else by sharing an operation with one.
+    /// </summary>
+    internal static string EnvironmentFilter(TelemetryScope scope, string table)
+    {
+        if (!scope.Narrows) return string.Empty;
+
+        return table == "requests"
+            ? $"| where {RequestMatch(scope)}\n"
+            : $"| where operation_Id in (requests | where {RequestMatch(scope)} | distinct operation_Id)\n";
+    }
 
     /// <summary>Failed plug-in executions, newest first - only the named plug-in types when given.</summary>
     public static string FailedPluginsQuery(TelemetryScope scope, IReadOnlyCollection<string>? pluginTypeNames) =>
         PluginRows +
         "| where success == false\n" +
-        TelemetryProfiles.EnvironmentFilter(scope) +
+        EnvironmentFilter(scope, "dependencies") +
         PluginNameFilter(pluginTypeNames) +
         "| project timestamp, id, operation_Id, name, resultCode, duration, customDimensions\n" +
         $"| order by timestamp desc\n| take {MaxRows}";
 
     public static string ExceptionsQuery(TelemetryScope scope) =>
         "exceptions\n" +
-        TelemetryProfiles.EnvironmentFilter(scope) +
+        EnvironmentFilter(scope, "exceptions") +
         "| project timestamp, operation_Id, operation_ParentId, operation_Name, type, outerMessage, innermostMessage, problemId, customDimensions\n" +
         $"| order by timestamp desc\n| take {MaxRows}";
 
     public static string FailedRequestsQuery(TelemetryScope scope) =>
         "requests\n" +
         "| where success == false\n" +
-        TelemetryProfiles.EnvironmentFilter(scope) +
+        EnvironmentFilter(scope, "requests") +
         "| project timestamp, id, operation_Id, operation_Name, name, resultCode, url, duration, customDimensions\n" +
         $"| order by timestamp desc\n| take {MaxRows}";
 
     /// <summary>How often the plug-in ran, how often it failed, and how long it took.</summary>
     public static string PluginSummaryQuery(TelemetryScope scope, IReadOnlyCollection<string> pluginTypeNames) =>
         PluginRows +
-        TelemetryProfiles.EnvironmentFilter(scope) +
+        EnvironmentFilter(scope, "dependencies") +
         PluginNameFilter(pluginTypeNames) +
         "| summarize Executions = count(), Failures = countif(success == false), AverageMs = avg(duration), " +
         "P95Ms = percentile(duration, 95), Last = max(timestamp)";
