@@ -6,9 +6,9 @@ using PPObjectSearch.Tests.Infrastructure;
 namespace PPObjectSearch.Tests.AppInsights;
 
 /// <summary>
-/// Query responses shaped like the Dataverse data export's rows. The column names are App
-/// Insights' own; the customDimensions keys are provisional until real rows are captured
-/// (TRACKER.md, step 2.1) and should be replaced with redacted real ones then.
+/// Query responses shaped like the Dataverse data export's rows, as Microsoft's "Telemetry events
+/// for Microsoft Dataverse" describes them. Replace them with redacted real rows once captured
+/// (TRACKER.md, step 2.1) - in particular, where the environment is named is not documented.
 /// </summary>
 internal static class TelemetryFixtures
 {
@@ -22,7 +22,7 @@ internal static class TelemetryFixtures
                      {"name":"customDimensions","type":"dynamic"}],
           "rows":[
             ["2026-10-20T08:15:02.000Z","dep-1","op-1","Contoso.Plugins.AccountPostUpdate","Failed",812.5,
-             "{\"MessageName\":\"Update\",\"PrimaryEntityName\":\"account\",\"orgId\":\"6f3b2c1a-0000-4000-8000-00000000c0de\"}"]
+             "{\"Depth\":\"1\",\"EntityName\":\"account\",\"IsolationType\":\"2\",\"PluginName\":\"Contoso.Plugins\",\"PluginType\":\"Contoso.Plugins.AccountPostUpdate\",\"PluginVersion\":\"1.0.0.0\",\"Stage\":\"40\",\"StepName\":\"Contoso.Plugins.AccountPostUpdate: Update of account\"}"]
           ]}]}
         """;
 
@@ -33,21 +33,23 @@ internal static class TelemetryFixtures
                      {"name":"innermostMessage","type":"string"},{"name":"problemId","type":"string"},{"name":"customDimensions","type":"dynamic"}],
           "rows":[
             ["2026-10-20T08:15:02.010Z","op-1","dep-1","PATCH accounts","Microsoft.Xrm.Sdk.InvalidPluginExecutionException",
-             "Credit limit cannot be negative.","Credit limit cannot be negative.","InvalidPluginExecutionException at AccountPostUpdate","{}"],
+             "Credit limit cannot be negative.","Credit limit cannot be negative.","InvalidPluginExecutionException at AccountPostUpdate",
+             "{\"clientType\":\"Web\",\"exceptionSource\":\"Contoso.Plugins.AccountPostUpdate\",\"entityName\":\"account\",\"pluginName\":\"Contoso.Plugins\"}"],
             ["2026-10-20T09:00:00.000Z","op-2","req-2","POST contacts","System.ServiceModel.FaultException",
              "A record with matching key values already exists.","Duplicate key","FaultException at Create","{}"],
-            ["2026-10-20T10:00:00.000Z","op-3","","GET accounts","System.TimeoutException","The operation timed out.","","TimeoutException","{}"]
+            ["2026-10-20T10:00:00.000Z","op-3","","","System.TimeoutException","The operation timed out.","","TimeoutException",
+             "{\"clientType\":\"UCIClient\",\"exceptionSource\":\"RetrieveMultiple\",\"entityName\":\"account\"}"]
           ]}]}
         """;
 
     public const string FailedRequests = """
         {"tables":[{"name":"PrimaryResult",
           "columns":[{"name":"timestamp","type":"datetime"},{"name":"id","type":"string"},{"name":"operation_Id","type":"string"},
-                     {"name":"name","type":"string"},{"name":"resultCode","type":"string"},{"name":"url","type":"string"},
+                     {"name":"operation_Name","type":"string"},{"name":"name","type":"string"},{"name":"resultCode","type":"string"},{"name":"url","type":"string"},
                      {"name":"duration","type":"real"},{"name":"customDimensions","type":"dynamic"}],
           "rows":[
-            ["2026-10-20T08:15:01.900Z","req-1","op-1","PATCH accounts","400","https://contoso.crm11.dynamics.com/api/data/v9.2/accounts(1)",900,"{}"],
-            ["2026-10-20T09:00:00.000Z","req-2","op-2","POST contacts","412","https://contoso.crm11.dynamics.com/api/data/v9.2/contacts",120,"{}"]
+            ["2026-10-20T08:15:01.900Z","req-1","op-1","PATCH accounts","Web API Request","400","https://contoso.crm11.dynamics.com/api/data/v9.2/accounts(1)",900,"{}"],
+            ["2026-10-20T09:00:00.000Z","req-2","op-2","POST contacts","Web API Request","412","https://contoso.crm11.dynamics.com/api/data/v9.2/contacts",120,"{}"]
           ]}]}
         """;
 

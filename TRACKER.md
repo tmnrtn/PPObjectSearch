@@ -197,14 +197,22 @@ _Results from the [USER] checkpoints go here._
 
 ### 2.1 Schema capture
 
-Run in the App Insights resource's *Logs* over the last 7 days, then paste the output (redacted):
+Microsoft's [Telemetry events for Microsoft Dataverse](https://learn.microsoft.com/en-us/power-platform/admin/telemetry-events-dataverse)
+documents most of it, and the profile now follows it (2026-10-22):
+
+- Plug-in executions: `dependencies` with `type == "Plugin"`, `name` = fully qualified type (may carry a
+  version), dimensions `PluginType`, `StepName` ("Type: Creation of account"), `EntityName`, `Stage`, `Depth`.
+- Requests: `name` is only "Web API Request" / "Organization Service Request"; `operation_Name` says what it was.
+- Exceptions: `type`/`problemId`, `outerMessage`, dimensions `exceptionSource`, `pluginName`, `entityName`.
+
+Still undocumented - **where the environment is named**. Run in the resource's *Logs* over the last
+day and paste the output (redact as needed):
 
 ```kusto
-exceptions | take 5 | project timestamp, type, outerMessage, problemId, operation_Id, operation_Name, cloud_RoleName, cloud_RoleInstance, customDimensions
-dependencies | summarize n = count() by type | order by n desc
-dependencies | where type has "plugin" | take 5 | project timestamp, name, type, target, success, resultCode, duration, operation_Id, customDimensions
-requests | where success == false | take 5 | project timestamp, name, resultCode, duration, operation_Id, customDimensions
+union requests, dependencies, exceptions
+| take 10
+| project itemType, cloud_RoleName, cloud_RoleInstance, operation_Name, customDimensions
 ```
 
 - Organization/environment id field: _
-- Plug-in type / step / message / entity fields: _
+- Plug-in type / step / message / entity fields: documented, see above

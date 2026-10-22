@@ -138,7 +138,7 @@ public class AzureMonitorClientTests
             {"tables":[{"name":"PrimaryResult",
               "columns":[{"name":"timestamp","type":"datetime"},{"name":"name","type":"string"},{"name":"success","type":"bool"},
                          {"name":"duration","type":"real"},{"name":"customDimensions","type":"dynamic"}],
-              "rows":[["2026-10-20T08:15:02.123Z","Contoso.Plugins.AccountPostUpdate",false,812.5,"{\"MessageName\":\"Update\",\"EntityName\":\"account\"}"]]}]}
+              "rows":[["2026-10-20T08:15:02.123Z","Contoso.Plugins.AccountPostUpdate",false,812.5,"{\"StepName\":\"Contoso.Plugins.AccountPostUpdate: Update of account\",\"EntityName\":\"account\"}"]]}]}
             """);
         using var client = Client(handler);
         var from = new DateTimeOffset(2026, 10, 13, 0, 0, 0, TimeSpan.Zero);

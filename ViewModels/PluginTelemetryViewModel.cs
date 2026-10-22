@@ -208,7 +208,7 @@ public sealed class PluginTelemetryViewModel : ObservableObject, IDisposable
     {
         var query = SelectedFailure?.OperationId is { Length: > 0 } operation
             ? AppInsightsLinks.OperationQuery(operation)
-            : "dependencies\n| where type contains 'plugin'\n" +
+            : "dependencies\n| where type =~ 'Plugin'\n" +
               (_names is { Count: > 0 } names
                   ? "| where " + string.Join(" or ", names.Select(n => $"name startswith {Kql.Literal(n)}")) + "\n"
                   : string.Empty) +

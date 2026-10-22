@@ -46,7 +46,7 @@ public class DataverseExportProfileTests
     {
         var query = DataverseExportProfile.FailedPluginsQuery(Scope, ["Contoso.Plugins.A", "Bad'Name"]);
 
-        Assert.StartsWith("dependencies", query);
+        Assert.StartsWith("dependencies\n| where type =~ 'Plugin'", query);
         Assert.Contains("| where success == false", query);
         Assert.Contains("name startswith 'Contoso.Plugins.A' or name startswith 'Bad\\'Name'", query);
         Assert.EndsWith($"| take {DataverseExportProfile.MaxRows}", query);
@@ -96,7 +96,8 @@ public class DataverseExportProfileTests
         var scoped = DataverseExportProfile.ToFailures(Table(FailedPlugins), Table(Exceptions), TelemetryTable.Empty, includeUnmatched: false);
 
         var stray = Assert.Single(all, e => e.ComponentKey.StartsWith("exception:", StringComparison.Ordinal));
-        Assert.Equal("GET accounts", stray.ComponentName);
+        Assert.Equal("RetrieveMultiple", stray.ComponentName);
+        Assert.Equal("Exception on account", stray.StepLabel);
         Assert.Equal("The operation timed out.", stray.ErrorMessage);
         Assert.Equal(3, all.Count);
         Assert.Single(scoped);
@@ -106,16 +107,31 @@ public class DataverseExportProfileTests
     [InlineData("Contoso.Plugins.AccountPostUpdate", "Contoso.Plugins.AccountPostUpdate")]
     [InlineData("Contoso.Plugins.AccountPostUpdate, Contoso.Plugins, Version=1.0.0.0", "Contoso.Plugins.AccountPostUpdate")]
     [InlineData("Contoso.Plugins.AccountPostUpdate: Update of account", "Contoso.Plugins.AccountPostUpdate")]
+    [InlineData("Contoso.Plugins.AccountPostUpdate (1.0.0.0)", "Contoso.Plugins.AccountPostUpdate")]
     [InlineData("", "(unknown plug-in)")]
     public void The_plug_in_type_is_the_class_name(string name, string type) =>
         Assert.Equal(type, DataverseExportProfile.PluginTypeName(name));
 
     [Fact]
-    public void The_context_reads_whichever_dimensions_are_there()
+    public void The_context_is_the_step_names_description_or_else_the_table()
     {
-        Assert.Equal("Create of contact", DataverseExportProfile.PluginContext(new Dictionary<string, string> { ["Message"] = "Create", ["Entity"] = "contact" }));
-        Assert.Equal("Publish", DataverseExportProfile.PluginContext(new Dictionary<string, string> { ["MessageName"] = "Publish", ["PrimaryEntityName"] = "none" }));
+        Assert.Equal("Creation of contact", DataverseExportProfile.PluginContext(
+            new Dictionary<string, string> { ["StepName"] = "Contoso.Validate: Creation of contact", ["EntityName"] = "contact" }));
+        Assert.Equal("contact", DataverseExportProfile.PluginContext(
+            new Dictionary<string, string> { ["StepName"] = "Validate on contact", ["EntityName"] = "contact" }));
+        Assert.Null(DataverseExportProfile.PluginContext(new Dictionary<string, string> { ["EntityName"] = "none" }));
         Assert.Null(DataverseExportProfile.PluginContext(new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void The_plug_in_type_dimension_names_the_component_over_the_name_column()
+    {
+        var plugins = Table(TelemetryFixtures.FailedPlugins.Replace("\"Contoso.Plugins.AccountPostUpdate\",\"Failed\"",
+            "\"Contoso.Plugins.AccountPostUpdate v2.1\",\"Failed\"", StringComparison.Ordinal));
+
+        var plugin = Assert.Single(DataverseExportProfile.ToFailures(plugins, TelemetryTable.Empty, TelemetryTable.Empty, includeUnmatched: false));
+
+        Assert.Equal("Contoso.Plugins.AccountPostUpdate", plugin.ComponentKey);
     }
 
     // ---------------------------------------------------------------- reading

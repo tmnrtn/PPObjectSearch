@@ -14,9 +14,13 @@ public sealed record PluginTelemetrySummary(long Executions, long Failures, doub
 /// plug-in executions as <c>dependencies</c>, Web API calls as <c>requests</c>, and what threw as
 /// <c>exceptions</c>, tied together by operation id.
 ///
-/// The column names are App Insights' own and fixed. Which <c>customDimensions</c> hold a
-/// plug-in's message and table is less certain, so several names are tried, and where the
-/// export names the environment is not assumed at all - see <see cref="TelemetryProfiles.EnvironmentFilter"/>.
+/// What each table holds follows Microsoft's "Telemetry events for Microsoft Dataverse": a plug-in
+/// execution is a dependency of type <c>Plugin</c> named by its fully qualified type, with
+/// <c>PluginType</c>, <c>StepName</c> and <c>EntityName</c> among its dimensions; a request is named
+/// only "Web API Request" or "Organization Service Request", so <c>operation_Name</c> says what it
+/// was; an exception carries <c>exceptionSource</c>, <c>pluginName</c> and <c>entityName</c>. Where
+/// the export names the environment is not documented, so it is not assumed - see
+/// <see cref="TelemetryProfiles.EnvironmentFilter"/>.
 /// </summary>
 public sealed class DataverseExportProfile : ITelemetryProfile
 {
@@ -31,11 +35,14 @@ public sealed class DataverseExportProfile : ITelemetryProfile
     /// <summary>Most rows read per table in one period; past it the result says it is cut short.</summary>
     public const int MaxRows = Dataverse.DataverseClient.MaxFailureRows;
 
-    // Plug-in executions are dependencies of type "Plugin"; "contains" also takes in any variant.
-    private const string PluginRows = "dependencies\n| where type contains 'plugin'\n";
+    // Plug-in executions are dependencies of type "Plugin"; SDK calls are "SDK Retrieve" and the like.
+    private const string PluginRows = "dependencies\n| where type =~ 'Plugin'\n";
 
-    private static readonly string[] MessageKeys = ["MessageName", "Message", "messagename", "PluginMessage", "SdkMessage"];
-    private static readonly string[] EntityKeys = ["PrimaryEntityName", "PrimaryEntity", "EntityName", "Entity", "EntityLogicalName"];
+    // Dimension names, matched without case: the dependency's are capitalised, the exception's not.
+    private const string PluginTypeKey = "PluginType";
+    private const string StepNameKey = "StepName";
+    private const string EntityNameKey = "EntityName";
+    private const string ExceptionSourceKey = "exceptionSource";
 
     // ---------------------------------------------------------------- queries
 
@@ -62,7 +69,7 @@ public sealed class DataverseExportProfile : ITelemetryProfile
         "requests\n" +
         "| where success == false\n" +
         TelemetryProfiles.EnvironmentFilter(scope) +
-        "| project timestamp, id, operation_Id, name, resultCode, url, duration, customDimensions\n" +
+        "| project timestamp, id, operation_Id, operation_Name, name, resultCode, url, duration, customDimensions\n" +
         $"| order by timestamp desc\n| take {MaxRows}";
 
     /// <summary>How often the plug-in ran, how often it failed, and how long it took.</summary>
@@ -142,7 +149,8 @@ public sealed class DataverseExportProfile : ITelemetryProfile
         {
             var operation = plugin.String("operation_Id");
             var exception = Claim(plugin.String("id"), operation);
-            var typeName = PluginTypeName(plugin.String("name"));
+            var dimensions = plugin.Properties("customDimensions");
+            var typeName = PluginTypeName(dimensions.GetValueOrDefault(PluginTypeKey) is { Length: > 0 } type ? type : plugin.String("name"));
             if (operation is not null) failedOperations.Add(operation);
 
             events.Add(new FailureEvent
@@ -154,7 +162,7 @@ public sealed class DataverseExportProfile : ITelemetryProfile
                 When = plugin.Date("timestamp") ?? DateTimeOffset.MinValue,
                 ErrorCode = exception?.String("type") ?? plugin.String("resultCode"),
                 ErrorMessage = Message(exception),
-                Context = PluginContext(plugin.Properties("customDimensions")) ?? PluginContext(exception?.Properties("customDimensions")),
+                Context = PluginContext(dimensions) ?? PluginContext(exception?.Properties("customDimensions")),
                 OperationId = operation,
                 RunName = plugin.String("id"),
                 Details = exception is null ? null : Describe(exception)
@@ -169,7 +177,9 @@ public sealed class DataverseExportProfile : ITelemetryProfile
             if (operation is not null && failedOperations.Contains(operation)) continue;
 
             var exception = Claim(null, operation);
-            var name = request.String("name") ?? "Request";
+
+            // The name is only ever "Web API Request" or "Organization Service Request"; the operation says what was asked.
+            var name = request.String("operation_Name") is { Length: > 0 } op ? op : request.String("name") ?? "Request";
 
             events.Add(new FailureEvent
             {
@@ -191,7 +201,10 @@ public sealed class DataverseExportProfile : ITelemetryProfile
         {
             foreach (var exception in exceptions.Rows.Where(r => !claimed.Contains(r)))
             {
-                var name = exception.String("operation_Name") is { Length: > 0 } op ? op : exception.String("type") ?? "Exception";
+                var dimensions = exception.Properties("customDimensions");
+                var name = exception.String("operation_Name") is { Length: > 0 } op ? op
+                    : dimensions.GetValueOrDefault(ExceptionSourceKey) is { Length: > 0 } source ? source
+                    : exception.String("type") ?? "Exception";
 
                 events.Add(new FailureEvent
                 {
@@ -201,7 +214,9 @@ public sealed class DataverseExportProfile : ITelemetryProfile
                     When = exception.Date("timestamp") ?? DateTimeOffset.MinValue,
                     ErrorCode = exception.String("type"),
                     ErrorMessage = Message(exception),
-                    Context = "Exception",
+                    Context = dimensions.GetValueOrDefault(EntityNameKey) is { Length: > 0 } entity and not "none"
+                        ? $"Exception on {entity}"
+                        : "Exception",
                     OperationId = exception.String("operation_Id"),
                     RunName = exception.String("problemId"),
                     Details = Describe(exception)
@@ -213,36 +228,35 @@ public sealed class DataverseExportProfile : ITelemetryProfile
     }
 
     /// <summary>
-    /// The plug-in type a dependency names: its class name, before any assembly (after a comma) or
-    /// step description (after a colon) the export adds.
+    /// The plug-in type a dependency names: its class name, before any version, assembly or step
+    /// the export adds after it. A type name holds none of the characters that start them.
     /// </summary>
     internal static string PluginTypeName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "(unknown plug-in)";
 
-        var end = name.IndexOfAny([',', ':']);
-        return (end > 0 ? name[..end] : name).Trim();
+        var trimmed = name.Trim();
+        var end = trimmed.IndexOfAny([',', ':', ' ', '(']);
+        return end > 0 ? trimmed[..end] : trimmed;
     }
 
-    /// <summary>"Update of account", as the trace log puts it - from whichever dimensions the export used.</summary>
+    /// <summary>
+    /// What the plug-in ran on, as the trace log puts it: "Creation of account", from the step
+    /// name the registration tool writes ("Contoso.Validate: Creation of account") - or, for a step
+    /// named otherwise, the table alone.
+    /// </summary>
     internal static string? PluginContext(IReadOnlyDictionary<string, string>? dimensions)
     {
         if (dimensions is null) return null;
 
-        var message = First(dimensions, MessageKeys);
-        var entity = First(dimensions, EntityKeys);
-
-        return (message, entity) switch
+        if (dimensions.GetValueOrDefault(StepNameKey) is { } step && step.IndexOf(": ", StringComparison.Ordinal) is var colon and > 0 &&
+            step[(colon + 2)..].Trim() is { Length: > 0 } described)
         {
-            (null, null) => null,
-            (_, null or "none") => message,
-            (null, _) => entity,
-            _ => $"{message} of {entity}"
-        };
-    }
+            return described;
+        }
 
-    private static string? First(IReadOnlyDictionary<string, string> dimensions, IEnumerable<string> keys) =>
-        keys.Select(k => dimensions.TryGetValue(k, out var v) ? v : null).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        return dimensions.GetValueOrDefault(EntityNameKey) is { Length: > 0 } entity and not "none" ? entity : null;
+    }
 
     /// <summary>The outer message, with the innermost after it where that says something more.</summary>
     private static string? Message(TelemetryRow? exception)
