@@ -38,6 +38,7 @@ public sealed partial class EnvironmentSessionViewModel
         OnPropertyChanged(nameof(AppInsightsBinding));
         OnPropertyChanged(nameof(HasAppInsights));
         OnPropertyChanged(nameof(AppInsightsDescription));
+        OnPropertyChanged(nameof(DetailShortcuts));
         AppInsightsChanged?.Invoke(this, EventArgs.Empty);
     }
 

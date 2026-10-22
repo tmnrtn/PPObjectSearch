@@ -884,7 +884,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
     /// <summary>The detail pane's "Open in details" buttons for the selected object.</summary>
     public IReadOnlyList<DetailsShortcut> DetailShortcuts =>
-        SelectedItem is { } item ? DetailsTabs.ShortcutsFor(item) : [];
+        SelectedItem is { } item ? DetailsTabs.ShortcutsFor(item, HasAppInsights) : [];
 
     public bool IsSelectedEnvironmentVariable =>
         SelectedItem is { } item && DetailsTabs.KindOf(item) == ObjectKind.EnvironmentVariable;

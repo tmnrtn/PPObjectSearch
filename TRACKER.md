@@ -147,14 +147,16 @@ telemetry (each app's own connection string) and custom SDK telemetry without be
 
 ### Phase 4: App Insights tab in object details
 
-- [ ] **4.1 Tab plumbing.** Add `DetailsTab.Telemetry` ("App Insights"). `DetailsTabs.TabsFor` and
+- [x] **4.1 Tab plumbing.** Add `DetailsTab.Telemetry` ("App Insights"). `DetailsTabs.TabsFor` and
       `ShortcutsFor` take whether the environment has a binding, and add the tab for
       `ObjectKind.Plugin` only when it does (more kinds come later via the profile). Tests in
       the existing `DetailsTabs` tests.
-- [ ] **4.2 Content.** For a plug-in type or step, show executions, failures and p95 duration over
+  - `DetailsTab.Telemetry`; `TabsFor`/`Resolve`/`ShortcutsFor` take an optional `hasTelemetry`, passed from `ObjectDetailsViewModel` (via the session's binding) and the session's `DetailShortcuts` (re-raised on `AppInsightsChanged`). Tests in `PluginTelemetryTests.cs` and `ObjectDetailsTelemetryTests.cs`.
+- [x] **4.2 Content.** For a plug-in type or step, show executions, failures and p95 duration over
       a period picker, plus the latest exceptions (time, message, entity, operation id) with the full
       exception text in a code view. Add an *Open in Azure portal* link. Load lazily when the tab is
       first shown and cancel on close, as the trace log does. Tests: the view model with the fake.
+  - `ViewModels/PluginTelemetryViewModel.cs` hangs off `ObjectDetailsViewModel.Telemetry` and loads only when the tab is selected; `DataverseClient.GetPluginTypeNamesAsync` maps a type/step/assembly to type names. The tab (in `ObjectDetailsWindow.xaml`) has a period picker, executions/failures/average/p95/last-ran tiles, the latest 50 failures and the selected exception in full, plus *Open in Azure portal*.
 
 ### Phase 5: Finish
 

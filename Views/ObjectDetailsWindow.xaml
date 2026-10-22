@@ -859,6 +859,116 @@
                         </Grid>
                     </TabItem>
 
+                    <!-- A plug-in's telemetry in the environment's App Insights resource, read when first shown. -->
+                    <TabItem Header="App Insights" Tag="{x:Static models:DetailsTab.Telemetry}"
+                             Visibility="{Binding HasTelemetry, Converter={StaticResource BoolToVis}}">
+                        <Grid DataContext="{Binding Telemetry}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.3*" MinWidth="380" />
+                                <ColumnDefinition Width="*" MinWidth="300" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Where it comes from, the period, and the way out to the portal. -->
+                            <Grid Grid.Row="0" Grid.ColumnSpan="2" Margin="12,10,12,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding SourceLabel}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <ComboBox Width="160" core:Ui.InlineLabel="Period" FontWeight="SemiBold"
+                                              AutomationProperties.Name="Period"
+                                              ItemsSource="{Binding Periods}" SelectedItem="{Binding Period}">
+                                        <ComboBox.ItemContainerStyle>
+                                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                                <Setter Property="FontWeight" Value="Normal" />
+                                            </Style>
+                                        </ComboBox.ItemContainerStyle>
+                                    </ComboBox>
+                                    <Button Content="Refresh" Height="28" Margin="6,0,0,0" Command="{Binding RefreshCommand}" />
+                                    <Button Content="Open in Azure portal" Height="28" Margin="6,0,0,0" Command="{Binding OpenInPortalCommand}"
+                                            ToolTip="The selected failure's operation in the resource's Logs - or, with none selected, this plug-in's executions" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Executions, failures and timings over the period. -->
+                            <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="12,0,12,8">
+                                <WrapPanel.Resources>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Margin" Value="0,0,28,0" />
+                                    </Style>
+                                </WrapPanel.Resources>
+                                <StackPanel>
+                                    <TextBlock Text="EXECUTIONS" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="{Binding ExecutionsLabel}" FontSize="18" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="FAILURES" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock FontSize="18" FontWeight="SemiBold">
+                                        <Run Text="{Binding FailuresLabel, Mode=OneWay}" />
+                                        <Run Text="{Binding FailureRateLabel, Mode=OneWay}" FontSize="12" FontWeight="Normal"
+                                             Foreground="{DynamicResource Muted}" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="AVERAGE" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="{Binding AverageLabel}" FontSize="18" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="P95" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="{Binding P95Label}" FontSize="18" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="LAST RAN" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="{Binding LastLabel}" FontSize="18" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <DockPanel Grid.Row="2" Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
+                                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Status}" />
+                                </Border>
+                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Failures}"
+                                          SelectedItem="{Binding SelectedFailure}" SelectionMode="Single" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="When" Width="140" SortMemberPath="When"
+                                                            Binding="{Binding When, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"
+                                                            ElementStyle="{StaticResource CellMuted}"
+                                                            HeaderStyle="{StaticResource PaneFirstHeader}" />
+                                        <DataGridTextColumn Header="Where" Width="130" Binding="{Binding StepLabel}"
+                                                            ElementStyle="{StaticResource Cell}" />
+                                        <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorLine}">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                                    <Setter Property="ToolTip" Value="{Binding ErrorMessage}" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <!-- The selected failure's exception in full. -->
+                            <Border Grid.Row="2" Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}" Background="{DynamicResource Surface2}">
+                                        <TextBlock Text="Exception" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBox Style="{StaticResource CodeBox}" Text="{Binding SelectedDetails, Mode=OneWay}"
+                                             Background="{DynamicResource Surface}" />
+                                </DockPanel>
+                            </Border>
+                        </Grid>
+                    </TabItem>
+
                     <!-- An environment variable as this environment resolves it. -->
                     <TabItem Header="Value" Tag="{x:Static models:DetailsTab.Value}"
                              Visibility="{Binding IsEnvironmentVariable, Converter={StaticResource BoolToVis}}">

@@ -101,13 +101,17 @@ public static class DetailsTabs
         or ObjectKind.Agent or ObjectKind.CustomApi or ObjectKind.SecurityRole or ObjectKind.OptionSet
         or ObjectKind.BusinessProcessFlow or ObjectKind.BusinessRule;
 
-    /// <summary>The tabs the window shows for this kind, type-specific first.</summary>
-    public static IReadOnlyList<DetailsTab> TabsFor(ObjectKind kind)
+    /// <summary>
+    /// The tabs the window shows for this kind, type-specific first. A plug-in has an App Insights
+    /// tab too where the environment has a resource chosen (<paramref name="hasTelemetry"/>).
+    /// </summary>
+    public static IReadOnlyList<DetailsTab> TabsFor(ObjectKind kind, bool hasTelemetry = false)
     {
         IEnumerable<DetailsTab> own = kind switch
         {
             ObjectKind.CloudFlow => [DetailsTab.Design, DetailsTab.Runs, DetailsTab.Source, DetailsTab.Connections],
             ObjectKind.ClassicWorkflow => [DetailsTab.Runs],
+            ObjectKind.Plugin when hasTelemetry => [DetailsTab.TraceLog, DetailsTab.Telemetry],
             ObjectKind.Plugin => [DetailsTab.TraceLog],
             ObjectKind.WebResource => [DetailsTab.Source],
             ObjectKind.EnvironmentVariable => [DetailsTab.Value],
@@ -121,12 +125,14 @@ public static class DetailsTabs
     }
 
     /// <summary>A tab the kind does not have falls back to its default, rather than to a hidden tab.</summary>
-    public static DetailsTab Resolve(ObjectKind kind, DetailsTab requested) =>
-        requested != DetailsTab.Default && TabsFor(kind).Contains(requested) ? requested : DefaultFor(kind);
+    public static DetailsTab Resolve(ObjectKind kind, DetailsTab requested, bool hasTelemetry = false) =>
+        requested != DetailsTab.Default && TabsFor(kind, hasTelemetry).Contains(requested) ? requested : DefaultFor(kind);
 
     /// <summary>The detail pane's "Open in details" buttons for this object.</summary>
-    public static IReadOnlyList<DetailsShortcut> ShortcutsFor(SolutionComponentItem item) => KindOf(item) switch
+    public static IReadOnlyList<DetailsShortcut> ShortcutsFor(SolutionComponentItem item, bool hasTelemetry = false) => KindOf(item) switch
     {
+        ObjectKind.Plugin when hasTelemetry =>
+            [new("Trace log", DetailsTab.TraceLog), new("App Insights", DetailsTab.Telemetry), LayersShortcut],
         ObjectKind.CloudFlow =>
         [
             new("Design", DetailsTab.Design),

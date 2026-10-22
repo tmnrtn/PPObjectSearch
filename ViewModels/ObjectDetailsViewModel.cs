@@ -45,7 +45,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         Item = item;
         Kind = DetailsTabs.KindOf(item);
         SwitchKind = Switchable.KindOf(item);
-        _selectedTab = DetailsTabs.Resolve(Kind, openOn?.Tab ?? DetailsTab.Default);
+        Telemetry = CreateTelemetry(session);
+        _selectedTab = DetailsTabs.Resolve(Kind, openOn?.Tab ?? DetailsTab.Default, HasTelemetry);
         _preferredGroup = openOn?.Group;
 
         OpenLinkCommand = new RelayCommand(_ => OpenUrl(item.MakerUrl), _ => item.MakerUrl is not null);
@@ -83,8 +84,37 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         get => _selectedTab;
         set
         {
-            if (SetProperty(ref _selectedTab, value)) OnPropertyChanged(nameof(StatusText));
+            if (!SetProperty(ref _selectedTab, value)) return;
+            OnPropertyChanged(nameof(StatusText));
+            LoadTelemetryIfShown();
         }
+    }
+
+    // ---------------------------------------------------------------- App Insights
+
+    /// <summary>The plug-in's telemetry, where the environment has an App Insights resource chosen; read when its tab is shown.</summary>
+    public PluginTelemetryViewModel? Telemetry { get; }
+
+    public bool HasTelemetry => Telemetry is not null;
+
+    private PluginTelemetryViewModel? CreateTelemetry(EnvironmentSessionViewModel? session)
+    {
+        if (!HasTraceLog || session?.AppInsightsBinding is not { } binding) return null;
+
+        return new PluginTelemetryViewModel(
+            _client.CreateAzureMonitorClient,
+            binding,
+            session.TelemetryScope,
+            ct => _client.GetPluginTypeNamesAsync(Item.ObjectId, Item.ComponentType, ct),
+            _openUrl,
+            _client.Cloud.Azure,
+            session.TenantId);
+    }
+
+    /// <summary>Telemetry is a query against Azure, so it waits until someone looks at it.</summary>
+    private void LoadTelemetryIfShown()
+    {
+        if (SelectedTab == DetailsTab.Telemetry && Telemetry is { HasLoaded: false, IsBusy: false } telemetry) _ = telemetry.LoadAsync();
     }
 
     /// <summary>For a table opened on one group of its components - its columns, say.</summary>
@@ -1508,6 +1538,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         _countCts?.Dispose();
         _countCts = null;
         FlowDiagram?.Dispose();
+        Telemetry?.Dispose();
     }
 
     private void OnSessionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -1608,6 +1639,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         if (SwitchKind is not null) await LoadSwitchStateAsync(problems);
         if (HasConnections) await LoadConnectionsAsync(problems);
         if (HasOverview) await LoadOverviewAsync(problems);
+        LoadTelemetryIfShown();
     }
 
     private async Task LoadSolutionsAsync(List<string> problems)
