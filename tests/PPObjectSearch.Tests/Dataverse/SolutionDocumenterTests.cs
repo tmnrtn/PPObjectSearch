@@ -55,7 +55,7 @@ public class SolutionDocumenterTests
     public async Task Each_section_is_documented_and_secrets_are_redacted()
     {
         var pages = await new SolutionDocumenter(Fakes.Dataverse(Handler()))
-            .BuildAsync(Solution, Items(), "Dev", new DocumentationOptions());
+            .BuildAsync(Solution, Items(), "Dev", new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false });
 
         var index = pages[0].Markdown;
         Assert.Contains("# Contoso Core", index);
@@ -83,7 +83,7 @@ public class SolutionDocumenterTests
     [Fact]
     public async Task Sections_can_be_left_out_and_a_failing_one_is_named()
     {
-        var options = new DocumentationOptions { Flows = false, PluginSteps = false, Dependencies = false };
+        var options = new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false, Flows = false, PluginSteps = false, Dependencies = false };
         var handler = new FakeHttpHandler(); // nothing answers: every read fails
 
         var pages = await new SolutionDocumenter(Fakes.Dataverse(handler)).BuildAsync(Solution, Items(), "Dev", options);
@@ -98,7 +98,7 @@ public class SolutionDocumenterTests
     public async Task Output_is_one_file_or_an_index_with_a_file_per_component()
     {
         var pages = await new SolutionDocumenter(Fakes.Dataverse(Handler()))
-            .BuildAsync(Solution, Items(), "Dev", new DocumentationOptions());
+            .BuildAsync(Solution, Items(), "Dev", new DocumentationOptions { Processes = false, PluginsAndApis = false, Integrations = false, DataVolumes = false, ExecutionVolumes = false });
 
         var single = SolutionDocumenter.Render(pages, filePerComponent: false);
         var readme = Assert.Single(single).Value;

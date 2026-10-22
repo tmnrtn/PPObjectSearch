@@ -573,8 +573,8 @@ public sealed partial class DataverseClient : IDisposable
     public async Task<IReadOnlyList<SolutionInfo>> GetSolutionsAsync(CancellationToken ct = default)
     {
         var url = EnvironmentUrl + ApiPath +
-                  "solutions?$select=solutionid,uniquename,friendlyname,ismanaged,version" +
-                  "&$expand=publisherid($select=friendlyname)" +
+                  "solutions?$select=solutionid,uniquename,friendlyname,ismanaged,version,_parentsolutionid_value" +
+                  "&$expand=publisherid($select=friendlyname,customizationprefix)" +
                   "&$filter=isvisible eq true" +
                   "&$orderby=friendlyname asc";
 
@@ -596,7 +596,9 @@ public sealed partial class DataverseClient : IDisposable
                 Version = JsonHelper.GetString(row, "version"),
                 PublisherName = row.TryGetProperty("publisherid", out var pub) && pub.ValueKind == JsonValueKind.Object
                     ? JsonHelper.GetString(pub, "friendlyname")
-                    : null
+                    : null,
+                PublisherPrefix = pub.ValueKind == JsonValueKind.Object ? JsonHelper.GetString(pub, "customizationprefix") : null,
+                ParentSolutionId = Guid.TryParse(JsonHelper.GetString(row, "_parentsolutionid_value"), out var parent) ? parent : null
             });
         }, ct).ConfigureAwait(false);
 

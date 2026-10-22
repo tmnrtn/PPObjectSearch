@@ -25,7 +25,7 @@ public sealed partial class EnvironmentSessionViewModel
     {
         if (_client is null || !IsConnected || SelectedSolution is null)
         {
-            Status = "Choose a solution first - the documentation is of one solution.";
+            Status = "Choose a solution first - the documentation starts from it, and others can be added.";
             return;
         }
 

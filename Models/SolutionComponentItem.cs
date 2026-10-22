@@ -12,6 +12,12 @@ public sealed class SolutionInfo
     public string? Version { get; init; }
     public string? PublisherName { get; init; }
 
+    /// <summary>The publisher's customisation prefix ("contoso"), which its columns and tables carry.</summary>
+    public string? PublisherPrefix { get; init; }
+
+    /// <summary>For a patch, the solution it patches; null for a solution that is not a patch.</summary>
+    public Guid? ParentSolutionId { get; init; }
+
     public bool IsDefaultSolution =>
         string.Equals(UniqueName, "Default", StringComparison.OrdinalIgnoreCase);
 
