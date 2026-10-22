@@ -35,7 +35,7 @@ public class DataverseExportProfileTests
     [InlineData("exceptions")]
     public void Plug_ins_and_exceptions_are_this_environments_by_sharing_an_operation_with_its_requests(string table)
     {
-        Assert.Equal("| where operation_Id in (requests | where url contains '//contoso.crm11.dynamics.com/' | distinct operation_Id)\n",
+        Assert.Equal("| join kind=leftsemi (requests | where url contains '//contoso.crm11.dynamics.com/' | distinct operation_Id) on operation_Id\n",
             DataverseExportProfile.EnvironmentFilter(Scope, table));
     }
 
@@ -49,10 +49,12 @@ public class DataverseExportProfileTests
     [Fact]
     public void Every_failures_query_is_narrowed_to_the_environment()
     {
-        Assert.Contains("operation_Id in (requests", DataverseExportProfile.FailedPluginsQuery(Scope, null));
-        Assert.Contains("operation_Id in (requests", DataverseExportProfile.ExceptionsQuery(Scope));
+        // Never "in (requests | ...)": a busy environment's requests inlined that way pass the API's 53 MB argument limit.
+        Assert.DoesNotContain(" in (requests", DataverseExportProfile.FailedPluginsQuery(Scope, null) + DataverseExportProfile.ExceptionsQuery(Scope));
+        Assert.Contains("join kind=leftsemi (requests", DataverseExportProfile.FailedPluginsQuery(Scope, null));
+        Assert.Contains("join kind=leftsemi (requests", DataverseExportProfile.ExceptionsQuery(Scope));
         Assert.Contains("| where url contains", DataverseExportProfile.FailedRequestsQuery(Scope));
-        Assert.Contains("operation_Id in (requests", DataverseExportProfile.PluginSummaryQuery(Scope, ["Contoso.A"]));
+        Assert.Contains("join kind=leftsemi (requests", DataverseExportProfile.PluginSummaryQuery(Scope, ["Contoso.A"]));
     }
 
     [Fact]

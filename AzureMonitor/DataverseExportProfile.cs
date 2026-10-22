@@ -58,16 +58,22 @@ public sealed class DataverseExportProfile : ITelemetryProfile
         string.IsNullOrWhiteSpace(scope.Host) ? "true" : $"url contains {Kql.Literal("//" + scope.Host.Trim() + "/")}";
 
     /// <summary>
-    /// A <c>where</c> clause keeping the environment's rows of one table, or nothing when the scope
-    /// does not narrow: requests by their URL, anything else by sharing an operation with one.
+    /// What keeps the environment's rows of one table, or nothing when the scope does not narrow:
+    /// requests by their URL, anything else by sharing an operation with one of those requests.
     /// </summary>
+    /// <remarks>
+    /// The operations are matched with a semi-join rather than <c>operation_Id in (requests | …)</c>:
+    /// a busy environment's week of requests, inlined as the list <c>in</c> takes, is over the query
+    /// API's 53 MB limit on arguments (SEM0023). The rows being narrowed - failures, mostly - are the
+    /// left side, which Kusto wants to be the smaller.
+    /// </remarks>
     internal static string EnvironmentFilter(TelemetryScope scope, string table)
     {
         if (!scope.Narrows) return string.Empty;
 
         return table == "requests"
             ? $"| where {RequestMatch(scope)}\n"
-            : $"| where operation_Id in (requests | where {RequestMatch(scope)} | distinct operation_Id)\n";
+            : $"| join kind=leftsemi (requests | where {RequestMatch(scope)} | distinct operation_Id) on operation_Id\n";
     }
 
     /// <summary>Failed plug-in executions, newest first - only the named plug-in types when given.</summary>
