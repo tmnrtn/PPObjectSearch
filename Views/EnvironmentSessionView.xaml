@@ -18,6 +18,9 @@
         <Style TargetType="TextBlock" x:Key="DetailValue">
             <Setter Property="Margin" Value="0,0,0,7" />
             <Setter Property="TextWrapping" Value="Wrap" />
+            <!-- Only the text is the click target, not the rest of the column. -->
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="core:CopyOnClick.IsEnabled" Value="True" />
         </Style>
 
         <!-- The search dropdown: a heading, and rows that never take focus from the box. -->

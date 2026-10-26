@@ -19,6 +19,9 @@
         <Style TargetType="TextBlock" x:Key="DetailValue">
             <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="TextWrapping" Value="Wrap" />
+            <!-- Only the text is the click target, not the rest of the column. -->
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="core:CopyOnClick.IsEnabled" Value="True" />
         </Style>
 
         <!-- A pane's heading row: 34 tall, heading at left, extras at right. -->
@@ -278,9 +281,10 @@
                                         </Grid.RowDefinitions>
 
                                         <StackPanel Grid.Row="0" Margin="16,14,16,10">
-                                            <TextBlock Text="{Binding SelectedUser.FullName}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding SelectedUser.FullName}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                       core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
                                             <TextBlock Text="{Binding SelectedUser.DomainName}" Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
-                                                       Margin="0,2,0,0" TextWrapping="Wrap" />
+                                                       Margin="0,2,0,0" TextWrapping="Wrap" core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
                                             <WrapPanel Margin="0,8,0,0">
                                                 <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedUser.UserType}" />
                                                 <ContentControl Style="{StaticResource UserStatusPill}" Margin="0,0,4,4" DataContext="{Binding SelectedUser}" />
@@ -299,6 +303,7 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
 
                                                 <TextBlock Grid.Row="0" Text="Business unit" Style="{StaticResource DetailKey}" />
@@ -312,13 +317,19 @@
                                                            Text="{Binding SelectedUser.LicenseType, TargetNullValue=—}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="Email" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="3" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
-                                                           Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}" />
+                                                           Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}"
+                                                           core:CopyOnClick.IsEnabled="True" />
                                                 <TextBlock Grid.Row="2" Text="Entra id" Style="{StaticResource DetailKey}" />
-                                                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource CodeBox}" Padding="0" FontSize="11"
-                                                         Background="Transparent" Margin="0,0,0,6"
-                                                         Text="{Binding SelectedUser.AadObjectId, Mode=OneWay, TargetNullValue=—}" />
-                                                <TextBlock Grid.Row="3" Text="Mailbox" Style="{StaticResource DetailKey}" />
-                                                <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           Text="{Binding SelectedUser.AadObjectId, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="3" Text="User id" Style="{StaticResource DetailKey}"
+                                                           ToolTip="The user's id in this environment (systemuserid)." />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           Text="{Binding SelectedUser.SystemUserId}" />
+                                                <TextBlock Grid.Row="4" Text="Mailbox" Style="{StaticResource DetailKey}" />
+                                                <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
                                                     <StackPanel Orientation="Horizontal" DataContext="{Binding Mailbox}"
                                                                 Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
                                                         <ContentControl Style="{StaticResource ApprovalPill}" Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
@@ -596,7 +607,7 @@
                                             </Border>
                                             <WrapPanel VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding SelectedRole.Name}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
-                                                           Margin="0,0,8,0" TextTrimming="CharacterEllipsis" />
+                                                           Margin="0,0,8,0" TextTrimming="CharacterEllipsis" core:CopyOnClick.IsEnabled="True" />
                                                 <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0" Content="{Binding SelectedRole.ManagedLabel}" />
                                                 <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,0"
                                                                 Content="{Binding SelectedRole.BusinessUnit, TargetNullValue=—}"
@@ -860,9 +871,11 @@
                                     <ScrollViewer x:Name="MailboxPane" VerticalScrollBarVisibility="Auto"
                                                   Visibility="{Binding SelectedMailbox, Converter={StaticResource EmptyToCollapsed}}">
                                         <StackPanel Margin="16,14,16,14">
-                                            <TextBlock Text="{Binding SelectedMailbox.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding SelectedMailbox.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                       core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
                                             <TextBlock Text="{Binding SelectedMailbox.EmailAddress, TargetNullValue='No email address'}" Style="{StaticResource Mono}"
-                                                       Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                                       Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" HorizontalAlignment="Left"
+                                                       core:CopyOnClick.IsEnabled="True" core:CopyOnClick.Text="{Binding SelectedMailbox.EmailAddress}" />
                                             <WrapPanel Margin="0,8,0,0" DataContext="{Binding SelectedMailbox}">
                                                 <ContentControl Style="{StaticResource ApprovalPill}" Margin="0,0,4,4"
                                                                 Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
@@ -890,7 +903,7 @@
 
                                                 <TextBlock Grid.Row="0" Text="Owner" Style="{StaticResource DetailKey}" />
                                                 <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
-                                                    <TextBlock>
+                                                    <TextBlock core:CopyOnClick.IsEnabled="True" core:CopyOnClick.Text="{Binding RegardingName}">
                                                         <Run Text="{Binding RegardingName, Mode=OneWay, TargetNullValue=—}" />
                                                         <Run Text="{Binding OwnerKind, Mode=OneWay, StringFormat=({0})}" Foreground="{DynamicResource Muted}" />
                                                     </TextBlock>
@@ -956,8 +969,8 @@
                                             </Grid>
 
                                             <TextBlock Text="Mailbox id" Style="{StaticResource DetailKey}" Margin="0,10,0,2" />
-                                            <TextBox Style="{StaticResource CodeBox}" Padding="0" FontSize="11" Background="Transparent"
-                                                     Text="{Binding SelectedMailbox.MailboxId, Mode=OneWay}" />
+                                            <TextBlock Style="{StaticResource DetailValue}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                       Text="{Binding SelectedMailbox.MailboxId}" />
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Grid>
@@ -1079,9 +1092,11 @@
 
                                         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="440">
                                             <StackPanel Margin="16,14,16,10">
-                                                <TextBlock Text="{Binding SelectedQueue.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding SelectedQueue.Name}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
                                                 <TextBlock Text="{Binding SelectedQueue.EmailAddress, TargetNullValue='No email address'}" Style="{StaticResource Mono}"
-                                                           Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                                           Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap" HorizontalAlignment="Left"
+                                                           core:CopyOnClick.IsEnabled="True" core:CopyOnClick.Text="{Binding SelectedQueue.EmailAddress}" />
                                                 <WrapPanel Margin="0,8,0,0">
                                                     <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedQueue.TypeLabel}" />
                                                     <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Inactive"

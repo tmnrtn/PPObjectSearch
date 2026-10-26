@@ -35,6 +35,9 @@
         <Style TargetType="TextBlock" x:Key="DetailValue">
             <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="TextWrapping" Value="Wrap" />
+            <!-- Only the text is the click target, not the rest of the column. -->
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="core:CopyOnClick.IsEnabled" Value="True" />
         </Style>
         <Style TargetType="Border" x:Key="PaneHeading">
             <Setter Property="Height" Value="34" />
@@ -237,11 +240,11 @@
                                                Visibility="{Binding RetryCount, Converter={StaticResource EmptyToCollapsed}}" />
                                     <TextBlock Grid.Row="9" Text="Activity id" Style="{StaticResource DetailKey}"
                                                Visibility="{Binding ActivityId, Converter={StaticResource EmptyToCollapsed}}" />
-                                    <TextBox Grid.Row="9" Grid.Column="1" Style="{StaticResource CodeBox}" Padding="0" FontSize="11"
-                                             Background="Transparent" TextWrapping="Wrap" Margin="0,0,0,6"
-                                             Text="{Binding ActivityId, Mode=OneWay}"
-                                             ToolTip="Quote this to Microsoft support about a failed import."
-                                             Visibility="{Binding ActivityId, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <TextBlock Grid.Row="9" Grid.Column="1" Style="{StaticResource DetailValue}"
+                                               FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                               Text="{Binding ActivityId}"
+                                               ToolTip="Quote this to Microsoft support about a failed import."
+                                               Visibility="{Binding ActivityId, Converter={StaticResource EmptyToCollapsed}}" />
                                 </Grid>
                             </StackPanel>
 
