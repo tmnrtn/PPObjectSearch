@@ -23,7 +23,8 @@ public sealed class TestShell : IDisposable
         if (settingsJson is not null) File.WriteAllText(SettingsPath, settingsJson);
 
         Updates = updates ?? new FakeHttpHandler();
-        Shell = new ShellViewModel(SettingsPath, Updates)
+        Screens = new ScreenHost(ScreenWindows);
+        Shell = new ShellViewModel(SettingsPath, Updates, Screens)
         {
             ShowMessage = (message, _, _) =>
             {
@@ -42,6 +43,10 @@ public sealed class TestShell : IDisposable
     public ShellViewModel Shell { get; }
     public string SettingsPath { get; }
     public FakeHttpHandler Updates { get; }
+
+    /// <summary>The shell's own screen host, so tests never share the app's.</summary>
+    public ScreenHost Screens { get; }
+    public FakeScreenWindows ScreenWindows { get; } = new();
 
     /// <summary>Every message box the shell showed, in order.</summary>
     public List<string> Messages { get; } = new();

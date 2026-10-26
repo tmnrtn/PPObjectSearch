@@ -45,10 +45,18 @@ straight into the maker portal.
   for the same copy actions; the pane can be hidden from the toolbar. Select several rows
   (Shift/Ctrl+click) and the menu copies all their names, links or ids - one per line - or copies
   them as a table for Excel, opens details for each, checks their layers or exports just them.
+- **Screens as tabs or windows** — object details, Failures, Recent changes, Compare and the app's
+  other screens open as tabs across the top of the main window, beside the environment itself.
+  Each tab's **Open in a new window** button pops it out into a window of its own, and that
+  window's title-bar button moves it back. `Ctrl+W` closes the tab showing (or, with the
+  environment showing, the environment's tab); a middle-click closes any tab. To open every screen
+  in its own window instead, choose **Open screens in › New windows** from the settings menu at the
+  foot of the sidebar. Screen windows are not tied to the main window, so either can be in front,
+  and they close when the main window closes.
 - **Object details** (*Open details*, or double-click a row) — solutions, layers and dependencies for
-  any object, with the type's own tabs first. Each window names the environment it came from. Open
-  as many as you like: each opens a step down and right from the last, and **Close all details**
-  (`Ctrl+Shift+W`) in the sidebar closes them together. By type, details also show:
+  any object, with the type's own tabs first. Each one names the environment it came from. Open
+  as many as you like: as windows, each opens a step down and right from the last, and **Close all
+  details** (`Ctrl+Shift+W`) closes them together, tabs and windows alike. By type, details also show:
   - **Cloud flows**: whether the flow is on, a link to it in Power Automate, recent run history
     (Dataverse's, plus runs still in progress or just finished from Power Automate), with each
     run's error and a link to the run, and the flow's JSON definition to copy or save. **Design** draws the flow
@@ -904,6 +912,10 @@ fixed and the app restarted.
 
   // Whether the main window's object detail pane is showing.
   "IsDetailPaneOpen": true,
+
+  // Where screens such as details and Failures open: "Tab" in the main window, or "Window" each
+  // in a window of its own. Set from the sidebar's settings menu.
+  "OpenScreensIn": "Tab",
 
   // The Application Insights resource each environment's telemetry is read from, keyed by host.
   // Set with "App Insights resource…" on the environment's menu. Kind is what the resource holds;

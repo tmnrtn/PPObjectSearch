@@ -1,0 +1,309 @@
+<local:ScreenView x:Class="PPObjectSearch.Views.TableDataView"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:core="clr-namespace:PPObjectSearch.Core"
+                  xmlns:local="clr-namespace:PPObjectSearch.Views"
+                  ScreenTitle="{Binding Title}"
+                  WindowHeight="720"
+                  WindowWidth="1250">
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <local:EnvironmentLine DataContext="{Binding Session}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Table data" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads the table's rows - nothing is written" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- The row limit, then read again, then export. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <ComboBox Width="150" core:Ui.InlineLabel="Limit" FontWeight="SemiBold"
+                              AutomationProperties.Name="Row limit"
+                              ItemsSource="{Binding RowCaps}" SelectedItem="{Binding RowCap}"
+                              ToolTip="The most rows read from the table. A read the limit cuts short says so.">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StringFormat={}{0:N0}}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                <Setter Property="FontWeight" Value="Normal" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+                    <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Read the rows again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The rows and columns shown, as CSV or Markdown">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="CSV: the rows shown…" Command="{Binding ExportCsvCommand}"
+                                          ToolTip="Every row shown, with the columns shown" />
+                                <MenuItem Header="Markdown: the rows shown…" Command="{Binding ExportMarkdownCommand}"
+                                          ToolTip="The rows shown as a table, with the filter that chose them" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- A read the row limit cut short, under the header. -->
+            <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="18,10,18,0"
+                    Visibility="{Binding Warnings, Converter={StaticResource EmptyToCollapsed}}">
+                <TextBlock Text="{Binding Warnings}" TextWrapping="Wrap" />
+            </Border>
+
+            <ProgressBar Grid.Row="2" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ============================================================ tables -->
+                <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,1,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBox Margin="10" Height="30" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search tables by name"
+                                 AutomationProperties.Name="Search tables"
+                                 Text="{Binding TableSearch, UpdateSourceTrigger=PropertyChanged}" />
+                        <ListBox Grid.Row="1" ItemsSource="{Binding TablesView}" SelectedItem="{Binding SelectedTable}"
+                                 AutomationProperties.Name="Tables"
+                                 BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Border}"
+                                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="2,3" ToolTip="{Binding Label}">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding DisplayName, Converter={StaticResource EmptyToCollapsed}}" />
+                                        <TextBlock Text="{Binding LogicalName}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- ============================================================ rows -->
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- The table, then what narrows the rows already read and which columns are read. -->
+                    <Grid Margin="14,10,14,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TableHeading}">
+                            <Run Text="{Binding TableDisplayName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" /><Run Text="  " /><Run
+                                 Text="{Binding TableLogicalName, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                 Foreground="{DynamicResource Muted}" />
+                        </TextBlock>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBox Width="220" Height="28" core:Ui.Icon="&#xE71C;" core:Ui.Placeholder="Quick filter"
+                                     AutomationProperties.Name="Quick filter"
+                                     ToolTip="Narrows the rows already read to those with this text in any column shown - nothing is read again"
+                                     Text="{Binding QuickFilter, UpdateSourceTrigger=PropertyChanged}" />
+                            <CheckBox Content="Raw values" Margin="12,0,6,0" VerticalAlignment="Center" IsChecked="{Binding ShowRawValues}"
+                                      ToolTip="Ids and option numbers rather than the names and labels Dataverse shows" />
+                            <ToggleButton Style="{StaticResource FilterToggle}" Margin="6,0,0,0" Padding="10,0"
+                                          IsChecked="{Binding IsColumnPickerOpen}" Content="{Binding ColumnsLabel}"
+                                          ToolTip="Choose the columns to read and show" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Server-side conditions, added one at a time: the rows are read again matching every one. -->
+                    <Grid Grid.Row="1" Margin="14,0,14,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
+                                      ItemsSource="{Binding Columns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
+                                      IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
+                            <ComboBox Width="140" Margin="6,0,0,0" AutomationProperties.Name="Filter operator"
+                                      ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
+                            <TextBox Width="200" Height="28" Margin="6,0,0,0" AutomationProperties.Name="Filter value"
+                                     core:Ui.Placeholder="{Binding FilterHint}"
+                                     IsEnabled="{Binding NeedsFilterValue}"
+                                     Text="{Binding FilterValue, UpdateSourceTrigger=PropertyChanged}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <Button Content="Add filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
+                                    ToolTip="Add this condition to the filters and read the rows again - a row has to match every filter" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Content="Active only" Margin="12,0,0,0" VerticalAlignment="Center" IsChecked="{Binding ActiveOnly}"
+                                  Visibility="{Binding HasStateCode, Converter={StaticResource BoolToVis}}"
+                                  ToolTip="Only rows whose status is Active" />
+                    </Grid>
+
+                    <!-- The filters the rows shown were read with - only once there is one. -->
+                    <DockPanel Grid.Row="2" Margin="14,0,14,10" LastChildFill="False"
+                               Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Read with" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <ItemsControl ItemsSource="{Binding ServerFilters}" VerticalAlignment="Center" Focusable="False"
+                                      AutomationProperties.Name="Filters applied">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                            CornerRadius="3" Height="22" Padding="7,0,2,0" Margin="4,2,0,2" SnapsToDevicePixels="True"
+                                            ToolTip="A filter the rows shown were read with">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                            <Button AutomationProperties.Name="Remove this filter" Style="{StaticResource LinkButton}"
+                                                    Content="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9"
+                                                    Foreground="{DynamicResource Muted}"
+                                                    Padding="5,0" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                    ToolTip="Remove this filter and read the rows again"
+                                                    Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Command="{Binding ClearFilterCommand}" />
+                    </DockPanel>
+
+                    <Grid Grid.Row="3">
+                        <!-- Columns are the table's, so they are made in code when the rows change. -->
+                        <DataGrid x:Name="RowsGrid" ItemsSource="{Binding RowsView}" IsReadOnly="True"
+                                  AutoGenerateColumns="False" ClipboardCopyMode="IncludeHeader"
+                                  SelectionUnit="CellOrRowHeader" SelectionMode="Extended"
+                                  EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                                  AutomationProperties.Name="Rows"
+                                  BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+                                  CurrentCellChanged="RowsGrid_CurrentCellChanged"
+                                  PreviewMouseRightButtonDown="RowsGrid_PreviewMouseRightButtonDown"
+                                  Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
+                            <!-- Right-click a cell: copy its value, its id or option number, its column, or the row's id. -->
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy value" Command="{Binding CopyValueCommand}"
+                                              ToolTip="The value as shown - a lookup's name, a choice's label" />
+                                    <MenuItem Header="Copy raw value" Command="{Binding CopyRawValueCommand}"
+                                              ToolTip="A lookup's row id, a choice's number, a date as stored" />
+                                    <MenuItem Header="Copy column" Command="{Binding CopyColumnCommand}"
+                                              ToolTip="This column's value in every row shown, one per line" />
+                                    <MenuItem Header="Copy row id" Command="{Binding CopyRowIdCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="Copy selected cells" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C"
+                                              CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              ToolTip="The cells selected, with their column headers, ready to paste into a spreadsheet" />
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                        </DataGrid>
+
+                        <!-- Nothing to list: say why, and what to change. -->
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360"
+                                    Visibility="{Binding HasRows, Converter={StaticResource NotBoolToVis}}">
+                            <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       TextAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- ============================================================ column picker -->
+                <Border Grid.Column="2" Width="290" BorderBrush="{DynamicResource Border}" BorderThickness="1,1,0,0"
+                        Visibility="{Binding IsColumnPickerOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox Margin="10" Height="30" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search columns"
+                                 AutomationProperties.Name="Search columns"
+                                 Text="{Binding ColumnSearch, UpdateSourceTrigger=PropertyChanged}" />
+                        <ListBox Grid.Row="1" ItemsSource="{Binding ColumnsView}" AutomationProperties.Name="Columns"
+                                 BorderThickness="0,1,0,1" BorderBrush="{DynamicResource Border}"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsShown}" ToolTip="{Binding ToolTip}" Margin="2,2">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                       TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding LogicalName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding TypeLabel, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+                            <Button Style="{StaticResource LinkButton}" Content="Default columns" Command="{Binding DefaultColumnsCommand}"
+                                    ToolTip="The primary name and the columns of the table's default view" />
+                            <Button Style="{StaticResource PrimaryButton}" Content="Show columns" Margin="8,0,0,0"
+                                    Command="{Binding ApplyColumnsCommand}" ToolTip="Read the rows again with the columns ticked" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="4" Style="{StaticResource StatusBar}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding StatusLine}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" ToolTip="{Binding StatusLine}" />
+                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" FontWeight="SemiBold" Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</local:ScreenView>

@@ -590,11 +590,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         var viewModel = new DependencyExplorerViewModel(_client, Item, _known,
             Session is { } session ? item => session.OpenDetails(item) : null, Session);
 
-        new Views.DependencyExplorerWindow
-        {
-            DataContext = viewModel,
-            Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
-        }.Show();
+        new Views.DependencyExplorerView { DataContext = viewModel }.Open();
     });
 
     // ---------------------------------------------------------------- find usages
@@ -1914,15 +1910,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         var index = Layers.IndexOf(layer);
         var below = index >= 0 && index + 1 < Layers.Count ? Layers[index + 1] : null;
 
-        var window = new Views.LayerChangesWindow
-        {
-            DataContext = new LayerChangesViewModel(Item.PrimaryLabel, layer, below),
-            Owner = Application.Current.Windows
-                .OfType<Window>()
-                .FirstOrDefault(w => ReferenceEquals(w.DataContext, this)) ?? Application.Current.MainWindow
-        };
-
-        window.Show();
+        new Views.LayerChangesView { DataContext = new LayerChangesViewModel(Item.PrimaryLabel, layer, below) }.Open();
     }
 
     /// <summary>Opens links in the environment's browser profile - supplied by the tab that opened this window.</summary>

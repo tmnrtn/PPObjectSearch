@@ -3,57 +3,26 @@ using System.Windows;
 namespace PPObjectSearch.Services;
 
 /// <summary>
-/// The object details windows currently open, so each new one can be placed where it is seen -
-/// stepped down and right from the last, rather than exactly over it - and so the main window can
-/// close them all at once.
+/// The object details screens open across every tab, so the main window can close them all at
+/// once, and so each one opened as a window is placed where it is seen - stepped down and right
+/// from the last, rather than exactly over it.
 /// </summary>
 public static class DetailsWindows
 {
     /// <summary>How far each new window steps from the last.</summary>
     public const double CascadeStep = 28;
 
-    private static readonly List<Window> Open = new();
-
-    /// <summary>Raised whenever a details window opens or closes.</summary>
-    public static event EventHandler? Changed;
-
-    public static int Count => Open.Count;
-
-    /// <summary>
-    /// Places <paramref name="window"/> (before it is shown) and tracks it until it closes.
-    /// The first opens centred on its owner as before; each one after steps on from the last.
-    /// </summary>
-    public static void Show(Window window)
+    /// <summary>Raised whenever a screen - details or not - opens or closes.</summary>
+    public static event EventHandler? Changed
     {
-        if (Open.LastOrDefault() is { } last)
-        {
-            var previous = last.WindowState == WindowState.Normal
-                ? new Rect(last.Left, last.Top, last.ActualWidth, last.ActualHeight)
-                : last.RestoreBounds;
-
-            var (left, top) = Cascade(previous, new Size(window.Width, window.Height), SystemParameters.WorkArea);
-
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Left = left;
-            window.Top = top;
-        }
-
-        Open.Add(window);
-        window.Closed += (_, _) =>
-        {
-            Open.Remove(window);
-            Changed?.Invoke(null, EventArgs.Empty);
-        };
-
-        window.Show();
-        Changed?.Invoke(null, EventArgs.Empty);
+        add => ScreenHost.Current.Changed += value;
+        remove => ScreenHost.Current.Changed -= value;
     }
 
-    /// <summary>Closes every open details window.</summary>
-    public static void CloseAll()
-    {
-        foreach (var window in Open.ToList()) window.Close();
-    }
+    public static int Count => ScreenHost.Current.DetailsCount;
+
+    /// <summary>Closes every open details screen, in tabs and in windows.</summary>
+    public static void CloseAll() => ScreenHost.Current.CloseAll(s => s.IsDetails);
 
     /// <summary>
     /// Where the next window goes: one step down and right from the previous, or - when that would

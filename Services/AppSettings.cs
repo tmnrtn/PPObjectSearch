@@ -124,6 +124,13 @@ public sealed class AppSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AppTheme Theme { get; set; } = AppTheme.System;
 
+    /// <summary>
+    /// Where screens such as an object's details or Failures open: Tab, in the main window (each
+    /// can still be popped out), or Window, each in a window of its own.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ScreenPlacement OpenScreensIn { get; set; } = ScreenPlacement.Tab;
+
     /// <summary>Whether to look, once a day, for a newer release on GitHub. Nothing is downloaded.</summary>
     public bool CheckForUpdates { get; set; } = true;
 

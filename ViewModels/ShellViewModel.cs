@@ -22,13 +22,18 @@ public sealed class ShellViewModel : ObservableObject
     {
     }
 
-    /// <summary>Settings read from and saved to the given file, and the update check sent through the given handler.</summary>
-    internal ShellViewModel(string settingsPath, System.Net.Http.HttpMessageHandler updateHandler)
+    /// <summary>
+    /// Settings read from and saved to the given file, the update check sent through the given
+    /// handler, and screens opened through the given host - the app's own unless one is given.
+    /// </summary>
+    internal ShellViewModel(string settingsPath, System.Net.Http.HttpMessageHandler updateHandler, ScreenHost? screens = null)
     {
         _settingsPath = settingsPath;
         _updateHandler = updateHandler;
         _settings = AppSettings.Load(settingsPath);
         _auth = new AuthenticationService(_settings.ClientId);
+        Screens = screens ?? ScreenHost.Current;
+        Screens.Placement = _settings.OpenScreensIn;
 
         AddTabCommand = new RelayCommand(_ => AddTab());
         GlobalSearchCommand = new RelayCommand(_ => OpenGlobalSearch());
@@ -38,6 +43,7 @@ public sealed class ShellViewModel : ObservableObject
         TableSettingsCommand = new RelayCommand(_ => OpenTableSettings());
         CommandPaletteCommand = new RelayCommand(_ => OpenCommandPalette());
         CloseTabCommand = new RelayCommand(CloseTab, p => Sessions.Count > 1 || p is not null);
+        CloseCurrentCommand = new RelayCommand(_ => CloseCurrent());
         MoveTabLeftCommand = new RelayCommand(_ => MoveSelectedTab(-1));
         MoveTabRightCommand = new RelayCommand(_ => MoveSelectedTab(+1));
         SignOutAllCommand = new AsyncRelayCommand(_ => SignOutAllAsync());
@@ -53,6 +59,10 @@ public sealed class ShellViewModel : ObservableObject
         SetThemeCommand = new RelayCommand(p =>
         {
             if (Enum.TryParse<AppTheme>(p as string, out var theme)) Theme = theme;
+        });
+        SetScreenPlacementCommand = new RelayCommand(p =>
+        {
+            if (Enum.TryParse<ScreenPlacement>(p as string, out var placement)) OpenScreensIn = placement;
         });
 
         RestoreTabs();
@@ -108,6 +118,9 @@ public sealed class ShellViewModel : ObservableObject
 
     public RelayCommand AddTabCommand { get; }
     public RelayCommand CloseTabCommand { get; }
+
+    /// <summary>Ctrl+W: the screen tab showing, or - when the environment shows - its tab.</summary>
+    public RelayCommand CloseCurrentCommand { get; }
     public RelayCommand MoveTabLeftCommand { get; }
     public RelayCommand MoveTabRightCommand { get; }
     public AsyncRelayCommand SignOutAllCommand { get; }
@@ -189,26 +202,44 @@ public sealed class ShellViewModel : ObservableObject
     public bool IsLightTheme => Theme == AppTheme.Light;
     public bool IsDarkTheme => Theme == AppTheme.Dark;
 
+    /// <summary>Secondary screens - details, Failures, Compare and the rest - in tabs and windows.</summary>
+    public ScreenHost Screens { get; }
+
+    public RelayCommand SetScreenPlacementCommand { get; }
+
+    /// <summary>Where new screens open: tabs in the main window, or windows of their own. Remembered in settings.</summary>
+    public ScreenPlacement OpenScreensIn
+    {
+        get => _settings.OpenScreensIn;
+        set
+        {
+            if (_settings.OpenScreensIn == value) return;
+
+            _settings.OpenScreensIn = value;
+            _settings.Save(_settingsPath);
+            Screens.Placement = value;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(OpensScreensInTabs));
+            OnPropertyChanged(nameof(OpensScreensInWindows));
+        }
+    }
+
+    public bool OpensScreensInTabs => OpenScreensIn == ScreenPlacement.Tab;
+    public bool OpensScreensInWindows => OpenScreensIn == ScreenPlacement.Window;
+
     private void OpenGlobalSearch()
     {
         if (!RequireConnectedTabs(1, "Connect at least one environment first.")) return;
 
-        new Views.GlobalSearchWindow
-        {
-            DataContext = new GlobalSearchViewModel(Sessions),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.GlobalSearchView { DataContext = new GlobalSearchViewModel(Sessions) }.Open();
     }
 
     private void OpenCompare()
     {
         if (!RequireConnectedTabs(2, "Connect at least two environments to compare them.")) return;
 
-        new Views.CompareWindow
-        {
-            DataContext = new CompareViewModel(Sessions),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.CompareView { DataContext = new CompareViewModel(Sessions) }.Open();
     }
 
     /// <summary>
@@ -221,11 +252,7 @@ public sealed class ShellViewModel : ObservableObject
     {
         if (!RequireConnectedTabs(2, "Connect the environment the solution comes from and the one it is going to.")) return;
 
-        new Views.ReadinessWindow
-        {
-            DataContext = new ReadinessViewModel(Sessions, source),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.ReadinessView { DataContext = new ReadinessViewModel(Sessions, source) }.Open();
     }
 
     /// <summary>
@@ -236,22 +263,14 @@ public sealed class ShellViewModel : ObservableObject
     {
         if (!RequireConnectedTabs(1, "Connect at least one environment first.")) return;
 
-        new Views.TableSettingsWindow
-        {
-            DataContext = new TableSettingsViewModel(Sessions, _settings, SelectedSession, s => s.Save(_settingsPath)),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.TableSettingsView { DataContext = new TableSettingsViewModel(Sessions, _settings, SelectedSession, s => s.Save(_settingsPath)) }.Open();
     }
 
     private void OpenDataCompare()
     {
         if (!RequireConnectedTabs(2, "Connect at least two environments to compare their data.")) return;
 
-        new Views.ReferenceDataCompareWindow
-        {
-            DataContext = new ReferenceDataCompareViewModel(Sessions, _settings),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.ReferenceDataCompareView { DataContext = new ReferenceDataCompareViewModel(Sessions, _settings) }.Open();
     }
 
     private bool RequireConnectedTabs(int minimum, string message)
@@ -266,7 +285,11 @@ public sealed class ShellViewModel : ObservableObject
     public EnvironmentSessionViewModel? SelectedSession
     {
         get => _selectedSession;
-        set => SetProperty(ref _selectedSession, value);
+        set
+        {
+            // Choosing an environment shows it, rather than whichever screen tab was in front.
+            if (SetProperty(ref _selectedSession, value)) Screens.ShowHome();
+        }
     }
 
     private void RestoreTabs()
@@ -323,6 +346,12 @@ public sealed class ShellViewModel : ObservableObject
         SelectedSession = Sessions[Math.Clamp(index, 0, Sessions.Count - 1)];
         SaveTabs();
         CloseTabCommand.RaiseCanExecuteChanged();
+    }
+
+    private void CloseCurrent()
+    {
+        if (Screens.SelectedTab is { } screen) Screens.Close(screen);
+        else if (CloseTabCommand.CanExecute(SelectedSession)) CloseTab(SelectedSession);
     }
 
     private void MoveSelectedTab(int offset)
@@ -385,6 +414,9 @@ public sealed class ShellViewModel : ObservableObject
     public void Shutdown()
     {
         SaveTabs();
+
+        // Screen windows are not owned by the main window, so they are closed with it here.
+        Screens.CloseAll();
         foreach (var session in Sessions) session.Dispose();
     }
 }
