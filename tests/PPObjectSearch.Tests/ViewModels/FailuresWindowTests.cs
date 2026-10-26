@@ -40,6 +40,9 @@ public class FailuresWindowTests
         if (stateFails) handler.OnError(HttpMethod.Get, "workflows?$select=workflowid,statecode", HttpStatusCode.Forbidden, "no state");
 
         return handler
+            .OnJson(HttpMethod.Get, "flowruns?fetchXml", $$"""
+                {"value":[{"cnt":3,"g0":"{{FlowA}}"},{"cnt":1,"g0":"{{FlowB}}"}]}
+                """)
             .OnJson(HttpMethod.Get, "flowruns?", $$"""
                 {"value":[
                   {"name":"run1","status":"Failed","starttime":"{{Ago(2)}}","errorcode":"ActionFailed","errormessage":"Record 1a2b3c4d-0000-0000-0000-000000000001 not found","_workflow_value":"{{FlowA}}"},
@@ -304,9 +307,9 @@ public class FailuresWindowTests
         Assert.Equal("Only Contoso Core", vm.SolutionLabel);
 
         vm.SolutionOnly = true;
-        await TestSessions.Until(() => handler.Requests.Count(r => r.Url.Contains("flowruns?")) == 2 && !vm.IsBusy);
+        await TestSessions.Until(() => handler.Requests.Count(r => r.Url.Contains("flowruns?$select")) == 2 && !vm.IsBusy);
 
-        var flowRuns = handler.Requests.Last(r => r.Url.Contains("flowruns?")).Url;
+        var flowRuns = handler.Requests.Last(r => r.Url.Contains("flowruns?$select")).Url;
         Assert.Contains($"_workflow_value eq {FlowA}", flowRuns);
         Assert.Equal("Sync orders", vm.Components[0].ComponentName);
     }
@@ -379,7 +382,7 @@ public class FailuresWindowTests
         await TestSessions.Until(() => !vm.IsBusy && vm.TotalFailures > 0);
 
         Assert.False(vm.IsCustom);
-        var flowRuns = handler.Requests.Count(r => r.Url.Contains("flowruns?"));
+        var flowRuns = handler.Requests.Count(r => r.Url.Contains("flowruns?$select"));
         Assert.Equal(1, flowRuns);
 
         vm.Period = "Custom";
@@ -389,7 +392,7 @@ public class FailuresWindowTests
         Assert.True(vm.IsCustom);
         Assert.Equal(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Unspecified), vm.CustomFrom);
         Assert.Equal(new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Unspecified), vm.CustomTo);
-        Assert.Equal(flowRuns, handler.Requests.Count(r => r.Url.Contains("flowruns?")));
+        Assert.Equal(flowRuns, handler.Requests.Count(r => r.Url.Contains("flowruns?$select")));
 
         vm.Period = "Custom";
         Assert.Equal(5, vm.Periods.Count);
@@ -427,7 +430,7 @@ public class FailuresWindowTests
     {
         var gate = new TaskCompletionSource();
         var calls = 0;
-        var gated = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?", async _ =>
+        var gated = new FakeHttpHandler().OnAsync(HttpMethod.Get, "flowruns?$select", async _ =>
         {
             if (Interlocked.Increment(ref calls) == 1) await gate.Task;
             return FakeHttpHandler.Json("""{"value":[]}""");
