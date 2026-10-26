@@ -48,6 +48,9 @@
         <Style TargetType="TextBlock" x:Key="DetailValue">
             <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="TextWrapping" Value="Wrap" />
+            <!-- Only the text is the click target, not the rest of the column. -->
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="core:CopyOnClick.IsEnabled" Value="True" />
         </Style>
 
         <!-- A connection reference's ids: in the row's tooltip, and copied from its menu. -->

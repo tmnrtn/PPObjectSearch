@@ -26,7 +26,7 @@ public sealed record UserInfo(
 
     public string StatusLabel => IsDisabled ? "Disabled" : "Enabled";
 
-    public string SearchText => $"{FullName} {DomainName} {Email} {BusinessUnit} {UserType} {Title} {AadObjectId}";
+    public string SearchText => $"{FullName} {DomainName} {Email} {BusinessUnit} {UserType} {Title} {AadObjectId} {SystemUserId}";
 }
 
 /// <summary>A security role a user holds - directly, or through a team they belong to.</summary>
