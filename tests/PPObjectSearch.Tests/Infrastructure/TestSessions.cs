@@ -19,6 +19,16 @@ public static class TestSessions
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_allItems")]
     private static extern ref List<SolutionComponentItem> ItemsField(EnvironmentSessionViewModel session);
 
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_linkBuilder")]
+    private static extern ref MakerPortalLinkBuilder? LinkBuilderField(EnvironmentSessionViewModel session);
+
+    /// <summary>Gives a connected tab the Power Platform environment id its connect would have resolved.</summary>
+    public static EnvironmentSessionViewModel WithEnvironmentId(this EnvironmentSessionViewModel session, string environmentId)
+    {
+        LinkBuilderField(session) = new MakerPortalLinkBuilder(environmentId, session.EnvironmentUrl, null);
+        return session;
+    }
+
     public static SolutionInfo Solution(string friendly = "Contoso Core", string unique = "contoso_core") => new()
     {
         SolutionId = Guid.NewGuid(), UniqueName = unique, FriendlyName = friendly, Version = "1.0.0.0", PublisherName = "Contoso"

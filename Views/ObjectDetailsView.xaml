@@ -517,7 +517,7 @@
                                                             Binding="{Binding DurationLabel}" ElementStyle="{StaticResource CellMuted}" />
                                         <DataGridTextColumn Header="Trigger" Width="110" Binding="{Binding TriggerType}"
                                                             ElementStyle="{StaticResource CellFull}" />
-                                        <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorMessage}">
+                                        <DataGridTextColumn Header="Error" Width="*" Binding="{Binding ErrorLine}">
                                             <DataGridTextColumn.ElementStyle>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource CellFull}">
                                                     <Setter Property="Foreground" Value="{DynamicResource Red}" />
@@ -615,6 +615,29 @@
                                                 <TextBlock Text="Error" Style="{StaticResource SectionHeading}"
                                                            Foreground="{DynamicResource Red}" VerticalAlignment="Center" />
                                             </Border>
+
+                                            <!-- A flow run's own error mostly says only that an action failed: the steps say which, and why. -->
+                                            <StackPanel DockPanel.Dock="Top" Margin="16,10,16,4"
+                                                        Visibility="{Binding DataContext.ShowsFailedSteps, RelativeSource={RelativeSource AncestorType=local:ScreenView}, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="Failed step" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Text="{Binding DataContext.FailedStepsStatus, RelativeSource={RelativeSource AncestorType=local:ScreenView}}"
+                                                           Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                           Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <ItemsControl ItemsSource="{Binding DataContext.FailedSteps, RelativeSource={RelativeSource AncestorType=local:ScreenView}}"
+                                                              Focusable="False">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Margin="0,0,0,6">
+                                                                <TextBlock Style="{StaticResource DetailValue}" Text="{Binding Label}" FontWeight="SemiBold"
+                                                                           Margin="0,0,0,2" core:CopyOnClick.Text="{Binding Name}" />
+                                                                <TextBlock Style="{StaticResource DetailValue}" Text="{Binding ErrorLine}"
+                                                                           Foreground="{DynamicResource Red}" ToolTip="{Binding ErrorMessage}" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+
                                             <TextBox Style="{StaticResource CodeBox}" Text="{Binding ErrorMessage, Mode=OneWay}"
                                                      TextWrapping="Wrap" Background="{DynamicResource Surface}" />
                                         </DockPanel>

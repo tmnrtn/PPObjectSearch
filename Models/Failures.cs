@@ -35,6 +35,15 @@ public sealed class FailureEvent
     /// <summary>The workflow (flow or classic) id, for opening its details.</summary>
     public Guid? WorkflowId { get; init; }
 
+    /// <summary>The id Power Automate knows a cloud flow by, as its run records it (flowrun.workflowid).</summary>
+    public string? FlowId { get; init; }
+
+    /// <summary>
+    /// A cloud flow run's step that failed, and why, once read from Power Automate - the run's own
+    /// error mostly says only that an action failed. Null until read.
+    /// </summary>
+    public FlowActionResult? FailedStep { get; set; }
+
     /// <summary>The plug-in step that failed, where the trace says.</summary>
     public Guid? StepId { get; init; }
 
@@ -61,15 +70,23 @@ public sealed class FailureEvent
         _ => "Plug-in"
     };
 
-    public string ErrorLine => ErrorText.FirstLine(ErrorMessage) ?? ErrorCode ?? "(no error text)";
+    /// <summary>The error as one line: the failed step's own where it has been read, else the run's.</summary>
+    public string ErrorLine => FailedStep?.ErrorLine ?? ErrorText.FirstLine(ErrorMessage) ?? ErrorCode ?? "(no error text)";
+
+    /// <summary>What a failure is grouped by: its error, and for a flow run whose failed step is known, that step.</summary>
+    public string Cause => FailedStep is { } step ? $"{step.Label}: {step.ErrorLine}" : ErrorLine;
+
+    /// <summary>The whole error, for a tooltip: the failed step's where it has been read, else the run's.</summary>
+    public string? ErrorDetail => FailedStep?.ErrorMessage ?? ErrorMessage;
 
     /// <summary>
-    /// Where it failed, as far as the source says: a plug-in's message and table, a flow run's error
-    /// code. A run's failing action is not in the run record, so a flow stops at its code.
+    /// Where it failed, as far as the source says: a plug-in's message and table, a flow run's
+    /// failed step - or, until that is read from Power Automate, the run's error code.
     /// </summary>
     public string StepLabel => Source switch
     {
         FailureSource.Plugin => string.IsNullOrWhiteSpace(Context) ? "Plug-in" : Context,
+        FailureSource.CloudFlow when FailedStep is { } step => step.Label,
         FailureSource.CloudFlow => string.IsNullOrWhiteSpace(ErrorCode) ? "Flow run" : ErrorCode,
         FailureSource.AppInsights when !string.IsNullOrWhiteSpace(Context) => Context,
         FailureSource.AppInsights => IsPlugin ? "Plug-in" : "Request",

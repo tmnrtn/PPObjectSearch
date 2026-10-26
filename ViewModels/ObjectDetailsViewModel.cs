@@ -260,7 +260,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         try
         {
             _powerAutomate ??= _client.CreatePowerAutomateClient();
-            var detail = await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name, CancellationToken.None);
+            var detail = _failedRunDetails.TryGetValue(run.Name, out var known)
+                ? known
+                : await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name, CancellationToken.None);
             diagram.ShowRun(detail, _powerAutomate);
         }
         catch (Exception ex)
@@ -1160,7 +1162,98 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _selectedRun, value)) return;
             OpenRunCommand.RaiseCanExecuteChanged();
             ShowRunOnDiagramCommand.RaiseCanExecuteChanged();
+            FailedStepsRead = LoadFailedStepsAsync(value);
         }
+    }
+
+    /// <summary>The read of the selected run's failed steps, for tests to wait on.</summary>
+    internal Task FailedStepsRead { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Failed runs read step by step, by run name: a finished run's steps do not change.</summary>
+    private readonly Dictionary<string, FlowRunDetail> _failedRunDetails = new(StringComparer.Ordinal);
+
+    /// <summary>Each failed run's failed steps, with what their outputs say, by run name.</summary>
+    private readonly Dictionary<string, IReadOnlyList<FlowActionResult>> _failedRunSteps = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _failedStepsCts;
+
+    /// <summary>Long enough that arrowing down the run list reads only the run it stops on.</summary>
+    private static readonly TimeSpan FailedStepsDelay = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>A failed cloud flow run is selected: which of its steps failed, and why, is worth reading.</summary>
+    public bool ShowsFailedSteps => IsCloudFlow && SelectedRun is { Outcome: RunOutcome.Failed };
+
+    private IReadOnlyList<FlowActionResult> _failedSteps = [];
+    /// <summary>The selected run's steps that failed of themselves - the cause behind "An action failed".</summary>
+    public IReadOnlyList<FlowActionResult> FailedSteps
+    {
+        get => _failedSteps;
+        private set => SetProperty(ref _failedSteps, value);
+    }
+
+    private string _failedStepsStatus = string.Empty;
+    /// <summary>While the steps are read, or why they could not be.</summary>
+    public string FailedStepsStatus
+    {
+        get => _failedStepsStatus;
+        private set => SetProperty(ref _failedStepsStatus, value);
+    }
+
+    /// <summary>
+    /// Reads the selected failed run from Power Automate - the run record says only that an action
+    /// failed - and shows the steps that failed. The same read draws the run on the diagram.
+    /// </summary>
+    private async Task LoadFailedStepsAsync(ProcessRun? run)
+    {
+        _failedStepsCts?.Cancel();
+        _failedStepsCts = null;
+        FailedSteps = [];
+        FailedStepsStatus = string.Empty;
+        OnPropertyChanged(nameof(ShowsFailedSteps));
+
+        if (_detached || !ShowsFailedSteps || run is null) return;
+
+        if (_failedRunSteps.TryGetValue(run.Name, out var known))
+        {
+            ShowFailedSteps(known);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_environmentId))
+        {
+            FailedStepsStatus = "Which step failed cannot be read: the environment's Power Platform id is unknown.";
+            return;
+        }
+
+        var cts = _failedStepsCts = new CancellationTokenSource();
+        FailedStepsStatus = "Reading which step failed from Power Automate...";
+
+        try
+        {
+            await Task.Delay(FailedStepsDelay, cts.Token);
+
+            _powerAutomate ??= _client.CreatePowerAutomateClient();
+            var flowId = run.FlowId ?? Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString();
+            var detail = await _powerAutomate.GetRunAsync(_environmentId, flowId, run.Name, cts.Token);
+            _failedRunDetails[run.Name] = detail;
+
+            var steps = await PowerAutomate.FailedStepReader.ExplainAsync(_powerAutomate, detail.FailedSteps, cts.Token);
+            _failedRunSteps[run.Name] = steps;
+            if (!cts.IsCancellationRequested) ShowFailedSteps(steps);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Another run was selected.
+        }
+        catch (Exception ex)
+        {
+            if (!cts.IsCancellationRequested) FailedStepsStatus = "Could not read which step failed - " + ex.Message;
+        }
+    }
+
+    private void ShowFailedSteps(IReadOnlyList<FlowActionResult> steps)
+    {
+        FailedSteps = steps;
+        FailedStepsStatus = steps.Count == 0 ? "Power Automate names no failed step for this run." : string.Empty;
     }
 
     private PluginTraceEntry? _selectedTrace;
@@ -1524,6 +1617,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
         // A row count can be many requests; nobody is left to read the answer.
         _countCts?.Cancel();
+        _failedStepsCts?.Cancel();
         FlowDiagram?.Detach();
     }
 

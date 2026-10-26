@@ -79,7 +79,7 @@ public static partial class FailureOverview
 
     public static IReadOnlyList<FailureErrorGroup> ByError(IEnumerable<FailureEvent> events) =>
         events
-            .GroupBy(e => Normalise(e.ErrorLine))
+            .GroupBy(e => Normalise(e.Cause))
             .Select(g =>
             {
                 var events = g.OrderByDescending(e => e.When).ToList();
