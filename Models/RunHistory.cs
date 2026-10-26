@@ -51,6 +51,9 @@ public sealed class ProcessRun
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage) || !string.IsNullOrWhiteSpace(ErrorCode);
 
+    /// <summary>The error as a line for the list: its message, read out of JSON where it is JSON, else its code.</summary>
+    public string? ErrorLine => ErrorText.FirstLine(ErrorMessage) ?? ErrorCode;
+
     internal static string FormatDuration(long? ms) => ms switch
     {
         null => string.Empty,

@@ -341,6 +341,79 @@ public class ObjectDetailsFlowTests
     }
 
     [Fact]
+    public async Task A_failed_run_shows_the_step_that_failed_and_the_diagram_reuses_the_read()
+    {
+        var run = $"/environments/{EnvironmentId}/flows/{FlowId}/runs/run-1";
+        var failedRuns = $$"""
+            {"value":[{"name":"run-1","status":"Failed","starttime":"2026-10-01T08:00:00Z","workflowid":"{{FlowId}}","errorcode":"ActionFailed",
+                       "errormessage":"{\n  \"code\": \"ActionFailed\",\n  \"message\": \"An action failed. No dependent actions succeeded.\"\n}"}]}
+            """;
+        var handler = Flow(first: h => h
+            .OnJson(HttpMethod.Get, "flowruns?", failedRuns)
+            .OnJson(HttpMethod.Get, run + "/actions", """
+                {"value":[
+                  {"name":"Try_scope","properties":{"status":"Failed","startTime":"2026-10-01T08:00:01Z",
+                    "error":{"code":"ActionFailed","message":"An action failed. No dependent actions succeeded."}}},
+                  {"name":"Send_an_email","properties":{"status":"Failed","startTime":"2026-10-01T08:00:02Z",
+                    "error":{"code":"NotFound","message":"The mailbox could not be found."}}}]}
+                """)
+            .OnJson(HttpMethod.Get, run, """{"name":"run-1","properties":{"status":"Failed","trigger":{"name":"manual","status":"Succeeded"}}}"""));
+        var details = Details(handler, CloudFlow(), EnvironmentId);
+
+        await details.LoadAsync();
+        await details.FailedStepsRead;
+
+        var selected = Assert.IsType<ProcessRun>(details.SelectedRun);
+        Assert.Equal("An action failed. No dependent actions succeeded.", selected.ErrorLine);
+        Assert.True(details.ShowsFailedSteps);
+        var step = Assert.Single(details.FailedSteps);
+        Assert.Equal("Send an email", step.Label);
+        Assert.Equal("The mailbox could not be found.", step.ErrorLine);
+        Assert.Equal(string.Empty, details.FailedStepsStatus);
+
+        await details.ShowRunOnDiagramCommand.ExecuteAsync(selected);
+
+        Assert.True(details.FlowDiagram!.IsRunMode);
+        Assert.Single(handler.Requests, r => r.Url.EndsWith("/runs/run-1?api-version=2016-11-01"));
+    }
+
+    [Fact]
+    public async Task A_failed_step_with_only_a_code_is_explained_by_its_outputs()
+    {
+        var run = $"/environments/{EnvironmentId}/flows/{FlowId}/runs/run-1";
+        var failedRuns = $$"""
+            {"value":[{"name":"run-1","status":"Failed","starttime":"2026-10-01T08:00:00Z","workflowid":"{{FlowId}}","errorcode":"ActionFailed"}]}
+            """;
+        var handler = Flow(first: h => h
+            .OnJson(HttpMethod.Get, "https://x/out/HTTP", """{"statusCode":404,"body":{"error":{"message":"File Not Found."}}}""")
+            .OnJson(HttpMethod.Get, "flowruns?", failedRuns)
+            .OnJson(HttpMethod.Get, run + "/actions", """
+                {"value":[{"name":"HTTP","properties":{"status":"Failed","error":{"code":"NotFound"},"outputsLink":{"uri":"https://x/out/HTTP"}}}]}
+                """)
+            .OnJson(HttpMethod.Get, run, """{"name":"run-1","properties":{"status":"Failed"}}"""));
+        var details = Details(handler, CloudFlow(), EnvironmentId);
+
+        await details.LoadAsync();
+        await details.FailedStepsRead;
+
+        var step = Assert.Single(details.FailedSteps);
+        Assert.Equal("HTTP 404: File Not Found.", step.ErrorLine);
+        Assert.Equal("NotFound", step.ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_succeeded_run_reads_no_steps()
+    {
+        var details = Details(Flow(first: h => h.OnJson(HttpMethod.Get, "flowruns?", DataverseRuns)), CloudFlow(), EnvironmentId);
+
+        await details.LoadAsync();
+        await details.FailedStepsRead;
+
+        Assert.False(details.ShowsFailedSteps);
+        Assert.Empty(details.FailedSteps);
+    }
+
+    [Fact]
     public async Task A_run_that_cannot_be_read_says_why_on_the_diagram()
     {
         var details = Details(Flow(first: h => h
