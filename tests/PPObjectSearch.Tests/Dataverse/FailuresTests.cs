@@ -20,6 +20,9 @@ public class FailuresTests
     private static FakeHttpHandler Handler(bool tracesFail = false) => (tracesFail
         ? new FakeHttpHandler().OnError(HttpMethod.Get, "plugintracelogs?", System.Net.HttpStatusCode.Forbidden, "no read on traces")
         : new FakeHttpHandler())
+        .OnJson(HttpMethod.Get, "flowruns?fetchXml", $$"""
+            {"value":[{"cnt":3,"g0":"{{FlowA}}"},{"cnt":1,"g0":"{{FlowB}}"}]}
+            """)
         .OnJson(HttpMethod.Get, "flowruns?", $$"""
             {"value":[
               {"name":"run1","status":"Failed","starttime":"2026-10-01T10:00:00Z","errorcode":"ActionFailed","errormessage":"Record 1a2b3c4d-0000-0000-0000-000000000001 not found","_workflow_value":"{{FlowA}}"},
@@ -127,10 +130,11 @@ public class FailuresTests
         var inScope = scope.First();
 
         var rows = Enumerable.Range(0, DataverseClient.MaxFailureRows)
-            .Select(i => $$"""{"name":"other{{i}}","status":"Succeeded","starttime":"2026-10-01T12:00:00Z","_workflow_value":"{{FlowA}}"}""")
+            .Select(i => $$"""{"name":"other{{i}}","status":"Failed","starttime":"2026-10-01T12:00:00Z","_workflow_value":"{{FlowA}}"}""")
             .Append($$"""{"name":"mine","status":"Failed","starttime":"2026-10-01T08:00:00Z","errormessage":"Boom","_workflow_value":"{{inScope}}"}""");
 
         var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "flowruns?fetchXml", $$"""{"value":[{"cnt":5000,"g0":"{{FlowA}}"},{"cnt":1,"g0":"{{inScope}}"}]}""")
             .OnJson(HttpMethod.Get, "flowruns?", "{\"value\":[" + string.Join(",", rows) + "]}")
             .OnJson(HttpMethod.Get, "workflows?", """{"value":[]}""");
 
@@ -139,6 +143,74 @@ public class FailuresTests
 
         Assert.Equal("mine", Assert.Single(data.Events).RunName);
         Assert.Empty(data.Notes);
+        Assert.Equal(1, Assert.Single(data.RunCounts).Value);
+    }
+
+    [Fact]
+    public async Task Only_failed_runs_are_read_and_every_run_is_counted_by_an_aggregate()
+    {
+        var handler = Handler();
+        var data = await Fakes.Dataverse(handler).GetFailuresAsync(From, To, new FailureQuery { ClassicWorkflows = false, Plugins = false });
+
+        var read = handler.Requests.Single(r => r.Url.Contains("flowruns?$select=name")).Url;
+        Assert.Contains("and (status eq 'Failed' or status eq 'TimedOut')", read);
+
+        var count = handler.Requests.Single(r => r.Url.Contains("flowruns?fetchXml")).Url;
+        Assert.Contains("<attribute name='workflow' alias='g0' groupby='true'/>", count);
+        Assert.Contains("<condition attribute='starttime' operator='ge' value='2026-10-01T00:00:00Z'/>", count);
+        Assert.DoesNotContain("operator='in'", count);
+        Assert.Equal(4, data.FlowRunsRead);
+    }
+
+    [Fact]
+    public async Task Past_the_cap_of_failed_runs_the_read_says_it_was_cut_short()
+    {
+        var rows = Enumerable.Range(0, DataverseClient.MaxFailureRows + 1)
+            .Select(i => $$"""{"name":"run{{i}}","status":"Failed","starttime":"2026-10-01T12:00:00Z","_workflow_value":"{{FlowA}}"}""");
+
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "flowruns?fetchXml", $$"""{"value":[{"cnt":9000,"g0":"{{FlowA}}"}]}""")
+            .OnJson(HttpMethod.Get, "flowruns?", "{\"value\":[" + string.Join(",", rows) + "]}")
+            .OnJson(HttpMethod.Get, "workflows?", """{"value":[]}""");
+
+        var data = await Fakes.Dataverse(handler).GetFailuresAsync(From, To, new FailureQuery { ClassicWorkflows = false, Plugins = false });
+
+        Assert.Equal(DataverseClient.MaxFailureRows, data.Events.Count);
+        Assert.Equal(9000, data.RunCounts[FlowA.ToString()]);
+        Assert.Equal($"Cloud flows: only the newest {DataverseClient.MaxFailureRows:N0} failed runs were read.", Assert.Single(data.Notes));
+    }
+
+    /// <summary>Flow runs where the flowrun table will not aggregate, so they are counted row by row.</summary>
+    private static FakeHttpHandler Unaggregated(int runs) => new FakeHttpHandler()
+        .OnError(HttpMethod.Get, "flowruns?fetchXml", System.Net.HttpStatusCode.BadRequest, "Aggregate queries are not supported on elastic tables")
+        .OnJson(HttpMethod.Get, "flowruns?$select=_workflow_value", "{\"value\":[" +
+            string.Join(",", Enumerable.Range(0, runs).Select(_ => $$"""{"_workflow_value":"{{FlowA}}"}""")) + "]}")
+        .OnJson(HttpMethod.Get, "flowruns?", $$"""
+            {"value":[{"name":"run1","status":"Failed","starttime":"2026-10-01T10:00:00Z","_workflow_value":"{{FlowA}}"}]}
+            """)
+        .OnJson(HttpMethod.Get, "workflows?", """{"value":[]}""");
+
+    [Fact]
+    public async Task Runs_are_counted_row_by_row_when_the_table_will_not_aggregate()
+    {
+        var data = await Fakes.Dataverse(Unaggregated(runs: 7)).GetFailuresAsync(From, To, new FailureQuery { ClassicWorkflows = false, Plugins = false });
+
+        Assert.Single(data.Events);
+        Assert.Equal(7, data.RunCounts[FlowA.ToString()]);
+        Assert.Empty(data.Notes);
+    }
+
+    [Fact]
+    public async Task Too_many_runs_to_count_row_by_row_leaves_the_rate_out_and_says_so()
+    {
+        var data = await Fakes.Dataverse(Unaggregated(runs: DataverseClient.MaxScannedRows + 1))
+            .GetFailuresAsync(From, To, new FailureQuery { ClassicWorkflows = false, Plugins = false });
+
+        Assert.Single(data.Events);
+        Assert.Empty(data.RunCounts);
+        Assert.Equal(DataverseClient.MaxScannedRows, data.FlowRunsRead);
+        Assert.Equal($"Cloud flows: over {DataverseClient.MaxScannedRows:N0} runs in the period, too many to count here, so failure rates are not shown.",
+            Assert.Single(data.Notes));
     }
 
     [Fact]
@@ -184,6 +256,8 @@ public class FailuresTests
 
         Assert.Empty(data.Events);
         Assert.Contains($"_workflow_value eq {FlowB}", Uri.UnescapeDataString(handler.Requests.First(r => r.Url.Contains("flowruns?")).Url));
+        Assert.Contains($"<condition attribute='workflow' operator='in'><value>{FlowB}</value></condition>",
+            handler.Requests.Single(r => r.Url.Contains("flowruns?fetchXml")).Url);
         Assert.Contains(data.Notes, n => n.StartsWith("the plug-in trace log could not be read"));
     }
 

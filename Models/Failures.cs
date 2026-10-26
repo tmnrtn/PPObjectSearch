@@ -90,7 +90,7 @@ public sealed class FailureData
     /// <summary>Sources that could not be read, or were cut short, said rather than left empty.</summary>
     public List<string> Notes { get; } = new();
 
-    /// <summary>How much was read for this: flow runs of every outcome, failed system jobs, trace log entries.</summary>
+    /// <summary>How much was read for this: flow runs of every outcome (counted), failed system jobs, trace log entries.</summary>
     public int FlowRunsRead { get; set; }
     public int SystemJobsRead { get; set; }
     public int TraceLogsRead { get; set; }

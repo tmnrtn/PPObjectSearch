@@ -86,36 +86,32 @@ public sealed partial class DataverseClient
 
     private async Task FlowFailuresAsync(DateTimeOffset from, DateTimeOffset to, FailureQuery query, FailureData data, CancellationToken ct)
     {
-        // Every run in the period is read, not only failures, so each flow has a failure rate -
-        // newest first, so a period cut short loses its oldest runs. A short scope is asked for by
+        // Only failed runs are read, newest first, so runs that succeeded cannot crowd them out of
+        // the cap; every run is counted on its own for a failure rate. A short scope is asked for by
         // id; a long one is filtered here, and the runs it leaves out do not count toward the cap.
-        var filter = $"starttime ge {Iso(from)} and starttime le {Iso(to)}";
-        if (query.WorkflowIds is { Count: > 0 and <= 40 } few)
-        {
-            filter += " and (" + string.Join(" or ", few.Select(id => $"_workflow_value eq {id}")) + ")";
-        }
+        var few = query.WorkflowIds is { Count: > 0 and <= 40 } ids ? ids : null;
+        var filter = $"starttime ge {Iso(from)} and starttime le {Iso(to)} and (status eq 'Failed' or status eq 'TimedOut')" + WorkflowFilter(few);
 
         var failed = new List<(Guid Workflow, JsonElement Row)>();
-        var runs = new Dictionary<Guid, int>();
 
         var truncated = await ReadCappedAsync(
             EnvironmentUrl + ApiPath + "flowruns?$select=name,status,starttime,errorcode,errormessage,workflowid,_workflow_value&$filter=" +
             Uri.EscapeDataString(filter) + "&$orderby=starttime desc",
             row =>
             {
-                data.FlowRunsRead++;
                 if (!Guid.TryParse(JsonHelper.GetString(row, "_workflow_value"), out var workflow)) return false;
                 if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) return false;
+                if (FlowOutcome(JsonHelper.GetString(row, "status") ?? string.Empty) != RunOutcome.Failed) return false;
 
-                runs[workflow] = runs.GetValueOrDefault(workflow) + 1;
-                if (FlowOutcome(JsonHelper.GetString(row, "status") ?? string.Empty) == RunOutcome.Failed) failed.Add((workflow, row.Clone()));
+                failed.Add((workflow, row.Clone()));
                 return true;
             }, ct).ConfigureAwait(false);
 
-        if (truncated) data.Notes.Add($"Cloud flows: only the newest {runs.Values.Sum():N0} runs in the period were read.");
+        if (truncated) data.Notes.Add($"Cloud flows: only the newest {MaxFailureRows:N0} failed runs were read.");
 
-        var names = await GetWorkflowNamesAsync(runs.Keys, ct).ConfigureAwait(false);
-        foreach (var (workflow, count) in runs) data.RunCounts[workflow.ToString()] = count;
+        await CountFlowRunsAsync(from, to, query, few, data, ct).ConfigureAwait(false);
+
+        var names = await GetWorkflowNamesAsync(failed.Select(f => f.Workflow).Distinct(), ct).ConfigureAwait(false);
 
         foreach (var (workflow, row) in failed)
         {
@@ -130,6 +126,60 @@ public sealed partial class DataverseClient
                 RunName = JsonHelper.GetString(row, "name"),
                 WorkflowId = workflow
             });
+        }
+    }
+
+    /// <summary>An OData clause keeping a short scope's flows, or nothing when there is none.</summary>
+    private static string WorkflowFilter(IReadOnlyCollection<Guid>? few) =>
+        few is null ? string.Empty : " and (" + string.Join(" or ", few.Select(id => $"_workflow_value eq {id}")) + ")";
+
+    /// <summary>
+    /// Every run in the period per flow, for a failure rate - counted by Dataverse. The flowrun table
+    /// is elastic and may refuse to aggregate; then runs are read and counted here up to
+    /// <see cref="MaxScannedRows"/>, and a count cut short is left out rather than shown as a rate.
+    /// </summary>
+    private async Task CountFlowRunsAsync(
+        DateTimeOffset from, DateTimeOffset to, FailureQuery query, IReadOnlyCollection<Guid>? few, FailureData data, CancellationToken ct)
+    {
+        var runs = new Dictionary<Guid, int>();
+
+        try
+        {
+            var scopeXml = few is null
+                ? string.Empty
+                : "<condition attribute='workflow' operator='in'>" + string.Concat(few.Select(id => $"<value>{id}</value>")) + "</condition>";
+
+            foreach (var group in await AggregateAsync("flowrun", "flowruns", "flowrunid", ["workflow"], scopeXml,
+                         from: from, to: to, dateColumn: "starttime", ct: ct).ConfigureAwait(false))
+            {
+                if (Guid.TryParse(group.Keys[0], out var workflow)) runs[workflow] = runs.GetValueOrDefault(workflow) + (int)group.Count;
+            }
+        }
+        catch (DataverseException ex) when (!IsAggregateLimit(ex))
+        {
+            // No row counts toward the failure cap, so the read stops only at the scan limit.
+            var truncated = await ReadCappedAsync(
+                EnvironmentUrl + ApiPath + "flowruns?$select=_workflow_value&$filter=" +
+                Uri.EscapeDataString($"starttime ge {Iso(from)} and starttime le {Iso(to)}" + WorkflowFilter(few)),
+                row =>
+                {
+                    if (Guid.TryParse(JsonHelper.GetString(row, "_workflow_value"), out var workflow)) runs[workflow] = runs.GetValueOrDefault(workflow) + 1;
+                    return false;
+                }, ct).ConfigureAwait(false);
+
+            if (truncated)
+            {
+                data.FlowRunsRead = runs.Values.Sum();
+                data.Notes.Add($"Cloud flows: over {MaxScannedRows:N0} runs in the period, too many to count here, so failure rates are not shown.");
+                return;
+            }
+        }
+
+        foreach (var (workflow, count) in runs)
+        {
+            if (query.WorkflowIds is { } scope && !scope.Contains(workflow)) continue;
+            data.RunCounts[workflow.ToString()] = count;
+            data.FlowRunsRead += count;
         }
     }
 
