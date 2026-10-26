@@ -283,6 +283,8 @@
                             </Border>
 
                             <TextBlock Text="{Binding SelectedErrorsHeading}" Style="{StaticResource SectionHeading}" Margin="16,10,16,4" />
+                            <TextBlock Text="{Binding StepsNote}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       Margin="16,0,16,4" Visibility="{Binding StepsNote, Converter={StaticResource EmptyToCollapsed}}" />
                             <ItemsControl ItemsSource="{Binding SelectedErrors}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -297,7 +299,7 @@
                                                 </DockPanel>
                                                 <TextBlock Text="{Binding Error}" FontSize="11" Foreground="{DynamicResource Red}"
                                                            TextWrapping="Wrap" Margin="0,3,0,0" MaxHeight="60"
-                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Events[0].ErrorMessage}" />
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Events[0].ErrorDetail}" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
@@ -317,8 +319,8 @@
                                                         Command="{Binding DataContext.OpenEventCommand, RelativeSource={RelativeSource AncestorType=local:ScreenView}}"
                                                         CommandParameter="{Binding}"
                                                         ToolTip="Open this failure in the details window" />
-                                                <TextBlock Text="{Binding ErrorLine}" TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding ErrorMessage}" />
+                                                <TextBlock Text="{Binding Cause}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding ErrorDetail}" />
                                             </DockPanel>
                                         </Border>
                                     </DataTemplate>

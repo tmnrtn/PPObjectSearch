@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -329,10 +330,11 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
 
             if (value is not null)
             {
-                foreach (var group in FailureOverview.ByError(value.Events)) SelectedErrors.Add(group);
-                foreach (var failure in value.Events.Take(RecentFailureCount)) RecentFailures.Add(failure);
+                ShowSelectedFailures(value);
                 _ = LoadStateAsync(value);
             }
+
+            StepsRead = ReadFailedStepsAsync(value);
 
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(SelectedRunsLabel));
@@ -343,6 +345,119 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     }
 
     public bool HasSelection => SelectedComponent is not null;
+
+    private void ShowSelectedFailures(FailureSummaryRow row)
+    {
+        SelectedErrors.Clear();
+        RecentFailures.Clear();
+        foreach (var group in FailureOverview.ByError(row.Events)) SelectedErrors.Add(group);
+        foreach (var failure in row.Events.Take(RecentFailureCount)) RecentFailures.Add(failure);
+        OnPropertyChanged(nameof(SelectedErrorsHeading));
+    }
+
+    // ---------------------------------------------------------------- the failed steps behind a flow's failures
+
+    /// <summary>How many of a flow's latest failed runs are read step by step when it is selected.</summary>
+    internal const int StepRunsRead = 10;
+
+    /// <summary>Runs read from Power Automate at once.</summary>
+    private const int StepReadsAtOnce = 4;
+
+    /// <summary>Each run's failed steps, by run name: a finished run's steps do not change.</summary>
+    private readonly ConcurrentDictionary<string, IReadOnlyList<FlowActionResult>> _stepsByRun = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _stepsCts;
+    private PowerAutomate.PowerAutomateClient? _powerAutomate;
+
+    /// <summary>The read of the selected flow's failed steps, for tests to wait on.</summary>
+    internal Task StepsRead { get; private set; } = Task.CompletedTask;
+
+    private string _stepsNote = string.Empty;
+    /// <summary>How many of the selected flow's runs were read step by step, or why none could be.</summary>
+    public string StepsNote
+    {
+        get => _stepsNote;
+        private set => SetProperty(ref _stepsNote, value);
+    }
+
+    /// <summary>
+    /// A cloud flow run's own error is nearly always "An action failed". For the selected flow,
+    /// reads its latest failed runs from Power Automate and regroups its failures by the step
+    /// that failed and why; older runs keep the run's error.
+    /// </summary>
+    private async Task ReadFailedStepsAsync(FailureSummaryRow? row)
+    {
+        _stepsCts?.Cancel();
+        _stepsCts = null;
+        StepsNote = string.Empty;
+
+        if (row is not { Source: FailureSource.CloudFlow } || _session.Client is not { } client) return;
+
+        if (string.IsNullOrWhiteSpace(_session.EnvironmentId))
+        {
+            StepsNote = "Which step failed cannot be read: the environment's Power Platform id is unknown.";
+            return;
+        }
+
+        var environmentId = _session.EnvironmentId;
+        var runs = row.Events.Where(e => !string.IsNullOrWhiteSpace(e.RunName)).Take(StepRunsRead).ToList();
+        if (runs.Count == 0) return;
+
+        var cts = _stepsCts = new CancellationTokenSource();
+        var unread = runs.Where(e => !_stepsByRun.ContainsKey(e.RunName!)).ToList();
+        if (unread.Count > 0) StepsNote = $"Reading which step failed in the latest {runs.Count} run(s) from Power Automate...";
+
+        var problems = new ConcurrentBag<string>();
+        try
+        {
+            _powerAutomate ??= client.CreatePowerAutomateClient();
+            var powerAutomate = _powerAutomate;
+
+            await Parallel.ForEachAsync(unread, new ParallelOptions { MaxDegreeOfParallelism = StepReadsAtOnce, CancellationToken = cts.Token },
+                async (failure, ct) =>
+                {
+                    var flowId = failure.FlowId ?? failure.WorkflowId?.ToString() ?? failure.ComponentKey;
+                    try
+                    {
+                        _stepsByRun[failure.RunName!] = await PowerAutomate.FailedStepReader.ReadAsync(
+                            powerAutomate, environmentId, flowId, failure.RunName!, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        problems.Add(ex.Message);
+                    }
+                });
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (cts.IsCancellationRequested || !ReferenceEquals(SelectedComponent, row)) return;
+
+        var read = 0;
+        foreach (var failure in runs)
+        {
+            if (!_stepsByRun.TryGetValue(failure.RunName!, out var steps)) continue;
+            failure.FailedStep = steps.FirstOrDefault();
+            read++;
+        }
+
+        ShowSelectedFailures(row);
+        StepsNote = StepsNoteFor(read, row.Events.Count, problems);
+    }
+
+    /// <summary>"Failed step read for the latest 10 of 142 runs." - and why any could not be.</summary>
+    internal static string StepsNoteFor(int read, int failures, IReadOnlyCollection<string> problems)
+    {
+        var note = read == 0 ? string.Empty
+            : read >= failures ? $"Failed step read for {(failures == 1 ? "the run" : $"all {failures:N0} runs")}."
+            : $"Failed step read for the latest {read:N0} of {failures:N0} runs.";
+
+        if (problems.Count == 0) return note;
+
+        var why = $"{problems.Count:N0} run(s) could not be read - {problems.First()}";
+        return string.IsNullOrEmpty(note) ? why : $"{note} {why}";
+    }
 
     /// <summary>"18 of 212 runs failed · first 2026-09-30 08:02" - or the failures alone where runs are not counted.</summary>
     public string SelectedRunsLabel => SelectedComponent is { } c
@@ -606,6 +721,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         _session.PropertyChanged -= OnSessionChanged;
         _session.AppInsightsChanged -= OnAppInsightsChanged;
         _cts?.Cancel();
+        _stepsCts?.Cancel();
     }
 
     public void Dispose()
@@ -613,6 +729,8 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         Detach();
         _cts?.Dispose();
         _cts = null;
+        _powerAutomate?.Dispose();
+        _powerAutomate = null;
     }
 
     // ---------------------------------------------------------------- export

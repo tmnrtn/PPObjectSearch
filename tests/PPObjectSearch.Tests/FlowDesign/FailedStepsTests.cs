@@ -69,6 +69,25 @@ public class FailedStepsTests
         Assert.Equal(expected, FlowStepError.FromOutputs(outputs));
     }
 
+    [Fact]
+    public void A_flow_failure_reads_as_its_failed_step_once_that_is_known()
+    {
+        var failure = new FailureEvent
+        {
+            Source = FailureSource.CloudFlow, ComponentKey = "flow", ComponentName = "Flow", When = T0,
+            ErrorCode = "ActionFailed", ErrorMessage = "{\"code\":\"ActionFailed\",\"message\":\"An action failed.\"}"
+        };
+
+        Assert.Equal(("ActionFailed", "An action failed.", "An action failed."), (failure.StepLabel, failure.ErrorLine, failure.Cause));
+        Assert.Equal(failure.ErrorMessage, failure.ErrorDetail);
+
+        failure.FailedStep = Step("Get_file", FlowStepOutcome.Failed, 0, "NotFound", "HTTP 404: File Not Found.");
+
+        Assert.Equal(("Get file", "HTTP 404: File Not Found.", "Get file: HTTP 404: File Not Found."),
+            (failure.StepLabel, failure.ErrorLine, failure.Cause));
+        Assert.Equal("HTTP 404: File Not Found.", failure.ErrorDetail);
+    }
+
     [Theory]
     [InlineData("{\n  \"code\": \"ActionFailed\",\n  \"message\": \"An action failed.\"\n}", "ActionFailed", "An action failed.")]
     [InlineData(null, "ActionFailed", "ActionFailed")]

@@ -129,6 +129,62 @@ public class FailuresWindowTests
         Assert.True(vm.OpenComponentDetailsCommand.CanExecute(null));
     }
 
+    [Fact]
+    public async Task A_selected_flow_s_failures_are_regrouped_by_the_step_that_failed()
+    {
+        const string env = "env-1";
+        // The runs record no flow id of their own, so the workflow id stands in.
+        var run1 = $"/environments/{env}/flows/{FlowA}/runs/run1";
+        var run3 = $"/environments/{env}/flows/{FlowA}/runs/run3";
+        var handler = Handler()
+            .OnJson(HttpMethod.Get, "https://x/out/HTTP", """{"statusCode":404,"body":{"error":{"message":"The resource could not be found."}}}""")
+            .OnJson(HttpMethod.Get, run1 + "/actions", """
+                {"value":[{"name":"Try","properties":{"status":"Failed","error":{"code":"ActionFailed"}}},
+                          {"name":"HTTP","properties":{"status":"Failed","error":{"code":"NotFound"},"outputsLink":{"uri":"https://x/out/HTTP"}}}]}
+                """)
+            .OnJson(HttpMethod.Get, run1, """{"name":"run1","properties":{"status":"Failed"}}""")
+            .OnJson(HttpMethod.Get, run3 + "/actions", """
+                {"value":[{"name":"Send_an_email","properties":{"status":"Failed","error":{"code":"Forbidden","message":"Mailbox is disabled."}}}]}
+                """)
+            .OnJson(HttpMethod.Get, run3, """{"name":"run3","properties":{"status":"Failed"}}""");
+        var vm = Open(TestSessions.Connected(handler).WithEnvironmentId(env));
+
+        await vm.LoadAsync();
+        await vm.StepsRead;
+
+        Assert.Equal(["HTTP", "Send an email"], vm.SelectedErrors.Select(g => g.Events[0].StepLabel));
+        Assert.Equal(["HTTP 404: The resource could not be found.", "Mailbox is disabled."], vm.SelectedErrors.Select(g => g.Error));
+        Assert.Equal(["HTTP: HTTP 404: The resource could not be found.", "Send an email: Mailbox is disabled."],
+            vm.RecentFailures.Select(f => f.Cause));
+        Assert.Equal("Failed step read for all 2 runs.", vm.StepsNote);
+    }
+
+    [Fact]
+    public async Task Without_the_environment_id_a_flow_s_steps_are_not_read()
+    {
+        var vm = await Loaded(Handler());
+        await vm.StepsRead;
+
+        Assert.Equal("Which step failed cannot be read: the environment's Power Platform id is unknown.", vm.StepsNote);
+        Assert.Equal("Grouped by error · 1", vm.SelectedErrorsHeading);
+
+        vm.SelectedComponent = vm.Components.Single(c => c.Source == FailureSource.Plugin);
+        await vm.StepsRead;
+
+        Assert.Equal(string.Empty, vm.StepsNote);
+    }
+
+    [Theory]
+    [InlineData(0, 5, new string[0], "")]
+    [InlineData(1, 1, new string[0], "Failed step read for the run.")]
+    [InlineData(10, 142, new string[0], "Failed step read for the latest 10 of 142 runs.")]
+    [InlineData(8, 142, new[] { "Forbidden", "Forbidden" }, "Failed step read for the latest 8 of 142 runs. 2 run(s) could not be read - Forbidden")]
+    [InlineData(0, 3, new[] { "Forbidden" }, "1 run(s) could not be read - Forbidden")]
+    public void The_steps_note_says_how_much_was_read(int read, int failures, string[] problems, string expected)
+    {
+        Assert.Equal(expected, FailuresViewModel.StepsNoteFor(read, failures, problems));
+    }
+
     [Theory]
     [InlineData(1, true, "On")]
     [InlineData(0, false, "Off")]

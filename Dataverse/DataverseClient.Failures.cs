@@ -124,7 +124,8 @@ public sealed partial class DataverseClient
                 ErrorCode = JsonHelper.GetString(row, "errorcode"),
                 ErrorMessage = JsonHelper.GetString(row, "errormessage"),
                 RunName = JsonHelper.GetString(row, "name"),
-                WorkflowId = workflow
+                WorkflowId = workflow,
+                FlowId = JsonHelper.GetString(row, "workflowid")
             });
         }
     }
