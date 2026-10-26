@@ -438,7 +438,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         if (_client is null) return;
 
         var viewModel = new SolutionHistoryViewModel(this, _client);
-        Track(new Views.SolutionHistoryWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
+        Track(new Views.SolutionHistoryView { DataContext = viewModel }.Open());
         _ = viewModel.LoadAsync();
     }
 
@@ -451,32 +451,32 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         if (_client is null) return;
 
         var viewModel = new EntraTeamSyncViewModel(this, _client) { StartTeamId = teamId };
-        Track(new Views.EntraTeamSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
+        Track(new Views.EntraTeamSyncView { DataContext = viewModel }.Open());
         _ = viewModel.LoadTeamsAsync();
     }
 
-    private Views.EnvironmentAdminWindow? _adminWindow;
+    private OpenScreen? _adminScreen;
 
     /// <summary>
-    /// Windows opened from this tab that hold its <see cref="DataverseClient"/>. That client is
+    /// Screens opened from this tab that hold its <see cref="DataverseClient"/>. That client is
     /// disposed when the tab reconnects, switches account, signs out or closes, after which every
-    /// action in those windows would fail - and a reconnect to another URL would leave them showing
+    /// action in those screens would fail - and a reconnect to another URL would leave them showing
     /// the old environment under this tab's name. So they close with the connection they belong to.
     /// </summary>
-    private readonly List<Window> _toolWindows = new();
+    private readonly List<OpenScreen> _toolScreens = new();
 
-    private T Track<T>(T window) where T : Window
+    private OpenScreen Track(OpenScreen screen)
     {
-        _toolWindows.Add(window);
-        window.Closed += (_, _) => _toolWindows.Remove(window);
-        return window;
+        _toolScreens.Add(screen);
+        screen.Closed += (_, _) => _toolScreens.Remove(screen);
+        return screen;
     }
 
     private void CloseToolWindows()
     {
-        foreach (var window in _toolWindows.ToList()) window.Close();
-        _toolWindows.Clear();
-        _adminWindow = null;
+        foreach (var screen in _toolScreens.ToList()) ScreenHost.Current.Close(screen);
+        _toolScreens.Clear();
+        _adminScreen = null;
     }
 
     /// <summary>The tab a shortcut asks for, by value or by name; the Users tab otherwise.</summary>
@@ -500,20 +500,18 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         if (_client is null) return;
 
-        if (_adminWindow is { DataContext: EnvironmentAdminViewModel open })
+        if (_adminScreen is { Content: Views.EnvironmentAdminView { DataContext: EnvironmentAdminViewModel open } })
         {
             if (selectId is { } id) _ = open.ShowAsync(tab, id);
             else open.SelectedTab = tab;
-            if (_adminWindow.WindowState == WindowState.Minimized) _adminWindow.WindowState = WindowState.Normal;
-            _adminWindow.Activate();
+            ScreenHost.Current.Activate(_adminScreen);
             return;
         }
 
         var viewModel = new EnvironmentAdminViewModel(this, _client, tab);
-        var window = Track(new Views.EnvironmentAdminWindow { DataContext = viewModel, Owner = Application.Current.MainWindow });
-        window.Closed += (_, _) => { if (ReferenceEquals(_adminWindow, window)) _adminWindow = null; };
-        _adminWindow = window;
-        window.Show();
+        var screen = Track(new Views.EnvironmentAdminView { DataContext = viewModel }.Open());
+        screen.Closed += (_, _) => { if (ReferenceEquals(_adminScreen, screen)) _adminScreen = null; };
+        _adminScreen = screen;
         _ = selectId is { } select ? viewModel.OpenAtAsync(tab, select) : viewModel.LoadAsync();
     }
 
@@ -523,7 +521,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         if (_client is null) return;
 
         var viewModel = new QueueSyncViewModel(this, _client) { StartQueueId = queueId };
-        Track(new Views.QueueSyncWindow { DataContext = viewModel, Owner = Application.Current.MainWindow }).Show();
+        Track(new Views.QueueSyncView { DataContext = viewModel }.Open());
         _ = viewModel.LoadAsync();
     }
 
@@ -1990,14 +1988,8 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         if (item is null || _client is null || !IsConnected) return;
 
         var viewModel = new ObjectDetailsViewModel(_client, item, KnownItems(), _linkBuilder?.EnvironmentId, OpenUrl, this, openOn);
-        var window = Track(new Views.ObjectDetailsWindow
-        {
-            DataContext = viewModel,
-            Owner = Application.Current.MainWindow
-        });
-
-        // Several can be open at once; each steps on from the last rather than covering it.
-        DetailsWindows.Show(window);
+        // Several can be open at once; as windows, each steps on from the last rather than covering it.
+        Track(new Views.ObjectDetailsView { DataContext = viewModel }.Open(isDetails: true));
 
         if (item.ObjectId != Guid.Empty)
         {
@@ -2041,11 +2033,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         if (item is not { HasAuditHistory: true } || _client is null || !IsConnected) return;
 
-        new Views.AuditHistoryWindow
-        {
-            DataContext = new AuditHistoryViewModel(this, _client, item),
-            Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow
-        }.Show();
+        new Views.AuditHistoryView { DataContext = new AuditHistoryViewModel(this, _client, item) }.Open();
     }
 
     private RelayCommand? _exploreDependenciesCommand;
@@ -2054,11 +2042,10 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     {
         if (SelectedItem is not { } item || _client is null || !IsConnected) return;
 
-        new Views.DependencyExplorerWindow
+        new Views.DependencyExplorerView
         {
-            DataContext = new DependencyExplorerViewModel(_client, item, KnownItems(), i => OpenDetails(i), this),
-            Owner = Application.Current.MainWindow
-        }.Show();
+            DataContext = new DependencyExplorerViewModel(_client, item, KnownItems(), i => OpenDetails(i), this)
+        }.Open();
     }, _ => SelectedItem is not null && IsConnected);
 
     // ---------------------------------------------------------------- browser profile

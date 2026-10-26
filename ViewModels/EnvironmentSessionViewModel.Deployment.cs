@@ -38,7 +38,7 @@ public sealed partial class EnvironmentSessionViewModel
     public RelayCommand RecentChangesCommand => _recentChangesCommand ??= new RelayCommand(_ =>
     {
         if (_client is null || !IsConnected) return;
-        new Views.ChangesWindow { DataContext = new ChangesViewModel(this), Owner = Application.Current.MainWindow }.Show();
+        new Views.ChangesView { DataContext = new ChangesViewModel(this) }.Open();
     });
 
     // ---------------------------------------------------------------- failures
@@ -47,7 +47,7 @@ public sealed partial class EnvironmentSessionViewModel
     public RelayCommand FailuresCommand => _failuresCommand ??= new RelayCommand(_ =>
     {
         if (_client is null || !IsConnected) return;
-        new Views.FailuresWindow { DataContext = new FailuresViewModel(this), Owner = Application.Current.MainWindow }.Show();
+        new Views.FailuresView { DataContext = new FailuresViewModel(this) }.Open();
     });
 
     // ---------------------------------------------------------------- table data
@@ -59,11 +59,7 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenTableData(string? tableLogicalName = null)
     {
         if (_client is null || !IsConnected) return;
-        new Views.TableDataWindow
-        {
-            DataContext = new TableDataViewModel(this, tableLogicalName),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.TableDataView { DataContext = new TableDataViewModel(this, tableLogicalName) }.Open();
     }
 
     // ---------------------------------------------------------------- security lookup
@@ -78,11 +74,7 @@ public sealed partial class EnvironmentSessionViewModel
         // The other connected tabs, for comparing a role across environments.
         var sessions = (Application.Current.MainWindow?.DataContext as ShellViewModel)?.Sessions.AsEnumerable() ?? [this];
 
-        new Views.SecurityLookupWindow
-        {
-            DataContext = new SecurityLookupViewModel(this, sessions),
-            Owner = Application.Current.MainWindow
-        }.Show();
+        new Views.SecurityLookupView { DataContext = new SecurityLookupViewModel(this, sessions) }.Open();
     }
 
     // ---------------------------------------------------------------- content search
@@ -105,8 +97,7 @@ public sealed partial class EnvironmentSessionViewModel
         var viewModel = new ContentSearchViewModel(this, _client, _definitionBodies, _allItems.ToList(),
             SelectedSolution?.DisplayLabel, term);
 
-        var window = new Views.ContentSearchWindow { DataContext = viewModel, Owner = Application.Current.MainWindow };
-        window.Show();
+        new Views.ContentSearchView { DataContext = viewModel }.Open();
 
         if (!string.IsNullOrWhiteSpace(term)) _ = viewModel.SearchCommand.ExecuteAsync(null);
     }

@@ -10,7 +10,7 @@
     <AssemblyName>PPObjectSearch</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
-    <Version>1.19.1</Version>
+    <Version>1.20.0</Version>
     <Product>Power Platform Object Search</Product>
     <Description>Keyword search over the objects in a Power Platform solution.</Description>
     <!-- Releases publish for win-x64; naming it here puts its runtime packages in the lock file. -->

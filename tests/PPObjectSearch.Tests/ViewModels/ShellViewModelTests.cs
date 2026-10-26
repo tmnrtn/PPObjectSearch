@@ -237,6 +237,109 @@ public sealed class ShellViewModelTests : IDisposable
         Assert.Empty(test.AppliedThemes);
     }
 
+    // ---------------------------------------------------------------- screens
+
+    private static OpenScreen Screen(string title, List<string>? stopped = null) =>
+        new(new object(), title, onClosed: () => stopped?.Add(title));
+
+    [Fact]
+    public void Screens_open_in_tabs_unless_settings_say_windows()
+    {
+        var tabs = Start(ThreeTabs);
+        var windows = Start("""{ "CheckForUpdates": false, "OpenScreensIn": "Window" }""");
+
+        Assert.Equal(ScreenPlacement.Tab, tabs.Shell.OpenScreensIn);
+        Assert.True(tabs.Shell.OpensScreensInTabs);
+        Assert.Equal(ScreenPlacement.Tab, tabs.Screens.Placement);
+
+        Assert.Equal(ScreenPlacement.Window, windows.Shell.OpenScreensIn);
+        Assert.True(windows.Shell.OpensScreensInWindows);
+        Assert.Equal(ScreenPlacement.Window, windows.Screens.Placement);
+    }
+
+    [Fact]
+    public void Choosing_where_screens_open_applies_and_remembers_it()
+    {
+        var test = Start(ThreeTabs);
+        var changed = new List<string?>();
+        test.Shell.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        test.Shell.SetScreenPlacementCommand.Execute("Window");
+        var failures = test.Screens.Show(Screen("Failures"));
+
+        Assert.Equal(ScreenPlacement.Window, test.Shell.OpenScreensIn);
+        Assert.Equal(ScreenPlacement.Window, test.Saved().OpenScreensIn);
+        Assert.Equal([failures], test.ScreenWindows.Windows);
+        Assert.Empty(test.Screens.Tabs);
+        Assert.Equal(
+            [nameof(ShellViewModel.OpenScreensIn), nameof(ShellViewModel.OpensScreensInTabs), nameof(ShellViewModel.OpensScreensInWindows)],
+            changed);
+
+        test.Shell.SetScreenPlacementCommand.Execute("Tab");
+
+        Assert.Equal(ScreenPlacement.Tab, test.Saved().OpenScreensIn);
+        Assert.Equal(ScreenPlacement.Tab, test.Screens.Placement);
+    }
+
+    [Fact]
+    public void The_same_placement_or_an_unknown_one_changes_nothing()
+    {
+        var test = Start(ThreeTabs);
+        File.Delete(test.SettingsPath);
+
+        test.Shell.SetScreenPlacementCommand.Execute("Tab");
+        test.Shell.SetScreenPlacementCommand.Execute("Popup");
+        test.Shell.SetScreenPlacementCommand.Execute(null);
+
+        Assert.Equal(ScreenPlacement.Tab, test.Shell.OpenScreensIn);
+        Assert.False(File.Exists(test.SettingsPath));
+    }
+
+    [Fact]
+    public void Ctrl_W_closes_the_screen_tab_showing_before_the_environment()
+    {
+        var test = Start(ThreeTabs);
+        var stopped = new List<string>();
+        var failures = test.Screens.Show(Screen("Failures", stopped));
+
+        test.Shell.CloseCurrentCommand.Execute(null);
+
+        Assert.Equal(["Failures"], stopped);
+        Assert.True(failures.IsClosed);
+        Assert.Equal(3, test.Shell.Sessions.Count);
+
+        test.Shell.CloseCurrentCommand.Execute(null);
+
+        Assert.Equal(2, test.Shell.Sessions.Count);
+    }
+
+    [Fact]
+    public void Choosing_an_environment_shows_it_in_front_of_screen_tabs()
+    {
+        var test = Start(ThreeTabs);
+        var failures = test.Screens.Show(Screen("Failures"));
+
+        test.Shell.SelectedSession = test.Shell.Sessions[1];
+
+        Assert.True(test.Screens.IsHomeSelected);
+        Assert.Equal([failures], test.Screens.Tabs);
+    }
+
+    [Fact]
+    public void Shutting_down_closes_every_screen()
+    {
+        var test = Start(ThreeTabs);
+        var stopped = new List<string>();
+        test.Screens.Show(Screen("Tab", stopped));
+        test.Screens.Show(Screen("Window", stopped), ScreenPlacement.Window);
+
+        test.Shell.Shutdown();
+
+        Assert.Equal(["Tab", "Window"], stopped);
+        Assert.Empty(test.Screens.Open);
+        Assert.Empty(test.ScreenWindows.Windows);
+    }
+
     // ---------------------------------------------------------------- app-wide commands
 
     [Theory]

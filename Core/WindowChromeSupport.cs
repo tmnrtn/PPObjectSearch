@@ -17,6 +17,17 @@ public static partial class WindowChromeSupport
     public static bool GetIsDialog(DependencyObject d) => (bool)d.GetValue(IsDialogProperty);
     public static void SetIsDialog(DependencyObject d, bool value) => d.SetValue(IsDialogProperty, value);
 
+    /// <summary>A screen in a window of its own, which shows a button to move it back into the main window.</summary>
+    public static readonly DependencyProperty IsScreenProperty = DependencyProperty.RegisterAttached(
+        "IsScreen", typeof(bool), typeof(WindowChromeSupport), new PropertyMetadata(false));
+
+    public static bool GetIsScreen(DependencyObject d) => (bool)d.GetValue(IsScreenProperty);
+    public static void SetIsScreen(DependencyObject d, bool value) => d.SetValue(IsScreenProperty, value);
+
+    /// <summary>The screen window's title-bar button: back into the main window as a tab.</summary>
+    public static readonly RoutedUICommand MoveToMainWindowCommand =
+        new("Move to the main window", "MoveToMainWindow", typeof(WindowChromeSupport));
+
     /// <summary>
     /// A maximised WindowChrome window overhangs the screen by its resize border, so the template
     /// pads itself back in by that much.

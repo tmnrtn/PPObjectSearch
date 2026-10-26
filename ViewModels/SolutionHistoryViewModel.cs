@@ -55,12 +55,7 @@ public sealed class SolutionHistoryViewModel : ObservableObject
     {
         if (SelectedEntry is not { } entry) return;
 
-        new Views.ImportLogWindow
-        {
-            DataContext = new ImportLogViewModel(Session, _client, entry),
-            Owner = System.Windows.Application.Current.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
-                    ?? System.Windows.Application.Current.MainWindow
-        }.Show();
+        new Views.ImportLogView { DataContext = new ImportLogViewModel(Session, _client, entry) }.Open();
     }
 
     public EnvironmentSessionViewModel Session { get; }

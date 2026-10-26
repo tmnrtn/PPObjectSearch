@@ -686,6 +686,9 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button AutomationProperties.Name="Move to a tab in the main window" x:Name="DockButton" Style="{StaticResource CaptionButton}" Content="&#xE73F;"
+                                            Command="{x:Static core:WindowChromeSupport.MoveToMainWindowCommand}" ToolTip="Move to a tab in the main window"
+                                            Visibility="Collapsed" />
                                     <Button AutomationProperties.Name="Minimise" x:Name="MinButton" Style="{StaticResource CaptionButton}" Content="&#xE921;"
                                             Command="{x:Static SystemCommands.MinimizeWindowCommand}" ToolTip="Minimise" />
                                     <Button AutomationProperties.Name="Maximise" x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
@@ -717,6 +720,9 @@
                         <Trigger Property="ResizeMode" Value="NoResize">
                             <Setter TargetName="MinButton" Property="Visibility" Value="Collapsed" />
                             <Setter TargetName="MaxButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="core:WindowChromeSupport.IsScreen" Value="True">
+                            <Setter TargetName="DockButton" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="Tag" Value="Main">
                             <Setter TargetName="AppMark" Property="Visibility" Value="Visible" />

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using PPObjectSearch.Services;
 using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch;
@@ -13,6 +14,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        // Screens opened as windows - by the setting, or popped out of a tab - need somewhere to go.
+        ScreenHost.Current.Attach(new Views.ScreenWindows(ScreenHost.Current));
+
         InitializeComponent();
         DataContext = _shell;
         Loaded += (_, _) => WarnAboutSettings();
@@ -42,6 +46,9 @@ public partial class MainWindow : Window
     private void Tab_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(this);
+
+        // Clicking the environment already selected brings it back in front of any screen tab.
+        _shell.Screens.ShowHome();
     }
 
     private void Tab_PreviewMouseMove(object sender, MouseEventArgs e)
