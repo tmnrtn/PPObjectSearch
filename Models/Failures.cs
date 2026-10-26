@@ -61,9 +61,7 @@ public sealed class FailureEvent
         _ => "Plug-in"
     };
 
-    public string ErrorLine => string.IsNullOrWhiteSpace(ErrorMessage)
-        ? ErrorCode ?? "(no error text)"
-        : ErrorMessage.Split('\n', 2)[0].Trim();
+    public string ErrorLine => ErrorText.FirstLine(ErrorMessage) ?? ErrorCode ?? "(no error text)";
 
     /// <summary>
     /// Where it failed, as far as the source says: a plug-in's message and table, a flow run's error

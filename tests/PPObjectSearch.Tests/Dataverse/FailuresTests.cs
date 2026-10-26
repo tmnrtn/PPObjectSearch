@@ -296,6 +296,25 @@ public class FailuresTests
         Assert.Equal(normalised, FailureOverview.Normalise(message));
     }
 
+    [Fact]
+    public void Flow_runs_with_json_errors_group_by_their_message_not_the_opening_brace()
+    {
+        static FailureEvent Failed(string message) => new()
+        {
+            Source = FailureSource.CloudFlow, ComponentKey = "flow", ComponentName = "Flow", When = From,
+            ErrorCode = "ActionFailed", ErrorMessage = message
+        };
+        var data = new FailureData();
+        data.Events.Add(Failed("{\r\n  \"code\": \"ActionFailed\",\r\n  \"message\": \"An action failed.\"\r\n}"));
+        data.Events.Add(Failed("{\r\n  \"code\": \"ActionFailed\",\r\n  \"message\": \"An action failed.\"\r\n}"));
+        data.Events.Add(Failed("{\r\n  \"code\": \"ActionFailed\",\r\n  \"message\": \"The flow timed out.\"\r\n}"));
+
+        var groups = FailureOverview.ByError(data);
+
+        Assert.Equal(["An action failed.", "The flow timed out."], groups.Select(g => g.Error));
+        Assert.Equal("An action failed.", FailureOverview.ByComponent(data)[0].TopError);
+    }
+
     [Theory]
     [InlineData("Unhandled exception: \nException type: X\nMessage: Real reason\n", "Real reason")]
     [InlineData("System.InvalidOperationException: Boom\n   at Foo", "System.InvalidOperationException: Boom")]

@@ -251,10 +251,7 @@ public sealed class LatestRunSummary
     };
 
     /// <summary>The error's first line; the detail is in the details window.</summary>
-    public string? ErrorLine => string.IsNullOrWhiteSpace(Run.ErrorMessage)
-        ? null
-        : Run.ErrorMessage.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault();
+    public string? ErrorLine => ErrorText.FirstLine(Run.ErrorMessage);
 
     public static LatestRunSummary? From(IReadOnlyList<ProcessRun> runs)
     {
