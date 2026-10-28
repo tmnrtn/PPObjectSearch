@@ -240,4 +240,26 @@ public class TableSettingsViewModelTests
         o.Vm.SelectedTab = TableSettingsTab.Links;
         Assert.StartsWith("Environment,Profile,Folder", o.Vm.ExportLines()[0]);
     }
+
+    [Fact]
+    public void Sorting_a_grouped_view_sorts_within_the_groups_and_keeps_their_order()
+    {
+        GapGroup Group(int order, string table) => new() { Order = order, Table = table, Label = table, ColumnCount = 2, Environments = ["Dev"] };
+        var (contact, account) = (Group(0, "contact"), Group(1, "account"));
+        var rows = new System.Collections.ObjectModel.ObservableCollection<GapRow>
+        {
+            new(contact, "b_column", null, false, []), new(contact, "z_column", null, false, []),
+            new(account, "a_column", null, false, []), new(account, "y_column", null, false, [])
+        };
+        var view = TableSettingsViewModel.Grouped(rows, nameof(GapRow.Group));
+
+        // What a click on the Column header does: a_column now comes first, but its group does not.
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription(nameof(GapRow.Column),
+            System.ComponentModel.ListSortDirection.Descending));
+
+        var groups = view.Groups.Cast<System.Windows.Data.CollectionViewGroup>().ToList();
+        Assert.Equal([contact, account], groups.Select(g => g.Name));
+        Assert.Equal(["z_column", "b_column"], groups[0].Items.Cast<GapRow>().Select(r => r.Column));
+        Assert.Equal(["y_column", "a_column"], groups[1].Items.Cast<GapRow>().Select(r => r.Column));
+    }
 }

@@ -157,6 +157,9 @@ public sealed record AuditGap(string Environment, string Table, string? TableLab
 /// <summary>A table with columns going unaudited somewhere: the group they are listed under.</summary>
 public sealed class GapGroup
 {
+    /// <summary>Where the group sits among the others, whichever column the rows are sorted by.</summary>
+    public int Order { get; init; }
+
     public required string Table { get; init; }
     public required string Label { get; init; }
     public required int ColumnCount { get; init; }
@@ -173,6 +176,9 @@ public sealed record GapRow(GapGroup Group, string Column, string? ColumnLabel, 
 /// <summary>One environment's link profile: the group its tables are listed under.</summary>
 public sealed class LinkGroup
 {
+    /// <summary>Where the group sits among the others, whichever column the rows are sorted by.</summary>
+    public int Order { get; set; }
+
     public required string Environment { get; init; }
     public required SynapseLinkProfile Profile { get; init; }
 
@@ -532,6 +538,7 @@ public static class TableSettingsReview
             var columns = table.GroupBy(g => g.Column, StringComparer.OrdinalIgnoreCase).ToList();
             var group = new GapGroup
             {
+                Order = rows.Count,
                 Table = table.Key,
                 Label = table.Select(g => g.TableLabel).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? table.Key,
                 ColumnCount = columns.Count,
@@ -597,6 +604,11 @@ public static class TableSettingsReview
             })
             .OrderByDescending(g => g.Group.ProblemCount > 0)
             .ThenByDescending(g => g.Group.IsCounted)
+            .Select((g, i) =>
+            {
+                g.Group.Order = i;
+                return g;
+            })
             .SelectMany(g => g.Rows)
             .ToList();
     }

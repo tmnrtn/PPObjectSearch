@@ -354,7 +354,7 @@
                                 </Style>
                             </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Table" Width="1.3*" MinWidth="200" SortMemberPath="Table.Table"
+                                <DataGridTemplateColumn Header="Table" Width="1.3*" MinWidth="200" SortMemberPath="TableLabel"
                                                         HeaderStyle="{StaticResource FirstHeader}">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>

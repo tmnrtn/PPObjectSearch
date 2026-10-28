@@ -326,10 +326,20 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     private System.Windows.Data.ListCollectionView? _gapMatrixView;
     public System.Windows.Data.ListCollectionView GapMatrixView => _gapMatrixView ??= CreateGapMatrixView();
 
-    private System.Windows.Data.ListCollectionView CreateGapMatrixView()
+    private System.Windows.Data.ListCollectionView CreateGapMatrixView() => Grouped(GapMatrixRows, nameof(GapRow.Group));
+
+    /// <summary>
+    /// The rows grouped by <paramref name="group"/>, the groups held in their own order (their
+    /// Order), so a click on a column header sorts the rows within each group rather than
+    /// reshuffling the groups by whichever row now comes first.
+    /// </summary>
+    internal static System.Windows.Data.ListCollectionView Grouped(System.Collections.IList rows, string group)
     {
-        var view = new System.Windows.Data.ListCollectionView(GapMatrixRows);
-        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(GapRow.Group)));
+        var view = new System.Windows.Data.ListCollectionView(rows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(group)
+        {
+            SortDescriptions = { new System.ComponentModel.SortDescription("Name.Order", System.ComponentModel.ListSortDirection.Ascending) }
+        });
         return view;
     }
     public ObservableCollection<LinkRow> LinkRows { get; } = new();
@@ -338,12 +348,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
     /// <summary>The link rows grouped by environment and profile.</summary>
     public System.Windows.Data.ListCollectionView LinkRowsView => _linkRowsView ??= CreateLinkRowsView();
 
-    private System.Windows.Data.ListCollectionView CreateLinkRowsView()
-    {
-        var view = new System.Windows.Data.ListCollectionView(LinkRows);
-        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(LinkRow.Group)));
-        return view;
-    }
+    private System.Windows.Data.ListCollectionView CreateLinkRowsView() => Grouped(LinkRows, nameof(LinkRow.Group));
     public ObservableCollection<SearchIndexRow> SearchRows { get; } = new();
     public ObservableCollection<SettingRow> EnvironmentRows { get; } = new();
 
