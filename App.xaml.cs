@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Threading;
 using PPObjectSearch.Core;
 using PPObjectSearch.Services;
@@ -13,6 +15,11 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // WPF formats bindings - dates, numbers - as en-US whatever Windows is set to; the user's
+        // own culture instead, so a date reads 28/10/2026 in the UK. Before any window is made.
+        FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
+            new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag)));
+
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
 
