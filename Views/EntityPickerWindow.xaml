@@ -17,6 +17,11 @@
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0" Margin="16,14,16,12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -29,6 +34,32 @@
                 <CheckBox Grid.Column="1" Content="Hide managed tables" Margin="14,0,0,0"
                           VerticalAlignment="Center" IsChecked="{Binding HideManaged}"
                           ToolTip="Reference data normally lives in tables this tenant owns." />
+
+                <!-- Only the tables a solution in either environment carries. -->
+                <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0"
+                      Visibility="{Binding CanFilterBySolution, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="210" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox Style="{StaticResource EnvPicker}" Height="30"
+                              core:Ui.InlineLabel="In"
+                              AutomationProperties.Name="Environment the solutions are read in"
+                              ToolTip="The environment whose solutions are offered"
+                              ItemsSource="{Binding SolutionSessions}" SelectedItem="{Binding SolutionSession}" />
+
+                    <ComboBox Grid.Column="1" Height="30" Padding="7,0" Margin="8,0,0,0"
+                              core:Ui.InlineLabel="Solution"
+                              AutomationProperties.Name="Solution"
+                              ToolTip="Only the tables in this solution"
+                              ItemsSource="{Binding SolutionOptions}" SelectedItem="{Binding SelectedSolution}"
+                              DisplayMemberPath="Label" TextSearch.TextPath="Label" />
+                </Grid>
+
+                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Amber}" Text="{Binding SolutionProblem}"
+                           Visibility="{Binding SolutionProblem, Converter={StaticResource EmptyToCollapsed}}" />
             </Grid>
 
             <ListBox Grid.Row="1" ItemsSource="{Binding ItemsView}"

@@ -142,6 +142,13 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
     private IReadOnlyList<EntitySummary>? _sourceEntities;
     private DataverseClient? _sourceEntitiesFrom;
+
+    /// <summary>Each solution's tables as the table picker read them, by the client that read
+    /// them - so a reconnected environment is read afresh.</summary>
+    private readonly Dictionary<(DataverseClient Client, Guid SolutionId), IReadOnlyCollection<string>> _solutionTables = new();
+
+    /// <summary>The solution the picker last narrowed the list to, offered again next time.</summary>
+    private (EnvironmentSessionViewModel Session, string UniqueName)? _pickerSolution;
     private CancellationTokenSource? _cts;
 
     /// <summary>Stops a comparison still running when the window closes; nobody is left to read the answer.</summary>
@@ -1119,9 +1126,17 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
             IsBusy = false;
         }
 
-        var picker = new EntityPickerViewModel(_sourceEntities, Entities.Select(e => e.LogicalName));
+        var picker = new EntityPickerViewModel(_sourceEntities, Entities.Select(e => e.LogicalName),
+            new[] { Source, Target }.OfType<EnvironmentSessionViewModel>(), ReadSolutionTablesAsync);
+        picker.SelectSolution(_pickerSolution?.Session, _pickerSolution?.UniqueName);
 
-        if (!PickEntities(picker)) return;
+        var picked = PickEntities(picker);
+
+        _pickerSolution = picker is { SolutionSession: { } session, SelectedSolution.Solution: { } solution }
+            ? (session, solution.UniqueName)
+            : null;
+
+        if (!picked) return;
 
         var chosen = picker.SelectedEntities();
         foreach (var entity in chosen)
@@ -1138,6 +1153,18 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
         Status = $"{Entities.Count} table(s) configured.";
         if (chosen.Count > 0) IsDirty = true;
         RaiseCommandStates();
+    }
+
+    private async Task<IReadOnlyCollection<string>> ReadSolutionTablesAsync(
+        EnvironmentSessionViewModel session, SolutionInfo solution, CancellationToken ct)
+    {
+        if (session.Client is not { } client) throw new InvalidOperationException($"{session.Title} is not connected.");
+
+        if (_solutionTables.TryGetValue((client, solution.SolutionId), out var known)) return known;
+
+        var tables = await client.GetSolutionTableNamesAsync(solution.SolutionId, ct);
+        _solutionTables[(client, solution.SolutionId)] = tables;
+        return tables;
     }
 
     private async Task EditEntityAsync(ReferenceEntityViewModel? entity)

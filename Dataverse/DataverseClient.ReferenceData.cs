@@ -37,6 +37,39 @@ public sealed partial class DataverseClient
         return results;
     }
 
+    /// <summary>
+    /// The logical names of the tables a solution holds. The solution lists its tables by metadata
+    /// id, so this environment's own metadata names them.
+    /// </summary>
+    public async Task<IReadOnlyCollection<string>> GetSolutionTableNamesAsync(Guid solutionId, CancellationToken ct = default)
+    {
+        var ids = new HashSet<Guid>();
+
+        await ForEachRowAsync(
+            EnvironmentUrl + ApiPath +
+            $"solutioncomponents?$select=objectid&$filter=_solutionid_value eq {solutionId} and componenttype eq 1",
+            null,
+            row =>
+            {
+                if (Guid.TryParse(JsonHelper.GetString(row, "objectid"), out var id)) ids.Add(id);
+            }, ct).ConfigureAwait(false);
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (ids.Count == 0) return names;
+
+        await ForEachRowAsync(EnvironmentUrl + ApiPath + "EntityDefinitions?$select=LogicalName,MetadataId", null, row =>
+        {
+            var logicalName = JsonHelper.GetString(row, "LogicalName");
+            if (!string.IsNullOrWhiteSpace(logicalName) &&
+                Guid.TryParse(JsonHelper.GetString(row, "MetadataId"), out var id) && ids.Contains(id))
+            {
+                names.Add(logicalName);
+            }
+        }, ct).ConfigureAwait(false);
+
+        return names;
+    }
+
     private static EntitySummary? ReadEntitySummary(JsonElement row)
     {
         var logicalName = JsonHelper.GetString(row, "LogicalName");

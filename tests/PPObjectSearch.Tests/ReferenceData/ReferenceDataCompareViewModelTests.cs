@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using PPObjectSearch.Auth;
+using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 using PPObjectSearch.Tests.Infrastructure;
 using PPObjectSearch.ViewModels;
@@ -825,6 +826,48 @@ public sealed class ReferenceDataCompareViewModelTests : IDisposable
 
         Assert.Equal(2, vm.Entities.Count);
         Assert.Single(source.Requests, r => r.Url.Contains(EntityList));
+    }
+
+    [Fact]
+    public async Task The_picker_filters_by_a_solution_in_either_side_read_once_and_offered_again()
+    {
+        var core = new SolutionInfo { SolutionId = G(77), UniqueName = "core", FriendlyName = "Core" };
+        // Ahead of the table list's route, which would answer the metadata id read too.
+        var target = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "solutioncomponents?", $$"""{"value":[{"objectid":"{{G(5)}}"}]}""")
+            .OnJson(HttpMethod.Get, "EntityDefinitions?$select=LogicalName,MetadataId",
+                $$"""{"value":[{"LogicalName":"new_other","MetadataId":"{{G(5)}}"}]}""");
+        var vm = Window(Side(SourceRows), target, Config());
+        vm.Sessions[1].Solutions.Add(core);
+
+        EntityPickerViewModel? offered = null;
+        vm.PickEntities = picker =>
+        {
+            offered = picker;
+            picker.SolutionSession = vm.Sessions[1];
+            picker.SelectedSolution = picker.SolutionOptions.Single(o => o.Solution == core);
+            return false;
+        };
+
+        await vm.AddEntitiesCommand.ExecuteAsync(null);
+        await offered!.SolutionRead;
+
+        Assert.Equal([vm.Sessions[0], vm.Sessions[1]], offered.SolutionSessions);
+        Assert.Equal(["new_other"], offered.ItemsView.Cast<EntityPick>().Select(p => p.LogicalName));
+
+        vm.PickEntities = picker =>
+        {
+            offered = picker;
+            return false;
+        };
+
+        await vm.AddEntitiesCommand.ExecuteAsync(null);
+        await offered.SolutionRead;
+
+        Assert.Same(vm.Sessions[1], offered.SolutionSession);
+        Assert.Same(core, offered.SelectedSolution?.Solution);
+        Assert.Equal(["new_other"], offered.ItemsView.Cast<EntityPick>().Select(p => p.LogicalName));
+        Assert.Single(target.Requests, r => r.Url.Contains("solutioncomponents?"));
     }
 
     [Fact]
