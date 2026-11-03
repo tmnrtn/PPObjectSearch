@@ -527,7 +527,8 @@ public sealed class ReferenceDataWriter
                 "target cannot be identified.");
         }
 
-        var id = await ResolveAsync(related, label, ct).ConfigureAwait(false);
+        var id = await ResolveAsync(related, label, Guid.TryParse(raw, out var pointedAt) ? pointedAt : null, ct)
+            .ConfigureAwait(false);
 
         if (id is null)
         {
@@ -545,7 +546,7 @@ public sealed class ReferenceDataWriter
             ? nav
             : null;
 
-    private async Task<Guid?> ResolveAsync(EntitySummary related, string label, CancellationToken ct)
+    private async Task<Guid?> ResolveAsync(EntitySummary related, string label, Guid? sourceId, CancellationToken ct)
     {
         var key = (related.LogicalName, label);
 
@@ -554,10 +555,12 @@ public sealed class ReferenceDataWriter
         // An ambiguous name throws out of here rather than being cached, so the failure is
         // reported against every row that depends on it instead of only the first. Nor is "not
         // found" cached: the row may be created later in this same run.
-        var id = await _target.ResolveByNameAsync(related, label, ct).ConfigureAwait(false);
+        if (await _target.ResolveByNameAsync(related, label, sourceId, ct).ConfigureAwait(false) is not { } match) return null;
 
-        if (id is not null) _resolved[key] = id;
-        return id;
+        // Told apart by the source's id, the answer is this reference's alone: another row of the
+        // same name may point at a different one.
+        if (!match.BySourceId) _resolved[key] = match.Id;
+        return match.Id;
     }
 
     /// <summary>A row this run has just written is a lookup target for the rows after it.</summary>
