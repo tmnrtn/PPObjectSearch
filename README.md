@@ -649,7 +649,9 @@ environment-specific settings, option lists. A table's details window opens it o
 - **Columns** - the primary name, then the columns of the table's default public view, in the
   view's order (a table with no view shows its primary name and status). **Columns** opens a
   searchable picker of every readable column; **Show columns** reads the rows again with the ones
-  ticked, and **Default columns** goes back to the view's.
+  ticked, and **Default columns** goes back to the view's. The columns a table was last read with
+  are remembered (in `settings.json`, by table, for every environment) and shown the next time it
+  is opened; a column the table no longer has is dropped.
 - **Labels, not ids** - lookups show the name of the row they point at, choices their label, and
   money and dates Dataverse's own formatting. **Raw values** shows the ids and option numbers instead.
 - **Quick filter** narrows the rows already read to those with the text in any column shown,

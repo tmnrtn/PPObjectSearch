@@ -59,7 +59,7 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenTableData(string? tableLogicalName = null)
     {
         if (_client is null || !IsConnected) return;
-        new Views.TableDataView { DataContext = new TableDataViewModel(this, tableLogicalName) }.Open();
+        new Views.TableDataView { DataContext = new TableDataViewModel(this, tableLogicalName, _settings) }.Open();
     }
 
     // ---------------------------------------------------------------- security lookup

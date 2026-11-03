@@ -60,6 +60,7 @@ public sealed record TableFilterChoice(TableFilterOperator Operator)
 public sealed class TableDataViewModel : ObservableObject, IDisposable
 {
     private readonly EnvironmentSessionViewModel _session;
+    private readonly AppSettings? _settings;
     private readonly string? _initialTable;
     private CancellationTokenSource? _cts;
     private IReadOnlyList<DataRecord> _records = [];
@@ -75,9 +76,11 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     }
 
     /// <param name="tableLogicalName">A table to open once the list is read - from a table's details window.</param>
-    public TableDataViewModel(EnvironmentSessionViewModel session, string? tableLogicalName = null)
+    /// <param name="settings">Where each table's columns are remembered; null remembers nothing.</param>
+    public TableDataViewModel(EnvironmentSessionViewModel session, string? tableLogicalName = null, AppSettings? settings = null)
     {
         _session = session;
+        _settings = settings;
         _initialTable = tableLogicalName;
 
         TablesView = (ListCollectionView)CollectionViewSource.GetDefaultView(Tables);
@@ -255,9 +258,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     {
         _defaultColumns = DefaultColumns(table, columns, viewColumns);
 
-        var ordered = _defaultColumns
+        // The columns last shown, where any of them is still there; else the view's.
+        var shown = RememberedColumns(table, columns) ?? _defaultColumns;
+        var leading = shown.Concat(_defaultColumns).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var ordered = leading
             .Select(n => columns.First(c => c.LogicalName.Equals(n, StringComparison.OrdinalIgnoreCase)))
-            .Concat(columns.Where(c => !_defaultColumns.Contains(c.LogicalName, StringComparer.OrdinalIgnoreCase))
+            .Concat(columns.Where(c => !leading.Contains(c.LogicalName, StringComparer.OrdinalIgnoreCase))
                 .OrderBy(c => string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName, StringComparer.CurrentCultureIgnoreCase));
 
         Columns.Clear();
@@ -266,7 +273,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
             Columns.Add(new TableDataColumn
             {
                 Column = column,
-                IsShown = _defaultColumns.Contains(column.LogicalName, StringComparer.OrdinalIgnoreCase)
+                IsShown = shown.Contains(column.LogicalName, StringComparer.OrdinalIgnoreCase)
             });
         }
 
@@ -278,6 +285,48 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ActiveOnly));
 
         FilterColumn = Columns.FirstOrDefault();
+    }
+
+    private static string ColumnsKey(EntitySummary table) => table.LogicalName.ToLowerInvariant();
+
+    /// <summary>The columns last shown for this table that it still has, in order; null when none are remembered.</summary>
+    private List<string>? RememberedColumns(EntitySummary table, IReadOnlyList<EntityColumn> columns)
+    {
+        if (_settings?.TableDataColumns?.GetValueOrDefault(ColumnsKey(table)) is not { } saved) return null;
+
+        var known = columns.Select(c => c.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var still = saved.Where(known.Contains).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(n => columns.First(c => c.LogicalName.Equals(n, StringComparison.OrdinalIgnoreCase)).LogicalName)
+            .ToList();
+
+        return still.Count > 0 ? still : null;
+    }
+
+    /// <summary>
+    /// Keeps the columns the rows were just read with, for the next time this table is opened.
+    /// Back on the defaults, the table is forgotten instead, so it follows its view again.
+    /// </summary>
+    private void RememberColumns(EntitySummary table, IReadOnlyList<TableDataColumn> shown)
+    {
+        if (_settings is null) return;
+
+        var names = shown.Select(c => c.LogicalName).ToList();
+        var key = ColumnsKey(table);
+        var saved = _settings.TableDataColumns?.GetValueOrDefault(key);
+
+        // As a set: the picker cannot reorder, so the defaults ticked again are the defaults.
+        if (names.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(_defaultColumns))
+        {
+            if (saved is null) return;
+            _settings.TableDataColumns!.Remove(key);
+        }
+        else
+        {
+            if (saved is not null && names.SequenceEqual(saved, StringComparer.OrdinalIgnoreCase)) return;
+            (_settings.TableDataColumns ??= new Dictionary<string, List<string>>())[key] = names;
+        }
+
+        _settings.Save();
     }
 
     private void ShowDefaultColumns()
@@ -686,6 +735,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         ShownColumns = columns;
         BuildRows(columns);
         IsColumnPickerOpen = false;
+        RememberColumns(table, columns);
 
         var more = filter is null ? string.Empty : " that match the filter";
         Warnings = result.IsTruncated

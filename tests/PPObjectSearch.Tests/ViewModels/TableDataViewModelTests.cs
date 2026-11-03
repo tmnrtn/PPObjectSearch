@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using PPObjectSearch.Models;
@@ -65,6 +66,29 @@ public class TableDataViewModelTests
     private static async Task<TableDataViewModel> Opened(FakeHttpHandler handler)
     {
         var vm = new TableDataViewModel(TestSessions.Connected(handler), "NEW_TAXCODE");
+        await vm.LoadAsync();
+        return vm;
+    }
+
+    /// <summary>Settings read from a broken file, which the app never saves over - so nothing here
+    /// reaches the real settings file.</summary>
+    private static AppSettings UnsavedSettings()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "ppos-tabledata-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(path, "{ not json");
+        try
+        {
+            return AppSettings.Load(path);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static async Task<TableDataViewModel> Opened(FakeHttpHandler handler, AppSettings settings)
+    {
+        var vm = new TableDataViewModel(TestSessions.Connected(handler), "new_taxcode", settings);
         await vm.LoadAsync();
         return vm;
     }
@@ -576,5 +600,77 @@ public class TableDataViewModelTests
 
         Assert.Empty(vm.ServerFilters);
         Assert.DoesNotContain("$filter", RowReads(handler)[^1].Url);
+    }
+
+    // ---------------------------------------------------------------- remembered columns
+
+    [Fact]
+    public async Task The_columns_read_with_are_remembered_and_the_table_reopens_with_them()
+    {
+        var settings = UnsavedSettings();
+        var vm = await Opened(Handler(), settings);
+        Assert.Null(settings.TableDataColumns);
+
+        vm.Columns.First(c => c.LogicalName == "new_rate").IsShown = false;
+        vm.Columns.First(c => c.LogicalName == "new_notes").IsShown = true;
+        await vm.ApplyColumnsCommand.ExecuteAsync(null);
+
+        Assert.Equal(["new_name", "new_region", "new_notes"], settings.TableDataColumns!["new_taxcode"]);
+
+        var handler = Handler();
+        var reopened = await Opened(handler, settings);
+
+        Assert.Equal(["Name", "Region", "Notes"], reopened.ShownColumns.Select(c => c.Header));
+        Assert.Contains("$select=new_taxcodeid,new_name,new_region,new_notes", Assert.Single(RowReads(handler)).Url);
+
+        // Remembered first, then the rest of the view's, then everything else by name.
+        Assert.Equal(["new_name", "new_region", "new_notes", "new_rate", "msdyn_modifiedon", "new_parentid", "statecode", "new_taxcodeid"],
+            reopened.Columns.Select(c => c.LogicalName));
+    }
+
+    [Fact]
+    public async Task Going_back_to_the_default_columns_forgets_the_table()
+    {
+        var settings = UnsavedSettings();
+        settings.TableDataColumns = new() { ["new_taxcode"] = ["new_notes", "new_name"] };
+        var vm = await Opened(Handler(), settings);
+
+        Assert.Equal(["Notes", "Name"], vm.ShownColumns.Select(c => c.Header));
+
+        vm.DefaultColumnsCommand.Execute(null);
+        await vm.ApplyColumnsCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Name", "Rate", "Region"], vm.ShownColumns.Select(c => c.Header));
+        Assert.False(settings.TableDataColumns.ContainsKey("new_taxcode"));
+    }
+
+    [Fact]
+    public async Task Remembered_columns_the_table_no_longer_has_are_dropped()
+    {
+        var settings = UnsavedSettings();
+        settings.TableDataColumns = new() { ["new_taxcode"] = ["new_gone", "NEW_NOTES"] };
+
+        var vm = await Opened(Handler(), settings);
+
+        Assert.Equal(["Notes"], vm.ShownColumns.Select(c => c.Header));
+        Assert.Equal(["new_notes"], settings.TableDataColumns["new_taxcode"]);
+
+        settings.TableDataColumns["new_taxcode"] = ["new_gone"];
+        var fallen = await Opened(Handler(), settings);
+
+        // Nothing remembered is left, so the view's columns stand in.
+        Assert.Equal(["Name", "Rate", "Region"], fallen.ShownColumns.Select(c => c.Header));
+        Assert.False(settings.TableDataColumns.ContainsKey("new_taxcode"));
+    }
+
+    [Fact]
+    public async Task Without_settings_nothing_is_remembered()
+    {
+        var vm = await Opened(Handler());
+
+        vm.Columns.First(c => c.LogicalName == "new_notes").IsShown = true;
+        await vm.ApplyColumnsCommand.ExecuteAsync(null);
+
+        Assert.Equal(4, vm.ShownColumns.Count);
     }
 }
