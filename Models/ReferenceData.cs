@@ -68,6 +68,12 @@ public sealed record EntityColumn(
     public bool IsUniqueIdentifier => TypeName == "UniqueidentifierType";
 }
 
+/// <summary>
+/// The row a lookup's name resolved to in the target. <see cref="BySourceId"/> when the name was
+/// shared and the source's own id picked the row - an answer for that one reference, not the name.
+/// </summary>
+public readonly record struct NameMatch(Guid Id, bool BySourceId);
+
 /// <summary>An alternate key, and the columns that make it up.</summary>
 public sealed record AlternateKeyInfo(string LogicalName, string? DisplayName, IReadOnlyList<string> KeyAttributes)
 {

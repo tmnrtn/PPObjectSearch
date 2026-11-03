@@ -584,8 +584,9 @@ public class ReferenceDataWriterTests
         Assert.False(second.Succeeded);
         Assert.Contains("ambiguous", second.Message);
 
-        // Each attempt asks by name and then, finding several, for the one active row.
-        Assert.Equal(4, handler.Requests.Count(r => r.Method == HttpMethod.Get));
+        // Each attempt asks by name and then, finding several, for the source's row by id and for
+        // the one active row.
+        Assert.Equal(6, handler.Requests.Count(r => r.Method == HttpMethod.Get));
     }
 
     [Fact]
@@ -602,6 +603,62 @@ public class ReferenceDataWriterTests
         Assert.True(outcome.Succeeded, outcome.Message);
         var body = BodyOf(handler.Requests[^1]);
         Assert.Equal($"/new_parents({G(502)})", body.GetProperty("new_ParentId@odata.bind").GetString());
+    }
+
+    [Fact]
+    public async Task Apply_uses_the_row_the_source_points_at_when_a_name_is_shared()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"new_parentid eq {G(502)}", ParentsResponse(G(502)))
+            .OnJson(HttpMethod.Get, "statecode eq 0", ParentsResponse(G(501)))
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(501), G(502)))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent },
+            Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(502), "Twin").Build(), null));
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Equal($"/new_parents({G(502)})", BodyOf(handler.Requests[^1]).GetProperty("new_ParentId@odata.bind").GetString());
+
+        // The id settles it, so which row is active is never asked; the id is asked for under the name.
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("statecode eq 0"));
+        Assert.Contains(handler.Requests, r => r.Url.EndsWith($"$filter=new_name eq 'Twin' and new_parentid eq {G(502)}"));
+    }
+
+    [Fact]
+    public async Task A_shared_name_settled_by_id_is_settled_again_for_each_reference()
+    {
+        // The target answers for whichever id it is asked about: both rows carry the name.
+        var handler = new FakeHttpHandler()
+            .On(HttpMethod.Get, "new_parentid eq ", r => FakeHttpHandler.Json(ParentsResponse(Guid.Parse(r.Url[^36..]))))
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(501), G(502)))
+            .OnStatus(HttpMethod.Post, "new_things", HttpStatusCode.NoContent);
+        var writer = Writer(handler);
+
+        var first = await writer.ApplyAsync(Compared(new[] { Parent },
+            Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(501), "Twin").Build(), null));
+        var firstBody = BodyOf(handler.Requests[^1]);
+        var second = await writer.ApplyAsync(Compared(new[] { Parent },
+            Row(G(2)).With("new_code", "B").WithLookup("new_parentid", G(502), "Twin").Build(), null));
+
+        Assert.True(first.Succeeded, first.Message);
+        Assert.True(second.Succeeded, second.Message);
+        Assert.Equal($"/new_parents({G(501)})", firstBody.GetProperty("new_ParentId@odata.bind").GetString());
+        Assert.Equal($"/new_parents({G(502)})", BodyOf(handler.Requests[^1]).GetProperty("new_ParentId@odata.bind").GetString());
+    }
+
+    [Fact]
+    public async Task A_shared_name_stays_ambiguous_when_the_source_row_is_not_one_of_them()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "new_parentid eq ", ParentsResponse())
+            .OnJson(HttpMethod.Get, "new_parents?", ParentsResponse(G(501), G(502)));
+
+        var outcome = await Writer(handler).ApplyAsync(Compared(new[] { Parent },
+            Row(G(1)).With("new_code", "A").WithLookup("new_parentid", G(10), "Twin").Build(), null));
+
+        Assert.False(outcome.Succeeded);
+        Assert.Equal("'Twin' matches 2 rows of new_parent, so the reference is ambiguous.", outcome.Message);
     }
 
     [Fact]

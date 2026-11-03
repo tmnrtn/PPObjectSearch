@@ -368,8 +368,9 @@ separate acknowledgement naming how many rows will go — Dataverse deletes cann
 - **Lookups are resolved by name** against the target: the label the source showed is looked up in
   the table the lookup actually points at. If nothing matches, or several rows do, that record is
   abandoned with the reason — a reference row written with a missing or guessed reference is worse
-  than one not written. Where a name is shared but only one of those rows is active, that one is
-  used. With **Match lookups by name** unticked, a lookup is bound by its id instead, once that row
+  than one not written. Where a name is shared, the row the source points at is used if the
+  target has it under that name (a row deployed from the source keeps its id); failing that, the
+  one active row of that name, if only one is. With **Match lookups by name** unticked, a lookup is bound by its id instead, once that row
   is found in the target.
 - **Rows are written parents first.** Creates and updates go table by table, a table before the
   tables that point at it (and, in a table that points at itself, a parent before its children),

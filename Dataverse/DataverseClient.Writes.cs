@@ -81,11 +81,14 @@ public sealed partial class DataverseClient
     /// <summary>
     /// Finds the one row of a table whose primary name is <paramref name="label"/>. Returns null
     /// where nothing matches and throws where several do - a lookup that cannot be pinned to a
-    /// single row is a reason to abandon the write, not to pick one.
+    /// single row is a reason to abandon the write, not to pick one. Several rows of the name are
+    /// told apart by <paramref name="sourceId"/> - the row the source points at, where the target
+    /// has it under this name - and failing that by being the only active one.
     /// </summary>
-    public async Task<Guid?> ResolveByNameAsync(
+    public async Task<NameMatch?> ResolveByNameAsync(
         EntitySummary table,
         string label,
+        Guid? sourceId = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(table.PrimaryNameAttribute))
@@ -124,16 +127,40 @@ public sealed partial class DataverseClient
 
         if (matches.Count > 1)
         {
+            // A row deployed from the source keeps its id, so the very row the source points at may
+            // be among them - surer than which of them is active. Only three rows were read, so it
+            // is asked for by id rather than looked for in those.
+            if (sourceId is { } id && await HasRowNamedAsync(table, id, literal, ct).ConfigureAwait(false))
+            {
+                return new NameMatch(id, BySourceId: true);
+            }
+
             // An inactive row that shares the name is usually a retired copy; if exactly one active
             // row carries it, that is the one meant. Not every table has statecode, so a query that
             // fails here simply leaves the name ambiguous.
-            if (await ResolveActiveByNameAsync(table, literal, ct).ConfigureAwait(false) is { } active) return active;
+            if (await ResolveActiveByNameAsync(table, literal, ct).ConfigureAwait(false) is { } active)
+            {
+                return new NameMatch(active, BySourceId: false);
+            }
 
             throw new DataverseException(
                 $"'{label}' matches {matches.Count} rows of {table.LogicalName}, so the reference is ambiguous.");
         }
 
-        return matches.Count == 1 ? matches[0] : null;
+        return matches.Count == 1 ? new NameMatch(matches[0], BySourceId: false) : null;
+    }
+
+    /// <summary>Whether the row with this id is one of those carrying the name.</summary>
+    private async Task<bool> HasRowNamedAsync(EntitySummary table, Guid id, string literal, CancellationToken ct)
+    {
+        var url = EnvironmentUrl + ApiPath + table.EntitySetName +
+                  $"?$select={table.PrimaryIdAttribute}&$top=1" +
+                  $"&$filter={table.PrimaryNameAttribute} eq '{literal}' and {table.PrimaryIdAttribute} eq {id}";
+
+        using var doc = await GetJsonAsync(url, ct).ConfigureAwait(false);
+
+        return JsonHelper.Rows(doc.RootElement).Any(row =>
+            Guid.TryParse(JsonHelper.GetString(row, table.PrimaryIdAttribute), out var found) && found == id);
     }
 
     private async Task<Guid?> ResolveActiveByNameAsync(EntitySummary table, string literal, CancellationToken ct)
