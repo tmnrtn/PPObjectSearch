@@ -570,7 +570,8 @@ public sealed class ReferenceDataWriter
     /// The order to write a run in. Creates and updates go first, tables before the tables whose
     /// lookups point at them, and within a table that points at itself, parents before children -
     /// so a row is in the target by the time anything referring to it is written. Deletes follow,
-    /// in the reverse order, so a child goes before the parent it depends on.
+    /// in the reverse order, so a child goes before the parent it depends on - tables and, within a
+    /// table that points at itself, rows.
     /// </summary>
     public static IReadOnlyList<T> OrderForWriting<T>(IEnumerable<T> items, Func<T, ReconcilePlanItem> itemOf)
     {
@@ -583,9 +584,11 @@ public sealed class ReferenceDataWriter
 
         foreach (var item in list.Select(itemOf))
         {
-            if (item.Row.Source is not { } source) continue;
+            // A delete has only the target's row, whose lookups name the same tables - so a run of
+            // nothing but deletes is still ordered.
+            if (RecordOf(item) is not { } record) continue;
 
-            foreach (var target in source.LookupTargets.Values.OfType<string>().Where(target =>
+            foreach (var target in record.LookupTargets.Values.OfType<string>().Where(target =>
                          dependsOn.ContainsKey(target) && !string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)))
             {
                 dependsOn[item.Table].Add(target);
@@ -613,24 +616,30 @@ public sealed class ReferenceDataWriter
             .ThenBy(i => depth.TryGetValue(itemOf(i), out var d) ? d : 0);
 
         var deletes = list.Where(i => itemOf(i).Action == ReconcileAction.Delete)
-            .OrderByDescending(i => rank[itemOf(i).Table]);
+            .OrderByDescending(i => rank[itemOf(i).Table])
+            .ThenByDescending(i => depth.TryGetValue(itemOf(i), out var d) ? d : 0);
 
         return writes.Concat(deletes).ToList();
     }
 
+    /// <summary>The row a write takes its values from, or a delete removes.</summary>
+    private static DataRecord? RecordOf(ReconcilePlanItem item) =>
+        item.Action == ReconcileAction.Delete ? item.Row.Target : item.Row.Source;
+
     /// <summary>
     /// For rows of a table that points at itself: how many ancestors in this run each has, found by
-    /// following the lookup's label to another row of the run with that name.
+    /// following the lookup's label to another row of the run with that name. Writes are traced
+    /// through the source's rows and deletes through the target's, each among their own kind.
     /// </summary>
     private static Dictionary<ReconcilePlanItem, int> SelfReferenceDepths(List<ReconcilePlanItem> items)
     {
         var depths = new Dictionary<ReconcilePlanItem, int>();
 
-        foreach (var table in items.GroupBy(i => i.Table, StringComparer.OrdinalIgnoreCase))
+        foreach (var table in items.GroupBy(i => (i.Table.ToLowerInvariant(), i.Action == ReconcileAction.Delete)))
         {
             var byName = table
-                .Where(i => i.Row.Source?.PrimaryName is { Length: > 0 })
-                .GroupBy(i => i.Row.Source!.PrimaryName!, StringComparer.OrdinalIgnoreCase)
+                .Where(i => RecordOf(i)?.PrimaryName is { Length: > 0 })
+                .GroupBy(i => RecordOf(i)!.PrimaryName!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             foreach (var item in table)
@@ -659,12 +668,12 @@ public sealed class ReferenceDataWriter
     /// <summary>The row of the run, by name, that a row's lookup to its own table points at.</summary>
     private static ReconcilePlanItem? ParentOf(ReconcilePlanItem item, Dictionary<string, ReconcilePlanItem> byName)
     {
-        if (item.Row.Source is not { } source) return null;
+        if (RecordOf(item) is not { } record) return null;
 
-        foreach (var (column, target) in source.LookupTargets)
+        foreach (var (column, target) in record.LookupTargets)
         {
             if (!string.Equals(target, item.Table, StringComparison.OrdinalIgnoreCase)) continue;
-            if (source.Label(column) is { Length: > 0 } label && byName.TryGetValue(label, out var parent) &&
+            if (record.Label(column) is { Length: > 0 } label && byName.TryGetValue(label, out var parent) &&
                 !ReferenceEquals(parent, item))
             {
                 return parent;

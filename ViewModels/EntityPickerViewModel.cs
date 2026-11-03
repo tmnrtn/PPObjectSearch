@@ -47,14 +47,43 @@ public sealed class EntityPick : ObservableObject
     public string DisplayLabel => string.IsNullOrWhiteSpace(Entity.DisplayName) ? Entity.LogicalName : Entity.DisplayName;
 }
 
+/// <summary>One entry in the solution filter: a solution, or none for every table.</summary>
+public sealed record SolutionOption(SolutionInfo? Solution)
+{
+    public string Label => Solution?.DisplayLabel ?? "Any solution";
+
+    public override string ToString() => Label;
+}
+
+/// <summary>The tables of a solution in an environment, by logical name.</summary>
+public delegate Task<IReadOnlyCollection<string>> SolutionTablesReader(
+    EnvironmentSessionViewModel session, SolutionInfo solution, CancellationToken ct);
+
 /// <summary>
 /// Picks tables to add to a comparison. The whole environment's table list is loaded by the caller
 /// and filtered here, so typing stays instant on an environment with a thousand tables.
+///
+/// A solution in either environment can narrow the list to its tables - the ones a release
+/// actually carries. The first of the solution environments is the one the list was read from.
 /// </summary>
 public sealed class EntityPickerViewModel : ObservableObject
 {
-    public EntityPickerViewModel(IEnumerable<EntitySummary> entities, IEnumerable<string> alreadyAdded)
+    private readonly SolutionTablesReader? _readSolutionTables;
+    private CancellationTokenSource? _solutionCts;
+
+    /// <summary>The chosen solution's tables; null when no solution narrows the list.</summary>
+    private HashSet<string>? _solutionTables;
+
+    public EntityPickerViewModel(
+        IEnumerable<EntitySummary> entities,
+        IEnumerable<string> alreadyAdded,
+        IEnumerable<EnvironmentSessionViewModel>? solutionSessions = null,
+        SolutionTablesReader? readSolutionTables = null)
     {
+        _readSolutionTables = readSolutionTables;
+        SolutionSessions = new ObservableCollection<EnvironmentSessionViewModel>(
+            readSolutionTables is null ? [] : (solutionSessions ?? []).Distinct());
+
         var added = alreadyAdded.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Items = new ObservableCollection<EntityPick>(entities.Select(e => new EntityPick
@@ -81,6 +110,9 @@ public sealed class EntityPickerViewModel : ObservableObject
             foreach (var item in Items) item.IsSelected = false;
             NotifySelectionChanged();
         });
+
+        _solutionSession = SolutionSessions.FirstOrDefault();
+        LoadSolutionOptions();
     }
 
     public ObservableCollection<EntityPick> Items { get; }
@@ -115,6 +147,130 @@ public sealed class EntityPickerViewModel : ObservableObject
         }
     }
 
+    // ---------------------------------------------------------------- solution filter
+
+    public ObservableCollection<EnvironmentSessionViewModel> SolutionSessions { get; }
+
+    public ObservableCollection<SolutionOption> SolutionOptions { get; } = new();
+
+    public bool CanFilterBySolution => SolutionSessions.Count > 0;
+
+    private EnvironmentSessionViewModel? _solutionSession;
+    /// <summary>The environment whose solutions are offered.</summary>
+    public EnvironmentSessionViewModel? SolutionSession
+    {
+        get => _solutionSession;
+        set
+        {
+            if (!SetProperty(ref _solutionSession, value)) return;
+            LoadSolutionOptions();
+        }
+    }
+
+    private SolutionOption? _selectedSolution;
+    public SolutionOption? SelectedSolution
+    {
+        get => _selectedSolution;
+        set
+        {
+            if (!SetProperty(ref _selectedSolution, value)) return;
+            SolutionRead = ApplySolutionAsync(value?.Solution);
+        }
+    }
+
+    /// <summary>The latest solution's read, for tests to wait on.</summary>
+    internal Task SolutionRead { get; private set; } = Task.CompletedTask;
+
+    private bool _isReadingSolution;
+    public bool IsReadingSolution
+    {
+        get => _isReadingSolution;
+        private set => SetProperty(ref _isReadingSolution, value);
+    }
+
+    private string? _solutionProblem;
+    /// <summary>Why the solution could not narrow the list; null when it did, or was not asked to.</summary>
+    public string? SolutionProblem
+    {
+        get => _solutionProblem;
+        private set => SetProperty(ref _solutionProblem, value);
+    }
+
+    /// <summary>
+    /// Opens on a solution picked before - by unique name, since the same solution has the same
+    /// name in every environment. Nothing happens when that environment or solution is gone.
+    /// </summary>
+    public void SelectSolution(EnvironmentSessionViewModel? session, string? uniqueName)
+    {
+        if (session is null || string.IsNullOrWhiteSpace(uniqueName) || !SolutionSessions.Contains(session)) return;
+
+        SolutionSession = session;
+        SelectedSolution = SolutionOptions.FirstOrDefault(o =>
+            string.Equals(o.Solution?.UniqueName, uniqueName, StringComparison.OrdinalIgnoreCase)) ?? SelectedSolution;
+    }
+
+    /// <summary>Every solution but the default one, which holds every table anyway.</summary>
+    private void LoadSolutionOptions()
+    {
+        SolutionOptions.Clear();
+
+        if (SolutionSession is { } session)
+        {
+            SolutionOptions.Add(new SolutionOption(null));
+            foreach (var solution in session.Solutions.Where(s => !s.IsDefaultSolution)
+                         .OrderBy(s => s.FriendlyName, StringComparer.CurrentCultureIgnoreCase))
+            {
+                SolutionOptions.Add(new SolutionOption(solution));
+            }
+        }
+
+        SelectedSolution = SolutionOptions.FirstOrDefault();
+    }
+
+    private async Task ApplySolutionAsync(SolutionInfo? solution)
+    {
+        // A slow read for the solution picked before must not land over this one.
+        _solutionCts?.Cancel();
+        _solutionCts?.Dispose();
+        _solutionCts = null;
+
+        _solutionTables = null;
+        SolutionProblem = null;
+
+        if (solution is not null && SolutionSession is { } session && _readSolutionTables is { } read)
+        {
+            var cts = _solutionCts = new CancellationTokenSource();
+            IsReadingSolution = true;
+            RefreshFilter();
+
+            try
+            {
+                var tables = await read(session, solution, cts.Token);
+                if (cts.IsCancellationRequested) return;
+
+                _solutionTables = tables.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // The list stays whole: better every table than none.
+                SolutionProblem = $"The tables in {solution.FriendlyName} could not be read - {ex.Message}";
+            }
+        }
+
+        IsReadingSolution = false;
+        RefreshFilter();
+    }
+
+    private void RefreshFilter()
+    {
+        ItemsView.Refresh();
+        NotifySelectionChanged();
+    }
+
     /// <summary>"3 selected · 412 managed tables hidden".</summary>
     public string Summary
     {
@@ -131,6 +287,21 @@ public sealed class EntityPickerViewModel : ObservableObject
             else
             {
                 parts.Add($"{ItemsView.Cast<EntityPick>().Count():N0} of {Items.Count:N0} tables shown");
+            }
+
+            if (IsReadingSolution)
+            {
+                parts.Add($"reading {SelectedSolution?.Solution?.FriendlyName}...");
+            }
+            else if (_solutionTables is not null && SelectedSolution?.Solution is { } solution)
+            {
+                // A solution read in the target can hold tables the source has never had.
+                var listed = Items.Select(i => i.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var missing = _solutionTables.Count(t => !listed.Contains(t));
+                if (missing > 0)
+                {
+                    parts.Add($"{missing:N0} of the tables in {solution.FriendlyName} not in {SolutionSessions[0].Title}");
+                }
             }
 
             return string.Join(" · ", parts);
@@ -164,6 +335,10 @@ public sealed class EntityPickerViewModel : ObservableObject
         if (obj is not EntityPick pick) return false;
 
         if (HideManaged && pick.Entity.IsManaged && !pick.IsSelected) return false;
+
+        // Nothing shows while the solution is read, rather than every table for a moment.
+        if (IsReadingSolution && !pick.IsSelected) return false;
+        if (_solutionTables is not null && !_solutionTables.Contains(pick.LogicalName) && !pick.IsSelected) return false;
 
         if (string.IsNullOrWhiteSpace(SearchText)) return true;
 

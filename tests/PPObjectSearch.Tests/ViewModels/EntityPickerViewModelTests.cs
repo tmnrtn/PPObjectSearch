@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using PPObjectSearch.Auth;
 using PPObjectSearch.Models;
+using PPObjectSearch.Services;
 using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Tests.ViewModels;
@@ -18,6 +20,39 @@ public class EntityPickerViewModelTests
             Table("new_region", null, managed: false)
         ],
         alreadyAdded);
+
+    private static SolutionInfo Solution(string uniqueName, string friendlyName) => new()
+    {
+        SolutionId = Guid.NewGuid(),
+        UniqueName = uniqueName,
+        FriendlyName = friendlyName
+    };
+
+    /// <summary>An environment with its solutions already listed, as a connected tab has them.</summary>
+    private static EnvironmentSessionViewModel Session(string name, params SolutionInfo[] solutions)
+    {
+        var session = new EnvironmentSessionViewModel(new AuthenticationService(), new AppSettings(),
+            new TabState { EnvironmentUrl = $"https://{name}.crm11.dynamics.com" });
+        foreach (var solution in solutions) session.Solutions.Add(solution);
+        return session;
+    }
+
+    /// <summary>A picker whose solution filter reads <paramref name="tables"/> by solution unique name.</summary>
+    private static EntityPickerViewModel SolutionPicker(
+        IReadOnlyList<EnvironmentSessionViewModel> sessions,
+        Func<EnvironmentSessionViewModel, SolutionInfo, Task<IReadOnlyCollection<string>>> read) => new(
+        [
+            Table("account", "Account", managed: true),
+            Table("contact", "Contact", managed: true),
+            Table("new_country", "Country", managed: false),
+            Table("new_region", null, managed: false)
+        ],
+        [],
+        sessions,
+        (session, solution, _) => read(session, solution));
+
+    private static SolutionOption Option(EntityPickerViewModel picker, string uniqueName) =>
+        picker.SolutionOptions.Single(o => o.Solution?.UniqueName == uniqueName);
 
     private static EntityPick Pick(EntityPickerViewModel picker, string logicalName) =>
         picker.Items.Single(i => i.LogicalName == logicalName);
@@ -171,5 +206,135 @@ public class EntityPickerViewModelTests
         var picker = Picker();
 
         Assert.False(picker.ItemsView.Filter("not a pick"));
+    }
+
+    // ---------------------------------------------------------------- solution filter
+
+    [Fact]
+    public void Without_a_way_to_read_solutions_there_is_no_solution_filter()
+    {
+        var picker = Picker();
+
+        Assert.False(picker.CanFilterBySolution);
+        Assert.Empty(picker.SolutionSessions);
+        Assert.Empty(picker.SolutionOptions);
+    }
+
+    [Fact]
+    public void The_source_solutions_are_offered_by_name_after_any_solution_without_the_default()
+    {
+        var source = Session("dev", Solution("Default", "Default Solution"), Solution("zeta", "Zeta"), Solution("core", "Core"));
+        var target = Session("test");
+
+        var picker = SolutionPicker([source, target], (_, _) => Task.FromResult<IReadOnlyCollection<string>>([]));
+
+        Assert.True(picker.CanFilterBySolution);
+        Assert.Same(source, picker.SolutionSession);
+        Assert.Equal(["Any solution", "Core", "Zeta"], picker.SolutionOptions.Select(o => o.Label));
+        Assert.Null(picker.SelectedSolution?.Solution);
+        Assert.Equal(4, Shown(picker).Length);
+    }
+
+    [Fact]
+    public void A_solution_narrows_the_list_to_its_tables_but_keeps_a_ticked_one()
+    {
+        var source = Session("dev", Solution("core", "Core"));
+        var picker = SolutionPicker([source], (_, _) => Task.FromResult<IReadOnlyCollection<string>>(["NEW_COUNTRY", "new_region"]));
+        Pick(picker, "account").IsSelected = true;
+
+        picker.SelectedSolution = Option(picker, "core");
+
+        Assert.Equal(["account", "new_country", "new_region"], Shown(picker));
+        Assert.Equal("1 selected · 3 of 4 tables shown", picker.Summary);
+
+        picker.SelectedSolution = picker.SolutionOptions[0];
+
+        Assert.Equal(4, Shown(picker).Length);
+    }
+
+    [Fact]
+    public void Tables_of_a_target_solution_missing_from_the_source_are_counted()
+    {
+        var source = Session("dev");
+        var target = Session("test", Solution("core", "Core"));
+        var read = new List<string>();
+        var picker = SolutionPicker([source, target], (session, solution) =>
+        {
+            read.Add($"{session.Title}/{solution.UniqueName}");
+            return Task.FromResult<IReadOnlyCollection<string>>(["new_country", "new_only_in_test"]);
+        });
+
+        picker.SolutionSession = target;
+        Assert.Equal(["Any solution", "Core"], picker.SolutionOptions.Select(o => o.Label));
+
+        picker.SelectedSolution = Option(picker, "core");
+
+        Assert.Equal(["test/core"], read);
+        Assert.Equal(["new_country"], Shown(picker));
+        Assert.Equal("0 selected · 1 of 4 tables shown · 1 of the tables in Core not in dev", picker.Summary);
+
+        // Another environment's list starts over, unfiltered.
+        picker.SolutionSession = source;
+
+        Assert.Null(picker.SelectedSolution?.Solution);
+        Assert.Equal(4, Shown(picker).Length);
+    }
+
+    [Fact]
+    public async Task Nothing_is_listed_while_the_solution_is_read()
+    {
+        var source = Session("dev", Solution("core", "Core"));
+        var pending = new TaskCompletionSource<IReadOnlyCollection<string>>();
+        var picker = SolutionPicker([source], (_, _) => pending.Task);
+
+        picker.SelectedSolution = Option(picker, "core");
+
+        Assert.True(picker.IsReadingSolution);
+        Assert.Empty(Shown(picker));
+        Assert.Equal("0 selected · 0 of 4 tables shown · reading Core...", picker.Summary);
+
+        pending.SetResult(["contact"]);
+        await picker.SolutionRead;
+
+        Assert.False(picker.IsReadingSolution);
+        Assert.Equal(["contact"], Shown(picker));
+    }
+
+    [Fact]
+    public void A_solution_that_cannot_be_read_leaves_the_list_whole_and_says_why()
+    {
+        var source = Session("dev", Solution("core", "Core"));
+        var picker = SolutionPicker([source], (_, _) => Task.FromException<IReadOnlyCollection<string>>(new InvalidOperationException("Forbidden")));
+
+        picker.SelectedSolution = Option(picker, "core");
+
+        Assert.False(picker.IsReadingSolution);
+        Assert.Equal(4, Shown(picker).Length);
+        Assert.Equal("The tables in Core could not be read - Forbidden", picker.SolutionProblem);
+
+        picker.SelectedSolution = picker.SolutionOptions[0];
+
+        Assert.Null(picker.SolutionProblem);
+    }
+
+    [Fact]
+    public void A_solution_picked_before_is_picked_again_by_unique_name()
+    {
+        var source = Session("dev", Solution("core", "Core"));
+        var target = Session("test", Solution("CORE", "Core"), Solution("other", "Other"));
+        var picker = SolutionPicker([source, target], (_, _) => Task.FromResult<IReadOnlyCollection<string>>(["account"]));
+
+        picker.SelectSolution(target, "core");
+
+        Assert.Same(target, picker.SolutionSession);
+        Assert.Equal("CORE", picker.SelectedSolution?.Solution?.UniqueName);
+        Assert.Equal(["account"], Shown(picker));
+
+        // An environment no longer offered, or a solution gone, changes nothing.
+        picker.SelectSolution(Session("gone", Solution("core", "Core")), "core");
+        picker.SelectSolution(target, "deleted");
+
+        Assert.Same(target, picker.SolutionSession);
+        Assert.Equal("CORE", picker.SelectedSolution?.Solution?.UniqueName);
     }
 }

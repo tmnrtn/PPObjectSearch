@@ -297,7 +297,10 @@ the solution rather than just its shape. It is read-only: nothing is ever writte
 environment.
 
 1. Pick a **source** and a **target** from the connected tabs.
-2. **+ Add** lists every table in the source environment. Tick the ones to check.
+2. **+ Add** lists every table in the source environment. Tick the ones to check. To see only
+   the tables a release carries, pick a solution under **Solution**, from the source or the
+   target (**In**). A table in a target solution that the source does not have is counted
+   below the list rather than shown.
 3. **Settings…** on a table (or double-click it) decides how it is compared:
    - **What identifies a row** — the primary key, one of the table's alternate keys, or columns you
      pick. Primary keys only agree between environments where the rows were *deployed*; rows built
@@ -371,7 +374,9 @@ separate acknowledgement naming how many rows will go — Dataverse deletes cann
 - **Rows are written parents first.** Creates and updates go table by table, a table before the
   tables that point at it (and, in a table that points at itself, a parent before its children),
   and a row written earlier in the run resolves the lookups of the rows after it. Deletes go
-  last, children first.
+  last, children first, both table by table and within a table that points at itself, read from
+  the target rows being deleted. Tables that point at each other are written in the order found;
+  **Retry failed** picks up a row whose reference had not been written yet.
 - **Read-only columns are left out**, not failed on. Calculated and rollup columns read like any
   other but Dataverse refuses them on write, so they are skipped and named in the result.
 - **A row changed since the comparison is not overwritten.** Updates and deletes carry the

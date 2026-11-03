@@ -121,6 +121,43 @@ public class DataverseClientReferenceDataTests
         Assert.True(entities[1].IsActivity);
     }
 
+    [Fact]
+    public async Task A_solutions_tables_are_named_by_their_metadata_ids()
+    {
+        var solution = Guid.NewGuid();
+        var country = Guid.NewGuid();
+        var region = Guid.NewGuid();
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "solutioncomponents?", $$"""
+                {"value":[{"objectid":"{{country}}"},{"objectid":"{{region}}"},{"objectid":"not an id"}]}
+                """)
+            .OnJson(HttpMethod.Get, "EntityDefinitions?", $$"""
+                {"value":[
+                  {"LogicalName":"account","MetadataId":"{{Guid.NewGuid()}}"},
+                  {"LogicalName":"new_country","MetadataId":"{{country}}"},
+                  {"LogicalName":"new_region","MetadataId":"{{region}}"},
+                  {"MetadataId":"{{region}}"}
+                ]}
+                """);
+
+        var tables = await Fakes.Dataverse(handler).GetSolutionTableNamesAsync(solution);
+
+        Assert.Equal(["new_country", "new_region"], tables.Order());
+        Assert.Contains("NEW_COUNTRY", tables);
+        Assert.Contains($"_solutionid_value eq {solution} and componenttype eq 1", handler.Requests[0].Url);
+    }
+
+    [Fact]
+    public async Task A_solution_without_tables_does_not_read_the_table_list()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "solutioncomponents?", """{"value":[]}""");
+
+        var tables = await Fakes.Dataverse(handler).GetSolutionTableNamesAsync(Guid.NewGuid());
+
+        Assert.Empty(tables);
+        Assert.Single(handler.Requests);
+    }
+
     private static readonly string[] ComparableColumns = ["new_amount", "new_name"];
 
     [Fact]

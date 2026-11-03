@@ -736,6 +736,48 @@ public class ReferenceDataWriterTests
     }
 
     [Fact]
+    public void A_run_of_only_deletes_takes_its_table_order_from_the_target_rows()
+    {
+        var parentTable = Plan(new[] { Code }, new[] { Name }, entity: ParentTable);
+        var thingPlan = Plan(new[] { Code }, new[] { Parent, Name });
+
+        var parentDelete = Assert.Single(ReferenceDataComparer.Compare(parentTable, Array.Empty<DataRecord>(),
+            new[] { Row(G(8)).With("new_code", "P").Named("P").Build() }).Rows);
+        var childDelete = Assert.Single(ReferenceDataComparer.Compare(thingPlan, Array.Empty<DataRecord>(),
+            new[] { Row(G(7)).With("new_code", "C").WithLookup("new_parentid", G(8), "P").Build() }).Rows);
+
+        var ordered = ReferenceDataWriter.OrderForWriting(
+            ReferenceDataWriter.Plan(new[] { parentDelete, childDelete }, new ReconcileOptions(true, true, true)), i => i);
+
+        Assert.Equal(new[] { Table, "new_parent" }, ordered.Select(i => i.Table));
+        Assert.All(ordered, i => Assert.Equal(ReconcileAction.Delete, i.Action));
+    }
+
+    private static readonly string[] ChildBeforeParent = ["grandchild", "child", "root"];
+
+    [Fact]
+    public void Rows_of_a_self_referencing_table_are_deleted_child_before_parent()
+    {
+        var self = Lookup("new_parentthingid");
+        var plan = Plan(new[] { Code }, new[] { self, Name });
+
+        DataRecord Node(int id, string name, string? parent) =>
+            (parent is null
+                ? Row(G(id)).With("new_code", name).Named(name)
+                : Row(G(id)).With("new_code", name).Named(name)
+                    .WithLookup("new_parentthingid", G(99), parent, targetTable: Table, navigation: "new_ParentThingId"))
+            .Build();
+
+        var rows = ReferenceDataComparer.Compare(plan, Array.Empty<DataRecord>(),
+            new[] { Node(1, "root", null), Node(3, "grandchild", "child"), Node(2, "child", "root") }).Rows;
+
+        var ordered = ReferenceDataWriter.OrderForWriting(
+            ReferenceDataWriter.Plan(rows, new ReconcileOptions(true, true, true)), i => i);
+
+        Assert.Equal(ChildBeforeParent, ordered.Select(i => i.Name));
+    }
+
+    [Fact]
     public async Task Apply_abandons_a_lookup_without_a_navigation_property()
     {
         var handler = new FakeHttpHandler();
