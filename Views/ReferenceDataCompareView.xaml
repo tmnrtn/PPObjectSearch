@@ -385,7 +385,14 @@
                               BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0">
 
                         <DataGrid.Columns>
+                            <!-- The tick toggles its own row and leaves the rest of the selection alone;
+                                 a click anywhere else on a row still selects as a grid does. -->
                             <DataGridTemplateColumn Width="40" CanUserResize="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellStyle>
+                                    <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="RowCheck_PreviewMouseLeftButtonDown" />
+                                    </Style>
+                                </DataGridTemplateColumn.CellStyle>
                                 <DataGridTemplateColumn.Header>
                                     <CheckBox x:Name="SelectAllBox" IsThreeState="True" Margin="8,0,0,0"
                                               Click="SelectAll_Click" ToolTip="Select every row shown" />

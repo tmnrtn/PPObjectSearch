@@ -120,6 +120,13 @@ public sealed class AppSettings
     /// </summary>
     public TableSettingsPreferences? TableSettings { get; set; }
 
+    /// <summary>
+    /// The columns Table data last showed for each table, in order, by table logical name - so a
+    /// table opens as it was left, in any environment. A table showing its default columns has
+    /// no entry, and keeps following its view.
+    /// </summary>
+    public Dictionary<string, List<string>>? TableDataColumns { get; set; }
+
     /// <summary>Light, Dark, or System to follow the Windows app theme.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AppTheme Theme { get; set; } = AppTheme.System;

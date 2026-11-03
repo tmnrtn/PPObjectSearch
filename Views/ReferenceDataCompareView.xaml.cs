@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Views;
@@ -30,6 +31,19 @@ public partial class ReferenceDataCompareView : ScreenView
     {
         if (ResultsGrid.SelectedItems.Count == ResultsGrid.Items.Count) ResultsGrid.UnselectAll();
         else ResultsGrid.SelectAll();
+    }
+
+    /// <summary>
+    /// A row's tick adds or removes that row alone. Left to the grid, the click would first select
+    /// only this row - the cell handles it even when the check box already has - and the check box
+    /// would then toggle it straight back off. Handled here, as a preview, the grid never sees it.
+    /// </summary>
+    private void RowCheck_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DataGridCell cell || DataGridRow.GetRowContainingElement(cell) is not { } row) return;
+
+        row.IsSelected = !row.IsSelected;
+        e.Handled = true;
     }
 
     /// <summary>Double-clicking a table opens the settings that decide how it is compared, which is
