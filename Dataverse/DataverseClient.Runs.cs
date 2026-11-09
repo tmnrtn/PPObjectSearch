@@ -183,7 +183,7 @@ public sealed partial class DataverseClient
                 using var type = await GetJsonAsync(
                     EnvironmentUrl + ApiPath + $"plugintypes({objectId})?$select=typename", ct).ConfigureAwait(false);
                 var name = JsonHelper.GetString(type.RootElement, "typename");
-                filter = string.IsNullOrWhiteSpace(name) ? null : $"typename eq '{Escape(name)}'";
+                filter = string.IsNullOrWhiteSpace(name) ? null : TraceTypeFilter(name);
                 break;
             }
 
@@ -202,7 +202,7 @@ public sealed partial class DataverseClient
 
                 if (names.Count == 0) return Array.Empty<PluginTraceEntry>();
 
-                filter = string.Join(" or ", names.Select(n => $"typename eq '{Escape(n!)}'"));
+                filter = string.Join(" or ", names.Select(n => TraceTypeFilter(n!)));
                 break;
             }
 
@@ -263,5 +263,12 @@ public sealed partial class DataverseClient
     /// A value for inside an OData string literal: single quotes doubled, then every character
     /// that means something in a URL percent-encoded (including '%').
     /// </summary>
+    /// <summary>
+    /// A type's trace entries, whether the trace log names it by class alone or in full, with its
+    /// assembly and version after a comma.
+    /// </summary>
+    private static string TraceTypeFilter(string typeName) =>
+        $"typename eq '{Escape(typeName)}' or startswith(typename,'{Escape(typeName + ",")}')";
+
     internal static string Escape(string value) => Uri.EscapeDataString(value.Replace("'", "''"));
 }

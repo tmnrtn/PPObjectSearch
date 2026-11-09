@@ -27,6 +27,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     internal const int RecentFailureCount = 8;
 
     private readonly EnvironmentSessionViewModel _session;
+    private readonly Action<SolutionComponentItem, DetailsTab> _openDetails;
     private CancellationTokenSource? _cts;
     private FailureData? _data;
     private FailureData? _shown;
@@ -34,9 +35,10 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     private DateTimeOffset _to;
     private int _stateRequest;
 
-    public FailuresViewModel(EnvironmentSessionViewModel session)
+    public FailuresViewModel(EnvironmentSessionViewModel session, Action<SolutionComponentItem, DetailsTab>? openDetails = null)
     {
         _session = session;
+        _openDetails = openDetails ?? session.OpenDetails;
 
         // The pickers hold calendar days; this is today's, in local time. Like a picked day it has
         // no kind: Range gives it today's offset, which a local-kind day from before a clock change
@@ -49,11 +51,11 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsBusy);
         ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => _shown is { Events.Count: > 0 });
         ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => _shown is not null);
-        OpenEventCommand = new RelayCommand(p => OpenEvent(p as FailureEvent), p => p is FailureEvent);
-        OpenLatestFailedRunCommand = new RelayCommand(
-            _ => OpenEvent(SelectedComponent?.Events[0]), _ => SelectedComponent is not null);
-        OpenComponentDetailsCommand = new RelayCommand(
-            _ => OpenDetails(SelectedComponent), _ => SelectedComponent is not null);
+        OpenEventCommand = new AsyncRelayCommand(p => OpenEventAsync(p as FailureEvent), p => p is FailureEvent);
+        OpenLatestFailedRunCommand = new AsyncRelayCommand(
+            _ => OpenEventAsync(SelectedComponent?.Events[0]), _ => SelectedComponent is not null);
+        OpenComponentDetailsCommand = new AsyncRelayCommand(
+            _ => OpenDetailsAsync(SelectedComponent), _ => SelectedComponent is not null);
 
         _session.PropertyChanged += OnSessionChanged;
         _session.AppInsightsChanged += OnAppInsightsChanged;
@@ -71,9 +73,9 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     public RelayCommand CancelCommand { get; }
     public RelayCommand ExportCsvCommand { get; }
     public RelayCommand ExportMarkdownCommand { get; }
-    public RelayCommand OpenEventCommand { get; }
-    public RelayCommand OpenLatestFailedRunCommand { get; }
-    public RelayCommand OpenComponentDetailsCommand { get; }
+    public AsyncRelayCommand OpenEventCommand { get; }
+    public AsyncRelayCommand OpenLatestFailedRunCommand { get; }
+    public AsyncRelayCommand OpenComponentDetailsCommand { get; }
 
     /// <summary>Opens the environment's App Insights picker - offered when none is chosen yet.</summary>
     public RelayCommand ChooseAppInsightsCommand => _session.ChooseAppInsightsCommand;
@@ -327,6 +329,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
             SelectedErrors.Clear();
             RecentFailures.Clear();
             SelectedStateLabel = null;
+            OpenProblem = null;
 
             if (value is not null)
             {
@@ -667,33 +670,70 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
     /// A failure, where it can be seen: a flow's or workflow's runs, a plug-in's trace log or App
     /// Insights tab - or, for a request or exception App Insights holds, its operation in the portal.
     /// </summary>
-    private void OpenEvent(FailureEvent? failure)
-    {
-        if (failure is null) return;
-
-        if (ItemFor(failure) is { } item)
+    private Task OpenEventAsync(FailureEvent? failure) => failure is null
+        ? Task.CompletedTask
+        : OpenAsync(failure, failure.Source switch
         {
-            _session.OpenDetails(item, failure.Source switch
-            {
-                FailureSource.AppInsights => DetailsTab.Telemetry,
-                FailureSource.Plugin => DetailsTab.TraceLog,
-                _ => DetailsTab.Runs
-            });
+            FailureSource.AppInsights => DetailsTab.Telemetry,
+            FailureSource.Plugin => DetailsTab.TraceLog,
+            _ => DetailsTab.Runs
+        });
+
+    private Task OpenDetailsAsync(FailureSummaryRow? row) =>
+        row is null ? Task.CompletedTask : OpenAsync(row.Events[0], DetailsTab.Default);
+
+    private async Task OpenAsync(FailureEvent failure, DetailsTab tab)
+    {
+        OpenProblem = null;
+
+        var (item, problem) = await FindItemAsync(failure);
+        if (item is not null)
+        {
+            _openDetails(item, tab);
             return;
         }
 
         if (failure.Source == FailureSource.AppInsights && OpenInPortal(failure)) return;
 
-        NotLoaded(failure);
+        Status = problem!;
+        OpenProblem = problem;
     }
 
-    private void OpenDetails(FailureSummaryRow? row)
+    /// <summary>
+    /// The component a failure belongs to: its row in the loaded list, or else the environment's own
+    /// record of it - so a failure can be opened whichever solution the tab has loaded. Otherwise why not.
+    /// </summary>
+    private async Task<(SolutionComponentItem? Item, string? Problem)> FindItemAsync(FailureEvent failure)
     {
-        if (row is null) return;
+        if (ItemFor(failure) is { } loaded) return (loaded, null);
 
-        if (ItemFor(row.Events[0]) is { } item) _session.OpenDetails(item);
-        else if (row.Source == FailureSource.AppInsights && OpenInPortal(row.Events[0])) return;
-        else NotLoaded(row.Events[0]);
+        var notLoaded = $"{failure.ComponentName} is not in the loaded list, so its details cannot be opened here. " +
+                        "Load the default solution to reach every component.";
+        // A request or exception App Insights holds belongs to no component to look up.
+        var hasComponent = failure.Source != FailureSource.AppInsights || failure.IsPlugin;
+        if (!hasComponent || _session.Client is not { } client) return (null, notLoaded);
+
+        Status = $"Finding {failure.ComponentName} in the environment...";
+        try
+        {
+            var found = await client.FindFailureComponentAsync(failure);
+            Status = found is null ? string.Empty : $"{failure.ComponentName} is not in the loaded list, so it was read from the environment.";
+            return found is null
+                ? (null, $"{failure.ComponentName} could not be found in the environment - it may have been deleted since it failed.")
+                : (found, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, $"{failure.ComponentName} is not in the loaded list, and could not be read from the environment - {ex.Message}");
+        }
+    }
+
+    private string? _openProblem;
+    /// <summary>Why the selected failure's component could not be opened - shown beside the buttons that tried.</summary>
+    public string? OpenProblem
+    {
+        get => _openProblem;
+        private set => SetProperty(ref _openProblem, value);
     }
 
     /// <summary>An App Insights failure's whole operation, in the resource's Logs in the Azure portal.</summary>
@@ -710,10 +750,6 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         Status = $"Opened operation {failure.OperationId} in the Azure portal.";
         return true;
     }
-
-    private void NotLoaded(FailureEvent failure) =>
-        Status = $"{failure.ComponentName} is not in the loaded list, so its details cannot be opened here. " +
-                 "Load the default solution to reach every component.";
 
     /// <summary>Lets go of the session when the window closes, and stops any read in progress.</summary>
     public void Detach()

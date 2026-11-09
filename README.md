@@ -92,6 +92,8 @@ straight into the maker portal.
 - **Failures** (in the sidebar, under the selected environment) — cloud flow runs, classic
   workflow jobs and plug-in trace log entries that ended in error over a period, with the trend,
   each failing component and its errors grouped, optionally narrowed to the solution on screen.
+  Opening a failure finds its flow, workflow or plug-in in the loaded list, or else reads it from
+  the environment, so it opens whichever solution is on screen.
   With an [Application Insights](#application-insights) resource chosen, the failed plug-ins,
   failed requests and exceptions it holds join them as a fourth source.
 - **Solution history** (in the sidebar, under the selected environment) — every import, upgrade,

@@ -279,6 +279,11 @@
                                         <Button Grid.Column="1" Content="Open details" Margin="6,0,0,0"
                                                 Command="{Binding OpenComponentDetailsCommand}" />
                                     </Grid>
+                                    <!-- Said here as well as in the status bar: it answers the button just pressed. -->
+                                    <TextBlock Text="{Binding OpenProblem}" FontSize="11" Foreground="{DynamicResource Amber}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Visibility="{Binding OpenProblem, Converter={StaticResource EmptyToCollapsed}}" />
+
                                 </StackPanel>
                             </Border>
 

@@ -243,6 +243,128 @@ public class FailuresTests
     }
 
     [Fact]
+    public async Task A_trace_naming_its_type_in_full_is_put_down_to_the_class_and_kept_by_a_solution_scope()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "organizations?", """{"value":[{"plugintracelogsetting":2}]}""")
+            .OnJson(HttpMethod.Get, "plugintracelogs?", """
+                {"value":[{"plugintracelogid":"t1","createdon":"2026-10-01T08:00:00Z","exceptiondetails":"Message: Boom",
+                  "typename":"Contoso.Api.CreateAccount, Contoso.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=8dda8a9d111a5056"}]}
+                """);
+        var scope = new FailureQuery
+        {
+            PluginTypeNames = new HashSet<string>(["Contoso.Api.CreateAccount"], StringComparer.OrdinalIgnoreCase),
+            PluginStepIds = new HashSet<Guid>()
+        };
+
+        var data = await Fakes.Dataverse(handler).GetFailuresAsync(From, To, scope);
+
+        var plugin = Assert.Single(data.Events, e => e.Source == FailureSource.Plugin);
+        Assert.Equal("Contoso.Api.CreateAccount", plugin.ComponentKey);
+        Assert.Equal("Contoso.Api.CreateAccount", plugin.ComponentName);
+    }
+
+    // ---------------------------------------------------------------- a component the tab has not loaded
+
+    private static FailureEvent PluginFailure(Guid? step = null, FailureSource source = FailureSource.Plugin) => new()
+    {
+        Source = source,
+        IsPlugin = source == FailureSource.AppInsights,
+        ComponentKey = "Contoso.O'Brien",
+        ComponentName = "Contoso.O'Brien",
+        When = From,
+        StepId = step
+    };
+
+    [Fact]
+    public async Task A_plugin_failure_finds_its_type_by_class_name()
+    {
+        var typeId = Guid.NewGuid();
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "plugintypes?",
+            $$"""{"value":[{"plugintypeid":"{{typeId}}","typename":"Contoso.O'Brien"}]}""");
+
+        var item = await Fakes.Dataverse(handler).FindFailureComponentAsync(PluginFailure(Step, FailureSource.AppInsights));
+
+        Assert.NotNull(item);
+        Assert.Equal((typeId, 90, "Contoso.O'Brien"), (item.ObjectId, item.ComponentType, item.Name));
+        Assert.Equal(ObjectKind.Plugin, DetailsTabs.KindOf(item));
+        Assert.Contains("$filter=typename eq 'Contoso.O''Brien'&$top=1", handler.Requests.Single().Url);
+    }
+
+    [Fact]
+    public async Task A_plugin_failure_whose_type_is_not_found_falls_back_to_its_step()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "plugintypes?", """{"value":[]}""")
+            .OnJson(HttpMethod.Get, $"sdkmessageprocessingsteps({Step})", """{"name":"Create of account"}""");
+
+        var item = await Fakes.Dataverse(handler).FindFailureComponentAsync(PluginFailure(Step));
+
+        Assert.NotNull(item);
+        Assert.Equal((Step, 92, "Create of account"), (item.ObjectId, item.ComponentType, item.Name));
+    }
+
+    [Fact]
+    public async Task A_plugin_failure_with_neither_type_nor_step_finds_nothing()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "plugintypes?", """{"value":[]}""")
+            .OnError(HttpMethod.Get, "sdkmessageprocessingsteps(", System.Net.HttpStatusCode.NotFound, "Does Not Exist");
+        using var client = Fakes.Dataverse(handler);
+
+        Assert.Null(await client.FindFailureComponentAsync(PluginFailure()));
+        Assert.Null(await client.FindFailureComponentAsync(PluginFailure(Step)));
+    }
+
+    [Fact]
+    public async Task A_flow_failure_finds_its_definition_as_a_cloud_flow()
+    {
+        var unique = Guid.NewGuid();
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, $"workflows({FlowA})?$select=name,category",
+            $$"""{"name":"Sync orders","category":5,"workflowidunique":"{{unique}}","primaryentity":"none"}""");
+        var failure = new FailureEvent
+        {
+            Source = FailureSource.CloudFlow, ComponentKey = FlowA.ToString(), ComponentName = "Sync orders", When = From, WorkflowId = FlowA
+        };
+
+        var item = await Fakes.Dataverse(handler).FindFailureComponentAsync(failure);
+
+        Assert.NotNull(item);
+        Assert.Equal((FlowA, 29, "Sync orders", unique), (item.ObjectId, item.ComponentType, item.Name, item.WorkflowIdUnique));
+        Assert.Equal(ObjectKind.CloudFlow, DetailsTabs.KindOf(item));
+    }
+
+    [Fact]
+    public async Task A_deleted_workflow_is_not_found_and_a_request_has_no_component_to_find()
+    {
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "workflows(", System.Net.HttpStatusCode.NotFound, "Does Not Exist");
+        using var client = Fakes.Dataverse(handler);
+        var job = new FailureEvent
+        {
+            Source = FailureSource.ClassicWorkflow, ComponentKey = Definition.ToString(), ComponentName = "Escalate case", When = From,
+            WorkflowId = Definition
+        };
+        var request = new FailureEvent { Source = FailureSource.AppInsights, ComponentKey = "request:GET /", ComponentName = "GET /", When = From };
+
+        Assert.Null(await client.FindFailureComponentAsync(job));
+        Assert.Null(await client.FindFailureComponentAsync(request));
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task A_lookup_that_is_refused_is_not_taken_for_a_missing_component()
+    {
+        var handler = new FakeHttpHandler().OnError(HttpMethod.Get, "workflows(", System.Net.HttpStatusCode.Forbidden, "No read on workflows");
+        var failure = new FailureEvent
+        {
+            Source = FailureSource.CloudFlow, ComponentKey = FlowA.ToString(), ComponentName = "Sync orders", When = From, WorkflowId = FlowA
+        };
+
+        await Assert.ThrowsAsync<DataverseException>(() => Fakes.Dataverse(handler).FindFailureComponentAsync(failure));
+    }
+
+    [Fact]
     public async Task A_solution_scope_keeps_only_its_components_and_a_failing_source_is_noted()
     {
         var handler = Handler(tracesFail: true);

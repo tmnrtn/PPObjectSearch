@@ -260,7 +260,7 @@ public class DataverseClientRunsTests
         var entries = await client.GetPluginTraceLogAsync(typeId, 90);
 
         Assert.Empty(entries!);
-        Assert.Contains("$filter=typename eq 'Contoso.O''Brien'", handler.Requests[1].Url);
+        Assert.Contains("$filter=typename eq 'Contoso.O''Brien' or startswith(typename,'Contoso.O''Brien,')&", handler.Requests[1].Url);
     }
 
     [Fact]
@@ -289,7 +289,8 @@ public class DataverseClientRunsTests
         await client.GetPluginTraceLogAsync(assemblyId, 91);
 
         Assert.Contains($"$filter=_pluginassemblyid_value eq {assemblyId}", handler.Requests[0].Url);
-        Assert.Contains("$filter=typename eq 'A.One' or typename eq 'A.Two'&", handler.Requests[1].Url);
+        Assert.Contains("$filter=typename eq 'A.One' or startswith(typename,'A.One,') or " +
+                        "typename eq 'A.Two' or startswith(typename,'A.Two,')&", handler.Requests[1].Url);
     }
 
     [Fact]
