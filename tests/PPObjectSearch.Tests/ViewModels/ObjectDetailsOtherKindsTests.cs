@@ -346,6 +346,21 @@ public class ObjectDetailsOtherKindsTests
     }
 
     [Fact]
+    public async Task System_jobs_are_read_again_at_the_count_asked_for()
+    {
+        var handler = Workflow(Jobs(5, 30));
+        var details = Details(handler, Item(29, 0));
+        await details.LoadAsync();
+
+        details.DataverseRunCount = 3;
+        await details.ReloadRunsCommand.ExecuteAsync(null);
+
+        Assert.Contains("$top=3", handler.Requests[^1].Url);
+        Assert.Equal(3, details.Runs.Count);
+        Assert.Equal("3+", details.RunsTabCount);
+    }
+
+    [Fact]
     public async Task System_jobs_that_cannot_be_read_say_why()
     {
         var details = Details(new FakeHttpHandler()
