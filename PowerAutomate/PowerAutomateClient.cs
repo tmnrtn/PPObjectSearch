@@ -126,11 +126,18 @@ public sealed class PowerAutomateClient : IDisposable
         return actions;
     }
 
+    /// <summary>How many live runs are asked for unless the caller says otherwise.</summary>
+    public const int DefaultRunCount = 50;
+
+    /// <summary>The most live runs asked for at once; the list is read as one page.</summary>
+    public const int RunCountLimit = 250;
+
     /// <summary>
     /// A flow's latest runs, live: including those still running or waiting, and those finished
     /// too recently for Dataverse's copy. Maker's route first, then the admin route.
     /// </summary>
-    public async Task<IReadOnlyList<ProcessRun>> GetRunsAsync(string environmentId, string flowId, int top = 50, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProcessRun>> GetRunsAsync(
+        string environmentId, string flowId, int top = DefaultRunCount, CancellationToken ct = default)
     {
         var path = $"environments/{Uri.EscapeDataString(environmentId)}/flows/{Uri.EscapeDataString(flowId)}/runs";
 

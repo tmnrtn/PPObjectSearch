@@ -483,6 +483,25 @@
                                                            VerticalAlignment="Center" />
                                             </StackPanel>
                                         </ToggleButton>
+                                        <!-- How many runs each source is asked for; a new details window starts at the defaults. -->
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                            <StackPanel.InputBindings>
+                                                <KeyBinding Key="Enter" Command="{Binding ReloadRunsCommand}" />
+                                            </StackPanel.InputBindings>
+                                            <TextBlock Text="Dataverse" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                                            <TextBox Text="{Binding DataverseRunCount, UpdateSourceTrigger=PropertyChanged}" Width="56" Height="24" Margin="6,0,0,0"
+                                                     AutomationProperties.Name="Runs read from Dataverse"
+                                                     ToolTip="How many of the latest runs to read from Dataverse" />
+                                            <TextBlock Text="Live" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                                       Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}" />
+                                            <TextBox Text="{Binding LiveRunCount, UpdateSourceTrigger=PropertyChanged}" Width="48" Height="24" Margin="6,0,0,0"
+                                                     AutomationProperties.Name="Runs read live from Power Automate"
+                                                     ToolTip="How many of the latest runs to read live from Power Automate - those in progress or not yet in Dataverse"
+                                                     Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}" />
+                                            <Button AutomationProperties.Name="Read the runs again" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                                                    Height="24" Width="24" Margin="6,0,0,0" Command="{Binding ReloadRunsCommand}"
+                                                    ToolTip="Read the runs again at these counts" />
+                                        </StackPanel>
                                         <TextBlock Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding RunsStatus}" />

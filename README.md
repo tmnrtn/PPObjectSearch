@@ -59,7 +59,9 @@ straight into the maker portal.
   details** (`Ctrl+Shift+W`) closes them together, tabs and windows alike. By type, details also show:
   - **Cloud flows**: whether the flow is on, a link to it in Power Automate, recent run history
     (Dataverse's, plus runs still in progress or just finished from Power Automate), with each
-    run's error and a link to the run, and the flow's JSON definition to copy or save. **Design** draws the flow
+    run's error and a link to the run (the latest 100 from Dataverse and 50 live by default; the
+    boxes above the list read more or fewer while that window is open), and the flow's JSON
+    definition to copy or save. **Design** draws the flow
     as the designer does, read-only: trigger, steps in run-after order, parallel branches side by
     side, and conditions, switches, loops and scopes that collapse. Where a step runs after
     something other than plain success, its connector is dashed red and shows the outcomes it
@@ -75,7 +77,7 @@ straight into the maker portal.
     failed iteration is picked; a step's **Inputs** and **Outputs** are fetched only when asked
     for, and never saved. Run details are
     kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
-  - **Classic workflows**: recent system jobs and their errors.
+  - **Classic workflows**: recent system jobs and their errors - the latest 100, or as many as asked for.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions
     (and a warning when tracing is switched off).
   - **Web resources**: the decoded source of scripts, HTML, CSS, XML, SVG and RESX files, with

@@ -13,6 +13,9 @@ public sealed partial class DataverseClient
     /// <summary>Enough to see a pattern; the maker portal is the place for anything older.</summary>
     public const int MaxRunHistory = 100;
 
+    /// <summary>The most a run list will ask for: a single page of Dataverse results.</summary>
+    public const int RunHistoryLimit = 5000;
+
     private const string SelectFlowRun =
         "name,status,starttime,endtime,duration,triggertype,errorcode,errormessage,workflowid";
 
@@ -77,7 +80,8 @@ public sealed partial class DataverseClient
     /// workflow's activation records rather than the definition in the solution, so those are
     /// found first.
     /// </summary>
-    public async Task<IReadOnlyList<ProcessRun>> GetClassicWorkflowRunsAsync(Guid workflowId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ProcessRun>> GetClassicWorkflowRunsAsync(
+        Guid workflowId, int top = MaxRunHistory, CancellationToken ct = default)
     {
         var ids = new List<Guid> { workflowId };
 
@@ -101,7 +105,7 @@ public sealed partial class DataverseClient
             var url = EnvironmentUrl + ApiPath +
                       "asyncoperations?$select=name,statuscode,startedon,completedon,createdon,message,friendlymessage,errorcode," +
                       "_regardingobjectid_value" +
-                      $"&$filter={filter}&$orderby=createdon desc&$top={MaxRunHistory}";
+                      $"&$filter={filter}&$orderby=createdon desc&$top={top}";
 
             using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
 
@@ -110,7 +114,7 @@ public sealed partial class DataverseClient
 
         return runs
             .OrderByDescending(r => r.StartTime)
-            .Take(MaxRunHistory)
+            .Take(top)
             .ToList();
     }
 

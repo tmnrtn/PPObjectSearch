@@ -263,6 +263,61 @@ public class ObjectDetailsFlowTests
         Assert.Equal("No runs in Dataverse or in Power Automate. Run history is kept for about 28 days.", details.RunsStatus);
     }
 
+    [Fact]
+    public async Task Runs_are_read_at_the_default_counts()
+    {
+        var handler = Flow();
+        var details = Details(handler, CloudFlow(), EnvironmentId);
+
+        await details.LoadAsync();
+
+        Assert.Equal(100, details.DataverseRunCount);
+        Assert.Equal(50, details.LiveRunCount);
+        Assert.Contains(handler.Requests, r => r.Url.Contains("flowruns?") && r.Url.Contains("$top=100"));
+        Assert.Contains(handler.Requests, r => r.Url.Contains("/runs?api-version") && r.Url.Contains("$top=50"));
+    }
+
+    [Fact]
+    public async Task Runs_are_read_again_at_the_counts_asked_for_and_a_new_window_starts_at_the_defaults()
+    {
+        var handler = Flow(first: h => h
+            .OnJson(HttpMethod.Get, "flowruns?", DataverseRuns)
+            .OnJson(HttpMethod.Get, "/runs?api-version", LiveRuns));
+        var details = Details(handler, CloudFlow(), EnvironmentId);
+        await details.LoadAsync();
+        handler.Requests.Clear();
+
+        details.DataverseRunCount = 2;
+        details.LiveRunCount = 7;
+        await details.ReloadRunsCommand.ExecuteAsync(null);
+
+        Assert.Contains(handler.Requests, r => r.Url.Contains("flowruns?") && r.Url.Contains("$top=2"));
+        Assert.Contains(handler.Requests, r => r.Url.Contains("/runs?api-version") && r.Url.Contains("$top=7"));
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("connectionreferences?"));
+        Assert.Equal(["run-live", "run-1", "run-2"], details.Runs.Select(r => r.Name));
+        Assert.Equal("3+", details.RunsTabCount);
+
+        var reopened = Details(Flow(), CloudFlow(), EnvironmentId);
+
+        Assert.Equal(100, reopened.DataverseRunCount);
+        Assert.Equal(50, reopened.LiveRunCount);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 1)]
+    [InlineData(-5, 1, 1)]
+    [InlineData(1_000_000, 5000, 250)]
+    public void Run_counts_are_kept_within_what_each_source_serves(int asked, int dataverse, int live)
+    {
+        var details = Details(Flow(), CloudFlow(), EnvironmentId);
+
+        details.DataverseRunCount = asked;
+        details.LiveRunCount = asked;
+
+        Assert.Equal(dataverse, details.DataverseRunCount);
+        Assert.Equal(live, details.LiveRunCount);
+    }
+
     // ---------------------------------------------------------------- a run on the diagram
 
     [Fact]

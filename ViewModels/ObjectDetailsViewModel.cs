@@ -1145,6 +1145,46 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
     public int FailedRunCount => Runs.Count(r => r.Outcome == RunOutcome.Failed);
 
+    private int _dataverseRunCount = DataverseClient.MaxRunHistory;
+    /// <summary>
+    /// How many runs - or system jobs - to read from Dataverse. Each details window starts at the
+    /// default; a change is kept until the window closes.
+    /// </summary>
+    public int DataverseRunCount
+    {
+        get => _dataverseRunCount;
+        set => SetProperty(ref _dataverseRunCount, Math.Clamp(value, 1, DataverseClient.RunHistoryLimit));
+    }
+
+    private int _liveRunCount = PowerAutomate.PowerAutomateClient.DefaultRunCount;
+    /// <summary>How many runs to read from Power Automate's live list, for a cloud flow. Starts at the default too.</summary>
+    public int LiveRunCount
+    {
+        get => _liveRunCount;
+        set => SetProperty(ref _liveRunCount, Math.Clamp(value, 1, PowerAutomate.PowerAutomateClient.RunCountLimit));
+    }
+
+    private AsyncRelayCommand? _reloadRunsCommand;
+    /// <summary>Reads the run history again, at the counts now asked for, leaving the other tabs as they are.</summary>
+    public AsyncRelayCommand ReloadRunsCommand => _reloadRunsCommand ??= new AsyncRelayCommand(
+        _ => ReloadRunsAsync(), _ => HasRunHistory && !IsBusy);
+
+    private async Task ReloadRunsAsync()
+    {
+        if (IsBusy || _detached) return;
+
+        IsBusy = true;
+        try
+        {
+            // Whatever goes wrong is said in RunsStatus, beside the list.
+            await LoadRunsAsync(new List<string>());
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>Opens a run - the one passed, else the selected one - in Power Automate.</summary>
     public RelayCommand OpenRunCommand => _openRunCommand ??= new RelayCommand(
         p => OpenUrl((p as ProcessRun ?? SelectedRun)?.PortalUrl),
@@ -1287,7 +1327,10 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isTraceOff, value);
     }
 
-    public string RunsTabCount => Runs.Count >= DataverseClient.MaxRunHistory ? $"{Runs.Count}+" : $"{Runs.Count}";
+    /// <summary>Set when either source came back at the count asked for, so older runs were left out.</summary>
+    private bool _runsCapped;
+
+    public string RunsTabCount => _runsCapped ? $"{Runs.Count}+" : $"{Runs.Count}";
 
     public string TraceTabCount =>
         TraceEntries.Count >= DataverseClient.MaxRunHistory ? $"{TraceEntries.Count}+" : $"{TraceEntries.Count}";
@@ -1296,13 +1339,15 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     {
         Runs.Clear();
         SelectedRun = null;
+        _runsCapped = false;
         var dataverseFailed = false;
 
         try
         {
             var runs = IsCloudFlow
-                ? await _client.GetCloudFlowRunsAsync(Item.ObjectId, ct: CancellationToken.None)
-                : await _client.GetClassicWorkflowRunsAsync(Item.ObjectId, CancellationToken.None);
+                ? await _client.GetCloudFlowRunsAsync(Item.ObjectId, DataverseRunCount, CancellationToken.None)
+                : await _client.GetClassicWorkflowRunsAsync(Item.ObjectId, DataverseRunCount, CancellationToken.None);
+            _runsCapped = runs.Count >= DataverseRunCount;
 
             foreach (var run in runs)
             {
@@ -1362,7 +1407,8 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         try
         {
             _powerAutomate ??= _client.CreatePowerAutomateClient();
-            var live = await _powerAutomate.GetRunsAsync(_environmentId, flowId, ct: CancellationToken.None);
+            var live = await _powerAutomate.GetRunsAsync(_environmentId, flowId, LiveRunCount, CancellationToken.None);
+            _runsCapped |= live.Count >= LiveRunCount;
 
             var merged = RunHistoryMerge.Merge(Runs.ToList(), live);
             var selectedName = SelectedRun?.Name;
@@ -1646,6 +1692,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
             OnPropertyChanged(nameof(StatusText));
             RefreshCommand?.RaiseCanExecuteChanged();
+            _reloadRunsCommand?.RaiseCanExecuteChanged();
         }
     }
 
