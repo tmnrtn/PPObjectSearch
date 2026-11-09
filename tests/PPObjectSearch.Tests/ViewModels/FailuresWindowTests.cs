@@ -32,7 +32,8 @@ public class FailuresWindowTests
     private static SolutionComponentItem TypeItem() =>
         new() { Name = PluginType, ComponentTypeName = "Plug-in Type", ComponentType = 90, ObjectId = Guid.NewGuid() };
 
-    private static FakeHttpHandler Handler(bool tracesFail = false, int flowState = 1, bool stateFails = false, bool stateMissing = false)
+    private static FakeHttpHandler Handler(bool tracesFail = false, int flowState = 1, bool stateFails = false, bool stateMissing = false,
+        string traceTypeName = PluginType)
     {
         var handler = new FakeHttpHandler();
         if (stateMissing) handler.OnJson(HttpMethod.Get, "workflows?$select=workflowid,statecode", """{"value":[]}""");
@@ -66,17 +67,17 @@ public class FailuresWindowTests
                 """)
             .OnJson(HttpMethod.Get, "organizations?", """{"value":[{"plugintracelogsetting":1}]}""")
             .OnJson(HttpMethod.Get, "plugintracelogs?", $$"""
-                {"value":[{"plugintracelogid":"t1","createdon":"{{Ago(5)}}","typename":"{{PluginType}}","messagename":"Update",
+                {"value":[{"plugintracelogid":"t1","createdon":"{{Ago(5)}}","typename":"{{traceTypeName}}","messagename":"Update",
                   "primaryentity":"account","pluginstepid":"{{Step}}",
                   "exceptiondetails":"Unhandled exception: \nException type: System.ServiceModel.FaultException\nMessage: Name is required\nDetail: ..."}]}
                 """);
     }
 
     /// <summary>The window on a tab, with progress reports landing as they are made.</summary>
-    private static FailuresViewModel Open(EnvironmentSessionViewModel session)
+    private static FailuresViewModel Open(EnvironmentSessionViewModel session, List<(SolutionComponentItem Item, DetailsTab Tab)>? opened = null)
     {
         InlineSynchronizationContext.Install();
-        return new FailuresViewModel(session);
+        return opened is null ? new FailuresViewModel(session) : new FailuresViewModel(session, (item, tab) => opened.Add((item, tab)));
     }
 
     private static FailuresViewModel Window(FakeHttpHandler handler, SolutionInfo? solution = null, params SolutionComponentItem[] items) =>
@@ -604,14 +605,45 @@ public class FailuresWindowTests
     // ---------------------------------------------------------------- opening
 
     [Fact]
-    public async Task A_failure_whose_component_is_not_loaded_says_how_to_reach_it()
+    public async Task A_failure_whose_component_is_not_loaded_is_read_from_the_environment()
     {
-        var vm = await Loaded(Handler());
+        var opened = new List<(SolutionComponentItem Item, DetailsTab Tab)>();
+        var handler = Handler().OnJson(HttpMethod.Get, $"workflows({FlowA})?$select=name,category",
+            """{"name":"Sync orders","category":5}""");
+        var vm = Open(TestSessions.Connected(handler), opened);
+        await vm.LoadAsync();
 
-        vm.OpenEventCommand.Execute(vm.RecentFailures[0]);
+        await vm.OpenEventCommand.ExecuteAsync(vm.RecentFailures[0]);
 
+        var (item, tab) = Assert.Single(opened);
+        Assert.Equal((FlowA, ObjectKind.CloudFlow, DetailsTab.Runs), (item.ObjectId, DetailsTabs.KindOf(item), tab));
+        Assert.Equal("Sync orders is not in the loaded list, so it was read from the environment.", vm.Status);
+        Assert.Null(vm.OpenProblem);
+    }
+
+    [Fact]
+    public async Task A_failure_that_cannot_be_reached_any_way_says_why_beside_the_buttons()
+    {
+        var gone = await Loaded(Handler().OnError(HttpMethod.Get, $"workflows({FlowA})", HttpStatusCode.NotFound, "Does Not Exist"));
+        var refused = await Loaded(Handler().OnError(HttpMethod.Get, $"workflows({FlowA})", HttpStatusCode.Forbidden, "No read on workflows"));
+        var offline = Open(TestSessions.Connected(Handler()));
+        await offline.LoadAsync();
+        TestSessions.DropClient(offline.Session);
+
+        foreach (var vm in new[] { gone, refused, offline })
+        {
+            vm.SelectedComponent = vm.Components.Single(c => c.ComponentName == "Sync orders");
+            await vm.OpenComponentDetailsCommand.ExecuteAsync(null);
+            Assert.Equal(vm.Status, vm.OpenProblem);
+        }
+
+        Assert.Equal("Sync orders could not be found in the environment - it may have been deleted since it failed.", gone.Status);
+        Assert.StartsWith("Sync orders is not in the loaded list, and could not be read from the environment - ", refused.Status);
         Assert.Equal("Sync orders is not in the loaded list, so its details cannot be opened here. " +
-                     "Load the default solution to reach every component.", vm.Status);
+                     "Load the default solution to reach every component.", offline.Status);
+
+        gone.SelectedComponent = gone.Components.First(c => c.ComponentName != "Sync orders");
+        Assert.Null(gone.OpenProblem);
     }
 
     [Fact]
@@ -653,14 +685,57 @@ public class FailuresWindowTests
     }
 
     [Fact]
-    public async Task A_classic_workflow_whose_definition_is_not_loaded_cannot_be_opened()
+    public async Task A_trace_naming_its_type_in_full_finds_the_loaded_type()
     {
-        var vm = await Loaded(Handler(), null, FlowItem());
+        var session = TestSessions.Connected(
+            Handler(traceTypeName: $"{PluginType}, Contoso.Plugins, Version=1.0.0.0, Culture=neutral, PublicKeyToken=8dda8a9d111a5056"),
+            items: TypeItem());
+        var vm = Open(session);
+        await vm.LoadAsync();
+        TestSessions.DropClient(session);
+
+        var row = vm.Components.Single(c => c.Source == FailureSource.Plugin);
+        Assert.Equal(PluginType, row.ComponentName);
+
+        vm.SelectedComponent = row;
+        await vm.OpenLatestFailedRunCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, vm.Status);
+        Assert.Null(vm.OpenProblem);
+    }
+
+    [Fact]
+    public async Task A_plugin_type_not_loaded_is_found_by_its_class_name_and_opened_on_its_trace_log()
+    {
+        var typeId = Guid.NewGuid();
+        var opened = new List<(SolutionComponentItem Item, DetailsTab Tab)>();
+        var handler = Handler(traceTypeName: $"{PluginType}, Contoso.Plugins, Version=1.0.0.0")
+            .OnJson(HttpMethod.Get, "plugintypes?", $$"""{"value":[{"plugintypeid":"{{typeId}}","typename":"{{PluginType}}"}]}""");
+        var vm = Open(TestSessions.Connected(handler), opened);
+        await vm.LoadAsync();
+        vm.SelectedComponent = vm.Components.Single(c => c.Source == FailureSource.Plugin);
+
+        await vm.OpenLatestFailedRunCommand.ExecuteAsync(null);
+        await vm.OpenComponentDetailsCommand.ExecuteAsync(null);
+
+        Assert.Equal([(typeId, DetailsTab.TraceLog), (typeId, DetailsTab.Default)], opened.Select(o => (o.Item.ObjectId, o.Tab)));
+        Assert.All(opened, o => Assert.Equal(ObjectKind.Plugin, DetailsTabs.KindOf(o.Item)));
+    }
+
+    [Fact]
+    public async Task A_classic_workflow_whose_definition_is_not_loaded_is_looked_up_by_its_definition()
+    {
+        var opened = new List<(SolutionComponentItem Item, DetailsTab Tab)>();
+        var handler = Handler().OnJson(HttpMethod.Get, $"workflows({Definition})?$select=name,category",
+            """{"name":"Escalate case","category":0}""");
+        var vm = Open(TestSessions.Connected(handler, items: FlowItem()), opened);
+        await vm.LoadAsync();
         vm.SelectedComponent = vm.Components.Single(c => c.Source == FailureSource.ClassicWorkflow);
 
-        vm.OpenComponentDetailsCommand.Execute(null);
+        await vm.OpenLatestFailedRunCommand.ExecuteAsync(null);
 
-        Assert.StartsWith("Escalate case is not in the loaded list", vm.Status);
+        var (item, tab) = Assert.Single(opened);
+        Assert.Equal((Definition, ObjectKind.ClassicWorkflow, DetailsTab.Runs), (item.ObjectId, DetailsTabs.KindOf(item), tab));
     }
 
     [Fact]

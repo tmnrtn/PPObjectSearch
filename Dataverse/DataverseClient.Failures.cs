@@ -277,7 +277,9 @@ public sealed partial class DataverseClient
                 if (string.IsNullOrWhiteSpace(exception)) return false;
                 data.TraceExceptionsRead++;
 
-                var typeName = JsonHelper.GetString(row, "typename") ?? "(unknown plug-in)";
+                // The trace log can name the type in full - "Contoso.Validate, Contoso.Plugins, Version=1.0.0.0, ..." -
+                // where a loaded plug-in type and App Insights name only the class, which is what they are matched on.
+                var typeName = AzureMonitor.DataverseExportProfile.PluginTypeName(JsonHelper.GetString(row, "typename"));
                 var step = ParseGuid(JsonHelper.GetString(row, "pluginstepid"));
 
                 if (scoped &&
@@ -310,6 +312,79 @@ public sealed partial class DataverseClient
             data.Notes.Add(failures >= MaxFailureRows
                 ? $"Plug-ins: only the newest {MaxFailureRows:N0} traced exceptions were read."
                 : $"Plug-ins: only the newest {MaxScannedRows:N0} trace log entries were read, so older exceptions are missing.");
+        }
+    }
+
+    /// <summary>
+    /// The component a failure belongs to, read from the environment - for one the tab has not
+    /// loaded. A plug-in failure finds its type by class name, or else its step; a flow's or
+    /// workflow's finds its definition. Null where the environment has no such component.
+    /// </summary>
+    public async Task<SolutionComponentItem?> FindFailureComponentAsync(FailureEvent failure, CancellationToken ct = default)
+    {
+        if (failure.Source is FailureSource.CloudFlow or FailureSource.ClassicWorkflow)
+        {
+            return failure.WorkflowId is { } workflowId ? await FindProcessAsync(workflowId, ct).ConfigureAwait(false) : null;
+        }
+
+        if (failure is not ({ Source: FailureSource.Plugin } or { Source: FailureSource.AppInsights, IsPlugin: true })) return null;
+
+        using (var types = await GetJsonAsync(
+                   EnvironmentUrl + ApiPath + "plugintypes?$select=plugintypeid,typename" +
+                   $"&$filter=typename eq '{Escape(failure.ComponentKey)}'&$top=1", ct).ConfigureAwait(false))
+        {
+            foreach (var row in JsonHelper.Rows(types.RootElement))
+            {
+                if (ParseGuid(JsonHelper.GetString(row, "plugintypeid")) is not { } id) continue;
+                return Found(id, 90, JsonHelper.GetString(row, "typename") ?? failure.ComponentKey);
+            }
+        }
+
+        if (failure.StepId is not { } stepId) return null;
+
+        using var step = await GetFoundJsonAsync(
+            EnvironmentUrl + ApiPath + $"sdkmessageprocessingsteps({stepId})?$select=name", ct).ConfigureAwait(false);
+        return step is null ? null : Found(stepId, 92, JsonHelper.GetString(step.RootElement, "name") ?? failure.ComponentName);
+    }
+
+    private async Task<SolutionComponentItem?> FindProcessAsync(Guid workflowId, CancellationToken ct)
+    {
+        using var doc = await GetFoundJsonAsync(
+            EnvironmentUrl + ApiPath + $"workflows({workflowId})?$select=name,category,workflowidunique,primaryentity",
+            ct).ConfigureAwait(false);
+        if (doc is null) return null;
+
+        // The category is what tells a cloud flow from a classic workflow in the details window.
+        var row = doc.RootElement;
+        return Found(workflowId, 29, JsonHelper.GetString(row, "name") ?? workflowId.ToString(),
+            category: JsonHelper.GetInt(row, "category"),
+            workflowIdUnique: ParseGuid(JsonHelper.GetString(row, "workflowidunique")),
+            primaryEntity: JsonHelper.GetString(row, "primaryentity"));
+    }
+
+    private static SolutionComponentItem Found(
+        Guid id, int componentType, string name, int? category = null, Guid? workflowIdUnique = null, string? primaryEntity = null) => new()
+    {
+        Name = name,
+        DisplayName = name,
+        ComponentType = componentType,
+        ComponentTypeName = ComponentTypes.GetName(componentType),
+        ObjectId = id,
+        ProcessCategory = category,
+        WorkflowIdUnique = workflowIdUnique,
+        PrimaryEntityName = primaryEntity
+    };
+
+    /// <summary>One record, or null where the environment has none by that id.</summary>
+    private async Task<JsonDocument?> GetFoundJsonAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            return await GetJsonAsync(url, ct).ConfigureAwait(false);
+        }
+        catch (DataverseException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
         }
     }
 
