@@ -27,6 +27,20 @@ public partial class FlowDiagramView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>
+    /// The iteration picked is scrolled to - above all the first failed one, picked for you, which
+    /// in a loop of hundreds is otherwise somewhere off the list. Once the list has laid out.
+    /// </summary>
+    private void Iterations_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListBox list || list.SelectedItem is not { } item) return;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (ReferenceEquals(list.SelectedItem, item)) list.ScrollIntoView(item);
+        }, DispatcherPriority.Loaded);
+    }
+
     private void Watch(FlowDiagramViewModel? diagram)
     {
         if (_diagram is not null) _diagram.PropertyChanged -= OnDiagramChanged;

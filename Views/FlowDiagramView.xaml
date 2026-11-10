@@ -607,11 +607,18 @@
                                      FontSize="11" Padding="0" MaxHeight="96" VerticalScrollBarVisibility="Auto" />
                         </Border>
 
-                        <TextBlock Text="{Binding IterationStatus}" FontSize="11" Foreground="{DynamicResource Muted}"
-                                   TextWrapping="Wrap" Margin="0,0,0,4"
-                                   Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                        <!-- One failure in hundreds of iterations is lost in the list, so it can list only the failures. -->
+                        <DockPanel>
+                            <CheckBox DockPanel.Dock="Right" Content="{Binding FailedOnlyLabel}" FontSize="11"
+                                      IsChecked="{Binding ShowFailedIterationsOnly}" VerticalAlignment="Top" Margin="8,0,0,4"
+                                      ToolTip="List only the iterations that failed or timed out"
+                                      Visibility="{Binding HasFailedIterations, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding IterationStatus}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                       TextWrapping="Wrap" Margin="0,0,0,4"
+                                       Visibility="{Binding IterationStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                        </DockPanel>
                         <ListBox ItemsSource="{Binding SelectedIterations}" SelectedItem="{Binding SelectedIteration}"
-                                 MaxHeight="130" Margin="0,0,0,10"
+                                 MaxHeight="130" Margin="0,0,0,10" SelectionChanged="Iterations_SelectionChanged"
                                  Visibility="{Binding HasSelectedIterations, Converter={StaticResource BoolToVis}}">
                             <ListBox.ItemTemplate>
                                 <!-- The 7px outcome dot the steps use, so a failed iteration stands out. -->

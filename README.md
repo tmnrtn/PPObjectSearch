@@ -74,7 +74,9 @@ straight into the maker portal.
     and the first failure selected with its error. The run sits in the diagram's toolbar, with
     **First failure**, ‹ › to step to the previous or next run, and a button to clear it. A step
     inside a loop lists its iterations, each with its outcome dot - in a failed run the first
-    failed iteration is picked; a step's **Inputs** and **Outputs** are fetched only when asked
+    failed iteration is picked and scrolled to, and **Failed only** lists just the failures. A
+    failed step or iteration whose error is only a code (a connector's BadRequest) has the reason
+    read from its outputs. Otherwise a step's **Inputs** and **Outputs** are fetched only when asked
     for, and never saved. On a "Run a child flow" step, **Open child run** opens the child flow
     with the run that step started drawn on its diagram - in a loop, the iteration picked, else
     the last. Run details are

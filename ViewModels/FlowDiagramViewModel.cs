@@ -609,6 +609,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         _run = run;
         _runClient = client;
         _repetitions.Clear();
+        _failureReasons.Clear();
 
         var triggerName = Design.Triggers.Count == 1 ? Design.Triggers[0].Name : null;
 
@@ -653,6 +654,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         _run = null;
         _runClient = null;
         _repetitions.Clear();
+        _failureReasons.Clear();
 
         foreach (var card in _cards) card.SetResult(inRun: false, result: null);
 
@@ -851,14 +853,104 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string? SelectedError => ErrorText(
-        SelectedIteration?.ErrorMessage ?? Selected?.Result?.ErrorMessage,
-        SelectedIteration?.ErrorCode ?? Selected?.Result?.ErrorCode);
+    /// <summary>The selected step's or iteration's error - its code alone where nothing says more.</summary>
+    public string? SelectedError
+    {
+        get
+        {
+            var code = SelectedIteration?.ErrorCode ?? Selected?.Result?.ErrorCode;
+            return ErrorText(
+                SelectedIteration?.ErrorMessage ?? ReasonFor(SelectedIteration?.OutputsLink) ??
+                Selected?.Result?.ErrorMessage ?? ReasonFor(Selected?.Result?.OutputsLink),
+                code) ?? (string.IsNullOrWhiteSpace(code) ? null : code);
+        }
+    }
 
     public bool HasSelectedError => SelectedError is not null;
 
+    /// <summary>
+    /// Why a step or iteration failed, read from its outputs - by outputs link - where its own error
+    /// was only a code. A connector's BadRequest says why only in the response it got.
+    /// </summary>
+    private readonly Dictionary<string, string> _failureReasons = new(StringComparer.Ordinal);
+
+    private string? ReasonFor(string? outputsLink) =>
+        outputsLink is not null && _failureReasons.TryGetValue(outputsLink, out var reason) ? reason : null;
+
+    private static bool IsFailure(FlowStepOutcome outcome) => outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut;
+
+    /// <summary>The selected iteration's - or else step's - failure, read from its outputs if it says only a code.</summary>
+    private void ExplainSelectedFailure()
+    {
+        var (outcome, message, link) = SelectedIteration is { } iteration
+            ? (iteration.Outcome, iteration.ErrorMessage, iteration.OutputsLink)
+            : Selected is { InRun: true, Result: { } result } ? (result.Outcome, result.ErrorMessage, result.OutputsLink) : default;
+
+        if (!IsFailure(outcome) || !string.IsNullOrWhiteSpace(message) || link is null || _runClient is null ||
+            _failureReasons.ContainsKey(link))
+        {
+            return;
+        }
+
+        Work.Track(ExplainFailureAsync(_runClient, link));
+    }
+
+    private async Task ExplainFailureAsync(PowerAutomateClient client, string link)
+    {
+        try
+        {
+            if (FlowStepError.FromOutputs(await client.GetContentAsync(link, _runCts?.Token ?? default)) is not { } reason) return;
+
+            _failureReasons[link] = reason;
+            OnPropertyChanged(nameof(SelectedError));
+            OnPropertyChanged(nameof(HasSelectedError));
+        }
+        catch (OperationCanceledException)
+        {
+            // The run went or the window closed.
+        }
+        catch (Exception ex)
+        {
+            // The code still shows; the reason was a nicety.
+            Log.Info($"Could not read why a step failed from its outputs: {ex.Message}");
+        }
+    }
+
+    /// <summary>The iterations listed: all of the selected step's, or only those that failed.</summary>
     public ObservableCollection<FlowRepetition> SelectedIterations { get; } = new();
     public bool HasSelectedIterations => SelectedIterations.Count > 0;
+
+    /// <summary>Every iteration of the selected step, as read.</summary>
+    private FlowRepetitions _allIterations = new();
+
+    public int FailedIterationCount => _allIterations.Count(r => IsFailure(r.Outcome));
+    public bool HasFailedIterations => FailedIterationCount > 0;
+    public string FailedOnlyLabel => $"Failed only ({FailedIterationCount:N0})";
+
+    private bool _showFailedIterationsOnly;
+    /// <summary>One failure in hundreds of iterations is lost in the list; this lists only the failures.</summary>
+    public bool ShowFailedIterationsOnly
+    {
+        get => _showFailedIterationsOnly;
+        set
+        {
+            if (SetProperty(ref _showFailedIterationsOnly, value)) FillIterations();
+        }
+    }
+
+    private void FillIterations()
+    {
+        var keep = SelectedIteration;
+
+        SelectedIterations.Clear();
+        foreach (var repetition in _allIterations.Where(r => !_showFailedIterationsOnly || IsFailure(r.Outcome)))
+        {
+            SelectedIterations.Add(repetition);
+        }
+
+        OnPropertyChanged(nameof(HasSelectedIterations));
+        if (keep is not null && !SelectedIterations.Contains(keep)) SelectedIteration = null;
+    }
 
     private FlowRepetition? _selectedIteration;
     /// <summary>An iteration of the selected step; its inputs and outputs replace the step's last pass.</summary>
@@ -873,6 +965,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(SelectedError));
             OnPropertyChanged(nameof(HasSelectedError));
             RaiseContentCommands();
+            ExplainSelectedFailure();
         }
     }
 
@@ -927,8 +1020,12 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
     {
         _selectionVersion++;
         SelectedIterations.Clear();
+        _allIterations = new FlowRepetitions();
+        _showFailedIterationsOnly = false;
         _selectedIteration = null;
         OnPropertyChanged(nameof(SelectedIteration));
+        OnPropertyChanged(nameof(ShowFailedIterationsOnly));
+        RaiseFailedIterations();
         IterationStatus = string.Empty;
         ClearContent();
 
@@ -942,6 +1039,17 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         {
             Work.Track(LoadIterationsAsync(card, _selectionVersion));
         }
+        else
+        {
+            ExplainSelectedFailure();
+        }
+    }
+
+    private void RaiseFailedIterations()
+    {
+        OnPropertyChanged(nameof(FailedIterationCount));
+        OnPropertyChanged(nameof(HasFailedIterations));
+        OnPropertyChanged(nameof(FailedOnlyLabel));
     }
 
     private async Task LoadIterationsAsync(FlowCardViewModel card, int version)
@@ -953,22 +1061,23 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
             var repetitions = await RepetitionsAsync(card.Node.Name);
             if (version != _selectionVersion) return;
 
-            foreach (var repetition in repetitions) SelectedIterations.Add(repetition);
+            _allIterations = repetitions;
+            FillIterations();
+            RaiseFailedIterations();
 
-            // In a failed run the iteration worth reading first is the one that failed.
-            if (IsRunFailed && SelectedIteration is null &&
-                repetitions.Find(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut) is { } firstFailed)
+            // In a failed run the iteration worth reading first is the one that failed. The list is
+            // shown before it is picked, so the view can scroll to it.
+            if (IsRunFailed && SelectedIteration is null && repetitions.Find(r => IsFailure(r.Outcome)) is { } firstFailed)
             {
                 SelectedIteration = firstFailed;
             }
 
-            var failed = repetitions.Count(r => r.Outcome is FlowStepOutcome.Failed or FlowStepOutcome.TimedOut);
+            var failed = FailedIterationCount;
             var failedNote = failed > 0 ? $", {failed:N0} failed" : string.Empty;
             var truncatedNote = repetitions.IsTruncated ? $" - only the first {repetitions.Count:N0} could be read" : string.Empty;
             IterationStatus = repetitions.Count == 0
                 ? "No iterations recorded."
                 : $"{repetitions.Count:N0} iteration(s){failedNote}{truncatedNote} - pick one to see its inputs and outputs.";
-            OnPropertyChanged(nameof(HasSelectedIterations));
         }
         catch (Exception ex)
         {
