@@ -353,6 +353,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         ShowInputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: true), _ => InputsLink is not null);
         ShowOutputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: false), _ => OutputsLink is not null);
         ShowDefinitionCommand = new RelayCommand(_ => ClearContent(), _ => HasContent);
+        OpenChildRunCommand = new AsyncRelayCommand(_ => OpenChildRunAsync(), _ => CanOpenChildRun);
         CopyCodeCommand = new RelayCommand(_ => CopyCode(), _ => !string.IsNullOrEmpty(DetailCode));
     }
 
@@ -1047,6 +1048,85 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         ShowOutputsCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanShowInputs));
         OnPropertyChanged(nameof(CanShowOutputs));
+
+        // The child run goes with the step and iteration it was asked for.
+        ChildRunProblem = null;
+        OnPropertyChanged(nameof(IsChildRunOffered));
+        OpenChildRunCommand.RaiseCanExecuteChanged();
+    }
+
+    // ---------------------------------------------------------------- the run a child flow step started
+
+    private Func<ChildFlowRun, Task<string?>>? _openChildRun;
+    /// <summary>
+    /// Opens a child flow at the run a step started, answering why not where it cannot. Set by
+    /// whoever can open flows; without it the step pane offers no link.
+    /// </summary>
+    public Func<ChildFlowRun, Task<string?>>? OpenChildRun
+    {
+        get => _openChildRun;
+        set
+        {
+            _openChildRun = value;
+            RaiseContentCommands();
+        }
+    }
+
+    public AsyncRelayCommand OpenChildRunCommand { get; }
+
+    /// <summary>A "Run a child flow" step in the run on show, where something can open the run it started.</summary>
+    public bool IsChildRunOffered => OpenChildRun is not null && Selected is { InRun: true, Node.ChildFlowId: not null };
+
+    /// <summary>The run is named only in the step's outputs, which only a step that ran has.</summary>
+    private bool CanOpenChildRun => IsChildRunOffered && OutputsLink is not null && _runClient is not null;
+
+    private string? _childRunProblem;
+    /// <summary>Why the child run could not be opened.</summary>
+    public string? ChildRunProblem
+    {
+        get => _childRunProblem;
+        private set
+        {
+            if (SetProperty(ref _childRunProblem, value)) OnPropertyChanged(nameof(HasChildRunProblem));
+        }
+    }
+
+    public bool HasChildRunProblem => ChildRunProblem is not null;
+
+    /// <summary>
+    /// Reads the step's outputs - the iteration picked, else its last - for the run they name, and
+    /// opens the child flow at it.
+    /// </summary>
+    private async Task OpenChildRunAsync()
+    {
+        if (Selected?.Node.ChildFlowId is not { } workflowId || OutputsLink is not { } link ||
+            _runClient is not { } client || OpenChildRun is not { } open)
+        {
+            return;
+        }
+
+        ChildRunProblem = null;
+        var selection = _selectionVersion;
+        var iteration = SelectedIteration;
+        string? problem;
+
+        try
+        {
+            var outputs = await client.GetContentAsync(link, _runCts?.Token ?? default);
+            problem = ChildFlowRun.From(workflowId, outputs) is { } run
+                ? await open(run)
+                : "The step's outputs do not name the run it started, so it cannot be opened.";
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            problem = "Could not read the step's outputs - " + ex.Message;
+        }
+
+        if (selection == _selectionVersion && iteration == SelectedIteration) ChildRunProblem = problem;
     }
 
     // ---------------------------------------------------------------- Definition | Inputs | Outputs

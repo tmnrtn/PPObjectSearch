@@ -347,7 +347,8 @@ public sealed partial class DataverseClient
         return step is null ? null : Found(stepId, 92, JsonHelper.GetString(step.RootElement, "name") ?? failure.ComponentName);
     }
 
-    private async Task<SolutionComponentItem?> FindProcessAsync(Guid workflowId, CancellationToken ct)
+    /// <summary>A flow or workflow by its workflowid, read from the environment; null where it has none.</summary>
+    public async Task<SolutionComponentItem?> FindProcessAsync(Guid workflowId, CancellationToken ct = default)
     {
         using var doc = await GetFoundJsonAsync(
             EnvironmentUrl + ApiPath + $"workflows({workflowId})?$select=name,category,workflowidunique,primaryentity",

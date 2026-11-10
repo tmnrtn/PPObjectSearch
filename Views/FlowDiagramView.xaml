@@ -589,6 +589,17 @@
 
                     <!-- The error, any iterations, and the code switch. -->
                     <StackPanel Grid.Row="2" Margin="14,10,14,0">
+                        <!-- A child flow call: the run it started, opened in the child flow's own details. -->
+                        <StackPanel Margin="0,0,0,10" Visibility="{Binding IsChildRunOffered, Converter={StaticResource BoolToVis}}">
+                            <Button Style="{StaticResource LinkButton}" Content="Open child run" HorizontalAlignment="Left"
+                                    Command="{Binding OpenChildRunCommand}"
+                                    ToolTip="Opens the child flow on its diagram, showing the run this step started - in a loop, the iteration picked, else the last."
+                                    ToolTipService.ShowOnDisabled="True" />
+                            <TextBlock Text="{Binding ChildRunProblem}" FontSize="11" Foreground="{DynamicResource Red}"
+                                       TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding HasChildRunProblem, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+
                         <Border Background="{DynamicResource RedSoft}" CornerRadius="4" Padding="8,6" Margin="0,0,0,10"
                                 Visibility="{Binding HasSelectedError, Converter={StaticResource BoolToVis}}">
                             <TextBox Text="{Binding SelectedError, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"

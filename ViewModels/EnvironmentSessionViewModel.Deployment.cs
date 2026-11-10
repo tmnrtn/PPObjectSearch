@@ -18,6 +18,10 @@ public sealed partial class EnvironmentSessionViewModel
     public void OpenDetails(SolutionComponentItem item, DetailsTab tab = DetailsTab.Default) =>
         ShowDetails(item, tab == DetailsTab.Default ? null : new DetailsShortcut(tab.ToString(), tab));
 
+    /// <summary>Opens a cloud flow's details on its diagram, showing one run - a child flow's, from its parent.</summary>
+    public void OpenRun(SolutionComponentItem flow, ChildFlowRun run) =>
+        ShowDetails(flow, new DetailsShortcut(nameof(DetailsTab.Design), DetailsTab.Design), run);
+
     // ---------------------------------------------------------------- documentation
 
     private RelayCommand? _documentSolutionCommand;

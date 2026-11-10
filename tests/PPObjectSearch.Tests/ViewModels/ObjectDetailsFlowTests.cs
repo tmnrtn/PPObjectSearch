@@ -614,4 +614,67 @@ public class ObjectDetailsFlowTests
         Assert.Null(details.IsSwitchedOn);
         Assert.True(details.IsFlowOn);
     }
+
+    // ---------------------------------------------------------------- a child flow's run, from its parent
+
+    private const string RunRecord = """{"name":"RUN","properties":{"status":"Succeeded","trigger":{"name":"manual","status":"Succeeded"}}}""";
+
+    [Fact]
+    public async Task A_run_asked_for_is_shown_once_loaded_by_the_flow_name_its_parent_recorded()
+    {
+        var run = $"/environments/{EnvironmentId}/flows/pa-child/runs/run-9";
+        var handler = Flow(first: h => h
+            .OnJson(HttpMethod.Get, "flowruns?", DataverseRuns)
+            .OnJson(HttpMethod.Get, run + "/actions", """{"value":[{"name":"Send","properties":{"status":"Succeeded"}}]}""")
+            .OnJson(HttpMethod.Get, run, RunRecord.Replace("RUN", "run-9")));
+        var details = Details(handler, CloudFlow(), EnvironmentId, openOn: new DetailsShortcut("Design", DetailsTab.Design));
+        details.ShowRunWhenLoaded(new ChildFlowRun(Id, "pa-child", "run-9"));
+
+        await details.LoadAsync();
+
+        Assert.Equal(DetailsTab.Design, details.SelectedTab);
+        Assert.True(details.FlowDiagram!.IsRunMode);
+        Assert.Equal("run-9", details.FlowDiagram.Run!.RunName);
+        // Not among the runs listed, so there is no neighbour to step to.
+        Assert.False(details.ShowOlderRunCommand.CanExecute(null));
+        Assert.False(details.ShowNewerRunCommand.CanExecute(null));
+
+        await details.LoadAsync();
+        Assert.Single(handler.Requests, r => r.Url.EndsWith("/runs/run-9?api-version=2016-11-01", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_run_asked_for_that_is_listed_is_picked_in_run_history()
+    {
+        var run = $"/environments/{EnvironmentId}/flows/{FlowId}/runs/run-1";
+        var handler = Flow(first: h => h
+            .OnJson(HttpMethod.Get, "flowruns?", DataverseRuns)
+            .OnJson(HttpMethod.Get, run + "/actions", """{"value":[]}""")
+            .OnJson(HttpMethod.Get, run, RunRecord.Replace("RUN", "run-1")));
+        var details = Details(handler, CloudFlow(), EnvironmentId);
+        details.ShowRunWhenLoaded(new ChildFlowRun(Id, "pa-child", "run-1"));
+
+        await details.LoadAsync();
+
+        Assert.Equal("run-1", details.SelectedRun?.Name);
+        Assert.True(details.FlowDiagram!.IsRunMode);
+        Assert.True(details.ShowOlderRunCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Child_runs_are_offered_only_where_the_window_can_open_flows()
+    {
+        var alone = Details(Flow(), CloudFlow(), EnvironmentId);
+        await alone.LoadAsync();
+        Assert.Null(alone.FlowDiagram!.OpenChildRun);
+
+        var handler = Flow(first: h => h
+            .OnError(HttpMethod.Get, $"workflows({ChildFlow})?$select=name,category", HttpStatusCode.NotFound, "Does not exist"));
+        var details = Details(handler, CloudFlow(), EnvironmentId, Session());
+        await details.LoadAsync();
+
+        var problem = await details.FlowDiagram!.OpenChildRun!(new ChildFlowRun(ChildFlow, "pa-child", "run-9"));
+
+        Assert.Equal("The child flow is not in this environment - it may have been deleted since.", problem);
+    }
 }

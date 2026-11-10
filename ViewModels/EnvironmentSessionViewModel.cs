@@ -1982,12 +1982,13 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         }
     }
 
-    private void ShowDetails(SolutionComponentItem? item, DetailsShortcut? openOn = null)
+    private void ShowDetails(SolutionComponentItem? item, DetailsShortcut? openOn = null, ChildFlowRun? showRun = null)
     {
         // A failed sign-in leaves its client behind, so being signed in is checked as well.
         if (item is null || _client is null || !IsConnected) return;
 
         var viewModel = new ObjectDetailsViewModel(_client, item, KnownItems(), _linkBuilder?.EnvironmentId, OpenUrl, this, openOn);
+        if (showRun is not null) viewModel.ShowRunWhenLoaded(showRun);
         // Several can be open at once; as windows, each steps on from the last rather than covering it.
         Track(new Views.ObjectDetailsView { DataContext = viewModel }.Open(isDetails: true));
 
