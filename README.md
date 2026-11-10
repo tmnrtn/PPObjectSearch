@@ -75,7 +75,9 @@ straight into the maker portal.
     **First failure**, ‹ › to step to the previous or next run, and a button to clear it. A step
     inside a loop lists its iterations, each with its outcome dot - in a failed run the first
     failed iteration is picked; a step's **Inputs** and **Outputs** are fetched only when asked
-    for, and never saved. Run details are
+    for, and never saved. On a "Run a child flow" step, **Open child run** opens the child flow
+    with the run that step started drawn on its diagram - in a loop, the iteration picked, else
+    the last. Run details are
     kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
   - **Classic workflows**: recent system jobs and their errors - the latest 100, or as many as asked for.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions

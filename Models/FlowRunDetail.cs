@@ -188,3 +188,42 @@ public sealed record FlowRunDetail(
         }
     }
 }
+
+/// <summary>
+/// The run a "Run a child flow" step started: the child flow by its Dataverse id and the name
+/// Power Automate knows it by, and the run - as the step's outputs' headers name them.
+/// </summary>
+public sealed record ChildFlowRun(Guid WorkflowId, string? FlowName, string RunName)
+{
+    private const string RunIdHeader = "x-ms-workflow-run-id";
+    private const string FlowNameHeader = "x-ms-workflow-name";
+
+    /// <summary>The child run a step's outputs name; null where they name none, or are not JSON.</summary>
+    public static ChildFlowRun? From(Guid workflowId, string outputs)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(outputs);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty("headers", out var headers) ||
+                headers.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var runName = Header(headers, RunIdHeader);
+            return string.IsNullOrWhiteSpace(runName) ? null : new ChildFlowRun(workflowId, Header(headers, FlowNameHeader), runName);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    // Header names are not case-sensitive, whatever case they were recorded in.
+    private static string? Header(JsonElement headers, string name) =>
+        headers.EnumerateObject()
+            .Where(h => string.Equals(h.Name, name, StringComparison.OrdinalIgnoreCase) && h.Value.ValueKind == JsonValueKind.String)
+            .Select(h => h.Value.GetString())
+            .FirstOrDefault();
+}

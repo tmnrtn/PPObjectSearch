@@ -222,7 +222,11 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     {
         if (_runOnDiagram is null) return null;
 
-        var index = Runs.IndexOf(_runOnDiagram) + step;
+        // A run opened from a parent flow need not be among those listed.
+        var at = Runs.IndexOf(_runOnDiagram);
+        if (at < 0) return null;
+
+        var index = at + step;
         return index >= 0 && index < Runs.Count && CanShowOnDiagram(Runs[index]) ? Runs[index] : null;
     }
 
@@ -373,6 +377,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         {
             var design = await Task.Run(() => FlowDesignParser.Parse(definition), CancellationToken.None);
             var diagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
+            if (Session is not null) diagram.OpenChildRun = OpenChildRunAsync;
             FlowDiagram = diagram;
 
             var childFlowIds = diagram.ChildFlowIds();
@@ -393,6 +398,47 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         {
             DesignStatus = "Could not draw the flow - " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Opens the flow a "Run a child flow" step called, on its diagram with the run it started -
+    /// from the loaded list, or else read from the environment. Says why not where it cannot.
+    /// </summary>
+    private async Task<string?> OpenChildRunAsync(ChildFlowRun run)
+    {
+        if (Session is not { } session) return "The child flow cannot be opened from here.";
+
+        SolutionComponentItem? flow;
+        try
+        {
+            flow = session.FindLoaded(run.WorkflowId) ?? await _client.FindProcessAsync(run.WorkflowId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            return "The child flow could not be read from the environment - " + ex.Message;
+        }
+
+        if (flow is null) return "The child flow is not in this environment - it may have been deleted since.";
+
+        session.OpenRun(flow, run);
+        return null;
+    }
+
+    /// <summary>A run to show on the diagram once the flow has loaded - one a parent flow started.</summary>
+    private ChildFlowRun? _runToShow;
+
+    public void ShowRunWhenLoaded(ChildFlowRun run) => _runToShow = run;
+
+    /// <summary>The run asked for, picked in Run history where it is listed there.</summary>
+    private async Task ShowRunAskedForAsync()
+    {
+        if (_runToShow is not { } wanted) return;
+        _runToShow = null;
+
+        var listed = Runs.FirstOrDefault(r => string.Equals(r.Name, wanted.RunName, StringComparison.Ordinal));
+        if (listed is not null) SelectedRun = listed;
+
+        await ShowRunOnDiagramAsync(listed ?? new ProcessRun { Name = wanted.RunName, Status = "Unknown", FlowId = wanted.FlowName });
     }
 
     private async Task LoadSourceAsync(List<string> problems)
@@ -1743,6 +1789,9 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             }
             if (_detached) return;
             await LoadKindTabsAsync(problems);
+
+            if (_detached) return;
+            await ShowRunAskedForAsync();
 
             if (_detached) return;
             await LoadLayersAsync(problems);
