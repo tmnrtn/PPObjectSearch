@@ -471,4 +471,150 @@ public class FlowDiagramStepDetailsTests
         Assert.Equal("No iterations recorded.", d.IterationStatus);
         Assert.Equal("0 iterations · failed", Card(d, "Loop").IterationLabel);
     }
+
+    // ---------------------------------------------------------------- finding a failure among many iterations
+
+    private const string BadRequest = """{"statusCode":400,"body":{"error":{"code":"0x80040217","message":"ect_secconfirmation With Id = 42 Does Not Exist"}}}""";
+
+    /// <summary>Iterations of Inner, one per status, each with its own outputs link; failures carry only a code.</summary>
+    private static string IterationsOf(params string[] statuses) => JsonSerializer.Serialize(new
+    {
+        value = statuses.Select((status, i) => new
+        {
+            properties = new
+            {
+                status,
+                code = status == "Failed" ? "BadRequest" : "OK",
+                repetitionIndexes = new[] { new { scopeName = "Loop", itemIndex = i } },
+                outputsLink = new { uri = $"https://x/out/Inner/{i}" }
+            }
+        })
+    });
+
+    private static FlowDiagramViewModel FailedLoop(FakeHttpHandler handler)
+    {
+        var d = Diagram(LoopSample);
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult>
+        {
+            ["Loop"] = Result("Loop", FlowStepOutcome.Failed),
+            ["Inner"] = Result("Inner", FlowStepOutcome.Failed, errorCode: "BadRequest")
+        }, FlowStepOutcome.Failed), Client(handler));
+        return d;
+    }
+
+    [Fact]
+    public async Task Failed_only_lists_just_the_failures_and_keeps_the_one_picked()
+    {
+        var statuses = Enumerable.Repeat("Succeeded", 795).ToArray();
+        statuses[610] = "Failed";
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/actions/Inner/repetitions", IterationsOf(statuses));
+        var d = FailedLoop(handler);
+
+        d.Selected = Card(d, "Inner");
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal(795, d.SelectedIterations.Count);
+        Assert.Equal("#611", d.SelectedIteration?.Label);
+        Assert.True(d.HasFailedIterations);
+        Assert.Equal("Failed only (1)", d.FailedOnlyLabel);
+
+        d.ShowFailedIterationsOnly = true;
+
+        Assert.Equal(["#611"], d.SelectedIterations.Select(r => r.Label));
+        Assert.Equal("#611", d.SelectedIteration?.Label);
+
+        d.ShowFailedIterationsOnly = false;
+
+        Assert.Equal(795, d.SelectedIterations.Count);
+    }
+
+    [Fact]
+    public async Task An_iteration_filtered_out_is_no_longer_picked_and_another_step_lists_all_again()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/actions/Inner/repetitions", IterationsOf("Succeeded", "Failed"));
+        var d = FailedLoop(handler);
+        d.Selected = Card(d, "Inner");
+        await d.Work.WhenIdleAsync();
+        d.SelectedIteration = d.SelectedIterations[0];
+
+        d.ShowFailedIterationsOnly = true;
+
+        Assert.Null(d.SelectedIteration);
+
+        d.Selected = Card(d, "Loop");
+
+        Assert.False(d.ShowFailedIterationsOnly);
+        Assert.False(d.HasFailedIterations);
+    }
+
+    [Fact]
+    public async Task A_failed_iteration_that_gives_only_a_code_is_explained_from_its_outputs()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "/actions/Inner/repetitions", IterationsOf("Succeeded", "Failed"))
+            .OnJson(HttpMethod.Get, "https://x/out/Inner/1", BadRequest);
+        var d = FailedLoop(handler);
+
+        d.Selected = Card(d, "Inner");
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal("#2", d.SelectedIteration?.Label);
+        Assert.Equal("BadRequest: HTTP 400: ect_secconfirmation With Id = 42 Does Not Exist", d.SelectedError);
+
+        // Read once a run: picking it again uses what was read.
+        d.SelectedIteration = d.SelectedIterations[0];
+        d.SelectedIteration = d.SelectedIterations[1];
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal(1, handler.Requests.Count(r => r.Url == "https://x/out/Inner/1"));
+        Assert.DoesNotContain(handler.Requests, r => r.Url == "https://x/out/Inner/0");
+    }
+
+    [Fact]
+    public async Task A_failed_step_that_gives_only_a_code_is_explained_from_its_outputs()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "https://x/out/Step", BadRequest);
+        var d = Diagram();
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult>
+        {
+            ["Step"] = Result("Step", FlowStepOutcome.Failed, errorCode: "BadRequest")
+        }, FlowStepOutcome.Failed), Client(handler));
+
+        await d.Work.WhenIdleAsync();
+
+        Assert.Same(Card(d, "Step"), d.Selected);
+        Assert.Equal("BadRequest: HTTP 400: ect_secconfirmation With Id = 42 Does Not Exist", d.SelectedError);
+    }
+
+    [Fact]
+    public async Task A_failure_with_its_own_message_reads_no_outputs()
+    {
+        var handler = new FakeHttpHandler();
+        var d = Diagram();
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult>
+        {
+            ["Step"] = Result("Step", FlowStepOutcome.Failed, errorCode: "BadRequest", error: "Already says why")
+        }, FlowStepOutcome.Failed), Client(handler));
+
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal("BadRequest: Already says why", d.SelectedError);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Outputs_that_cannot_be_read_leave_the_failure_as_it_was()
+    {
+        var handler = new FakeHttpHandler().OnStatus(HttpMethod.Get, "https://x/out/Step", HttpStatusCode.Forbidden);
+        var d = Diagram();
+        d.ShowRun(Run(new Dictionary<string, FlowActionResult>
+        {
+            ["Step"] = Result("Step", FlowStepOutcome.Failed, errorCode: "BadRequest")
+        }, FlowStepOutcome.Failed), Client(handler));
+
+        await d.Work.WhenIdleAsync();
+
+        Assert.Equal("BadRequest", d.SelectedError);
+        Assert.Single(handler.Requests);
+    }
 }
