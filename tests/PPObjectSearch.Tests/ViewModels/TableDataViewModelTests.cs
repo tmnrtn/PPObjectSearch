@@ -621,6 +621,18 @@ public class TableDataViewModelTests
     }
 
     [Fact]
+    public async Task A_number_column_sorts_by_value_not_by_its_text()
+    {
+        var vm = await Opened(Handler());
+        var rate = vm.ShownColumns.Select((c, i) => (c, i)).First(x => x.c.LogicalName == "new_rate").i;
+
+        vm.RowsView.SortDescriptions.Add(new System.ComponentModel.SortDescription($"SortKeys[{rate}]", System.ComponentModel.ListSortDirection.Ascending));
+
+        // As text, "20.00" would come before "5.00".
+        Assert.Equal(["Zero", "Reduced", "Standard"], vm.RowsView.Cast<TableDataRow>().Select(r => r.Record.PrimaryName));
+    }
+
+    [Fact]
     public void A_row_opens_on_its_form_in_the_environments_apps()
     {
         var url = TableDataViewModel.RecordUrl("https://contoso.crm11.dynamics.com/", "new_taxcode",

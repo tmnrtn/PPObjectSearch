@@ -73,7 +73,10 @@ public partial class TableDataView : ScreenView
         e.Handled = true;
     }
 
-    /// <summary>One text column per column read, bound to the row's cell at the same position.</summary>
+    /// <summary>
+    /// One text column per column read, bound to the row's cell at the same position, and sorted by
+    /// the row's sort key there - a date or a number rather than the text shown.
+    /// </summary>
     private void BuildColumns(IReadOnlyList<TableDataColumn> columns)
     {
         RowsGrid.Columns.Clear();
@@ -93,7 +96,7 @@ public partial class TableDataView : ScreenView
                 Header = columns[i].Header,
                 HeaderStyle = headerStyle,
                 Binding = new Binding(path) { Mode = BindingMode.OneTime },
-                SortMemberPath = path,
+                SortMemberPath = $"SortKeys[{i}]",
                 ElementStyle = (Style)FindResource(i == 0 ? "CellFirst" : "Cell"),
                 MaxWidth = 420
             });
