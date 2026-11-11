@@ -484,6 +484,13 @@ test result.
   membership type, whether it is a business unit's default team, and then its members (with
   their status), the security roles every member holds through it, and its field security
   profiles. An Entra group team opens straight in Entra team sync.
+- **Owned records…** (on a selected user or team) counts the rows that user or team owns, in
+  every table with an owner, in a window of its own: the tables they own rows in, largest first,
+  each opening in Table data filtered to those rows, and exportable to CSV. Only rows owned
+  directly count - a user's share of what their teams own is not theirs - and only rows the
+  signed-in account can read. A table that cannot be counted (no read privilege, say) is listed
+  with why, so a short list is never taken for a complete one. Past 50,000 rows a table is
+  counted by pages, as Table data's row count does.
 - **Security roles** — each role once, at the business unit it is defined in. A role shows its
   privileges as the role editor lays them out (a row per table, Create to Share, each with its
   reach: User, BU, Parent, Org), its other privileges (Export to Excel, Bulk delete...), and the

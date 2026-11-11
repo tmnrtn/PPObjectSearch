@@ -78,13 +78,14 @@ public sealed partial class DataverseClient
     }
 
     /// <summary>
-    /// One FetchXML aggregate count. Null when Dataverse refuses it, which it does - rather than
-    /// returning a capped number - once the table has more than 50,000 rows.
+    /// One FetchXML aggregate count, of the rows <paramref name="filter"/> (a FetchXML filter
+    /// element) leaves, or of every row. Null when Dataverse refuses it, which it does - rather
+    /// than returning a capped number - once more than 50,000 rows are counted.
     /// </summary>
-    private async Task<long?> TryAggregateCountAsync(TableDefinition table, CancellationToken ct)
+    private async Task<long?> TryAggregateCountAsync(TableDefinition table, CancellationToken ct, string? filter = null)
     {
         var fetch = $"<fetch aggregate='true'><entity name='{table.LogicalName}'>" +
-                    $"<attribute name='{table.PrimaryId}' alias='rowcount' aggregate='count' /></entity></fetch>";
+                    $"<attribute name='{table.PrimaryId}' alias='rowcount' aggregate='count' />{filter}</entity></fetch>";
 
         try
         {
@@ -106,7 +107,7 @@ public sealed partial class DataverseClient
     }
 
     private async Task<(long Rows, int Requests)> CountByPagesAsync(
-        TableDefinition table, IProgress<string>? progress, CancellationToken ct)
+        TableDefinition table, IProgress<string>? progress, CancellationToken ct, string? filter = null)
     {
         var requests = 0;
         string? firstKeyOnPageOne = null;
@@ -126,7 +127,7 @@ public sealed partial class DataverseClient
             // Only the key, ordered on it so a page number means the same rows on every request.
             var fetch = $"<fetch page='{page}' count='{CountPageSize}' no-lock='true'>" +
                         $"<entity name='{table.LogicalName}'><attribute name='{table.PrimaryId}' />" +
-                        $"<order attribute='{table.PrimaryId}' /></entity></fetch>";
+                        $"<order attribute='{table.PrimaryId}' />{filter}</entity></fetch>";
 
             // Without odata.maxpagesize: with it, the Web API pages by itself and ignores page='n'.
             using var doc = await GetJsonAsync(

@@ -285,10 +285,15 @@
                                                        core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
                                             <TextBlock Text="{Binding SelectedUser.DomainName}" Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
                                                        Margin="0,2,0,0" TextWrapping="Wrap" core:CopyOnClick.IsEnabled="True" HorizontalAlignment="Left" />
-                                            <WrapPanel Margin="0,8,0,0">
-                                                <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedUser.UserType}" />
-                                                <ContentControl Style="{StaticResource UserStatusPill}" Margin="0,0,4,4" DataContext="{Binding SelectedUser}" />
-                                            </WrapPanel>
+                                            <DockPanel Margin="0,8,0,0">
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Owned records…" VerticalAlignment="Top"
+                                                        Command="{Binding OwnedRecordsCommand}"
+                                                        ToolTip="Count the records this user owns, table by table - not those owned by their teams. Read-only." />
+                                                <WrapPanel>
+                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedUser.UserType}" />
+                                                    <ContentControl Style="{StaticResource UserStatusPill}" Margin="0,0,4,4" DataContext="{Binding SelectedUser}" />
+                                                </WrapPanel>
+                                            </DockPanel>
 
                                             <!-- Two pairs to a row; the long values span. -->
                                             <Grid Margin="0,6,0,0">
@@ -620,15 +625,20 @@
                                                 <TextBlock Text="{Binding SelectedTeam.EmailAddress}" Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
                                                            Margin="0,2,0,0" TextWrapping="Wrap" HorizontalAlignment="Left" core:CopyOnClick.IsEnabled="True"
                                                            Visibility="{Binding SelectedTeam.EmailAddress, Converter={StaticResource EmptyToCollapsed}}" />
-                                                <WrapPanel Margin="0,8,0,0">
-                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedTeam.TypeDisplay}" />
-                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Default team"
-                                                                    ToolTip="The business unit's default team: every user in the business unit is a member."
-                                                                    Visibility="{Binding SelectedTeam.IsDefault, Converter={StaticResource BoolToVis}}" />
-                                                    <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedTeam.MembershipTypeLabel}"
-                                                                    ToolTip="Which of the Entra group's members the team takes in"
-                                                                    Visibility="{Binding SelectedTeam.MembershipTypeLabel, Converter={StaticResource EmptyToCollapsed}}" />
-                                                </WrapPanel>
+                                                <DockPanel Margin="0,8,0,0">
+                                                    <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Owned records…" VerticalAlignment="Top"
+                                                            Command="{Binding OwnedRecordsCommand}"
+                                                            ToolTip="Count the records this team owns, table by table. Read-only." />
+                                                    <WrapPanel>
+                                                        <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedTeam.TypeDisplay}" />
+                                                        <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="Default team"
+                                                                        ToolTip="The business unit's default team: every user in the business unit is a member."
+                                                                        Visibility="{Binding SelectedTeam.IsDefault, Converter={StaticResource BoolToVis}}" />
+                                                        <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedTeam.MembershipTypeLabel}"
+                                                                        ToolTip="Which of the Entra group's members the team takes in"
+                                                                        Visibility="{Binding SelectedTeam.MembershipTypeLabel, Converter={StaticResource EmptyToCollapsed}}" />
+                                                    </WrapPanel>
+                                                </DockPanel>
                                                 <TextBlock Text="{Binding SelectedTeam.Description}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                                                            Margin="0,4,0,0" Visibility="{Binding SelectedTeam.Description, Converter={StaticResource EmptyToCollapsed}}" />
 

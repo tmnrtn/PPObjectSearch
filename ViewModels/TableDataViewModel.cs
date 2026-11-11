@@ -62,6 +62,9 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     private readonly EnvironmentSessionViewModel _session;
     private readonly AppSettings? _settings;
     private readonly string? _initialTable;
+
+    /// <summary>A condition the initial table opens with - its owner, from Owned records. Used once.</summary>
+    private TableServerFilter? _initialFilter;
     private CancellationTokenSource? _cts;
     private IReadOnlyList<DataRecord> _records = [];
 
@@ -77,11 +80,14 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
     /// <param name="tableLogicalName">A table to open once the list is read - from a table's details window.</param>
     /// <param name="settings">Where each table's columns are remembered; null remembers nothing.</param>
-    public TableDataViewModel(EnvironmentSessionViewModel session, string? tableLogicalName = null, AppSettings? settings = null)
+    /// <param name="initialFilter">A condition <paramref name="tableLogicalName"/> opens with, which can be removed like any other.</param>
+    public TableDataViewModel(EnvironmentSessionViewModel session, string? tableLogicalName = null, AppSettings? settings = null,
+        TableServerFilter? initialFilter = null)
     {
         _session = session;
         _settings = settings;
         _initialTable = tableLogicalName;
+        _initialFilter = initialFilter;
 
         TablesView = (ListCollectionView)CollectionViewSource.GetDefaultView(Tables);
         TablesView.Filter = o => o is EntitySummary t && MatchesTable(t, TableSearch);
@@ -697,6 +703,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         _lookupNames.Clear();
         FilterValue = string.Empty;
         QuickFilter = string.Empty;
+
+        if (_initialFilter is { } initial && table.LogicalName.Equals(_initialTable, StringComparison.OrdinalIgnoreCase))
+        {
+            _initialFilter = null;
+            ServerFilters.Add(initial);
+            FiltersChanged();
+        }
 
         var columns = await client.GetEntityColumnsAsync(table.LogicalName, ct);
         var view = await client.GetDefaultViewColumnsAsync(table.LogicalName, ct);

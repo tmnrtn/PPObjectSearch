@@ -602,6 +602,24 @@ public class TableDataViewModelTests
         Assert.DoesNotContain("$filter", RowReads(handler)[^1].Url);
     }
 
+    [Fact]
+    public async Task A_table_opened_with_a_filter_reads_only_those_rows_and_the_filter_can_be_removed()
+    {
+        var handler = Handler();
+        var owner = new TableServerFilter("_ownerid_value eq 11111111-0000-0000-0000-000000000001", "Owner equals 'Alice'");
+        var vm = new TableDataViewModel(TestSessions.Connected(handler), "new_taxcode", initialFilter: owner);
+
+        await vm.LoadAsync();
+
+        Assert.Equal(["Owner equals 'Alice'"], vm.ServerFilters.Select(f => f.Label));
+        Assert.Contains("$filter=_ownerid_value eq 11111111-0000-0000-0000-000000000001", RowReads(handler)[^1].Url);
+
+        await vm.RemoveFilterCommand.ExecuteAsync(vm.ServerFilters[0]);
+
+        Assert.Empty(vm.ServerFilters);
+        Assert.DoesNotContain("$filter", RowReads(handler)[^1].Url);
+    }
+
     // ---------------------------------------------------------------- remembered columns
 
     [Fact]
