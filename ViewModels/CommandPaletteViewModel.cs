@@ -153,6 +153,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
             new() { Title = "Table data", Group = env, Detail = "rows of a table, read-only", Command = session.TableDataCommand },
             new() { Title = "Users", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Users" },
+            new() { Title = "Teams", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Teams" },
             new() { Title = "Security roles", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
             new() { Title = "Mailboxes", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },
             new() { Title = "Queues", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Queues" },

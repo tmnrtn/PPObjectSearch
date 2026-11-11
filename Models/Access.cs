@@ -67,6 +67,35 @@ public sealed record FieldProfileAssignment(
     public string ManagedLabel => IsManaged ? "Managed" : "Unmanaged";
 }
 
+/// <summary>A team as the Teams tab lists it: its type, business unit, administrator and email.</summary>
+public sealed record TeamDetail(
+    Guid TeamId,
+    string Name,
+    int? TeamType,
+    string? TeamTypeLabel,
+    string? BusinessUnit,
+    Guid? AadObjectId,
+    string? MembershipTypeLabel,
+    bool IsDefault,
+    string? Administrator,
+    string? EmailAddress,
+    Guid? QueueId,
+    string? QueueName,
+    string? Description,
+    DateTimeOffset? CreatedOn)
+{
+    /// <summary>teamtype 0 = Owner, 1 = Access, 2 = AAD Security Group, 3 = AAD Office Group.</summary>
+    public bool IsOwnerTeam => TeamType == 0;
+    public bool IsAccessTeam => TeamType == 1;
+
+    /// <summary>Linked to an Entra group, whose membership it follows.</summary>
+    public bool IsEntraGroupTeam => AadObjectId is not null;
+
+    public string TypeDisplay => TeamTypeLabel ?? TeamType?.ToString() ?? "Unknown";
+
+    public string SearchText => $"{Name} {BusinessUnit} {TypeDisplay} {Administrator} {EmailAddress} {AadObjectId} {TeamId}";
+}
+
 /// <summary>A security role, at the business unit it was defined in.</summary>
 public sealed record SecurityRoleInfo(Guid RoleId, string Name, string? BusinessUnit, bool IsManaged, DateTimeOffset? ModifiedOn)
 {

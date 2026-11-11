@@ -4,7 +4,7 @@ using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Views;
 
-/// <summary>Users, security roles, mailboxes and queues in one environment - see the XAML.</summary>
+/// <summary>Users, teams, security roles, mailboxes and queues in one environment - see the XAML.</summary>
 public partial class EnvironmentAdminView : ScreenView
 {
     public EnvironmentAdminView()

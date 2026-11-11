@@ -4,7 +4,7 @@ using PPObjectSearch.Models;
 namespace PPObjectSearch.Dataverse;
 
 /// <summary>
-/// Users, security roles, mailboxes and queues - the reads behind the Environment admin window.
+/// Users, teams, security roles, mailboxes and queues - the reads behind the Environment admin window.
 /// Read-only: nothing here changes the environment.
 /// </summary>
 public sealed partial class DataverseClient
@@ -75,7 +75,31 @@ public sealed partial class DataverseClient
             JsonHelper.GetBool(row, "isdefault") ?? false);
     }
 
-    private const string AssignedRoleSelect = "roleid,name,_businessunitid_value,_parentrootroleid_value";
+    private const string TeamDetailSelect =
+        TeamSelect + ",_administratorid_value,emailaddress,_queueid_value,description,createdon";
+
+    /// <summary>Every team - owner, access and Entra group teams, business unit default teams included.</summary>
+    public Task<IReadOnlyList<TeamDetail>> GetTeamDetailsAsync(CancellationToken ct = default) =>
+        ReadWithFallbackAsync("teams", TeamDetailSelect, TeamSelect, "&$orderby=name", row =>
+            Guid.TryParse(JsonHelper.GetString(row, "teamid"), out var id)
+                ? new TeamDetail(
+                    id,
+                    JsonHelper.GetString(row, "name") ?? Unnamed,
+                    JsonHelper.GetInt(row, "teamtype"),
+                    Label(row, "teamtype"),
+                    Label(row, BusinessUnitColumn),
+                    ParseGuid(JsonHelper.GetString(row, "azureactivedirectoryobjectid")),
+                    Label(row, "membershiptype"),
+                    JsonHelper.GetBool(row, "isdefault") ?? false,
+                    Label(row, "_administratorid_value"),
+                    JsonHelper.GetString(row, "emailaddress"),
+                    ParseGuid(JsonHelper.GetString(row, "_queueid_value")),
+                    Label(row, "_queueid_value"),
+                    JsonHelper.GetString(row, "description"),
+                    JsonHelper.GetDate(row, "createdon"))
+                : null, ct);
+
+    private const string AssignedRoleSelect ="roleid,name,_businessunitid_value,_parentrootroleid_value";
 
     /// <summary>
     /// The roles assigned to the user themselves. A role is copied into every business unit, and

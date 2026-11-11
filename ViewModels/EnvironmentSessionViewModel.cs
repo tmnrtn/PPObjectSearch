@@ -491,7 +491,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
     internal void ShowRoleInAdmin(Guid roleId) => ShowEnvironmentAdmin(AdminTab.Roles, roleId);
 
     /// <summary>
-    /// Users, roles, mailboxes and queues - read-only. One window per tab: asking again brings it
+    /// Users, teams, roles, mailboxes and queues - read-only. One window per tab: asking again brings it
     /// forward on the tab asked for.
     /// </summary>
     private void ShowEnvironmentAdmin(AdminTab tab) => ShowEnvironmentAdmin(tab, null);

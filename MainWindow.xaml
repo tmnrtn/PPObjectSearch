@@ -309,21 +309,26 @@
                                 <TextBlock Text="Users" VerticalAlignment="Center" />
                             </Button>
                             <Button Style="{StaticResource SidebarRight}"
+                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Teams"
+                                    ToolTip="Teams, with their members, security roles and field security">
+                                <TextBlock Text="Teams" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Style="{StaticResource SidebarLeft}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Roles"
                                     ToolTip="Privileges, and who holds each role">
                                 <TextBlock Text="Security roles" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             </Button>
-                            <Button Style="{StaticResource SidebarLeft}"
+                            <Button Style="{StaticResource SidebarRight}"
                                     Command="{Binding EnvironmentAdminCommand}" CommandParameter="Mailboxes"
                                     ToolTip="Server-side sync: approval and test results">
                                 <TextBlock Text="Mailboxes" VerticalAlignment="Center" />
                             </Button>
-                            <Button Style="{StaticResource SidebarRight}"
-                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
-                                    ToolTip="Owner, email settings, mailbox and members">
-                                <TextBlock Text="Queues" VerticalAlignment="Center" />
-                            </Button>
                         </UniformGrid>
+                        <Button Style="{StaticResource SidebarAction}"
+                                Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
+                                ToolTip="Owner, email settings, mailbox and members">
+                            <TextBlock Text="Queues" VerticalAlignment="Center" />
+                        </Button>
 
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding EntraTeamSyncCommand}"
                                 ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind. Previews and asks before writing.">

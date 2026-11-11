@@ -117,7 +117,7 @@ straight into the maker portal.
   across environments, with column-level audit gaps, link sync state and the search index. See
   [Table settings](#table-settings).
 - **Environment admin** (in the sidebar, under the selected environment) — read-only views of
-  users, security roles, mailboxes and queues. See [Environment admin](#environment-admin).
+  users, teams, security roles, mailboxes and queues. See [Environment admin](#environment-admin).
 - **Admin tools** (in the sidebar, under the selected environment) — sync an Entra group team with its Entra (RBAC)
   group, and make a queue's members match a team's. Every change is previewed and confirmed first,
   under the same production guard.
@@ -466,10 +466,11 @@ the environment simply reads as unknown and is guarded.
 
 ## Environment admin
 
-**Users**, **Security roles**, **Mailboxes** and **Queues** in the sidebar, under the selected
-environment, open one window with a tab for each. It only reads. Each tab reads the first time it
-is opened, and links move between them: a user's role opens it on the Security roles tab, a
-queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues tab. **Back** and
+**Users**, **Teams**, **Security roles**, **Mailboxes** and **Queues** in the sidebar, under the
+selected environment, open one window with a tab for each. It only reads. Each tab reads the first
+time it is opened, and links move between them: a user's role opens it on the Security roles tab,
+a user's team on the Teams tab, a team's member on the Users tab, a role's holder on the Users or
+Teams tab, a queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues tab. **Back** and
 **Forward** (Alt+Left / Alt+Right, or the mouse's back and forward buttons) retrace those links.
 
 - **Users** — every user, searchable, filtered by user type (application user, or the access
@@ -478,6 +479,11 @@ queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues t
   team, each in the business unit it is held in, their field security profiles (direct and through
 teams - access to secured columns, which roles do not grant), and their mailbox's approval and
 test result.
+- **Teams** — every team, searchable, filtered by type (owner, access, Entra group) and business
+  unit. A team shows its business unit, administrator, default queue, email, Entra group and
+  membership type, whether it is a business unit's default team, and then its members (with
+  their status), the security roles every member holds through it, and its field security
+  profiles. An Entra group team opens straight in Entra team sync.
 - **Security roles** — each role once, at the business unit it is defined in. A role shows its
   privileges as the role editor lays them out (a row per table, Create to Share, each with its
   reach: User, BU, Parent, Org), its other privileges (Export to Excel, Bulk delete...), and the
