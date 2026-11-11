@@ -112,6 +112,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         CopyRawValueCommand = new RelayCommand(_ => CopyCell(raw: true), _ => CurrentRow is not null && CurrentColumn >= 0);
         CopyColumnCommand = new RelayCommand(_ => CopyColumn(), _ => CurrentColumn >= 0 && HasRows);
         CopyRowIdCommand = new RelayCommand(_ => CopyRowId(), _ => CurrentRow is not null);
+        OpenRecordCommand = new RelayCommand(p => OpenRecord(p as TableDataRow ?? CurrentRow),
+            p => (p as TableDataRow ?? CurrentRow) is not null && SelectedTable is not null);
         ToggleColumnPickerCommand = new RelayCommand(_ => IsColumnPickerOpen = !IsColumnPickerOpen);
         ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => Rows.Count > 0);
         ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => Rows.Count > 0);
@@ -133,6 +135,9 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     public RelayCommand CopyRawValueCommand { get; }
     public RelayCommand CopyColumnCommand { get; }
     public RelayCommand CopyRowIdCommand { get; }
+
+    /// <summary>The row - double-clicked, or the one right-clicked - on its form in the environment's apps.</summary>
+    public RelayCommand OpenRecordCommand { get; }
     public RelayCommand ToggleColumnPickerCommand { get; }
     public RelayCommand ExportCsvCommand { get; }
     public RelayCommand ExportMarkdownCommand { get; }
@@ -174,6 +179,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(TableLogicalName));
             RefreshCommand.RaiseCanExecuteChanged();
             ApplyColumnsCommand.RaiseCanExecuteChanged();
+            OpenRecordCommand.RaiseCanExecuteChanged();
             if (value is not null) _ = OpenTableAsync(value);
         }
     }
@@ -811,6 +817,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         CopyRawValueCommand.RaiseCanExecuteChanged();
         CopyColumnCommand.RaiseCanExecuteChanged();
         CopyRowIdCommand.RaiseCanExecuteChanged();
+        OpenRecordCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>The value shown, or the raw one - a lookup's id, a choice's number.</summary>
@@ -838,6 +845,21 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         if (CurrentRow is not { } row) return;
         Copy(row.Record.Id.ToString(), $"the id of {Describe(row)}");
     }
+
+    private void OpenRecord(TableDataRow? row)
+    {
+        if (row is null || SelectedTable is not { } table || _session.Client is not { } client) return;
+
+        _session.OpenUrl(RecordUrl(client.EnvironmentUrl, table.LogicalName, row.Record.Id));
+        Status = $"Opened {Describe(row)} in Dynamics 365.";
+    }
+
+    /// <summary>
+    /// A row on its main form. With no app named, Dataverse opens it in the user's default app -
+    /// or asks which app, where there is no default.
+    /// </summary>
+    internal static string RecordUrl(string environmentUrl, string logicalName, Guid id) =>
+        $"{environmentUrl.TrimEnd('/')}/main.aspx?pagetype=entityrecord&etn={Uri.EscapeDataString(logicalName)}&id={id}";
 
     private static string Describe(TableDataRow row) =>
         string.IsNullOrWhiteSpace(row.Record.PrimaryName) ? "the row" : row.Record.PrimaryName;

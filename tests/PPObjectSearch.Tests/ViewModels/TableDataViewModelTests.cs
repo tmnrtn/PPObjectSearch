@@ -620,6 +620,27 @@ public class TableDataViewModelTests
         Assert.DoesNotContain("$filter", RowReads(handler)[^1].Url);
     }
 
+    [Fact]
+    public void A_row_opens_on_its_form_in_the_environments_apps()
+    {
+        var url = TableDataViewModel.RecordUrl("https://contoso.crm11.dynamics.com/", "new_taxcode",
+            Guid.Parse("00000000-0000-0000-0000-000000000002"));
+
+        Assert.Equal("https://contoso.crm11.dynamics.com/main.aspx?pagetype=entityrecord&etn=new_taxcode&id=00000000-0000-0000-0000-000000000002", url);
+    }
+
+    [Fact]
+    public async Task Only_a_row_can_be_opened()
+    {
+        var vm = await Opened(Handler());
+
+        Assert.False(vm.OpenRecordCommand.CanExecute(null));
+        Assert.True(vm.OpenRecordCommand.CanExecute(vm.Rows[0]));
+
+        vm.SetCurrentCell(vm.Rows[1], 0);
+        Assert.True(vm.OpenRecordCommand.CanExecute(null));
+    }
+
     // ---------------------------------------------------------------- remembered columns
 
     [Fact]
