@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows.Data;
 using PPObjectSearch.Core;
@@ -31,10 +32,16 @@ public sealed class TableDataColumn : ObservableObject
 }
 
 /// <summary>One row as shown: the cells line up with <see cref="TableDataViewModel.ShownColumns"/>.</summary>
-public sealed class TableDataRow(DataRecord record, IReadOnlyList<string?> cells)
+public sealed class TableDataRow(DataRecord record, IReadOnlyList<string?> cells, IReadOnlyList<object?>? sortKeys = null)
 {
     public DataRecord Record { get; } = record;
     public IReadOnlyList<string?> Cells { get; } = cells;
+
+    /// <summary>
+    /// What each column sorts by: a date or a number for those columns, so "27/01/2026" follows
+    /// "29/07/2025" and 100 follows 20 - the text shown would sort them the other way round.
+    /// </summary>
+    public IReadOnlyList<object?> SortKeys { get; } = sortKeys ?? cells;
 
     public bool Matches(string text) => Cells.Any(c => c?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false);
 }
@@ -571,10 +578,36 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         return record.Label(selectName) is { Length: > 0 } label ? label : record.Raw(selectName);
     }
 
+    /// <summary>
+    /// A date column sorts by the moment stored and a number column by its value; anything else by
+    /// the text shown. A value that does not parse sorts as empty, so a column never mixes types.
+    /// </summary>
+    internal static object? SortKey(DataRecord record, EntityColumn column, string? cell)
+    {
+        var raw = record.Raw(column.SelectName);
+
+        if (column.IsDateTime)
+        {
+            return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var when) ? when : null;
+        }
+
+        if (column.IsNumeric)
+        {
+            return decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : null;
+        }
+
+        return cell;
+    }
+
     private void BuildRows(IReadOnlyList<TableDataColumn> columns)
     {
         var raw = ShowRawValues;
-        Rows.ReplaceAll(_records.Select(r => new TableDataRow(r, columns.Select(c => Cell(r, c.SelectName, raw)).ToArray())));
+        Rows.ReplaceAll(_records.Select(r =>
+        {
+            var cells = columns.Select(c => Cell(r, c.SelectName, raw)).ToArray();
+            return new TableDataRow(r, cells, columns.Select((c, i) => SortKey(r, c.Column, cells[i])).ToArray());
+        }));
         SetCurrentCell(null, -1);
         RefreshRows();
     }
