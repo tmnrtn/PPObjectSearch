@@ -315,7 +315,7 @@ public class EnvironmentAdminNavigationTests
     }
 
     [Fact]
-    public async Task A_role_lists_its_holders_and_a_user_holder_links_to_the_users_tab()
+    public async Task A_role_lists_its_holders_and_each_links_to_its_own_tab()
     {
         var handler = new FakeHttpHandler()
             .OnJson(HttpMethod.Get, "_parentrootroleid_value", Value(new Dictionary<string, object?>
@@ -327,6 +327,7 @@ public class EnvironmentAdminNavigationTests
             .OnJson(HttpMethod.Get, "roles?$select=roleid,name", Value(Role(RoleA, "Basic User", true)))
             .OnJson(HttpMethod.Get, "RetrieveRolePrivilegesRole", """{"RolePrivileges":[]}""")
             .OnJson(HttpMethod.Get, "systemusers?", Value(User(Alice, "Alice", "Contoso", false)))
+            .OnJson(HttpMethod.Get, "teams?", Value(new Dictionary<string, object?> { ["teamid"] = TeamA, ["name"] = "Service Desk", ["teamtype"] = 0 }))
             .OnJson(HttpMethod.Get, "", Value());
         var admin = Admin(handler, AdminTab.Roles);
         await admin.LoadAsync();
@@ -334,14 +335,19 @@ public class EnvironmentAdminNavigationTests
         await Settle(admin);
 
         Assert.Equal("1 user(s) and 1 team(s). Team members hold it through their team.", admin.Roles.HolderStatus);
-        var team = admin.Roles.Holders.Single(h => h.IsTeam);
-        Assert.False(admin.Roles.ShowHolderCommand.CanExecute(team));
 
         admin.Roles.ShowHolderCommand.Execute(admin.Roles.Holders.Single(h => !h.IsTeam));
         await Settle(admin);
 
         Assert.Equal(AdminTab.Users, admin.SelectedTab);
         Assert.Equal(Alice, admin.Users.SelectedUser?.SystemUserId);
+
+        await admin.BackCommand.ExecuteAsync(null);
+        admin.Roles.ShowHolderCommand.Execute(admin.Roles.Holders.Single(h => h.IsTeam));
+        await Settle(admin);
+
+        Assert.Equal(AdminTab.Teams, admin.SelectedTab);
+        Assert.Equal(TeamA, admin.Teams.SelectedTeam?.TeamId);
     }
 
     [Fact]

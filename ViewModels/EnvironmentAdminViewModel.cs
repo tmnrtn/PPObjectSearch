@@ -11,6 +11,7 @@ namespace PPObjectSearch.ViewModels;
 public enum AdminTab
 {
     Users,
+    Teams,
     Roles,
     Mailboxes,
     Queues
@@ -20,9 +21,13 @@ public enum UserStatusFilter { All, Enabled, Disabled }
 public enum RoleManagedFilter { All, Managed, Unmanaged }
 public enum MailboxOwnerFilter { All, Users, Queues, Other }
 public enum QueueTypeFilter { All, Public, Private }
+public enum TeamTypeFilter { All, Owner, Access, Entra }
 
 /// <summary>What the selected user's pane lists below their properties.</summary>
 public enum UserDetailView { Roles, Teams, FieldSecurity }
+
+/// <summary>What the selected team's pane lists below its properties.</summary>
+public enum TeamDetailView { Members, Roles, FieldSecurity }
 
 /// <summary>What the selected role's pane shows.</summary>
 public enum RoleDetailView { Privileges, Other, HeldBy }
@@ -40,9 +45,9 @@ public sealed record AdminLocation(AdminTab Tab, Guid? Id, string? Label)
 }
 
 /// <summary>
-/// Users, security roles, mailboxes and queues in one environment. Read-only: each tab reads
-/// the first time it is opened, and links between them - a user's role, a queue's mailbox -
-/// move to the other tab with that row selected.
+/// Users, teams, security roles, mailboxes and queues in one environment. Read-only: each tab
+/// reads the first time it is opened, and links between them - a user's role, a team's members,
+/// a queue's mailbox - move to the other tab with that row selected.
 /// </summary>
 public sealed class EnvironmentAdminViewModel : ObservableObject
 {
@@ -53,6 +58,7 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
     {
         Session = session;
         Users = new AdminUsersViewModel(this, client);
+        Teams = new AdminTeamsViewModel(this, client);
         Roles = new AdminRolesViewModel(this, client);
         Mailboxes = new AdminMailboxesViewModel(this, client);
         Queues = new AdminQueuesViewModel(this, client);
@@ -118,6 +124,7 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
     public string Title => $"Environment admin — {Session.Title}";
 
     public AdminUsersViewModel Users { get; }
+    public AdminTeamsViewModel Teams { get; }
     public AdminRolesViewModel Roles { get; }
     public AdminMailboxesViewModel Mailboxes { get; }
     public AdminQueuesViewModel Queues { get; }
@@ -135,6 +142,7 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
     public AdminPaneViewModel Pane(AdminTab tab) => tab switch
     {
         AdminTab.Users => Users,
+        AdminTab.Teams => Teams,
         AdminTab.Roles => Roles,
         AdminTab.Mailboxes => Mailboxes,
         _ => Queues
@@ -286,6 +294,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         View.Filter = o => o is UserInfo u && Include(u);
         ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
         ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedUser?.DefaultMailboxId is not null);
+        ShowTeamCommand = new RelayCommand(p => Owner.Work.Track(ShowTeamAsync(p as TeamInfo)), p => p is TeamInfo);
         EntraTeamSyncCommand = new RelayCommand(
             p => { if (p is TeamInfo { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
             p => p is TeamInfo { IsEntraGroupTeam: true });
@@ -299,6 +308,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     public RelayCommand ShowRoleCommand { get; }
     public RelayCommand ShowMailboxCommand { get; }
+    public RelayCommand ShowTeamCommand { get; }
 
     private IReadOnlyList<string> _typeOptions = [AllTypes];
     public IReadOnlyList<string> TypeOptions { get => _typeOptions; private set => SetProperty(ref _typeOptions, value); }
@@ -587,6 +597,255 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     private Task ShowMailboxAsync() =>
         SelectedUser?.DefaultMailboxId is { } id ? Owner.ShowAsync(AdminTab.Mailboxes, id) : Task.CompletedTask;
+
+    private Task ShowTeamAsync(TeamInfo? team) =>
+        team is null ? Task.CompletedTask : Owner.ShowAsync(AdminTab.Teams, team.TeamId);
+}
+
+// ==================================================================== teams
+
+public sealed class AdminTeamsViewModel : AdminPaneViewModel
+{
+    public const string AllUnits = "All business units";
+
+    public AdminTeamsViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
+    {
+        View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
+        View.Filter = o => o is TeamDetail t && Include(t);
+        ShowMemberCommand = new RelayCommand(p => Owner.Work.Track(ShowMemberAsync(p as MemberUser)), p => p is MemberUser);
+        ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
+        ShowQueueCommand = new RelayCommand(_ => Owner.Work.Track(ShowQueueAsync()), _ => SelectedTeam?.QueueId is not null);
+        EntraTeamSyncCommand = new RelayCommand(
+            _ => { if (SelectedTeam is { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
+            _ => SelectedTeam is { IsEntraGroupTeam: true });
+    }
+
+    public ObservableCollection<TeamDetail> Items { get; } = new();
+    public ListCollectionView View { get; }
+
+    public RelayCommand ShowMemberCommand { get; }
+    public RelayCommand ShowRoleCommand { get; }
+    public RelayCommand ShowQueueCommand { get; }
+
+    /// <summary>The selected group team, opened in Entra team sync - which writes, so it asks there first.</summary>
+    public RelayCommand EntraTeamSyncCommand { get; }
+
+    private TeamTypeFilter _typeFilter;
+    public TeamTypeFilter TypeFilter
+    {
+        get => _typeFilter;
+        set
+        {
+            if (SetProperty(ref _typeFilter, value)) ApplyFilter();
+        }
+    }
+
+    private IReadOnlyList<string> _unitOptions = [AllUnits];
+    public IReadOnlyList<string> UnitOptions { get => _unitOptions; private set => SetProperty(ref _unitOptions, value); }
+
+    private string _selectedUnit = AllUnits;
+    public string SelectedUnit
+    {
+        get => _selectedUnit;
+        set
+        {
+            if (SetProperty(ref _selectedUnit, value ?? AllUnits)) ApplyFilter();
+        }
+    }
+
+    public int CountAll => Items.Count;
+    public int CountOwner => Items.Count(t => t.IsOwnerTeam);
+    public int CountAccess => Items.Count(t => t.IsAccessTeam);
+    public int CountEntra => Items.Count(t => t.IsEntraGroupTeam);
+
+    private bool Include(TeamDetail t) =>
+        TypeFilter switch
+        {
+            TeamTypeFilter.Owner => t.IsOwnerTeam,
+            TeamTypeFilter.Access => t.IsAccessTeam,
+            TeamTypeFilter.Entra => t.IsEntraGroupTeam,
+            _ => true
+        } &&
+        (SelectedUnit == AllUnits || string.Equals(t.BusinessUnit, SelectedUnit, StringComparison.CurrentCultureIgnoreCase)) &&
+        Matches(t.SearchText, SearchText);
+
+    protected override int Count => Items.Count;
+    protected override string Noun => "teams";
+    public override Guid? SelectedId => SelectedTeam?.TeamId;
+    public override string? SelectedLabel => SelectedTeam?.Name;
+
+    protected override void ApplyFilter()
+    {
+        View.Refresh();
+        ShowingSummary = Showing(View.Count, Items.Count, "teams");
+    }
+
+    private TeamDetailView _detailView;
+    /// <summary>Members, Security roles or Field security, below the team's properties.</summary>
+    public TeamDetailView DetailView { get => _detailView; set => SetProperty(ref _detailView, value); }
+
+    protected override async Task LoadCoreAsync()
+    {
+        Status = "Reading teams...";
+        var selected = SelectedTeam?.TeamId;
+        var teams = await Client.GetTeamDetailsAsync();
+
+        Items.Clear();
+        foreach (var team in teams) Items.Add(team);
+
+        UnitOptions = Options(AllUnits, teams.Select(t => t.BusinessUnit));
+        if (!UnitOptions.Contains(SelectedUnit)) SelectedUnit = AllUnits;
+
+        OnPropertyChanged(nameof(CountAll));
+        OnPropertyChanged(nameof(CountOwner));
+        OnPropertyChanged(nameof(CountAccess));
+        OnPropertyChanged(nameof(CountEntra));
+        ApplyFilter();
+
+        if (selected is { } id) SelectedTeam = Items.FirstOrDefault(t => t.TeamId == id);
+    }
+
+    public override void SelectById(Guid id)
+    {
+        if (Items.FirstOrDefault(t => t.TeamId == id) is not { } team) return;
+
+        if (!View.Contains(team))
+        {
+            SearchText = string.Empty;
+            TypeFilter = TeamTypeFilter.All;
+            SelectedUnit = AllUnits;
+        }
+
+        SelectedTeam = team;
+    }
+
+    // ---------------------------------------------------------------- the selected team
+
+    private TeamDetail? _selectedTeam;
+    public TeamDetail? SelectedTeam
+    {
+        get => _selectedTeam;
+        set
+        {
+            if (!SetProperty(ref _selectedTeam, value)) return;
+            ShowQueueCommand.RaiseCanExecuteChanged();
+            EntraTeamSyncCommand.RaiseCanExecuteChanged();
+            Owner.Work.Track(LoadDetailsAsync(value));
+        }
+    }
+
+    public ObservableCollection<MemberUser> Members { get; } = new();
+    public ObservableCollection<RoleAssignment> Roles { get; } = new();
+    public ObservableCollection<FieldProfileAssignment> FieldProfiles { get; } = new();
+
+    private string _memberStatus = string.Empty;
+    /// <summary>How many members and how many disabled - or why there are none.</summary>
+    public string MemberStatus { get => _memberStatus; private set => SetProperty(ref _memberStatus, value); }
+
+    private string _roleStatus = string.Empty;
+    public string RoleStatus { get => _roleStatus; private set => SetProperty(ref _roleStatus, value); }
+
+    private string _fieldProfileStatus = string.Empty;
+    public string FieldProfileStatus { get => _fieldProfileStatus; private set => SetProperty(ref _fieldProfileStatus, value); }
+
+    private bool _isLoadingDetails;
+    public bool IsLoadingDetails { get => _isLoadingDetails; private set => SetProperty(ref _isLoadingDetails, value); }
+
+    /// <summary>
+    /// Members, roles and field security profiles, read together but each on its own - a privilege
+    /// the reader lacks for one does not cost the others.
+    /// </summary>
+    private async Task LoadDetailsAsync(TeamDetail? team)
+    {
+        var request = ++DetailRequest;
+        Members.Clear();
+        Roles.Clear();
+        FieldProfiles.Clear();
+        MemberStatus = RoleStatus = FieldProfileStatus = string.Empty;
+
+        if (team is null) return;
+
+        IsLoadingDetails = true;
+        MemberStatus = "Reading members...";
+        RoleStatus = "Reading security roles...";
+        FieldProfileStatus = "Reading field security profiles...";
+
+        var membersTask = Client.GetTeamMembersAsync(team.TeamId);
+        var rolesTask = Client.GetTeamRolesAsync(team.TeamId, team.Name);
+        var profilesTask = Client.GetTeamFieldProfilesAsync(team.TeamId, team.Name);
+
+        try
+        {
+            try
+            {
+                var members = await membersTask;
+                if (request != DetailRequest) return;
+
+                foreach (var member in members.OrderBy(m => m.FullName, StringComparer.CurrentCultureIgnoreCase)) Members.Add(member);
+                MemberStatus = Members.Count == 0 ? NoMembersText(team) : MembersText();
+            }
+            catch (Exception ex)
+            {
+                if (request == DetailRequest) MemberStatus = "Could not read this team's members - " + ex.Message;
+            }
+
+            try
+            {
+                var roles = await rolesTask;
+                if (request != DetailRequest) return;
+
+                foreach (var role in roles.OrderBy(r => r.RoleName, StringComparer.CurrentCultureIgnoreCase)) Roles.Add(role);
+                RoleStatus = Roles.Count == 0 ? NoRolesText(team) : $"{Roles.Count:N0} role(s). Every member holds them through this team.";
+            }
+            catch (Exception ex)
+            {
+                if (request == DetailRequest) RoleStatus = "Could not read this team's security roles - " + ex.Message;
+            }
+
+            try
+            {
+                var profiles = await profilesTask;
+                if (request != DetailRequest) return;
+
+                foreach (var profile in profiles.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)) FieldProfiles.Add(profile);
+                FieldProfileStatus = FieldProfiles.Count == 0
+                    ? "No field security profile - members get no access to secured columns through this team."
+                    : string.Empty;
+            }
+            catch (Exception ex)
+            {
+                if (request == DetailRequest) FieldProfileStatus = "Could not read field security profiles - " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (request == DetailRequest) IsLoadingDetails = false;
+        }
+    }
+
+    private static string NoMembersText(TeamDetail team) => team.IsEntraGroupTeam
+        ? "No members yet. Group members join the team as they sign in to the environment; Entra team sync compares it with its group."
+        : "No members.";
+
+    private static string NoRolesText(TeamDetail team) => team.IsAccessTeam
+        ? "No security role. An access team holds none: it grants access to the records shared with it."
+        : "No security role - members get no privileges through this team.";
+
+    /// <summary>"12 member(s), 2 disabled."</summary>
+    private string MembersText()
+    {
+        var disabled = Members.Count(m => m.IsDisabled == true);
+        return $"{Members.Count:N0} member(s)" + (disabled > 0 ? $", {disabled:N0} disabled." : ".");
+    }
+
+    private Task ShowMemberAsync(MemberUser? member) =>
+        member is null ? Task.CompletedTask : Owner.ShowAsync(AdminTab.Users, member.SystemUserId);
+
+    private Task ShowRoleAsync(RoleAssignment? role) =>
+        role is null ? Task.CompletedTask : Owner.ShowAsync(AdminTab.Roles, role.DefinitionId);
+
+    private Task ShowQueueAsync() =>
+        SelectedTeam?.QueueId is { } id ? Owner.ShowAsync(AdminTab.Queues, id) : Task.CompletedTask;
 }
 
 // ==================================================================== security roles
@@ -603,7 +862,7 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
                                      Matches(row.Table, PrivilegeSearch) &&
                                      (!GrantedOnly || row.Widest > PrivilegeDepth.None);
 
-        ShowHolderCommand = new RelayCommand(p => Owner.Work.Track(ShowHolderAsync(p as RoleHolder)), p => p is RoleHolder { IsTeam: false });
+        ShowHolderCommand = new RelayCommand(p => Owner.Work.Track(ShowHolderAsync(p as RoleHolder)), p => p is RoleHolder);
     }
 
     public ObservableCollection<SecurityRoleInfo> Items { get; } = new();
@@ -798,7 +1057,7 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
     }
 
     private Task ShowHolderAsync(RoleHolder? holder) =>
-        holder is { IsTeam: false } ? Owner.ShowAsync(AdminTab.Users, holder.Id) : Task.CompletedTask;
+        holder is null ? Task.CompletedTask : Owner.ShowAsync(holder.IsTeam ? AdminTab.Teams : AdminTab.Users, holder.Id);
 }
 
 // ==================================================================== mailboxes
