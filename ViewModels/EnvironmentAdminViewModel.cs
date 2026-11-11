@@ -295,6 +295,9 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
         ShowMailboxCommand = new RelayCommand(_ => Owner.Work.Track(ShowMailboxAsync()), _ => SelectedUser?.DefaultMailboxId is not null);
         ShowTeamCommand = new RelayCommand(p => Owner.Work.Track(ShowTeamAsync(p as TeamInfo)), p => p is TeamInfo);
+        OwnedRecordsCommand = new RelayCommand(
+            _ => { if (SelectedUser is { } user) Owner.Session.ShowOwnedRecords(user.SystemUserId, user.FullName, isTeam: false); },
+            _ => SelectedUser is not null);
         EntraTeamSyncCommand = new RelayCommand(
             p => { if (p is TeamInfo { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
             p => p is TeamInfo { IsEntraGroupTeam: true });
@@ -309,6 +312,9 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     public RelayCommand ShowRoleCommand { get; }
     public RelayCommand ShowMailboxCommand { get; }
     public RelayCommand ShowTeamCommand { get; }
+
+    /// <summary>The records the selected user owns themselves, counted table by table in a window of their own.</summary>
+    public RelayCommand OwnedRecordsCommand { get; }
 
     private IReadOnlyList<string> _typeOptions = [AllTypes];
     public IReadOnlyList<string> TypeOptions { get => _typeOptions; private set => SetProperty(ref _typeOptions, value); }
@@ -439,6 +445,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         {
             if (!SetProperty(ref _selectedUser, value)) return;
             ShowMailboxCommand.RaiseCanExecuteChanged();
+            OwnedRecordsCommand.RaiseCanExecuteChanged();
             Owner.Work.Track(LoadDetailsAsync(value));
         }
     }
@@ -615,6 +622,9 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
         ShowMemberCommand = new RelayCommand(p => Owner.Work.Track(ShowMemberAsync(p as MemberUser)), p => p is MemberUser);
         ShowRoleCommand = new RelayCommand(p => Owner.Work.Track(ShowRoleAsync(p as RoleAssignment)), p => p is RoleAssignment);
         ShowQueueCommand = new RelayCommand(_ => Owner.Work.Track(ShowQueueAsync()), _ => SelectedTeam?.QueueId is not null);
+        OwnedRecordsCommand = new RelayCommand(
+            _ => { if (SelectedTeam is { } team) Owner.Session.ShowOwnedRecords(team.TeamId, team.Name, isTeam: true); },
+            _ => SelectedTeam is not null);
         EntraTeamSyncCommand = new RelayCommand(
             _ => { if (SelectedTeam is { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
             _ => SelectedTeam is { IsEntraGroupTeam: true });
@@ -626,6 +636,9 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
     public RelayCommand ShowMemberCommand { get; }
     public RelayCommand ShowRoleCommand { get; }
     public RelayCommand ShowQueueCommand { get; }
+
+    /// <summary>The records the selected team owns, counted table by table in a window of their own.</summary>
+    public RelayCommand OwnedRecordsCommand { get; }
 
     /// <summary>The selected group team, opened in Entra team sync - which writes, so it asks there first.</summary>
     public RelayCommand EntraTeamSyncCommand { get; }
@@ -729,6 +742,7 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
         {
             if (!SetProperty(ref _selectedTeam, value)) return;
             ShowQueueCommand.RaiseCanExecuteChanged();
+            OwnedRecordsCommand.RaiseCanExecuteChanged();
             EntraTeamSyncCommand.RaiseCanExecuteChanged();
             Owner.Work.Track(LoadDetailsAsync(value));
         }

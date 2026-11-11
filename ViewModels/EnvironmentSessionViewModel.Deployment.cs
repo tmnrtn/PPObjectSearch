@@ -59,11 +59,26 @@ public sealed partial class EnvironmentSessionViewModel
     private RelayCommand? _tableDataCommand;
     public RelayCommand TableDataCommand => _tableDataCommand ??= new RelayCommand(_ => OpenTableData());
 
-    /// <summary>The rows of a table, read-only - optionally one table, from its details window.</summary>
-    public void OpenTableData(string? tableLogicalName = null)
+    /// <summary>
+    /// The rows of a table, read-only - optionally one table, from its details window, and
+    /// optionally filtered, as Owned records opens a table on its owner's rows.
+    /// </summary>
+    public void OpenTableData(string? tableLogicalName = null, TableServerFilter? filter = null)
     {
         if (_client is null || !IsConnected) return;
-        new Views.TableDataView { DataContext = new TableDataViewModel(this, tableLogicalName, _settings) }.Open();
+        new Views.TableDataView { DataContext = new TableDataViewModel(this, tableLogicalName, _settings, filter) }.Open();
+    }
+
+    // ---------------------------------------------------------------- owned records
+
+    /// <summary>The rows a user or team owns, table by table - read-only. Counting starts as it opens.</summary>
+    public void ShowOwnedRecords(Guid ownerId, string ownerName, bool isTeam)
+    {
+        if (_client is null || !IsConnected) return;
+
+        var viewModel = new OwnedRecordsViewModel(this, _client, ownerId, ownerName, isTeam);
+        Track(new Views.OwnedRecordsView { DataContext = viewModel }.Open());
+        _ = viewModel.RunAsync();
     }
 
     // ---------------------------------------------------------------- security lookup
