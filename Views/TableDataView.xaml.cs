@@ -63,6 +63,16 @@ public partial class TableDataView : ScreenView
         RowsGrid.CurrentCell = new DataGridCellInfo(cell);
     }
 
+    /// <summary>A double-click on a row - not its column header or the scroll bar - opens it in Dynamics 365.</summary>
+    private void RowsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Left || DataContext is not TableDataViewModel viewModel) return;
+        if (ItemsControl.ContainerFromElement(RowsGrid, e.OriginalSource as DependencyObject) is not DataGridRow { Item: TableDataRow row }) return;
+
+        if (viewModel.OpenRecordCommand.CanExecute(row)) viewModel.OpenRecordCommand.Execute(row);
+        e.Handled = true;
+    }
+
     /// <summary>One text column per column read, bound to the row's cell at the same position.</summary>
     private void BuildColumns(IReadOnlyList<TableDataColumn> columns)
     {

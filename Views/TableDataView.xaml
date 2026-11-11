@@ -223,10 +223,15 @@
                                   BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
                                   CurrentCellChanged="RowsGrid_CurrentCellChanged"
                                   PreviewMouseRightButtonDown="RowsGrid_PreviewMouseRightButtonDown"
+                                  MouseDoubleClick="RowsGrid_MouseDoubleClick"
                                   Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
-                            <!-- Right-click a cell: copy its value, its id or option number, its column, or the row's id. -->
+                            <!-- Right-click a cell: open its row, or copy its value, its id or option number, its column, or the row's id.
+                                 Double-click a row to open it. -->
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
+                                    <MenuItem Header="Open in Dynamics 365" Command="{Binding OpenRecordCommand}" InputGestureText="Double-click"
+                                              ToolTip="The row on its form, in the browser" />
+                                    <Separator />
                                     <MenuItem Header="Copy value" Command="{Binding CopyValueCommand}"
                                               ToolTip="The value as shown - a lookup's name, a choice's label" />
                                     <MenuItem Header="Copy raw value" Command="{Binding CopyRawValueCommand}"

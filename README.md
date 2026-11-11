@@ -693,6 +693,9 @@ environment-specific settings, option lists. A table's details window opens it o
   **Stop** ends a read in progress.
 - **Export** the rows and columns shown, after both filters, as CSV or as a Markdown table with the
   environment and filters above it.
+- **Open** - double-click a row (or right-click it, **Open in Dynamics 365**) to open it on its
+  form, in the environment's browser profile if one is set. It opens in your default app; where
+  there is none, Dataverse asks which app.
 - **Copy** - right-click a cell for **Copy value** (as shown), **Copy raw value** (a lookup's row
   id, a choice's number), **Copy column** (that column's value in every row shown, one per line)
   and **Copy row id**. Select cells and press `Ctrl+C` (or **Copy selected cells**) to copy them
