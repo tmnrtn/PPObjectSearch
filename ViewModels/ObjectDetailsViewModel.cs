@@ -376,7 +376,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         try
         {
             var design = await Task.Run(() => FlowDesignParser.Parse(definition), CancellationToken.None);
-            var diagram = new FlowDiagramViewModel(design, Item.PrimaryLabel);
+            var diagram = new FlowDiagramViewModel(design, Item.PrimaryLabel) { EnvironmentName = Session?.Title };
             if (Session is not null) diagram.OpenChildRun = OpenChildRunAsync;
             FlowDiagram = diagram;
 

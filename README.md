@@ -77,9 +77,12 @@ straight into the maker portal.
     failed iteration is picked and scrolled to, and **Failed only** lists just the failures. A
     failed step or iteration whose error is only a code (a connector's BadRequest) has the reason
     read from its outputs. Otherwise a step's **Inputs** and **Outputs** are fetched only when asked
-    for, and never saved. On a "Run a child flow" step, **Open child run** opens the child flow
+    for, and saved only when you export them. On a "Run a child flow" step, **Open child run** opens the child flow
     with the run that step started drawn on its diagram - in a loop, the iteration picked, else
-    the last. Run details are
+    the last. **Export** on the run saves it as JSON to analyse elsewhere: each step in design
+    order with its container and branch, status, times and error, and every iteration of a step
+    in a loop - optionally with every step's and iteration's inputs and outputs, read one by one
+    (a large run takes a while, and they can hold sensitive data). Run details are
     kept for about 28 days, and need you to own or co-own the flow (or be an environment admin).
   - **Classic workflows**: recent system jobs and their errors - the latest 100, or as many as asked for.
   - **Plug-in assemblies, types and steps**: the plug-in trace log, with trace text and exceptions

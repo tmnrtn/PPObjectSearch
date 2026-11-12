@@ -402,6 +402,29 @@ public class FlowRunOverlayTests
         Assert.True(Card(d, "Notify").IsMatch);
     }
 
+    [Fact]
+    public void A_run_can_be_exported_only_while_it_is_on_show()
+    {
+        var d = Diagram();
+        Assert.False(d.ExportRunCommand.CanExecute(null));
+        Assert.False(d.ExportRunWithContentCommand.CanExecute(null));
+
+        d.ShowRun(Run(), Client().Client);
+        Assert.True(d.ExportRunCommand.CanExecute(null));
+        Assert.True(d.ExportRunWithContentCommand.CanExecute(null));
+
+        d.ClearRun();
+        Assert.False(d.ExportRunCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void An_export_is_named_after_the_flow_and_run_safe_for_a_file()
+    {
+        var d = new FlowDiagramViewModel(FlowDesignParser.Parse(Sample), "Sync accounts/contacts");
+
+        Assert.Equal("Sync accounts_contacts-run-08584501234567890123456789CU01.json", d.RunExportFileName(Run()));
+    }
+
     [Theory]
     [InlineData("08584501234567890123456789CU01", "…6789CU01")]
     [InlineData("short", "short")]
