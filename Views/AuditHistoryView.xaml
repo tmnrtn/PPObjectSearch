@@ -45,8 +45,25 @@
                                Visibility="{Binding ShowsAuditBanner, Converter={StaticResource NotBoolToVis}}" />
                 </StackPanel>
 
-                <Button Grid.Column="1" AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;"
-                        VerticalAlignment="Center" Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The changes listed, one line per column changed, as CSV or Markdown">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="CSV: the changes…" Command="{Binding ExportCsvCommand}"
+                                          ToolTip="Every change, one line per column changed, with the old and new values whole" />
+                                <MenuItem Header="Markdown: the changes…" Command="{Binding ExportMarkdownCommand}"
+                                          ToolTip="The changes as a table, with what the history is of and whether auditing is on" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <Border Grid.Row="1" Style="{StaticResource Banner}" Margin="18,0,18,10"

@@ -111,7 +111,8 @@ straight into the maker portal.
   **Save raw XML…** are on the toolbar. An import still running shows its progress, refreshed every
   five seconds, until its log is ready.
 - **Table data** (in the sidebar) — a read-only, filterable look at the rows of one table, for
-  checking reference and config data, with export to CSV or Markdown. See [Table data](#table-data).
+  checking reference and config data, with lookups and related rows to follow, each row's audit
+  history, and export to CSV or Markdown. See [Table data](#table-data).
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
@@ -661,7 +662,9 @@ what the timeline cannot: each audited change to it - when, by whom, and each co
 so a flow turned off, a step disabled or a variable's value replaced can be traced. A variable's
 history covers its definition and its current value row. It reads Dataverse auditing, so it shows
 only what was recorded while auditing was on; the window says whether it is on now for the
-environment and the table, and needs the View Audit History privilege.
+environment and the table, and needs the View Audit History privilege. **Export** writes the
+changes as CSV or Markdown, one line per column changed. Any table row's history is in
+[Table data](#table-data).
 
 ## Table data
 
@@ -699,6 +702,23 @@ environment-specific settings, option lists. A table's details window opens it o
 - **Open** - double-click a row (or right-click it, **Open in Dynamics 365**) to open it on its
   form, in the environment's browser profile if one is set. It opens in your default app; where
   there is none, Dataverse asks which app.
+- **Follow a lookup** - a lookup's name is a link: click it (or right-click, **Open link**) to open
+  the row it points at in a Table data window of its own, filtered to that row by its id. A customer
+  or owner lookup opens the table that row is actually in. From there its own lookups and related
+  rows can be followed in turn.
+- **Related rows** - the column picker lists, after the table's own columns, each table whose rows
+  point at this one (*Contact (parentcustomerid)*), one per relationship. Tick one and each row shows
+  a **View rows** link that opens that table filtered to the rows whose lookup holds this row - a
+  filter chip that can be removed like any other. Only relationships to the table's id, and to
+  tables whose rows can be read, are offered. Related rows are links, not values: they are not read
+  with the rows, and are left out of the quick filter, copying and export.
+- **Audit history** - right-click a row for **Audit history**: each audited change to it - when, by
+  whom, the action, and each column's old and new value. Columns are named by their display names,
+  and the values are read as the app shows them (RetrieveAuditDetails) - a lookup's name, a
+  choice's label, a date in your format - for the newest 250 changes; older ones, and any whose
+  details cannot be read, show the stored values. **Export** writes the history as CSV or Markdown,
+  one line per column changed with the values whole. It shows only what was recorded while
+  auditing was on, says whether it is on now, and needs the View Audit History privilege.
 - **Copy** - right-click a cell for **Copy value** (as shown), **Copy raw value** (a lookup's row
   id, a choice's number), **Copy column** (that column's value in every row shown, one per line)
   and **Copy row id**. Select cells and press `Ctrl+C` (or **Copy selected cells**) to copy them

@@ -89,7 +89,7 @@ public class DataverseClientTableRowsTests
         Assert.Contains("$select=new_taxcodeid,new_name,statecode", request.Url);
         Assert.Contains("$orderby=new_name,new_taxcodeid", request.Url);
         Assert.Contains("$filter=new_rate gt 5", request.Url);
-        Assert.Contains("odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"", request.Header("Prefer"));
+        Assert.Contains("odata.include-annotations=\"*\"", request.Header("Prefer"));
     }
 
     [Fact]
@@ -208,5 +208,47 @@ public class DataverseClientTableRowsTests
             .OnError(HttpMethod.Get, "/ManyToOneRelationships", HttpStatusCode.BadRequest, "not for virtual tables");
 
         Assert.Empty(await Fakes.Dataverse(handler).GetLookupNavigationsAsync("new_virtual", "new_parentid"));
+    }
+
+    [Fact]
+    public async Task Child_relationships_are_those_that_point_at_the_tables_id()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='new_taxcode')/OneToManyRelationships", """
+            {"value":[
+              {"SchemaName":"new_taxcode_rateline","ReferencingEntity":"new_rateline","ReferencingAttribute":"new_taxcodeid","ReferencedAttribute":"new_taxcodeid"},
+              {"SchemaName":"new_taxcode_bycode","ReferencingEntity":"new_rateline","ReferencingAttribute":"new_codeid","ReferencedAttribute":"new_code"},
+              {"SchemaName":"new_taxcode_broken","ReferencingEntity":null,"ReferencingAttribute":"new_x","ReferencedAttribute":"new_taxcodeid"}
+            ]}
+            """);
+
+        var relationship = Assert.Single(await Fakes.Dataverse(handler).GetChildRelationshipsAsync(TaxCode));
+
+        Assert.Equal(new ChildRelationship("new_taxcode_rateline", "new_rateline", "new_taxcodeid"), relationship);
+        Assert.Contains("$select=SchemaName,ReferencingEntity,ReferencingAttribute,ReferencedAttribute", Assert.Single(handler.Requests).Url);
+    }
+
+    [Fact]
+    public async Task Child_relationships_that_cannot_be_read_are_none()
+    {
+        var handler = new FakeHttpHandler()
+            .OnError(HttpMethod.Get, "/OneToManyRelationships", HttpStatusCode.BadRequest, "not for virtual tables");
+
+        Assert.Empty(await Fakes.Dataverse(handler).GetChildRelationshipsAsync(TaxCode));
+    }
+
+    [Fact]
+    public async Task A_rows_lookups_say_which_table_they_point_at()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "new_taxcodes?", """
+            {"value":[{"new_taxcodeid":"00000000-0000-0000-0000-000000000001","new_name":"Reduced",
+              "_ownerid_value":"aaaaaaaa-0000-0000-0000-000000000001",
+              "_ownerid_value@OData.Community.Display.V1.FormattedValue":"Finance",
+              "_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname":"team"}]}
+            """);
+
+        var row = Assert.Single((await Fakes.Dataverse(handler).GetTableRowsAsync(TaxCode, ["_ownerid_value"], null, 10)).Rows);
+
+        Assert.Equal("team", row.LookupTargets["_ownerid_value"]);
+        Assert.Equal("Finance", row.Label("_ownerid_value"));
     }
 }

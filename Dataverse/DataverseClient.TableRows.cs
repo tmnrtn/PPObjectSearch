@@ -14,6 +14,12 @@ public sealed record TableRowsResult(IReadOnlyList<DataRecord> Rows, bool IsTrun
 public sealed record LookupNavigation(string NavigationProperty, string TargetTable, string TargetNameColumn);
 
 /// <summary>
+/// A table whose rows point at this one - a one-to-many relationship seen from its parent: the
+/// child table, and the lookup on it that holds the parent's id.
+/// </summary>
+public sealed record ChildRelationship(string SchemaName, string ChildTable, string LookupColumn);
+
+/// <summary>
 /// Reading a table's rows to look at them - reference and configuration data, a lookup table, an
 /// option list. Read-only: nothing here sends anything but a GET.
 /// </summary>
@@ -140,6 +146,44 @@ public sealed partial class DataverseClient
     }
 
     /// <summary>
+    /// The tables whose rows point at this one, by a lookup to its primary id. A relationship to
+    /// some other column of it - an alternate key - is left out, since the rows it relates are not
+    /// found by this table's id. None, where the relationships cannot be read.
+    /// </summary>
+    public async Task<IReadOnlyList<ChildRelationship>> GetChildRelationshipsAsync(
+        EntitySummary entity,
+        CancellationToken ct = default)
+    {
+        var url = EnvironmentUrl + ApiPath +
+                  $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(entity.LogicalName.ToLowerInvariant())}')/OneToManyRelationships" +
+                  "?$select=SchemaName,ReferencingEntity,ReferencingAttribute,ReferencedAttribute";
+
+        var results = new List<ChildRelationship>();
+
+        try
+        {
+            await ForEachRowAsync(url, null, row =>
+            {
+                var schemaName = JsonHelper.GetString(row, "SchemaName");
+                var child = JsonHelper.GetString(row, "ReferencingEntity");
+                var lookup = JsonHelper.GetString(row, "ReferencingAttribute");
+                if (string.IsNullOrWhiteSpace(schemaName) || string.IsNullOrWhiteSpace(child) || string.IsNullOrWhiteSpace(lookup)) return;
+
+                var referenced = JsonHelper.GetString(row, "ReferencedAttribute");
+                if (referenced is { Length: > 0 } && !referenced.Equals(entity.PrimaryIdAttribute, StringComparison.OrdinalIgnoreCase)) return;
+
+                results.Add(new ChildRelationship(schemaName, child, lookup));
+            }, ct).ConfigureAwait(false);
+        }
+        catch (DataverseException)
+        {
+            return [];
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Reads up to <paramref name="maxRows"/> rows, sorted by the primary name then the id so that
     /// a read the cap cuts short stops at a predictable place. A table that refuses the sort - some
     /// virtual tables do - is read again unsorted rather than not at all.
@@ -184,7 +228,9 @@ public sealed partial class DataverseClient
         {
             ct.ThrowIfCancellationRequested();
 
-            using var doc = await GetJsonAsync(url, ct, Annotations.Formatted).ConfigureAwait(false);
+            // Every annotation, not just the labels: a lookup only says which table it points at -
+            // which a customer or owner lookup needs to be followed - in its lookuplogicalname.
+            using var doc = await GetJsonAsync(url, ct, Annotations.All).ConfigureAwait(false);
 
             foreach (var row in JsonHelper.Rows(doc.RootElement))
             {

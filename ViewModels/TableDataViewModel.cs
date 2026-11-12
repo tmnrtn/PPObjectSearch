@@ -10,10 +10,33 @@ using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
-/// <summary>One of the table's columns in the column picker, with its tick.</summary>
+/// <summary>
+/// One of the table's columns in the column picker, with its tick - or one of the tables whose rows
+/// point at it, shown as a column of links to each row's related rows.
+/// </summary>
 public sealed class TableDataColumn : ObservableObject
 {
+    /// <summary>The column; for related rows, a stand-in named after the relationship, which is never read.</summary>
     public required EntityColumn Column { get; init; }
+
+    /// <summary>The relationship whose rows this column links to; null for one of the table's own columns.</summary>
+    public ChildRelationship? Relationship { get; init; }
+
+    public bool IsRelationship => Relationship is not null;
+
+    /// <summary>A lookup links to the row it points at; related rows link to the rows that point here.</summary>
+    public bool IsLink => IsRelationship || Column.IsLookup;
+
+    /// <summary>The related rows of a relationship, as a column the picker can list among the table's own.</summary>
+    internal static TableDataColumn Related(ChildRelationship relationship, EntitySummary? child) => new()
+    {
+        Column = new EntityColumn(relationship.SchemaName,
+            $"{(string.IsNullOrWhiteSpace(child?.DisplayName) ? relationship.ChildTable : child!.DisplayName)} ({relationship.LookupColumn})",
+            RelatedRowsType, IsPrimaryId: false, IsPrimaryName: false),
+        Relationship = relationship
+    };
+
+    private const string RelatedRowsType = "RelatedRows";
 
     private bool _isShown;
     public bool IsShown
@@ -25,8 +48,10 @@ public sealed class TableDataColumn : ObservableObject
     public string Header => string.IsNullOrWhiteSpace(Column.DisplayName) ? Column.LogicalName : Column.DisplayName;
     public string LogicalName => Column.LogicalName;
     public string SelectName => Column.SelectName;
-    public string TypeLabel => Column.TypeLabel;
-    public string ToolTip => $"{Column.LogicalName} · {Column.TypeLabel}";
+    public string TypeLabel => IsRelationship ? "Related rows" : Column.TypeLabel;
+    public string ToolTip => Relationship is { } r
+        ? $"The {r.ChildTable} rows whose {r.LookupColumn} is this row · {r.SchemaName}"
+        : $"{Column.LogicalName} · {Column.TypeLabel}";
 
     public override string ToString() => Header;
 }
@@ -115,10 +140,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         ApplyFilterCommand = new AsyncRelayCommand(_ => ApplyFilterAsync(), _ => FilterColumn is not null);
         ClearFilterCommand = new AsyncRelayCommand(_ => ClearFilterAsync(), _ => HasServerFilter);
         RemoveFilterCommand = new AsyncRelayCommand(p => RemoveFilterAsync(p as TableServerFilter), p => p is TableServerFilter);
-        CopyValueCommand = new RelayCommand(_ => CopyCell(raw: false), _ => CurrentRow is not null && CurrentColumn >= 0);
-        CopyRawValueCommand = new RelayCommand(_ => CopyCell(raw: true), _ => CurrentRow is not null && CurrentColumn >= 0);
-        CopyColumnCommand = new RelayCommand(_ => CopyColumn(), _ => CurrentColumn >= 0 && HasRows);
+        CopyValueCommand = new RelayCommand(_ => CopyCell(raw: false), _ => CurrentRow is not null && IsValueColumn(CurrentColumn));
+        CopyRawValueCommand = new RelayCommand(_ => CopyCell(raw: true), _ => CurrentRow is not null && IsValueColumn(CurrentColumn));
+        CopyColumnCommand = new RelayCommand(_ => CopyColumn(), _ => IsValueColumn(CurrentColumn) && HasRows);
         CopyRowIdCommand = new RelayCommand(_ => CopyRowId(), _ => CurrentRow is not null);
+        FollowLinkCommand = new RelayCommand(_ => FollowLink(CurrentRow, CurrentColumn), _ => LinkTarget(CurrentRow, CurrentColumn) is not null);
+        AuditHistoryCommand = new RelayCommand(p => ShowAuditHistory(p as TableDataRow ?? CurrentRow),
+            p => (p as TableDataRow ?? CurrentRow) is { Record.Id: var id } && id != Guid.Empty && SelectedTable is not null);
         OpenRecordCommand = new RelayCommand(p => OpenRecord(p as TableDataRow ?? CurrentRow),
             p => (p as TableDataRow ?? CurrentRow) is not null && SelectedTable is not null);
         ToggleColumnPickerCommand = new RelayCommand(_ => IsColumnPickerOpen = !IsColumnPickerOpen);
@@ -145,6 +173,12 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
     /// <summary>The row - double-clicked, or the one right-clicked - on its form in the environment's apps.</summary>
     public RelayCommand OpenRecordCommand { get; }
+
+    /// <summary>The link in the cell right-clicked: a lookup's row, or a row's related rows.</summary>
+    public RelayCommand FollowLinkCommand { get; }
+
+    /// <summary>Who changed the row right-clicked, and from what to what.</summary>
+    public RelayCommand AuditHistoryCommand { get; }
     public RelayCommand ToggleColumnPickerCommand { get; }
     public RelayCommand ExportCsvCommand { get; }
     public RelayCommand ExportMarkdownCommand { get; }
@@ -236,6 +270,14 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
     public string ColumnsLabel => $"Columns · {ShownColumns.Count}";
 
+    private IReadOnlyList<TableDataColumn> _filterColumns = [];
+    /// <summary>The table's own columns, which a server filter can test - not the related rows.</summary>
+    public IReadOnlyList<TableDataColumn> FilterColumns
+    {
+        get => _filterColumns;
+        private set => SetProperty(ref _filterColumns, value);
+    }
+
     private bool _isColumnPickerOpen;
     public bool IsColumnPickerOpen
     {
@@ -273,28 +315,43 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         return chosen;
     }
 
-    private void SetColumns(EntitySummary table, IReadOnlyList<EntityColumn> columns, IReadOnlyList<string> viewColumns)
+    /// <param name="relationships">The tables whose rows point at this one, listed after its own columns.</param>
+    private void SetColumns(EntitySummary table, IReadOnlyList<EntityColumn> columns, IReadOnlyList<string> viewColumns,
+        IReadOnlyList<ChildRelationship>? relationships = null)
     {
         _defaultColumns = DefaultColumns(table, columns, viewColumns);
 
+        // Related rows, by the relationship's name - remembered like any column, but always after the table's own.
+        var related = (relationships ?? [])
+            .Where(r => !columns.Any(c => c.LogicalName.Equals(r.SchemaName, StringComparison.OrdinalIgnoreCase)))
+            .Select(r => TableDataColumn.Related(r, Tables.FirstOrDefault(t => t.LogicalName.Equals(r.ChildTable, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+        var all = columns.Concat(related.Select(r => r.Column)).ToList();
+
         // The columns last shown, where any of them is still there; else the view's.
-        var shown = RememberedColumns(table, columns) ?? _defaultColumns;
+        var shown = RememberedColumns(table, all) ?? _defaultColumns;
         var leading = shown.Concat(_defaultColumns).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var ordered = leading
-            .Select(n => columns.First(c => c.LogicalName.Equals(n, StringComparison.OrdinalIgnoreCase)))
+            .Select(n => all.First(c => c.LogicalName.Equals(n, StringComparison.OrdinalIgnoreCase)))
             .Concat(columns.Where(c => !leading.Contains(c.LogicalName, StringComparer.OrdinalIgnoreCase))
-                .OrderBy(c => string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName, StringComparer.CurrentCultureIgnoreCase));
+                .OrderBy(c => string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName, StringComparer.CurrentCultureIgnoreCase))
+            .Concat(related.Select(r => r.Column).Where(c => !leading.Contains(c.LogicalName, StringComparer.OrdinalIgnoreCase))
+                .OrderBy(c => c.DisplayName, StringComparer.CurrentCultureIgnoreCase));
 
         Columns.Clear();
         foreach (var column in ordered)
         {
+            var relationship = related.FirstOrDefault(r => ReferenceEquals(r.Column, column))?.Relationship;
             Columns.Add(new TableDataColumn
             {
                 Column = column,
+                Relationship = relationship,
                 IsShown = shown.Contains(column.LogicalName, StringComparer.OrdinalIgnoreCase)
             });
         }
+
+        FilterColumns = Columns.Where(c => !c.IsRelationship).ToList();
 
         ColumnSearch = string.Empty;
         DefaultColumnsCommand.RaiseCanExecuteChanged();
@@ -303,7 +360,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         _activeOnly = false;
         OnPropertyChanged(nameof(ActiveOnly));
 
-        FilterColumn = Columns.FirstOrDefault();
+        FilterColumn = FilterColumns.FirstOrDefault();
     }
 
     private static string ColumnsKey(EntitySummary table) => table.LogicalName.ToLowerInvariant();
@@ -605,8 +662,9 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         var raw = ShowRawValues;
         Rows.ReplaceAll(_records.Select(r =>
         {
-            var cells = columns.Select(c => Cell(r, c.SelectName, raw)).ToArray();
-            return new TableDataRow(r, cells, columns.Select((c, i) => SortKey(r, c.Column, cells[i])).ToArray());
+            // Related rows are a link, not a value: nothing to filter, sort or export by.
+            var cells = columns.Select(c => c.IsRelationship ? null : Cell(r, c.SelectName, raw)).ToArray();
+            return new TableDataRow(r, cells, columns.Select((c, i) => c.IsRelationship ? null : SortKey(r, c.Column, cells[i])).ToArray());
         }));
         SetCurrentCell(null, -1);
         RefreshRows();
@@ -752,9 +810,11 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
         var columns = await client.GetEntityColumnsAsync(table.LogicalName, ct);
         var view = await client.GetDefaultViewColumnsAsync(table.LogicalName, ct);
+        var relationships = await client.GetChildRelationshipsAsync(table, ct);
         ct.ThrowIfCancellationRequested();
 
-        SetColumns(table, columns, view);
+        // Only those whose rows can be read here can be opened.
+        SetColumns(table, columns, view, relationships.Where(r => Tables.Any(t => t.LogicalName.Equals(r.ChildTable, StringComparison.OrdinalIgnoreCase))).ToList());
         await ReadRowsAsync(client, table, ct);
     });
 
@@ -778,7 +838,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         Status = $"Reading {table.Label}...";
         var clock = Stopwatch.StartNew();
 
-        var result = await client.GetTableRowsAsync(table, columns.Select(c => c.SelectName), filter, RowCap,
+        var result = await client.GetTableRowsAsync(table, columns.Where(c => !c.IsRelationship).Select(c => c.SelectName), filter, RowCap,
             n => Status = $"Reading {table.Label} - {n:N0} rows so far...", ct);
         ct.ThrowIfCancellationRequested();
 
@@ -851,7 +911,12 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         CopyColumnCommand.RaiseCanExecuteChanged();
         CopyRowIdCommand.RaiseCanExecuteChanged();
         OpenRecordCommand.RaiseCanExecuteChanged();
+        FollowLinkCommand.RaiseCanExecuteChanged();
+        AuditHistoryCommand.RaiseCanExecuteChanged();
     }
+
+    /// <summary>A column shown whose cells hold a value to copy - not a column of related rows.</summary>
+    private bool IsValueColumn(int column) => column >= 0 && column < ShownColumns.Count && !ShownColumns[column].IsRelationship;
 
     /// <summary>The value shown, or the raw one - a lookup's id, a choice's number.</summary>
     private void CopyCell(bool raw)
@@ -888,6 +953,67 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Where a cell's link goes: the table to open, and the filter that picks the rows - a lookup's
+    /// row by its id, or the rows of a related table whose lookup holds this row's id. Null where
+    /// the cell has no link: an empty lookup, or a table whose rows cannot be read here.
+    /// </summary>
+    internal (EntitySummary Table, TableServerFilter Filter)? LinkTarget(TableDataRow? row, int column)
+    {
+        if (row is null || column < 0 || column >= ShownColumns.Count) return null;
+
+        var shown = ShownColumns[column];
+        if (shown.Relationship is { } relationship)
+        {
+            if (row.Record.Id == Guid.Empty || FindTable(relationship.ChildTable) is not { } child) return null;
+
+            return (child, new TableServerFilter($"_{relationship.LookupColumn}_value eq {row.Record.Id}",
+                $"{relationship.LookupColumn} is '{(string.IsNullOrWhiteSpace(row.Record.PrimaryName) ? row.Record.Id.ToString() : row.Record.PrimaryName)}'"));
+        }
+
+        if (!shown.Column.IsLookup || !Guid.TryParse(row.Record.Raw(shown.SelectName), out var id)) return null;
+
+        // A customer or owner lookup can point at more than one table; the row says which.
+        var targetName = row.Record.LookupTargets.GetValueOrDefault(shown.SelectName) ??
+                         (_lookupNames.GetValueOrDefault(shown.LogicalName) is [var only] ? only.TargetTable : null);
+        if (targetName is null || FindTable(targetName) is not { } target) return null;
+
+        var name = row.Record.Label(shown.SelectName) is { Length: > 0 } label ? label : id.ToString();
+        var targetLabel = string.IsNullOrWhiteSpace(target.DisplayName) ? target.LogicalName : target.DisplayName;
+        return (target, new TableServerFilter($"{target.PrimaryIdAttribute} eq {id}", $"{targetLabel} is '{name}'"));
+    }
+
+    private EntitySummary? FindTable(string logicalName) =>
+        Tables.FirstOrDefault(t => t.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Opens a cell's link in a table data window of its own, filtered to the rows it points at.</summary>
+    public void FollowLink(TableDataRow? row, int column)
+    {
+        if (LinkTarget(row, column) is not { } link)
+        {
+            if (row is not null && column >= 0 && column < ShownColumns.Count && ShownColumns[column].IsLink)
+            {
+                Status = $"{ShownColumns[column].Header} of {Describe(row)} has nothing to open here.";
+            }
+            return;
+        }
+
+        _session.OpenTableData(link.Table.LogicalName, link.Filter);
+        Status = $"Opened {link.Table.Label} where {link.Filter.Label}.";
+    }
+
+    private void ShowAuditHistory(TableDataRow? row)
+    {
+        if (row is null || row.Record.Id == Guid.Empty || SelectedTable is not { } table) return;
+
+        var names = Columns.Where(c => !c.IsRelationship && !string.IsNullOrWhiteSpace(c.Column.DisplayName))
+            .ToDictionary(c => c.LogicalName, c => c.Column.DisplayName!, StringComparer.OrdinalIgnoreCase);
+        var created = DateTimeOffset.TryParse(row.Record.Raw("createdon"), CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal, out var when) ? when : (DateTimeOffset?)null;
+
+        _session.ShowRecordAuditHistory(new AuditedRow(table, row.Record.Id, row.Record.PrimaryName, names, created));
+    }
+
+    /// <summary>
     /// A row on its main form. With no app named, Dataverse opens it in the user's default app -
     /// or asks which app, where there is no default.
     /// </summary>
@@ -905,8 +1031,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     // ---------------------------------------------------------------- export
 
     /// <summary>The headers and cells on screen, after both filters.</summary>
-    internal (IReadOnlyList<string> Headers, List<IReadOnlyList<string?>> Rows) Shown() =>
-        (ShownColumns.Select(c => c.Header).ToList(), RowsView.Cast<TableDataRow>().Select(r => r.Cells).ToList());
+    /// <remarks>Related rows are links, not values, so they are left out.</remarks>
+    internal (IReadOnlyList<string> Headers, List<IReadOnlyList<string?>> Rows) Shown()
+    {
+        var kept = Enumerable.Range(0, ShownColumns.Count).Where(i => !ShownColumns[i].IsRelationship).ToList();
+        return (kept.Select(i => ShownColumns[i].Header).ToList(),
+            RowsView.Cast<TableDataRow>().Select(r => (IReadOnlyList<string?>)kept.Select(i => r.Cells[i]).ToList()).ToList());
+    }
 
     /// <summary>What a Markdown export says above its table.</summary>
     internal IEnumerable<string> ExportNotes()

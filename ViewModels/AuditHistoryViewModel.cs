@@ -1,42 +1,90 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Models;
+using PPObjectSearch.Services;
 
 namespace PPObjectSearch.ViewModels;
 
 /// <summary>
-/// Who changed a configuration row and how - a flow turned off, a step disabled, a variable's
-/// value replaced - from Dataverse auditing, where it is on.
+/// One row of a table whose audit history is shown - from the table data window.
+/// </summary>
+/// <param name="Name">The row's primary name, where it was read.</param>
+/// <param name="ColumnNames">The table's columns' display names by logical name, so each change names its column as the app does.</param>
+/// <param name="CreatedOn">When the row was created, where it was read - to tell whether the history reaches back that far.</param>
+public sealed record AuditedRow(
+    EntitySummary Table,
+    Guid Id,
+    string? Name,
+    IReadOnlyDictionary<string, string> ColumnNames,
+    DateTimeOffset? CreatedOn = null);
+
+/// <summary>
+/// Who changed a row and how - a flow turned off, a step disabled, a variable's value replaced, a
+/// table row's columns edited - from Dataverse auditing, where it is on.
 /// </summary>
 public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 {
+    private readonly Func<Action<int, int>, CancellationToken, Task<IReadOnlyList<AuditRecord>>> _read;
+    private readonly DateTimeOffset? _createdOn;
+    private readonly string _typeName;
     private readonly DataverseClient _client;
-    private readonly SolutionComponentItem _item;
     private CancellationTokenSource? _cts;
-    private string? _table;
+    private readonly string? _table;
     private bool _readFailed;
 
     public AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, SolutionComponentItem item)
+        : this(session, client, item.PrimaryLabel,
+            string.IsNullOrWhiteSpace(item.SubType) ? item.ComponentTypeName : $"{item.SubType} · {item.ComponentTypeName}",
+            (string.IsNullOrWhiteSpace(item.SubType) ? item.ComponentTypeName : item.SubType).ToLowerInvariant(),
+            DataverseClient.AuditTable(item.ComponentType), item.CreatedOn,
+            (_, ct) => client.GetAuditHistoryAsync(item.ComponentType, item.ObjectId, ct))
+    {
+    }
+
+    /// <summary>Any row of any table, its changes' values formatted and its columns named by <see cref="AuditedRow.ColumnNames"/>.</summary>
+    public AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, AuditedRow row)
+        : this(session, client, string.IsNullOrWhiteSpace(row.Name) ? row.Id.ToString() : row.Name,
+            row.Table.Label, "row", row.Table.LogicalName, row.CreatedOn,
+            async (progress, ct) => Named(await client.GetRecordAuditHistoryAsync(row.Table.LogicalName, row.Id, progress, ct), row.ColumnNames))
+    {
+    }
+
+    private AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, string name, string typeLabel,
+        string typeName, string? table, DateTimeOffset? createdOn,
+        Func<Action<int, int>, CancellationToken, Task<IReadOnlyList<AuditRecord>>> read)
     {
         Session = session;
         _client = client;
-        _item = item;
-        Title = $"Audit history — {item.PrimaryLabel} ({session.Title})";
+        Name = name;
+        TypeLabel = typeLabel;
+        _typeName = typeName;
+        _table = table;
+        _createdOn = createdOn;
+        _read = read;
+        Title = $"Audit history — {name} ({session.Title})";
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
+        ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => HasRecords);
+        ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => HasRecords);
     }
+
+    /// <summary>Each change's columns by their display names, where the table has one for them.</summary>
+    internal static IReadOnlyList<AuditRecord> Named(IReadOnlyList<AuditRecord> records, IReadOnlyDictionary<string, string> columnNames) =>
+        records.Select(r => r.WithChanges(r.Changes
+                .Select(c => columnNames.TryGetValue(c.Column, out var name) ? c with { DisplayName = name } : c)
+                .ToList()))
+            .ToList();
 
     /// <summary>The tab the window was opened from, for the header's environment line.</summary>
     public EnvironmentSessionViewModel Session { get; }
 
     public string Title { get; }
 
-    /// <summary>The component, under the heading: its name, then what it is.</summary>
-    public string Name => _item.PrimaryLabel;
-    public string TypeLabel => string.IsNullOrWhiteSpace(_item.SubType)
-        ? _item.ComponentTypeName
-        : $"{_item.SubType} · {_item.ComponentTypeName}";
+    /// <summary>What the history is of, under the heading: its name, then what it is.</summary>
+    public string Name { get; }
+    public string TypeLabel { get; }
 
     public ObservableCollection<AuditRecord> Records { get; } = new();
 
@@ -46,6 +94,8 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
     public bool HasRecords => Records.Count > 0;
 
     public AsyncRelayCommand RefreshCommand { get; }
+    public RelayCommand ExportCsvCommand { get; }
+    public RelayCommand ExportMarkdownCommand { get; }
 
     private string _auditState = string.Empty;
     /// <summary>Whether auditing is recording changes, and whether the history shown is all of it.</summary>
@@ -121,12 +171,11 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
         _ => $"Nothing about this {TypeName} has changed while auditing was on."
     };
 
-    private string TypeName => (string.IsNullOrWhiteSpace(_item.SubType) ? _item.ComponentTypeName : _item.SubType).ToLowerInvariant();
+    private string TypeName => _typeName;
 
     public async Task LoadAsync()
     {
-        if (DataverseClient.AuditTable(_item.ComponentType) is not { } table) return;
-        _table = table;
+        if (_table is not { } table) return;
 
         if (_cts is { } running) await running.CancelAsync();
         var cts = _cts = new CancellationTokenSource();
@@ -138,7 +187,7 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
             Status = "Reading the audit history...";
             var clock = Stopwatch.StartNew();
             var state = await _client.GetAuditStatusAsync(table, cts.Token);
-            var records = await _client.GetAuditHistoryAsync(_item.ComponentType, _item.ObjectId, cts.Token);
+            var records = await _read((done, of) => Status = $"Reading the values of the changes - {done:N0} of {of:N0}...", cts.Token);
             if (cts.IsCancellationRequested) return;
 
             Records.Clear();
@@ -146,9 +195,11 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(ShowsRow));
             OnPropertyChanged(nameof(HasRecords));
             OnPropertyChanged(nameof(CountLabel));
+            ExportCsvCommand.RaiseCanExecuteChanged();
+            ExportMarkdownCommand.RaiseCanExecuteChanged();
 
             IsAuditOff = !state.IsOn;
-            IsAuditPartial = IsPartial(records, _item.CreatedOn);
+            IsAuditPartial = IsPartial(records, _createdOn);
             AuditState = Describe(state, records);
             OnPropertyChanged(nameof(EmptyText));
 
@@ -193,10 +244,52 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
         if (!IsAuditPartial) return state.Describe(table);
 
         var oldest = records.Min(r => r.When).ToLocalTime();
-        var created = _item.CreatedOn!.Value.ToLocalTime();
+        var created = _createdOn!.Value.ToLocalTime();
         var missing = $"The audited changes start on {oldest:yyyy-MM-dd}, but this {TypeName} was created on {created:yyyy-MM-dd}: " +
                       "changes made before then were not recorded, or their records have been deleted.";
         return state.IsOn ? missing : state.Describe(table) + " " + missing;
+    }
+
+    /// <summary>What a Markdown export says above its table.</summary>
+    internal IEnumerable<string> ExportNotes()
+    {
+        yield return $"{TypeLabel}: {Name}";
+        yield return $"Environment: {Session.Title}";
+        if (!string.IsNullOrEmpty(AuditState)) yield return AuditState;
+        yield return $"Changes: {CountLabel}";
+    }
+
+    /// <summary>Every change listed, one line per column changed, its values whole rather than shortened.</summary>
+    private void Export(bool markdown)
+    {
+        var name = string.Concat($"audit-{Name}-{Session.Title}".Select(c => Path.GetInvalidFileNameChars().Contains(c) || c == ' ' ? '-' : c));
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = markdown ? "Markdown (*.md)|*.md" : "CSV file (*.csv)|*.csv",
+            FileName = $"{name}.{(markdown ? "md" : "csv")}"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        var headers = AuditHistoryExport.Headers(ShowsRow);
+        var rows = AuditHistoryExport.Rows(Records, ShowsRow);
+
+        try
+        {
+            if (markdown)
+            {
+                File.WriteAllText(dialog.FileName, TableDataExport.Markdown($"Audit history — {Name}", ExportNotes(), headers, rows));
+            }
+            else
+            {
+                CsvExporter.WriteLines(dialog.FileName, TableDataExport.CsvLines(headers, rows));
+            }
+
+            Status = $"Exported {CountLabel} to {dialog.FileName}.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Status = "Could not export - " + ex.Message;
+        }
     }
 
     /// <summary>Stops a read still running when the window closes; nobody is left to see it.</summary>

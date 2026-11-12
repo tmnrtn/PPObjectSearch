@@ -3,8 +3,11 @@ namespace PPObjectSearch.Models;
 /// <summary>One column's change in an audit record.</summary>
 public sealed record AuditChange(string Column, string? OldValue, string? NewValue)
 {
-    /// <summary>Longer values - a flow's definition, a plug-in's configuration - are shown by their size.</summary>
-    internal const int LongValue = 200;
+    /// <summary>
+    /// Longer values - a flow's definition, a plug-in's configuration - are shown by their size. A
+    /// row's description or note is shorter than this, and is shown whole; an export keeps every value.
+    /// </summary>
+    internal const int LongValue = 1000;
 
     /// <summary>The columns the audited tables change most, by the name the maker portal gives them.</summary>
     private static readonly Dictionary<string, string> ColumnNames = new(StringComparer.OrdinalIgnoreCase)
@@ -27,8 +30,11 @@ public sealed record AuditChange(string Column, string? OldValue, string? NewVal
         ["(change)"] = "Change"
     };
 
+    /// <summary>The column's display name from its table's metadata, where the history is of a table's row.</summary>
+    public string? DisplayName { get; init; }
+
     /// <summary>The column as a maker knows it; the logical name is kept for the tooltip.</summary>
-    public string ColumnLabel => ColumnNames.GetValueOrDefault(Column) ?? Column;
+    public string ColumnLabel => DisplayName is { Length: > 0 } name ? name : ColumnNames.GetValueOrDefault(Column) ?? Column;
 
     public string OldShown => Shown(OldValue);
     public string NewShown => Shown(NewValue);
@@ -58,6 +64,10 @@ public sealed class AuditRecord
     public string? Row { get; init; }
 
     public IReadOnlyList<AuditChange> Changes { get; init; } = Array.Empty<AuditChange>();
+
+    /// <summary>The same change, with its columns read another way - formatted, or named.</summary>
+    public AuditRecord WithChanges(IReadOnlyList<AuditChange> changes) =>
+        new() { When = When, By = By, Action = Action, Row = Row, Changes = changes };
 
     public string ChangesLabel => string.Join(Environment.NewLine, Changes);
 

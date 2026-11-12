@@ -100,6 +100,131 @@ public sealed partial class DataverseClient
         return records.OrderByDescending(r => r.When).ToList();
     }
 
+    /// <summary>The most changes of one row whose values are read as the app shows them; older ones keep their stored values.</summary>
+    internal const int RecordAuditDetailLimit = 250;
+
+    /// <summary>How many changes' values are read at once.</summary>
+    private const int AuditDetailReads = 4;
+
+    /// <summary>
+    /// The audit history of any one row, newest first, with each change's values as the app shows
+    /// them: a lookup's name, a choice's label, a date in the user's format. Those come from
+    /// RetrieveAuditDetails, one call per change, so only the newest
+    /// <see cref="RecordAuditDetailLimit"/> are read that way; the rest - and any whose details
+    /// cannot be read - keep the stored change data.
+    /// </summary>
+    /// <param name="onDetailsRead">How many changes have their values read so far, of how many.</param>
+    public async Task<IReadOnlyList<AuditRecord>> GetRecordAuditHistoryAsync(
+        string table, Guid id, Action<int, int>? onDetailsRead = null, CancellationToken ct = default)
+    {
+        var rows = await ReadRowsAsync(
+            EnvironmentUrl + ApiPath + "audits?$select=auditid,createdon,action,operation,_userid_value,changedata" +
+            $"&$filter=_objectid_value eq {id}&$orderby=createdon desc",
+            row => ParseGuid(JsonHelper.GetString(row, "auditid")) is { } auditId && ReadAudit(row, table, null) is { } record
+                ? Tuple.Create(auditId, record)
+                : null,
+            ct).ConfigureAwait(false);
+
+        var records = rows.Select(r => r.Item2).ToArray();
+        var detailed = Math.Min(records.Length, RecordAuditDetailLimit);
+        var done = 0;
+
+        using var gate = new SemaphoreSlim(AuditDetailReads);
+
+        await Task.WhenAll(Enumerable.Range(0, detailed).Select(async i =>
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                if (await GetAuditDetailChangesAsync(rows[i].Item1, ct).ConfigureAwait(false) is { } changes)
+                {
+                    records[i] = records[i].WithChanges(changes);
+                }
+            }
+            finally
+            {
+                gate.Release();
+                onDetailsRead?.Invoke(Interlocked.Increment(ref done), detailed);
+            }
+        })).ConfigureAwait(false);
+
+        return records.OrderByDescending(r => r.When).ToList();
+    }
+
+    /// <summary>
+    /// One change's columns with their old and new values, formatted. Null where the details cannot
+    /// be read, or are not a column change - a share or an association - so the change data stays.
+    /// </summary>
+    private async Task<IReadOnlyList<AuditChange>?> GetAuditDetailChangesAsync(Guid auditId, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + $"audits({auditId})/Microsoft.Dynamics.CRM.RetrieveAuditDetails",
+                ct, Annotations.All, maxPageSize: false).ConfigureAwait(false);
+
+            return doc.RootElement.TryGetProperty("AuditDetail", out var detail) ? ParseAuditDetail(detail) : null;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Services.Log.Warn($"Audit details of {auditId} could not be read", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The columns an AttributeAuditDetail's old and new values differ in. Each value is the
+    /// formatted one where Dataverse gives one; a lookup's <c>_name_value</c> is named as its column.
+    /// </summary>
+    internal static IReadOnlyList<AuditChange>? ParseAuditDetail(JsonElement detail)
+    {
+        var hasOld = detail.TryGetProperty("OldValue", out var oldRow) && oldRow.ValueKind == JsonValueKind.Object;
+        var hasNew = detail.TryGetProperty("NewValue", out var newRow) && newRow.ValueKind == JsonValueKind.Object;
+        if (!hasOld && !hasNew) return null;
+
+        var before = hasOld ? AuditValues(oldRow) : new Dictionary<string, string?>();
+        var after = hasNew ? AuditValues(newRow) : new Dictionary<string, string?>();
+
+        return after.Keys.Concat(before.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(c => new AuditChange(c, before.GetValueOrDefault(c), after.GetValueOrDefault(c)))
+            .Where(c => !string.Equals(c.OldValue, c.NewValue, StringComparison.Ordinal))
+            .ToList();
+    }
+
+    private static Dictionary<string, string?> AuditValues(JsonElement row)
+    {
+        var raw = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var formatted = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var property in row.EnumerateObject())
+        {
+            var at = property.Name.IndexOf('@', StringComparison.Ordinal);
+            if (at == 0) continue;
+
+            if (at > 0)
+            {
+                if (property.Name.EndsWith(FormattedValueSuffix, StringComparison.Ordinal))
+                {
+                    formatted[property.Name[..at]] = property.Value.GetString();
+                }
+                continue;
+            }
+
+            raw[property.Name] = ReadValue(property.Value);
+        }
+
+        return raw.ToDictionary(
+            p => ColumnOf(p.Key),
+            p => formatted.GetValueOrDefault(p.Key) is { Length: > 0 } label ? label : p.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A lookup's <c>_parentid_value</c> is the column <c>parentid</c>.</summary>
+    internal static string ColumnOf(string name) =>
+        name.Length > 7 && name.StartsWith('_') && name.EndsWith("_value", StringComparison.Ordinal) ? name[1..^6] : name;
+
     private static AuditRecord? ReadAudit(JsonElement row, string table, string? label)
     {
         if (JsonHelper.GetDate(row, "createdon") is not { } when) return null;

@@ -74,8 +74,31 @@ public partial class TableDataView : ScreenView
     }
 
     /// <summary>
+    /// A link's click - a lookup's name, or a row's related rows - opens what it points at. The
+    /// cell it is in says which row and which column.
+    /// </summary>
+    private void RowsGrid_LinkClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not TableDataViewModel viewModel) return;
+
+        // The link is a content element: its logical parent leads back into the visual tree.
+        var element = e.OriginalSource as DependencyObject;
+        while (element is not null and not DataGridCell)
+        {
+            element = element is System.Windows.Media.Visual
+                ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                : LogicalTreeHelper.GetParent(element);
+        }
+        if (element is not DataGridCell { DataContext: TableDataRow row } cell) return;
+
+        viewModel.FollowLink(row, RowsGrid.Columns.IndexOf(cell.Column));
+        e.Handled = true;
+    }
+
+    /// <summary>
     /// One text column per column read, bound to the row's cell at the same position, and sorted by
-    /// the row's sort key there - a date or a number rather than the text shown.
+    /// the row's sort key there - a date or a number rather than the text shown. A lookup's name is
+    /// a link to its row, and a column of related rows a link to them.
     /// </summary>
     private void BuildColumns(IReadOnlyList<TableDataColumn> columns)
     {
@@ -91,13 +114,37 @@ public partial class TableDataView : ScreenView
                 TryFindResource(i == 0 ? "FirstHeader" : typeof(DataGridColumnHeader)) as Style);
             headerStyle.Setters.Add(new Setter(ToolTipProperty, columns[i].ToolTip));
 
+            var cellStyle = (Style)FindResource(i == 0 ? "CellFirst" : "Cell");
+
+            if (columns[i].IsLink)
+            {
+                // No address: the click is handled here, not navigated. Related rows have no value,
+                // so they show the same words in every row, and copy as nothing.
+                var text = columns[i].IsRelationship
+                    ? new Binding { Source = "View rows", Mode = BindingMode.OneTime }
+                    : new Binding(path) { Mode = BindingMode.OneTime };
+
+                RowsGrid.Columns.Add(new DataGridHyperlinkColumn
+                {
+                    Header = columns[i].Header,
+                    HeaderStyle = headerStyle,
+                    ContentBinding = text,
+                    ClipboardContentBinding = new Binding(path) { Mode = BindingMode.OneTime },
+                    SortMemberPath = $"SortKeys[{i}]",
+                    CanUserSort = !columns[i].IsRelationship,
+                    ElementStyle = cellStyle,
+                    MaxWidth = 420
+                });
+                continue;
+            }
+
             RowsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = columns[i].Header,
                 HeaderStyle = headerStyle,
                 Binding = new Binding(path) { Mode = BindingMode.OneTime },
                 SortMemberPath = $"SortKeys[{i}]",
-                ElementStyle = (Style)FindResource(i == 0 ? "CellFirst" : "Cell"),
+                ElementStyle = cellStyle,
                 MaxWidth = 420
             });
         }
