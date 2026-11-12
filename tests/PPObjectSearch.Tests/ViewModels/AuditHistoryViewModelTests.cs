@@ -115,11 +115,15 @@ public sealed class AuditHistoryViewModelTests
     [Fact]
     public void A_long_value_is_shown_by_its_size_and_a_column_by_its_name()
     {
-        var definition = new AuditChange("clientdata", new string('a', 41 * 1024), new string('b', 300));
+        var definition = new AuditChange("clientdata", new string('a', 41 * 1024), new string('b', 1001));
 
         Assert.Equal("Definition", definition.ColumnLabel);
         Assert.Equal("41 KB", definition.OldShown);
-        Assert.Equal("300 bytes", definition.NewShown);
+        Assert.Equal("1001 bytes", definition.NewShown);
+
+        // A row's description or note is shown whole.
+        var description = new string('c', AuditChange.LongValue);
+        Assert.Equal(description, new AuditChange("description", null, description).NewShown);
 
         var other = new AuditChange("new_custom", null, "x");
         Assert.Equal("new_custom", other.ColumnLabel);
