@@ -159,7 +159,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
-                                      ItemsSource="{Binding Columns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
+                                      ItemsSource="{Binding FilterColumns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
                                       IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
                             <ComboBox Width="140" Margin="6,0,0,0" AutomationProperties.Name="Filter operator"
                                       ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
@@ -224,13 +224,18 @@
                                   CurrentCellChanged="RowsGrid_CurrentCellChanged"
                                   PreviewMouseRightButtonDown="RowsGrid_PreviewMouseRightButtonDown"
                                   MouseDoubleClick="RowsGrid_MouseDoubleClick"
+                                  Hyperlink.Click="RowsGrid_LinkClick"
                                   Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
-                            <!-- Right-click a cell: open its row, or copy its value, its id or option number, its column, or the row's id.
-                                 Double-click a row to open it. -->
+                            <!-- Right-click a cell: open its row, follow its link, see its audit history, or copy its value, its id or
+                                 option number, its column, or the row's id. Double-click a row to open it; click a link to follow it. -->
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="Open in Dynamics 365" Command="{Binding OpenRecordCommand}" InputGestureText="Double-click"
                                               ToolTip="The row on its form, in the browser" />
+                                    <MenuItem Header="Open link" Command="{Binding FollowLinkCommand}" InputGestureText="Click"
+                                              ToolTip="A lookup's row, or this row's related rows, in a table data window of their own" />
+                                    <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
+                                              ToolTip="Who changed this row, when, and from what to what - where auditing is on" />
                                     <Separator />
                                     <MenuItem Header="Copy value" Command="{Binding CopyValueCommand}"
                                               ToolTip="The value as shown - a lookup's name, a choice's label" />

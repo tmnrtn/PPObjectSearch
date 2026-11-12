@@ -2037,6 +2037,14 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         new Views.AuditHistoryView { DataContext = new AuditHistoryViewModel(this, _client, item) }.Open();
     }
 
+    /// <summary>Who changed one row of a table, and from what to what - from the table data window.</summary>
+    public void ShowRecordAuditHistory(AuditedRow row)
+    {
+        if (_client is null || !IsConnected) return;
+
+        new Views.AuditHistoryView { DataContext = new AuditHistoryViewModel(this, _client, row) }.Open();
+    }
+
     private RelayCommand? _exploreDependenciesCommand;
     /// <summary>The selected object's dependency tree, from the palette rather than its details window.</summary>
     public RelayCommand ExploreDependenciesCommand => _exploreDependenciesCommand ??= new RelayCommand(_ =>

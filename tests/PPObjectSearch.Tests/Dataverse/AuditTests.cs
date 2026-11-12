@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using PPObjectSearch.Dataverse;
 using PPObjectSearch.Tests.Infrastructure;
@@ -100,5 +101,87 @@ public class AuditTests
         Assert.True(Item(380, Flow).HasAuditHistory);
         Assert.False(Item(1, Flow).HasAuditHistory);
         Assert.False(Item(29, Guid.Empty).HasAuditHistory);
+    }
+
+    private static readonly Guid Account = Guid.Parse("b0000000-0000-0000-0000-000000000001");
+    private static readonly Guid Edited = Guid.Parse("c0000000-0000-0000-0000-000000000001");
+    private static readonly Guid Created = Guid.Parse("c0000000-0000-0000-0000-000000000002");
+
+    [Fact]
+    public void Audit_details_give_each_changed_columns_formatted_values()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""
+            {"@odata.type":"#Microsoft.Dynamics.CRM.AttributeAuditDetail",
+             "OldValue":{"@odata.type":"#Microsoft.Dynamics.CRM.account","name":"Contoso",
+               "_ownerid_value":"4026be43-6b69-e111-8f65-78e7d1620f5e",
+               "_ownerid_value@OData.Community.Display.V1.FormattedValue":"Ana Lee",
+               "_ownerid_value@Microsoft.Dynamics.CRM.lookuplogicalname":"systemuser",
+               "industrycode":1,"industrycode@OData.Community.Display.V1.FormattedValue":"Accounting"},
+             "NewValue":{"@odata.type":"#Microsoft.Dynamics.CRM.account","name":"Contoso",
+               "_ownerid_value":"39e0dbe4-131b-e111-ba7e-78e7d1620f5e",
+               "_ownerid_value@OData.Community.Display.V1.FormattedValue":"Finance team",
+               "industrycode":2,"industrycode@OData.Community.Display.V1.FormattedValue":"Agriculture",
+               "description":"New"}}
+            """);
+
+        var changes = DataverseClient.ParseAuditDetail(doc.RootElement)!;
+
+        // The name did not change, so it is not listed; the lookup is named as its column.
+        Assert.Equal(["ownerid: Ana Lee → Finance team", "industrycode: Accounting → Agriculture", "description: (empty) → New"],
+            changes.Select(c => c.ToString()));
+    }
+
+    [Fact]
+    public void A_share_or_association_has_no_column_changes_in_its_details()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""{"@odata.type":"#Microsoft.Dynamics.CRM.ShareAuditDetail","Principal":{}}""");
+
+        Assert.Null(DataverseClient.ParseAuditDetail(doc.RootElement));
+    }
+
+    [Theory]
+    [InlineData("_parentaccountid_value", "parentaccountid")]
+    [InlineData("name", "name")]
+    [InlineData("_value", "_value")]
+    public void A_lookups_shadow_name_is_read_as_its_column(string name, string column) =>
+        Assert.Equal(column, DataverseClient.ColumnOf(name));
+
+    [Fact]
+    public async Task A_rows_history_reads_each_changes_values_and_keeps_the_change_data_where_they_cannot_be_read()
+    {
+        var progress = new List<(int, int)>();
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"audits({Edited})/Microsoft.Dynamics.CRM.RetrieveAuditDetails", """
+                {"AuditDetail":{"@odata.type":"#Microsoft.Dynamics.CRM.AttributeAuditDetail",
+                  "OldValue":{"statuscode":1,"statuscode@OData.Community.Display.V1.FormattedValue":"Active"},
+                  "NewValue":{"statuscode":2,"statuscode@OData.Community.Display.V1.FormattedValue":"On hold"}}}
+                """)
+            .OnError(HttpMethod.Get, $"audits({Created})/Microsoft.Dynamics.CRM.RetrieveAuditDetails", HttpStatusCode.InternalServerError, "no")
+            .OnJson(HttpMethod.Get, "audits?", $$"""
+                {"value":[
+                  {"auditid":"{{Edited}}","createdon":"2026-10-02T09:00:00Z","action@OData.Community.Display.V1.FormattedValue":"Update",
+                   "_userid_value@OData.Community.Display.V1.FormattedValue":"Ana Lee",
+                   "changedata":"{\"changedAttributes\":[{\"logicalName\":\"statuscode\",\"oldValue\":\"1\",\"newValue\":\"2\"}]}"},
+                  {"auditid":"{{Created}}","createdon":"2026-09-01T09:00:00Z","action@OData.Community.Display.V1.FormattedValue":"Create",
+                   "changedata":"{\"changedAttributes\":[{\"logicalName\":\"name\",\"oldValue\":null,\"newValue\":\"Contoso\"}]}"}
+                ]}
+                """);
+
+        var records = await Fakes.Dataverse(handler).GetRecordAuditHistoryAsync("account", Account, (done, of) =>
+        {
+            lock (progress) progress.Add((done, of));
+        });
+
+        Assert.Equal(2, records.Count);
+        Assert.Equal("statuscode: Active → On hold", records[0].ChangesLabel);
+        Assert.Equal("Ana Lee", records[0].By);
+        Assert.Equal("name: (empty) → Contoso", records[1].ChangesLabel);
+        Assert.Equal("Create", records[1].Action);
+        Assert.Equal([(1, 2), (2, 2)], progress.Order());
+
+        var list = handler.Requests.First(r => r.Url.Contains("audits?", StringComparison.Ordinal));
+        Assert.Contains($"_objectid_value eq {Account}", list.Url);
+        Assert.Contains("odata.include-annotations=\"*\"",
+            handler.Requests.First(r => r.Url.Contains("RetrieveAuditDetails", StringComparison.Ordinal)).Header("Prefer"));
     }
 }
