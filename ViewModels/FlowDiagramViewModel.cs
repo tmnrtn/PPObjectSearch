@@ -1,5 +1,6 @@
 using PPObjectSearch.Core;
 using System.Collections.ObjectModel;
+using System.IO;
 using PPObjectSearch.Models;
 using PPObjectSearch.PowerAutomate;
 using PPObjectSearch.Services;
@@ -355,6 +356,8 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         ShowDefinitionCommand = new RelayCommand(_ => ClearContent(), _ => HasContent);
         OpenChildRunCommand = new AsyncRelayCommand(_ => OpenChildRunAsync(), _ => CanOpenChildRun);
         CopyCodeCommand = new RelayCommand(_ => CopyCode(), _ => !string.IsNullOrEmpty(DetailCode));
+        ExportRunCommand = new AsyncRelayCommand(_ => ExportRunAsync(withContent: false), _ => CanExportRun);
+        ExportRunWithContentCommand = new AsyncRelayCommand(_ => ExportRunAsync(withContent: true), _ => CanExportRun);
     }
 
     public FlowDesign Design { get; }
@@ -680,6 +683,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(StatusLine));
         JumpToFailureCommand.RaiseCanExecuteChanged();
         ClearRunCommand.RaiseCanExecuteChanged();
+        RaiseExportCommands();
         RefreshSelectedRun();
     }
 
@@ -1284,6 +1288,112 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         Notice = ClipboardText.TryCopy(code, out var failure)
             ? $"Copied the step's {DetailCodeTitle.ToLowerInvariant()} ({code.Length:N0} characters)."
             : "Could not copy - " + failure;
+    }
+
+    // ---------------------------------------------------------------- export
+
+    /// <summary>The environment the flow is in, named in an export.</summary>
+    public string? EnvironmentName { get; set; }
+
+    /// <summary>The run's steps, times, errors and loop iterations, as JSON.</summary>
+    public AsyncRelayCommand ExportRunCommand { get; }
+
+    /// <summary>The same with every step's and iteration's inputs and outputs - one read each.</summary>
+    public AsyncRelayCommand ExportRunWithContentCommand { get; }
+
+    private bool _isExporting;
+    /// <summary>One export at a time: a second would read the same content again, alongside.</summary>
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set
+        {
+            if (SetProperty(ref _isExporting, value)) RaiseExportCommands();
+        }
+    }
+
+    private bool CanExportRun => IsRunMode && _runClient is not null && !IsExporting;
+
+    private void RaiseExportCommands()
+    {
+        ExportRunCommand.RaiseCanExecuteChanged();
+        ExportRunWithContentCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>"Flow name-run-0858...CU01.json".</summary>
+    internal string RunExportFileName(FlowRunDetail run)
+    {
+        var name = $"{_flowName ?? "flow"}-run-{run.RunName}.json";
+        var invalid = Path.GetInvalidFileNameChars();
+        return new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+    }
+
+    private async Task ExportRunAsync(bool withContent)
+    {
+        if (_run is not { } run || _runClient is not { } client) return;
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "JSON file (*.json)|*.json",
+            FileName = RunExportFileName(run)
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        var path = dialog.FileName;
+        // Written aside and moved into place, so a stopped export leaves no half a file.
+        var partial = path + ".part";
+        var ct = _runCts?.Token ?? default;
+
+        IsExporting = true;
+        var progress = new Progress<string>(text =>
+        {
+            // A report can land after the export has finished; the last word is its result.
+            if (IsExporting) Notice = text;
+        });
+
+        try
+        {
+            FlowRunExportSummary summary;
+            await using (var stream = File.Create(partial))
+            {
+                summary = await FlowRunExporter.WriteAsync(stream, run, Design, client,
+                    new FlowRunExportOptions(withContent, _flowName, EnvironmentName), progress, ct);
+            }
+
+            File.Move(partial, path, overwrite: true);
+
+            var iterations = summary.Iterations > 0 ? $", {summary.Iterations:N0} iteration(s)" : string.Empty;
+            var problems = summary.Problems > 0
+                ? $" - {summary.Problems:N0} read(s) failed and are noted in the file"
+                : string.Empty;
+            Notice = $"Exported {summary.Steps:N0} step(s){iterations} to {path}{problems}.";
+        }
+        catch (OperationCanceledException)
+        {
+            TryDelete(partial);
+            Notice = "Export stopped - the run is no longer on show.";
+        }
+        catch (Exception ex)
+        {
+            TryDelete(partial);
+            Notice = "Could not export the run - " + ex.Message;
+        }
+        finally
+        {
+            IsExporting = false;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Could not remove a partial export: {ex.Message}");
+        }
     }
 
     /// <summary>The tail of a run name, which is what tells runs apart: "...CU01".</summary>
