@@ -86,14 +86,18 @@ public sealed partial class EnvironmentSessionViewModel
     private RelayCommand? _securityLookupCommand;
     public RelayCommand SecurityLookupCommand => _securityLookupCommand ??= new RelayCommand(_ => OpenSecurityLookup());
 
-    private void OpenSecurityLookup()
+    /// <summary>Security lookup - on one user's effective access, read as it opens, when <paramref name="effectiveFor"/> is given.</summary>
+    public void OpenSecurityLookup(UserInfo? effectiveFor = null)
     {
         if (_client is null || !IsConnected) return;
 
         // The other connected tabs, for comparing a role across environments.
         var sessions = (Application.Current.MainWindow?.DataContext as ShellViewModel)?.Sessions.AsEnumerable() ?? [this];
 
-        new Views.SecurityLookupView { DataContext = new SecurityLookupViewModel(this, sessions) }.Open();
+        var viewModel = new SecurityLookupViewModel(this, sessions, effectiveFor);
+        new Views.SecurityLookupView { DataContext = viewModel }.Open();
+
+        if (effectiveFor is not null) _ = viewModel.RunCommand.ExecuteAsync(null);
     }
 
     // ---------------------------------------------------------------- content search

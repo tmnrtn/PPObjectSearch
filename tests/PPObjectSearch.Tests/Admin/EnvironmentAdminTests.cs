@@ -61,10 +61,10 @@ public class EnvironmentAdminTests
         ["testemailconfigurationscheduled"] = false, ["statecode"] = 0
     };
 
-    private static EnvironmentAdminViewModel Admin(FakeHttpHandler handler, AdminTab tab = AdminTab.Users) =>
+    private static EnvironmentAdminViewModel Admin(FakeHttpHandler handler, AdminTab tab = AdminTab.Users, FakeHttpHandler? graph = null) =>
         new(new EnvironmentSessionViewModel(new AuthenticationService(), new AppSettings(),
                 new TabState { EnvironmentUrl = Fakes.EnvironmentUrl }),
-            Fakes.Dataverse(handler), tab);
+            Fakes.Dataverse(handler), tab, graph is null ? null : () => Fakes.Graph(graph));
 
     /// <summary>Selections and links start loads nobody awaits; this waits for them.</summary>
     private static Task Settle(EnvironmentAdminViewModel admin) => admin.Work.WhenIdleAsync();
@@ -171,6 +171,91 @@ public class EnvironmentAdminTests
 
         Assert.Equal(AdminTab.Roles, admin.SelectedTab);
         Assert.Equal(RoleRoot, admin.Roles.SelectedRole?.RoleId);
+    }
+
+    [Fact]
+    public async Task A_users_last_sign_in_comes_from_the_audit_log_or_says_why_there_is_none()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"_objectid_value eq {Alice} and action eq 64", Value(new { createdon = "2026-11-14T09:12:00Z" }))
+            .OnJson(HttpMethod.Get, "audits?", Value())
+            .OnJson(HttpMethod.Get, "organizations?", Value(new { isauditenabled = true, isuseraccessauditenabled = false }))
+            .OnJson(HttpMethod.Get, "systemusers?", Users());
+        var admin = Admin(handler);
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
+        await Settle(admin);
+        Assert.Equal(DateTimeOffset.Parse("2026-11-14T09:12:00Z").ToLocalTime().ToString("yyyy-MM-dd HH:mm"), admin.Users.LastSignIn);
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Bob);
+        await Settle(admin);
+        Assert.Equal("Not audited", admin.Users.LastSignIn);
+        Assert.Contains("Log access", admin.Users.LastSignInToolTip);
+
+        // An application user never signs in, so the audit log is not asked.
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == AppUser);
+        await Settle(admin);
+        Assert.Equal("—", admin.Users.LastSignIn);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains($"_objectid_value eq {AppUser}"));
+    }
+
+    [Fact]
+    public async Task Licences_are_read_from_entra_only_once_their_view_is_opened()
+    {
+        var oid = Guid.NewGuid();
+        var alice = User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"));
+        alice["azureactivedirectoryobjectid"] = oid;
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Value(
+            alice, User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid())));
+        var graph = new FakeHttpHandler().OnJson(HttpMethod.Get, $"users/{oid}/licenseDetails", Value(new
+        {
+            skuId = "sku-pa", skuPartNumber = "POWERAPPS_PER_USER",
+            servicePlans = new object[] { new { servicePlanName = "DYN365_CDS_P2", provisioningStatus = "Success" } }
+        }));
+        var admin = Admin(handler, graph: graph);
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == Alice);
+        await Settle(admin);
+        Assert.Empty(graph.Requests);
+
+        admin.Users.DetailView = UserDetailView.Licenses;
+        await Settle(admin);
+        var license = Assert.Single(admin.Users.Licenses);
+        Assert.Equal("POWERAPPS_PER_USER", license.Name);
+        Assert.Equal("DYN365_CDS_P2", license.PlansLabel);
+
+        // Back and forth between views reads them once.
+        admin.Users.DetailView = UserDetailView.Roles;
+        admin.Users.DetailView = UserDetailView.Licenses;
+        await Settle(admin);
+        Assert.Single(graph.Requests);
+
+        admin.Users.SelectedUser = admin.Users.Items.First(u => u.SystemUserId == AppUser);
+        await Settle(admin);
+        Assert.Empty(admin.Users.Licenses);
+        Assert.Contains("service principal", admin.Users.LicenseStatus);
+        Assert.Single(graph.Requests);
+    }
+
+    [Fact]
+    public async Task A_licence_read_that_fails_says_why_in_the_list()
+    {
+        var oid = Guid.NewGuid();
+        var alice = User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"));
+        alice["azureactivedirectoryobjectid"] = oid;
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Value(alice));
+        var graph = new FakeHttpHandler().OnError(HttpMethod.Get, "licenseDetails", HttpStatusCode.Forbidden, "Insufficient privileges.");
+        var admin = Admin(handler, graph: graph);
+        await admin.LoadAsync();
+
+        admin.Users.DetailView = UserDetailView.Licenses;
+        admin.Users.SelectedUser = admin.Users.Items.Single();
+        await Settle(admin);
+
+        Assert.StartsWith("Could not read licences from Entra - ", admin.Users.LicenseStatus);
+        Assert.Contains("User.Read.All", admin.Users.LicenseStatus);
     }
 
     // ---------------------------------------------------------------- security roles

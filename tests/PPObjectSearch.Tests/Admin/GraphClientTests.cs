@@ -150,4 +150,38 @@ public class GraphClientTests
 
         Assert.Null(await Fakes.Graph(handler).IsTransitiveMemberAsync("u1", GroupId));
     }
+
+    [Fact]
+    public async Task GetUserLicensesAsync_lists_each_sku_with_only_its_provisioned_plans()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "users/u1/licenseDetails", Page([
+            new
+            {
+                skuId = "sku-e3", skuPartNumber = "ENTERPRISEPACK",
+                servicePlans = new object[]
+                {
+                    new { servicePlanName = "YAMMER_ENTERPRISE", provisioningStatus = "Disabled" },
+                    new { servicePlanName = "EXCHANGE_S_ENTERPRISE", provisioningStatus = "Success" },
+                    new { servicePlanName = "DYN365_CDS_O365_P2", provisioningStatus = "Success" }
+                }
+            },
+            new { skuId = "sku-pa", skuPartNumber = "POWERAPPS_PER_USER", servicePlans = Array.Empty<object>() }
+        ]));
+
+        var licenses = await Fakes.Graph(handler).GetUserLicensesAsync("u1");
+
+        Assert.NotNull(licenses);
+        Assert.Equal(["ENTERPRISEPACK", "POWERAPPS_PER_USER"], licenses.Select(l => l.Name));
+        Assert.Equal("DYN365_CDS_O365_P2, EXCHANGE_S_ENTERPRISE", licenses[0].PlansLabel);
+        Assert.Empty(licenses[1].EnabledPlans);
+        Assert.Contains("$select=skuId,skuPartNumber,servicePlans", handler.Requests[0].Url);
+    }
+
+    [Fact]
+    public async Task GetUserLicensesAsync_returns_null_for_a_missing_user()
+    {
+        var handler = new FakeHttpHandler().OnError(HttpMethod.Get, "licenseDetails", HttpStatusCode.NotFound, "Resource does not exist.");
+
+        Assert.Null(await Fakes.Graph(handler).GetUserLicensesAsync("u1"));
+    }
 }

@@ -381,6 +381,37 @@ public class SecurityLookupViewModelTests
         Assert.Equal(["Table,Create,Read,Write,Delete,Append,AppendTo,Assign,Share", "Account,,Organization,,Organization,,,,"], lines);
     });
 
+    [Fact]
+    public void Opened_on_a_user_it_shows_their_effective_access_and_lists_them_once() => AdminUiThread.Run(async () =>
+    {
+        var handler = Handler();
+        var alice = (await Fakes.Dataverse(handler).GetUsersAsync()).Single(u => u.SystemUserId == Alice);
+        var lookup = new SecurityLookupViewModel(AdminSessions.Connected(handler), [], alice);
+
+        Assert.Equal(SecurityLookupTab.Effective, lookup.Tab);
+        Assert.Same(alice, lookup.SelectedUser);
+
+        await lookup.RunCommand.ExecuteAsync(null);
+        await lookup.EnsureListsAsync();
+
+        Assert.Equal(PrivilegeDepth.Organization, Assert.Single(lookup.EffectiveRows).Delete.Depth);
+        Assert.Equal([Alice], lookup.Users.Select(u => u.SystemUserId));
+        Assert.Same(alice, lookup.SelectedUser);
+    });
+
+    [Fact]
+    public void Opened_on_a_disabled_user_the_picker_keeps_them() => AdminUiThread.Run(async () =>
+    {
+        var handler = Handler();
+        var bob = (await Fakes.Dataverse(handler).GetUsersAsync()).Single(u => u.SystemUserId == Bob);
+        var lookup = new SecurityLookupViewModel(AdminSessions.Connected(handler), [], bob);
+
+        await lookup.EnsureListsAsync();
+
+        Assert.Equal([Bob, Alice], lookup.Users.Select(u => u.SystemUserId));
+        Assert.Same(bob, lookup.SelectedUser);
+    });
+
     // ---------------------------------------------------------------- secured columns
 
     [Fact]

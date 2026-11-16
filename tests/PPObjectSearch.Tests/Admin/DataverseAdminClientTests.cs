@@ -230,6 +230,43 @@ public class DataverseAdminClientTests
         Assert.Empty(handler.Requests);
     }
 
+    // ---------------------------------------------------------------- sign-ins
+
+    [Fact]
+    public async Task GetLastSignInAsync_reads_the_newest_web_sign_in_from_the_audit_log()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "audits?", Rows(new { createdon = "2026-11-14T09:12:00Z" }));
+
+        var when = await Fakes.Dataverse(handler).GetLastSignInAsync(UserId);
+
+        Assert.Equal(DateTimeOffset.Parse("2026-11-14T09:12:00Z"), when);
+        var url = handler.Requests[0].Url;
+        // User Access via Web only: web-services access (65) is integrations running as the user.
+        Assert.Contains($"_objectid_value eq {UserId} and action eq 64", url);
+        Assert.Contains("$orderby=createdon desc", url);
+        Assert.Contains("$top=1", url);
+    }
+
+    [Fact]
+    public async Task GetLastSignInAsync_is_null_when_no_sign_in_is_recorded()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "audits?", Rows());
+
+        Assert.Null(await Fakes.Dataverse(handler).GetLastSignInAsync(UserId));
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public async Task IsUserAccessAuditedAsync_needs_auditing_and_access_logging_both_on(bool audit, bool access, bool expected)
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "organizations?",
+            Rows(new { isauditenabled = audit, isuseraccessauditenabled = access }));
+
+        Assert.Equal(expected, await Fakes.Dataverse(handler).IsUserAccessAuditedAsync());
+    }
+
     // ---------------------------------------------------------------- writes
 
     [Fact]

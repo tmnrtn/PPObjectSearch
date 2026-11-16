@@ -38,9 +38,19 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
     /// <summary>What a tab's last lookup covered, and what to say if it found nothing.</summary>
     private sealed record TabRead(string Summary, string EmptyHeading, string EmptyText);
 
-    public SecurityLookupViewModel(EnvironmentSessionViewModel session, IEnumerable<EnvironmentSessionViewModel> sessions)
+    /// <param name="effectiveFor">A user to open on, on the Effective access tab - disabled or not, as the picker lists only enabled ones.</param>
+    public SecurityLookupViewModel(EnvironmentSessionViewModel session, IEnumerable<EnvironmentSessionViewModel> sessions,
+        UserInfo? effectiveFor = null)
     {
         _session = session;
+
+        if (effectiveFor is not null)
+        {
+            _tab = SecurityLookupTab.Effective;
+            Users.Add(effectiveFor);
+            _selectedUser = effectiveFor;
+        }
+
         Sessions = new ObservableCollection<EnvironmentSessionViewModel>(sessions.Where(s => s.IsConnected));
         if (!Sessions.Contains(session)) Sessions.Insert(0, session);
 
@@ -365,7 +375,12 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
                 Tables.Add(table);
             }
 
-            foreach (var user in (await Client.GetUsersAsync(CancellationToken.None)).Where(u => !u.IsDisabled)) Users.Add(user);
+            // A user the window opened on is in the list already, selected.
+            var opened = Users.Select(u => u.SystemUserId).ToHashSet();
+            foreach (var user in (await Client.GetUsersAsync(CancellationToken.None)).Where(u => !u.IsDisabled && !opened.Contains(u.SystemUserId)))
+            {
+                Users.Add(user);
+            }
 
             await LoadRolesAsync(LeftSession, LeftRoles);
             await LoadRolesAsync(RightSession, RightRoles);

@@ -19,7 +19,7 @@ public sealed class GraphException : Exception
 }
 
 /// <summary>
-/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user.
+/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user and their licences.
 ///
 /// Signs in through the tab's own account, in the environment's tenant, so the Entra side of a
 /// comparison is always the same directory the Dataverse environment belongs to. The default
@@ -112,6 +112,39 @@ public sealed class GraphClient : IDisposable
             BaseUrl + $"users/{Uri.EscapeDataString(idOrUpn)}?$select={UserSelect}", ct).ConfigureAwait(false);
 
         return doc is null ? null : ReadUser(doc.RootElement);
+    }
+
+    /// <summary>
+    /// The licences assigned to a user, each with the service plans it has switched on - those
+    /// provisioned, not the ones an admin turned off. Null where there is no such user.
+    /// </summary>
+    public async Task<IReadOnlyList<EntraLicense>?> GetUserLicensesAsync(string userId, CancellationToken ct = default)
+    {
+        var licenses = new List<EntraLicense>();
+        var url = BaseUrl + $"users/{Uri.EscapeDataString(userId)}/licenseDetails?$select=skuId,skuPartNumber,servicePlans";
+
+        try
+        {
+            await ReadAllPagesAsync(url, row =>
+            {
+                var plans = row.TryGetProperty("servicePlans", out var list) && list.ValueKind == JsonValueKind.Array
+                    ? list.EnumerateArray()
+                        .Where(p => Str(p, "provisioningStatus") == "Success")
+                        .Select(p => Str(p, "servicePlanName"))
+                        .OfType<string>()
+                        .Order(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                    : [];
+
+                licenses.Add(new EntraLicense(Str(row, "skuId") ?? string.Empty, Str(row, "skuPartNumber"), plans));
+            }, ct).ConfigureAwait(false);
+        }
+        catch (GraphException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        return licenses.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     /// <summary>

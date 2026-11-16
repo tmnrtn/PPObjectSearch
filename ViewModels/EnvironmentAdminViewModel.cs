@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Data;
 using PPObjectSearch.Core;
 using PPObjectSearch.Dataverse;
+using PPObjectSearch.Graph;
 using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 
@@ -24,7 +25,7 @@ public enum QueueTypeFilter { All, Public, Private }
 public enum TeamTypeFilter { All, Owner, Access, Entra }
 
 /// <summary>What the selected user's pane lists below their properties.</summary>
-public enum UserDetailView { Roles, Teams, FieldSecurity }
+public enum UserDetailView { Roles, Teams, FieldSecurity, Licenses }
 
 /// <summary>What the selected team's pane lists below its properties.</summary>
 public enum TeamDetailView { Members, Roles, FieldSecurity }
@@ -49,14 +50,20 @@ public sealed record AdminLocation(AdminTab Tab, Guid? Id, string? Label)
 /// reads the first time it is opened, and links between them - a user's role, a team's members,
 /// a queue's mailbox - move to the other tab with that row selected.
 /// </summary>
-public sealed class EnvironmentAdminViewModel : ObservableObject
+public sealed class EnvironmentAdminViewModel : ObservableObject, IDisposable
 {
     /// <summary>Loads started by selections and links, which nothing waits for - except tests.</summary>
     internal BackgroundWork Work { get; } = new();
 
-    public EnvironmentAdminViewModel(EnvironmentSessionViewModel session, DataverseClient client, AdminTab tab = AdminTab.Users)
+    private readonly Func<GraphClient> _createGraph;
+    private GraphClient? _graph;
+
+    /// <param name="graph">For tests: the Graph client to read licences with, rather than the tab's.</param>
+    public EnvironmentAdminViewModel(EnvironmentSessionViewModel session, DataverseClient client, AdminTab tab = AdminTab.Users,
+        Func<GraphClient>? graph = null)
     {
         Session = session;
+        _createGraph = graph ?? session.CreateGraphClient;
         Users = new AdminUsersViewModel(this, client);
         Teams = new AdminTeamsViewModel(this, client);
         Roles = new AdminRolesViewModel(this, client);
@@ -150,6 +157,15 @@ public sealed class EnvironmentAdminViewModel : ObservableObject
 
     /// <summary>Reads the tab on show - called when the window opens.</summary>
     public Task LoadAsync() => Pane(SelectedTab).EnsureLoadedAsync();
+
+    /// <summary>Microsoft Graph, in the environment's tenant - made the first time a user's licences are asked for.</summary>
+    internal GraphClient Graph => _graph ??= _createGraph();
+
+    public void Dispose()
+    {
+        _graph?.Dispose();
+        _graph = null;
+    }
 
     /// <summary>Opens on one row, as the window's first place - nothing to go back to.</summary>
     internal Task OpenAtAsync(AdminTab tab, Guid id) => MoveToAsync(new AdminLocation(tab, id, null));
@@ -301,7 +317,16 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         EntraTeamSyncCommand = new RelayCommand(
             p => { if (p is TeamInfo { IsEntraGroupTeam: true } team) Owner.Session.ShowEntraTeamSync(team.TeamId); },
             p => p is TeamInfo { IsEntraGroupTeam: true });
+        EffectiveAccessCommand = new RelayCommand(
+            _ => { if (SelectedUser is { } user) Owner.Session.OpenSecurityLookup(user); },
+            _ => SelectedUser is not null);
     }
+
+    /// <summary>
+    /// Security lookup's effective access for the selected user: per table, the widest depth any
+    /// of their roles grants, directly or through a team.
+    /// </summary>
+    public RelayCommand EffectiveAccessCommand { get; }
 
     /// <summary>A group team the user is in, opened in Entra team sync - which writes, so it asks there first.</summary>
     public RelayCommand EntraTeamSyncCommand { get; }
@@ -386,13 +411,15 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     }
 
     private UserDetailView _detailView;
-    /// <summary>Security roles or Teams, below the user's properties.</summary>
+    /// <summary>Security roles, Teams, Field security or Licences, below the user's properties.</summary>
     public UserDetailView DetailView
     {
         get => _detailView;
         set
         {
-            if (SetProperty(ref _detailView, value)) OnPropertyChanged(nameof(IsRolesView));
+            if (!SetProperty(ref _detailView, value)) return;
+            OnPropertyChanged(nameof(IsRolesView));
+            EnsureLicenses();
         }
     }
 
@@ -446,7 +473,9 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             if (!SetProperty(ref _selectedUser, value)) return;
             ShowMailboxCommand.RaiseCanExecuteChanged();
             OwnedRecordsCommand.RaiseCanExecuteChanged();
+            EffectiveAccessCommand.RaiseCanExecuteChanged();
             Owner.Work.Track(LoadDetailsAsync(value));
+            ShowLicensesFor(value);
         }
     }
 
@@ -461,6 +490,14 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     private string _fieldProfileStatus = string.Empty;
     /// <summary>Why the field security list is empty - none held, or the read failed.</summary>
     public string FieldProfileStatus { get => _fieldProfileStatus; private set => SetProperty(ref _fieldProfileStatus, value); }
+
+    private string _lastSignIn = string.Empty;
+    /// <summary>"2026-11-14 09:12", "None recorded", "Not audited" - or a dash for an application user, or when it cannot be read.</summary>
+    public string LastSignIn { get => _lastSignIn; private set => SetProperty(ref _lastSignIn, value); }
+
+    private string _lastSignInToolTip = string.Empty;
+    /// <summary>Where the sign-in comes from, or why there is none to show.</summary>
+    public string LastSignInToolTip { get => _lastSignInToolTip; private set => SetProperty(ref _lastSignInToolTip, value); }
 
     private MailboxInfo? _mailbox;
     public MailboxInfo? Mailbox { get => _mailbox; private set => SetProperty(ref _mailbox, value); }
@@ -482,6 +519,8 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         FieldProfiles.Clear();
         FieldProfileStatus = string.Empty;
         Mailbox = null;
+        LastSignIn = string.Empty;
+        LastSignInToolTip = string.Empty;
         RaiseRoleCounts();
 
         if (user is null)
@@ -489,6 +528,8 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             DetailStatus = string.Empty;
             return;
         }
+
+        _ = Owner.Work.Track(LoadLastSignInAsync(user, request));
 
         IsLoadingDetails = true;
         DetailStatus = "Reading teams and roles...";
@@ -538,6 +579,132 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         finally
         {
             if (request == DetailRequest) IsLoadingDetails = false;
+        }
+    }
+
+    /// <summary>Whether the environment logs sign-ins - read once, for the first user who has none.</summary>
+    private Task<bool?>? _userAccessAudited;
+
+    /// <summary>
+    /// The user's last sign-in, from the audit log. Read on its own: reading the audit needs a
+    /// privilege the roles and teams do not, and its absence should cost only this line.
+    /// </summary>
+    private async Task LoadLastSignInAsync(UserInfo user, int request)
+    {
+        if (user.IsApplicationUser)
+        {
+            LastSignIn = "—";
+            LastSignInToolTip = "An application user is a service principal; it never signs in to the apps.";
+            return;
+        }
+
+        LastSignIn = "…";
+        LastSignInToolTip = "Reading the audit log...";
+
+        try
+        {
+            var when = await Client.GetLastSignInAsync(user.SystemUserId);
+            var audited = when is null ? await (_userAccessAudited ??= ReadUserAccessAuditedAsync()) : true;
+            if (request != DetailRequest) return;
+
+            (LastSignIn, LastSignInToolTip) = (when, audited) switch
+            {
+                ({ } at, _) => (at.ToString("yyyy-MM-dd HH:mm"),
+                    "The latest User Access via Web entry in the audit log. Access through the Web API - integrations and " +
+                    "background jobs running as the user - is not counted."),
+                (null, false) => ("Not audited",
+                    "This environment does not log user access, so there is no sign-in to show. It is turned on in the " +
+                    "Power Platform admin center: Settings, Audit and logs, Audit settings, Log access."),
+                _ => ("None recorded",
+                    "No User Access via Web entry in the audit log - they have not signed in since user access logging was " +
+                    "turned on, or not within the audit retention period.")
+            };
+        }
+        catch (Exception ex)
+        {
+            if (request != DetailRequest) return;
+            LastSignIn = "—";
+            LastSignInToolTip = "Could not read the audit log - " + ex.Message;
+        }
+    }
+
+    private async Task<bool?> ReadUserAccessAuditedAsync()
+    {
+        try
+        {
+            return await Client.IsUserAccessAuditedAsync();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warn("Audit settings could not be read", ex);
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------- licences
+
+    /// <summary>The user's licences in Entra, by name.</summary>
+    public ObservableCollection<EntraLicense> Licenses { get; } = new();
+
+    private string _licenseStatus = string.Empty;
+    /// <summary>Why the licence list is empty - still reading, none assigned, no Entra user, or the read failed.</summary>
+    public string LicenseStatus { get => _licenseStatus; private set => SetProperty(ref _licenseStatus, value); }
+
+    /// <summary>The user whose licences are on show or being read; null until the Licences view is opened for them.</summary>
+    private Guid? _licensesFor;
+    private int _licenseRequest;
+
+    /// <summary>Clears the licences for a new selection, and reads theirs at once if the Licences view is open.</summary>
+    private void ShowLicensesFor(UserInfo? user)
+    {
+        _licenseRequest++;
+        _licensesFor = null;
+        Licenses.Clear();
+        LicenseStatus = string.Empty;
+        if (user is not null) EnsureLicenses();
+    }
+
+    /// <summary>
+    /// Licences come from Microsoft Graph, which can ask the user to sign in again for it - so they
+    /// are read only once the Licences view is opened, not for every user clicked past.
+    /// </summary>
+    private void EnsureLicenses()
+    {
+        if (DetailView != UserDetailView.Licenses || SelectedUser is not { } user || _licensesFor == user.SystemUserId) return;
+
+        _licensesFor = user.SystemUserId;
+        Owner.Work.Track(LoadLicensesAsync(user, ++_licenseRequest));
+    }
+
+    private async Task LoadLicensesAsync(UserInfo user, int request)
+    {
+        if (user.AadObjectId is not { } objectId)
+        {
+            LicenseStatus = user.IsApplicationUser
+                ? "An application user is a service principal, which holds no licences."
+                : "This user has no Entra object id, so their licences cannot be looked up.";
+            return;
+        }
+
+        LicenseStatus = "Reading licences from Entra...";
+
+        try
+        {
+            var licenses = await Owner.Graph.GetUserLicensesAsync(objectId.ToString());
+            if (request != _licenseRequest) return;
+
+            foreach (var license in licenses ?? []) Licenses.Add(license);
+
+            LicenseStatus = licenses switch
+            {
+                null => "Entra has no user with this object id - they may have been deleted there.",
+                { Count: 0 } => "No licence is assigned to this user in Entra, directly or through a group.",
+                _ => string.Empty
+            };
+        }
+        catch (Exception ex)
+        {
+            if (request == _licenseRequest) LicenseStatus = "Could not read licences from Entra - " + ex.Message;
         }
     }
 
