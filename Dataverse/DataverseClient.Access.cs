@@ -152,6 +152,42 @@ public sealed partial class DataverseClient
             teamName);
     }
 
+    // ---------------------------------------------------------------- sign-ins
+
+    /// <summary>audit.action 64, User Access via Web: a person opening the environment's apps.</summary>
+    private const int UserAccessViaWeb = 64;
+
+    /// <summary>
+    /// When the user last signed in to the environment's apps, from the audit log - null where
+    /// none is recorded. Only User Access via Web counts: User Access via Web Services (65) is
+    /// logged by integrations and background jobs running as the user, at any hour.
+    /// </summary>
+    public async Task<DateTimeOffset?> GetLastSignInAsync(Guid systemUserId, CancellationToken ct = default)
+    {
+        var found = await ReadRowsAsync(
+            EnvironmentUrl + ApiPath + "audits?$select=createdon" +
+            $"&$filter=_objectid_value eq {systemUserId} and action eq {UserAccessViaWeb}&$orderby=createdon desc&$top=1",
+            row => JsonHelper.GetDate(row, "createdon") is { } when ? Tuple.Create(when) : null, ct).ConfigureAwait(false);
+
+        return found.Count > 0 ? found[0].Item1 : null;
+    }
+
+    /// <summary>
+    /// Whether the environment logs sign-ins: auditing on, and its user access logging too.
+    /// Null where the setting cannot be read.
+    /// </summary>
+    public async Task<bool?> IsUserAccessAuditedAsync(CancellationToken ct = default)
+    {
+        using var doc = await GetJsonAsync(
+            EnvironmentUrl + ApiPath + "organizations?$select=isauditenabled,isuseraccessauditenabled", ct).ConfigureAwait(false);
+
+        if (!doc.RootElement.TryGetProperty("value", out var value) || value.GetArrayLength() == 0) return null;
+
+        var audit = JsonHelper.GetBool(value[0], "isauditenabled");
+        var access = JsonHelper.GetBool(value[0], "isuseraccessauditenabled");
+        return audit == false || access == false ? false : audit is null || access is null ? null : true;
+    }
+
     // ---------------------------------------------------------------- security roles
 
     /// <summary>

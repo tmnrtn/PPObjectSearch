@@ -14,6 +14,8 @@ public partial class EnvironmentAdminView : ScreenView
 
     private EnvironmentAdminViewModel? ViewModel => DataContext as EnvironmentAdminViewModel;
 
+    protected override void OnScreenClosed() => ViewModel?.Dispose();
+
     /// <summary>Alt+Left and Alt+Right, as in a browser. Alt makes the key arrive as a system key.</summary>
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {

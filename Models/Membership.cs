@@ -47,3 +47,12 @@ public sealed record EntraGroup(string Id, string? DisplayName, bool? SecurityEn
 
 /// <summary>An Entra user, from Microsoft Graph.</summary>
 public sealed record EntraUser(string Id, string? DisplayName, string? Upn, string? Mail, bool? AccountEnabled, string? UserType = null);
+
+/// <summary>A licence assigned to an Entra user - directly or through a group - and the service plans it switches on.</summary>
+public sealed record EntraLicense(string SkuId, string? SkuPartNumber, IReadOnlyList<string> EnabledPlans)
+{
+    /// <summary>The SKU's part number - ENTERPRISEPACK, DYN365_ENTERPRISE_PLAN1 - which is what Graph names it by.</summary>
+    public string Name => SkuPartNumber ?? SkuId;
+
+    public string PlansLabel => string.Join(", ", EnabledPlans);
+}

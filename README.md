@@ -481,8 +481,13 @@ Teams tab, a queue's mailbox on the Mailboxes tab, a mailbox's owner on the User
   mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled users
   by default). A user shows their teams, and their security roles both direct and through each
   team, each in the business unit it is held in, their field security profiles (direct and through
-teams - access to secured columns, which roles do not grant), and their mailbox's approval and
-test result.
+  teams - access to secured columns, which roles do not grant), and their mailbox's approval and
+  test result. **Last sign-in** comes from the audit log - the latest *User Access via Web*
+  entry, so integrations and background jobs running as the user (*via Web Services*) do not
+  count - and says *Not audited* where the environment does not log user access. **Licences**
+  lists the user's licences in Entra, directly or through a group, with the service plans each
+  switches on; they are read from Microsoft Graph only once that view is opened. **Effective
+  access…** opens Security lookup on the user's effective access.
 - **Teams** — every team, searchable, filtered by type (owner, access, Entra group) and business
   unit. A team shows its business unit, administrator, default queue, email, Entra group and
   membership type, whether it is a business unit's default team, and then its members (with
@@ -568,7 +573,7 @@ someone removed from the group but not yet re-synced.
 
 Graph is called as the tab's signed-in account, in the environment's tenant. The default client
 is pre-consented; with your own `ClientId`, grant it `GroupMember.Read.All` and `User.Read.All`
-delegated permissions.
+delegated permissions. The Users tab's **Licences** needs `User.Read.All` too.
 
 ### Queue membership sync
 

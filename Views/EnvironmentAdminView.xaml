@@ -289,6 +289,9 @@
                                                 <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Owned records…" VerticalAlignment="Top"
                                                         Command="{Binding OwnedRecordsCommand}"
                                                         ToolTip="Count the records this user owns, table by table - not those owned by their teams. Read-only." />
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="Effective access…" VerticalAlignment="Top"
+                                                        Margin="0,0,6,0" Command="{Binding EffectiveAccessCommand}"
+                                                        ToolTip="Open Security lookup on what this user can do to each table: the widest depth any of their roles grants, directly or through a team. Read-only." />
                                                 <WrapPanel>
                                                     <ContentControl Style="{StaticResource Chip}" Margin="0,0,4,4" Content="{Binding SelectedUser.UserType}" />
                                                     <ContentControl Style="{StaticResource UserStatusPill}" Margin="0,0,4,4" DataContext="{Binding SelectedUser}" />
@@ -309,6 +312,7 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
 
                                                 <TextBlock Grid.Row="0" Text="Business unit" Style="{StaticResource DetailKey}" />
@@ -324,17 +328,24 @@
                                                 <TextBlock Grid.Row="1" Grid.Column="3" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
                                                            Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}"
                                                            core:CopyOnClick.IsEnabled="True" />
-                                                <TextBlock Grid.Row="2" Text="Entra id" Style="{StaticResource DetailKey}" />
-                                                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
-                                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
-                                                           Text="{Binding SelectedUser.AadObjectId, TargetNullValue=—}" />
-                                                <TextBlock Grid.Row="3" Text="User id" Style="{StaticResource DetailKey}"
-                                                           ToolTip="The user's id in this environment (systemuserid)." />
+                                                <TextBlock Grid.Row="2" Text="Last sign-in" Style="{StaticResource DetailKey}"
+                                                           ToolTip="From the audit log: the last time they opened the environment's apps." />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
+                                                           Text="{Binding LastSignIn}" ToolTip="{Binding LastSignInToolTip}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="2" Text="Created" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="3" Style="{StaticResource DetailValue}"
+                                                           Text="{Binding SelectedUser.CreatedOn, StringFormat={}{0:yyyy-MM-dd HH:mm}, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="3" Text="Entra id" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
                                                            FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           Text="{Binding SelectedUser.AadObjectId, TargetNullValue=—}" />
+                                                <TextBlock Grid.Row="4" Text="User id" Style="{StaticResource DetailKey}"
+                                                           ToolTip="The user's id in this environment (systemuserid)." />
+                                                <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
                                                            Text="{Binding SelectedUser.SystemUserId}" />
-                                                <TextBlock Grid.Row="4" Text="Mailbox" Style="{StaticResource DetailKey}" />
-                                                <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Grid.Row="5" Text="Mailbox" Style="{StaticResource DetailKey}" />
+                                                <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
                                                     <StackPanel Orientation="Horizontal" DataContext="{Binding Mailbox}"
                                                                 Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
                                                         <ContentControl Style="{StaticResource ApprovalPill}" Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
@@ -379,6 +390,10 @@
                                                                      core:Ui.Count="{Binding FieldProfiles.Count}"
                                                                      ToolTip="Field security profiles, direct and through teams: access to secured columns, which roles do not grant."
                                                                      IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=FieldSecurity}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Licences" GroupName="UserDetail"
+                                                                     core:Ui.Count="{Binding Licenses.Count}"
+                                                                     ToolTip="The licences assigned to the user in Entra, directly or through a group, with the service plans each switches on. Read from Microsoft Graph."
+                                                                     IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Licenses}" />
                                                     </StackPanel>
                                                 </Border>
                                             </DockPanel>
@@ -493,6 +508,31 @@
                                                 <TextBlock Text="{Binding FieldProfileStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
                                                            TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
                                                            Visibility="{Binding FieldProfiles.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Licenses}">
+                                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Licenses}" IsReadOnly="True">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Licence" Width="220" Binding="{Binding Name}"
+                                                                            HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellPaneFirst}">
+                                                                    <Setter Property="ToolTip" Value="{Binding SkuId}" />
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                        <DataGridTextColumn Header="Service plans" Width="*" Binding="{Binding PlansLabel}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellMuted}">
+                                                                    <Setter Property="ToolTip" Value="{Binding PlansLabel}" />
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <TextBlock Text="{Binding LicenseStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                           TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                           Visibility="{Binding Licenses.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
                                             </Grid>
                                         </Grid>
                                     </Grid>
