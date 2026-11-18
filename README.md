@@ -692,14 +692,19 @@ relationships from the environment's metadata; tables already read are not read 
 - **Lines** use crow's-foot ends: a lookup's table is *exactly one* when the lookup is required and
   *zero or one* when it is not, and the table holding it *zero or many*. A many-to-many is dashed,
   with *zero or many* at both ends.
-- **Columns** - names only; keys and lookups (the default: primary key, primary name and lookups);
-  keys, lookups and custom columns; or every column. **PK** and **FK** mark keys, a lookup names
-  the table it points at, and required columns are in bold.
+- **Columns** - names only; keys and the lookups drawn (the default: primary key, primary name and
+  the lookups with a line); keys and every lookup, those to tables left out too; keys, lookups and
+  custom columns; or every column. **PK** and **FK** mark keys, a lookup names the table it points
+  at, and required columns are in bold. Mermaid lists every lookup whichever is chosen.
 - **Left out, but listed.** These are not drawn unless asked for, but a lookup to one is still
   listed in its table's box, naming it:
   - **reference tables** - types, codes and statuses that other tables look up and that look up
     nothing themselves, which would otherwise stand in a long row across the diagram;
   - **users, teams and business units**, which nearly every table looks up.
+
+  **Tables with no relationships** - ticked tables with no line to another, such as a business
+  process flow's table or an activity a solution holds for a form - are left out too, unless no
+  table has a line, when they are all there is to draw.
 - **Tables outside the solutions** that their lookups point at are drawn dashed, by name only.
 
 The diagram redraws as you change what it shows. **Ctrl+wheel** or the zoom buttons zoom; **Fit**

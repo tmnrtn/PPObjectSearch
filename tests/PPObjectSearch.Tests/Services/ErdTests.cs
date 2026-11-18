@@ -75,7 +75,7 @@ public class ErdTests
         Assert.DoesNotContain(diagram.Links, l => l.Label is "parentcustomerid" or "ownerid" or "createdby");
         Assert.DoesNotContain(diagram.Boxes.Single(b => b.LogicalName == "ect_case").Rows, r => r.Name == "ownerid");
 
-        var platform = Build(new ErdOptions(ShowSystemRelationships: true));
+        var platform = Build(new ErdOptions(ErdColumnDetail.Keys, ShowSystemRelationships: true));
         Assert.Equal(["account", "contact"], platform.Links.Where(l => l.Label == "parentcustomerid").Select(l => l.One).Order(StringComparer.Ordinal));
         // Users and teams are still left out: the owner lookup is listed, naming them, without a line.
         Assert.DoesNotContain(platform.Boxes, b => b.LogicalName is "systemuser" or "team");
@@ -96,7 +96,7 @@ public class ErdTests
             new("systemuser", "User", [Id("systemuserid"), Lookup("ect_caseid")], [new("ect_user_case", "ect_caseid", "ect_case")], [])
         ];
 
-        var diagram = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true));
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(ErdColumnDetail.Keys, Prefixes: ["ect"], ShowReferenceTables: true));
 
         Assert.Equal(["ect_case"], diagram.Boxes.Select(b => b.LogicalName));
         Assert.Empty(diagram.Links);
@@ -110,7 +110,7 @@ public class ErdTests
     [Fact]
     public void Without_outside_tables_a_lookup_to_one_is_listed_without_a_line()
     {
-        var diagram = Build(new ErdOptions(ShowOutsideTables: false));
+        var diagram = Build(new ErdOptions(ErdColumnDetail.Keys, ShowOutsideTables: false));
 
         Assert.Equal(["ect_case", "contact"], diagram.Boxes.Select(b => b.LogicalName));
         Assert.DoesNotContain(diagram.Links, l => l.One == "account");
@@ -193,7 +193,7 @@ public class ErdTests
             new("ect_make", "Make", [Id("ect_makeid")], [], [], IsCustom: true)
         ];
 
-        var diagram = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"]));
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(ErdColumnDetail.Keys, Prefixes: ["ect"]));
 
         // Case type looks up only itself and make nothing; vehicle looks up make, so it stays.
         Assert.Equal(["ect_case", "ect_vehicle"], diagram.Boxes.Select(b => b.LogicalName));
@@ -202,6 +202,34 @@ public class ErdTests
         Assert.Equal("ect_make", diagram.Boxes[1].Rows.Single(r => r.Name == "ect_makeid").References);
 
         Assert.Equal(4, ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true)).Boxes.Count);
+    }
+
+    [Fact]
+    public void The_default_rows_are_the_keys_and_the_lookups_drawn()
+    {
+        // Without outside tables, the lookup to account has no line, so it is not listed.
+        var rows = Build(new ErdOptions(ShowOutsideTables: false)).Boxes.Single(b => b.LogicalName == "ect_case").Rows;
+
+        Assert.Equal(["ect_caseid", "ect_name", "ect_contactid", "ect_parentcaseid"], rows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void A_table_with_no_line_to_another_is_left_out_unless_asked_for()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("ect_case", "Case", [Id("ect_caseid"), Lookup("ect_contactid")], [new("a", "ect_contactid", "ect_contact")], [], IsCustom: true),
+            new("ect_contact", "Contact", [Id("ect_contactid")], [], [], IsCustom: true),
+            new("ect_flow", "Flow", [Id("ect_flowid"), Lookup("ect_parentid")], [new("b", "ect_parentid", "ect_flow")], [], IsCustom: true),
+            new("appointment", "Appointment", [Id("activityid")], [], [])
+        ];
+        var options = new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true);
+
+        // A table looking up only itself has no line to another.
+        Assert.Equal(["ect_case", "ect_contact"], ErdBuilder.Build(tables, options).Boxes.Select(b => b.LogicalName));
+        Assert.Equal(4, ErdBuilder.Build(tables, options with { ShowStandalone = true }).Boxes.Count);
+        // With no line anywhere, the tables are all there is to draw.
+        Assert.Equal(2, ErdBuilder.Build(tables.Skip(2).ToList(), options).Boxes.Count);
     }
 
     [Fact]

@@ -271,7 +271,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    private ErdOptions Options() => new(Columns, ShowOutsideTables, ShowSystemRelationships, ShowPeople, Prefixes(), ShowReferenceTables);
+    private ErdOptions Options() => new(Columns, ShowOutsideTables, ShowSystemRelationships, ShowPeople, Prefixes(), ShowReferenceTables, ShowStandalone);
 
     private void TickSuggested()
     {
@@ -318,6 +318,17 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool _showStandalone;
+    /// <summary>Draws the chosen tables with no line to another, which say nothing about the relationships.</summary>
+    public bool ShowStandalone
+    {
+        get => _showStandalone;
+        set
+        {
+            if (SetProperty(ref _showStandalone, value)) Relayout();
+        }
+    }
+
     private bool _showReferenceTables;
     /// <summary>Draws the tables only looked up - types, codes, statuses; otherwise the lookups to them are only listed.</summary>
     public bool ShowReferenceTables
@@ -332,12 +343,13 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     public IReadOnlyList<ErdColumnChoice> ColumnChoices { get; } =
     [
         new(ErdColumnDetail.None, "Table names only"),
-        new(ErdColumnDetail.Keys, "Keys and lookups"),
+        new(ErdColumnDetail.Drawn, "Keys and the lookups drawn"),
+        new(ErdColumnDetail.Keys, "Keys and every lookup"),
         new(ErdColumnDetail.Custom, "Keys, lookups and custom columns"),
         new(ErdColumnDetail.All, "Every column")
     ];
 
-    private ErdColumnDetail _columns = ErdColumnDetail.Keys;
+    private ErdColumnDetail _columns = ErdColumnDetail.Drawn;
     public ErdColumnDetail Columns
     {
         get => _columns;
@@ -383,6 +395,9 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     // ---------------------------------------------------------------- the diagram
 
     private ErdDiagram? _diagram;
+
+    /// <summary>The diagram as Mermaid writes it: every lookup listed, where the boxes list only those drawn.</summary>
+    private ErdDiagram? _mermaid;
 
     private ErdPlacedDiagram? _placed;
     /// <summary>The diagram as laid out - what is shown and saved.</summary>
@@ -650,6 +665,9 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         cts.Token.ThrowIfCancellationRequested();
 
         _diagram = diagram;
+        _mermaid = Columns == ErdColumnDetail.Drawn
+            ? ErdBuilder.Build(tables, Options() with { Columns = ErdColumnDetail.Keys }, _displayNames)
+            : diagram;
         Placed = placed;
         Image = HasDiagram ? Render(placed) : null;
     }
@@ -692,7 +710,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         ? $"{DocPage.Slug(_drawn[0].UniqueName)}-erd"
         : $"{DocPage.Slug(_session.Title)}-erd-{DateTime.Now:yyyy-MM-dd}";
 
-    private string Mermaid() => ErdMermaidWriter.ToMermaid(_diagram!, Placed?.Title);
+    private string Mermaid() => ErdMermaidWriter.ToMermaid(_mermaid ?? _diagram!, Placed?.Title);
 
     private void CopyMermaid()
     {

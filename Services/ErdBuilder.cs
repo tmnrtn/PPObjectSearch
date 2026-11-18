@@ -8,7 +8,10 @@ public enum ErdColumnDetail
     /// <summary>The table's name alone.</summary>
     None,
 
-    /// <summary>The primary key, the primary name and the lookups drawn.</summary>
+    /// <summary>The primary key, the primary name and the lookups drawn as lines.</summary>
+    Drawn,
+
+    /// <summary>The primary key, the primary name and every lookup - those to tables left out too.</summary>
     Keys,
 
     /// <summary>The keys, and every custom column.</summary>
@@ -23,13 +26,15 @@ public enum ErdColumnDetail
 /// <param name="ShowPeople">Users, teams and business units, and the lines to them.</param>
 /// <param name="ShowReferenceTables">Tables that are only looked up - types, codes, statuses - and the lines to them.</param>
 /// <param name="Prefixes">The solutions' publisher prefixes, which name what they made; with none, custom stands in.</param>
+/// <param name="ShowStandalone">Chosen tables with no line to another - unless none has one, when all are drawn.</param>
 public sealed record ErdOptions(
-    ErdColumnDetail Columns = ErdColumnDetail.Keys,
+    ErdColumnDetail Columns = ErdColumnDetail.Drawn,
     bool ShowOutsideTables = true,
     bool ShowSystemRelationships = false,
     bool ShowPeople = false,
     IReadOnlyCollection<string>? Prefixes = null,
-    bool ShowReferenceTables = false)
+    bool ShowReferenceTables = false,
+    bool ShowStandalone = false)
 {
     /// <summary>Made by one of the solutions' publishers: named with its prefix - or, with no prefix known, custom.</summary>
     public bool IsOwn(string name, bool isCustom) => Prefixes is not { Count: > 0 } prefixes
@@ -174,13 +179,25 @@ public static class ErdBuilder
         var linked = links.SelectMany(l => new[] { l.One, l.Many }).ToHashSet(StringComparer.OrdinalIgnoreCase);
         outside.RemoveWhere(t => !linked.Contains(t));
 
+        // A table with no line to another says nothing about the relationships - unless none has
+        // one, when the tables are all there is to draw.
+        var between = links.Where(l => !string.Equals(l.One, l.Many, StringComparison.OrdinalIgnoreCase)).ToList();
+        var related = between.SelectMany(l => new[] { l.One, l.Many }).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var standalone = options.ShowStandalone || between.Count == 0
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : chosen.Keys.Where(t => !related.Contains(t)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        links.RemoveAll(l => standalone.Contains(l.One));
+
+        // The lookups drawn as lines, by table and column, for the rows that list only those.
+        var lines = links.Where(l => !l.IsManyToMany).Select(l => (l.Many.ToLowerInvariant(), l.Label.ToLowerInvariant())).ToHashSet();
+
         var boxes = new List<ErdBox>();
         foreach (var table in chosen.Values.OrderBy(t => t.Label, StringComparer.CurrentCultureIgnoreCase).ThenBy(t => t.LogicalName, StringComparer.OrdinalIgnoreCase))
         {
-            if (references.Contains(table.LogicalName)) continue;
+            if (references.Contains(table.LogicalName) || standalone.Contains(table.LogicalName)) continue;
 
             boxes.Add(new ErdBox(table.LogicalName, table.Label, Subtitle(table.Label, table.LogicalName),
-                Rows(table, options.Columns, drawn), IsOutside: false));
+                Rows(table, options.Columns, drawn, lines), IsOutside: false));
         }
 
         foreach (var name in outside)
@@ -232,7 +249,7 @@ public static class ErdBuilder
     /// </summary>
     public static IReadOnlySet<string> Neighbours(string table, IReadOnlyList<ErdTable> tables, ErdOptions options)
     {
-        var diagram = Build(tables, options with { Columns = ErdColumnDetail.None, ShowOutsideTables = false, ShowReferenceTables = true });
+        var diagram = Build(tables, options with { Columns = ErdColumnDetail.None, ShowOutsideTables = false, ShowReferenceTables = true, ShowStandalone = true });
         var neighbours = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { table };
 
         foreach (var link in diagram.Links)
@@ -249,7 +266,8 @@ public static class ErdBuilder
         string.Equals(title, logicalName, StringComparison.OrdinalIgnoreCase) ? null : logicalName;
 
     /// <summary>The primary key, then the primary name, then the rest by logical name.</summary>
-    private static IReadOnlyList<ErdRow> Rows(ErdTable table, ErdColumnDetail detail, Dictionary<(string Table, string Column), List<string>> drawn)
+    private static IReadOnlyList<ErdRow> Rows(ErdTable table, ErdColumnDetail detail,
+        Dictionary<(string Table, string Column), List<string>> drawn, HashSet<(string Table, string Column)> lines)
     {
         if (detail == ErdColumnDetail.None) return [];
 
@@ -264,7 +282,9 @@ public static class ErdBuilder
             {
                 ErdColumnDetail.All => true,
                 ErdColumnDetail.Custom => column.IsPrimaryId || column.IsPrimaryName || targets is not null || column.IsCustom,
-                _ => column.IsPrimaryId || column.IsPrimaryName || targets is not null
+                ErdColumnDetail.Keys => column.IsPrimaryId || column.IsPrimaryName || targets is not null,
+                _ => column.IsPrimaryId || column.IsPrimaryName ||
+                     lines.Contains((table.LogicalName.ToLowerInvariant(), column.LogicalName.ToLowerInvariant()))
             };
             if (!shown) continue;
 

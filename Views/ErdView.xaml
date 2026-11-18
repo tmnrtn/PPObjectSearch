@@ -171,6 +171,8 @@
                                   AutomationProperties.Name="Columns listed in each table" />
                         <CheckBox Content="Tables outside the solutions that their lookups point at" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
                                   ToolTip="Drawn dashed, by name only - account, contact or another solution's table" />
+                        <CheckBox Content="Tables with no relationships" IsChecked="{Binding ShowStandalone}" Margin="0,6,0,0"
+                                  ToolTip="Ticked tables with no line to another - a process flow's table, an activity held for a form. Drawn anyway when no table has a line" />
                         <CheckBox Content="Reference tables - types, codes, statuses" IsChecked="{Binding ShowReferenceTables}" Margin="0,6,0,0"
                                   ToolTip="Tables other tables look up that look up nothing themselves. Left out, a lookup to one is still listed in its table, naming it, without a line" />
                         <CheckBox Content="Users, teams and business units" IsChecked="{Binding ShowPeople}" Margin="0,6,0,0"
