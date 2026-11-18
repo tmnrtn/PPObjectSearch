@@ -396,6 +396,8 @@ public class SecurityLookupViewModelTests
             "Sales Manager via team EMEA in Contoso EMEA"), account.Read.ToolTip);
         Assert.Equal("User - records owned by them" + Environment.NewLine + "Salesperson", account.Delete.ToolTip);
         Assert.Equal("Roles held in Contoso (their own) and Contoso EMEA (team EMEA)", lookup.EffectiveUnitsLabel);
+        // The export names the units too; User access needs none.
+        Assert.Equal("Account,,Business unit (Contoso; Contoso EMEA),,User,,,,", lookup.ExportLines()[1]);
         Assert.EndsWith("Contoso EMEA (team EMEA)", lookup.EffectiveUnitsToolTip);
     });
 

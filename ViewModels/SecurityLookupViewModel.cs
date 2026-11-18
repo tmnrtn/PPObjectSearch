@@ -629,7 +629,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
             Holders.Select(h => CsvExporter.Line(h.Name, h.Kind, h.DepthLabel, h.Via))
                 .Prepend(CsvExporter.Line("Name", "Kind", $"{Action} depth on {TableName}", "Via")).ToList(),
         SecurityLookupTab.Effective =>
-            EffectiveRows.Select(r => CsvExporter.Line(SecurityLookup.Actions.Select(a => r[a].Label).Prepend(r.Table)))
+            EffectiveRows.Select(r => CsvExporter.Line(SecurityLookup.Actions.Select(a => r[a].ExportLabel).Prepend(r.Table)))
                 .Prepend(CsvExporter.Line(SecurityLookup.Actions.Prepend("Table"))).ToList(),
         SecurityLookupTab.SecuredColumn =>
             FieldGrants.Select(g => CsvExporter.Line(g.ProfileName, Yes(g.CanRead), Yes(g.CanCreate), Yes(g.CanUpdate),

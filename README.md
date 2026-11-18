@@ -528,7 +528,8 @@ not. Read-only, and each view exports to CSV:
   in each of Probation North and Sales", then "Basic User via team Probation North in Probation
   North"), and a line under the user picker lists every unit their roles are held in ("Roles held
   in Sales (their own) and Probation North (team Probation North)"). User access through a team
-  names the team, whose records it covers; Organization access needs no unit.
+  names the team, whose records it covers; Organization access needs no unit. The CSV export names
+  the units in each Business unit and Parent cell ("Business unit (Probation North; Sales)").
 - **Secured column** - the field security profiles that grant read, create or update on a column,
   and the users and teams holding each.
 - **Compare roles** - two roles side by side, or the same role in two connected environments

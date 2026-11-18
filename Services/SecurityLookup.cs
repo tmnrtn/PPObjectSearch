@@ -40,6 +40,9 @@ public sealed record EffectiveCell(PrivilegeDepth Depth, IReadOnlyList<Effective
 
     public string GrantedByLabel => string.Join(", ", GrantedBy);
 
+    /// <summary>The depth, and for Business unit or Parent the units it reaches from: "Business unit (North; South)".</summary>
+    public string ExportLabel => BusinessUnits.Count == 0 ? Label : $"{Label} ({string.Join("; ", BusinessUnits)})";
+
     /// <summary>
     /// Whose records the depth covers: "records in each of Probation North and Sales", "records
     /// owned by them or team EMEA" - User depth through a team covers what the team owns.

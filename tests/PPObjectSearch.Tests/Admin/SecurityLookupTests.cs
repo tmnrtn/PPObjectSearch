@@ -44,6 +44,7 @@ public class SecurityLookupTests
 
         Assert.Equal(["Probation North", "Probation South"], account.Read.BusinessUnits);
         Assert.Equal("records in each of Probation North and Probation South", account.Read.Reach);
+        Assert.Equal("Business unit (Probation North; Probation South)", account.Read.ExportLabel);
         Assert.Equal(string.Join(Environment.NewLine,
             "Business unit - records in each of Probation North and Probation South",
             "Salesperson in Probation North",
@@ -58,6 +59,7 @@ public class SecurityLookupTests
 
         Assert.Equal("Parent: child BUs - records in North and the units beneath it" + Environment.NewLine + "Area Manager in North",
             account.Write.ToolTip);
+        Assert.Equal("Parent: child BUs (North)", account.Write.ExportLabel);
     }
 
     [Fact]
@@ -82,6 +84,7 @@ public class SecurityLookupTests
         var account = Assert.Single(SecurityLookup.Effective([(G("Salesperson", null), [P("prvReadAccount", PrivilegeDepth.BusinessUnit)])]));
 
         Assert.Equal("Business unit - records in their business unit" + Environment.NewLine + "Salesperson", account.Read.ToolTip);
+        Assert.Equal("Business unit", account.Read.ExportLabel);
     }
 
     [Fact]
