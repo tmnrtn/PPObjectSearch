@@ -670,23 +670,42 @@ more solutions with the relationships between them. The selected solution is tic
 solution's patches with them. **Draw** reads each table's columns, lookups and many-to-many
 relationships from the environment's metadata; tables already read are not read again.
 
-- **Layout** - tables a lookup points at sit above the tables that hold the lookup, and lines are
-  routed around the boxes. A table that looks itself up (a parent case, a parent account) has a loop
-  at its corner.
+- **Your relationships only.** By default the diagram draws what the solutions' publishers made:
+  lookup columns and many-to-many relationships named with their prefixes (`ect_`). The platform's
+  own - owner, created by, regarding, an account's parent, a contact's merged-into, and those
+  Microsoft's apps add (`msdyn_`, `msa_`, `adx_`), which Dataverse also calls custom - come back
+  with **The platform's own relationships**. The default solution's publisher counts only when it
+  is drawn alone.
+- **One line per pair of tables.** Several lookups from one table to another - a visit report with
+  thirty lookups to its scored responses - are one line; its hover lists the columns, and each is
+  still listed in the box and in the Mermaid.
+- **Tables** - the list of tables read lets you leave some out. It starts with the **suggested**
+  tables ticked: the solutions' own, the out-of-box tables they add columns to, and the tables
+  their own lookups point at. An out-of-box table a solution holds only for a form or a view
+  (Audit, Appointment) starts unticked, as does the table behind a many-to-many relationship,
+  which is drawn as a line. **Suggested** ticks them again; right-click a table to draw only it and
+  the tables related to it.
+- **Layout** - *Grouped* (the default) draws related tables near each other in a block about as
+  tall as it is wide; a diagram of 15 tables or fewer is laid out in layers either way. *Layered*
+  puts tables looked up above the tables that look them up, which grows as wide as its widest
+  layer. Lines are routed around the boxes; a table that looks itself up has a loop at its corner.
 - **Lines** use crow's-foot ends: a lookup's table is *exactly one* when the lookup is required and
   *zero or one* when it is not, and the table holding it *zero or many*. A many-to-many is dashed,
-  with *zero or many* at both ends. A customer, owner or regarding lookup draws a line to each table
-  it can point at.
-- **Tables** - the list of tables read lets you leave some out (the tables behind many-to-many
-  relationships start unticked, as those relationships are drawn as lines).
-- **Columns** - names only; keys and lookups (the default: primary key, primary name and the lookups
-  drawn); keys, lookups and custom columns; or every column. **PK** and **FK** mark keys, a lookup
-  names the table it points at, and required columns are in bold.
-- **Tables outside the solutions** that they look up - account, contact, another solution's table -
-  are drawn dashed, by name only. Switch them off to see only the solutions' own tables.
-- **System lookups** - owner, owning user, team and business unit, created and modified by,
-  organization, currency, process and stage, SLA - are left out unless asked for, as every table
-  has them and they tie everything to systemuser.
+  with *zero or many* at both ends.
+- **Columns** - names only; keys and the lookups drawn (the default: primary key, primary name and
+  the lookups with a line); keys and every lookup, those to tables left out too; keys, lookups and
+  custom columns; or every column. **PK** and **FK** mark keys, a lookup names the table it points
+  at, and required columns are in bold. Mermaid lists every lookup whichever is chosen.
+- **Left out, but listed.** These are not drawn unless asked for, but a lookup to one is still
+  listed in its table's box, naming it:
+  - **reference tables** - types, codes and statuses that other tables look up and that look up
+    nothing themselves, which would otherwise stand in a long row across the diagram;
+  - **users, teams and business units**, which nearly every table looks up.
+
+  **Tables with no relationships** - ticked tables with no line to another, such as a business
+  process flow's table or an activity a solution holds for a form - are left out too, unless no
+  table has a line, when they are all there is to draw.
+- **Tables outside the solutions** that their lookups point at are drawn dashed, by name only.
 
 The diagram redraws as you change what it shows. **Ctrl+wheel** or the zoom buttons zoom; **Fit**
 shows it whole. Double-click a table to open its details.
@@ -694,7 +713,7 @@ shows it whole. Double-click a table to open its details.
 **Save** writes it as:
 
 - **SVG** - vector, sharp at any size, for Word, PowerPoint, Visio, draw.io or a browser. Hovering a
-  line in a browser names its lookup column;
+  line in a browser names its lookup columns;
 - **PNG** - a picture at twice the size on screen (smaller for a very large diagram), for slides,
   chats and tickets;
 - **Mermaid** - an `erDiagram`, in a `.mmd` file or fenced in a `.md` file, for GitHub, Azure DevOps

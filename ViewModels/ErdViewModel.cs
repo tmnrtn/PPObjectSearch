@@ -46,6 +46,9 @@ public sealed class ErdTableChoice : ObservableObject
 /// <summary>An entry in the column detail list.</summary>
 public sealed record ErdColumnChoice(ErdColumnDetail Value, string Label);
 
+/// <summary>An entry in the layout list.</summary>
+public sealed record ErdLayoutChoice(ErdLayoutStyle Value, string Label);
+
 /// <summary>
 /// An entity relationship diagram of the tables in one or more solutions, drawn as it is shaped -
 /// which tables, how many of their columns, and whether the tables outside they look up are shown -
@@ -93,6 +96,8 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         }, _ => !IsBusy && Choices.Any(c => c.IsChosen));
         AllTablesCommand = new RelayCommand(_ => TickTables(true), _ => Tables.Count > 0);
         NoTablesCommand = new RelayCommand(_ => TickTables(false), _ => Tables.Count > 0);
+        SuggestedTablesCommand = new RelayCommand(_ => TickSuggested(), _ => Tables.Count > 0);
+        NeighboursCommand = new RelayCommand(p => TickNeighbours(p as ErdTableChoice), p => p is ErdTableChoice);
 
         CopyMermaidCommand = new RelayCommand(_ => CopyMermaid(), _ => _diagram is not null);
         CopyImageCommand = new RelayCommand(_ => CopyImage(), _ => Placed is not null);
@@ -245,6 +250,48 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         foreach (var table in TablesView.Cast<ErdTableChoice>()) table.IsChosen = chosen;
     }
 
+    /// <summary>
+    /// The solutions' own tables, the out-of-box tables they extend, and the tables their own
+    /// lookups point at - an out-of-box table held only for a form or a view stays out.
+    /// </summary>
+    private IReadOnlySet<string> Suggested()
+    {
+        return ErdBuilder.Suggested(Tables.Select(t => t.Table).ToList(), Prefixes());
+    }
+
+    /// <summary>
+    /// The drawn solutions' publisher prefixes - "ect" - which name the relationships they made.
+    /// The default solution's publisher counts only when it is drawn alone: beside real
+    /// solutions, its prefix names whatever makers built outside them.
+    /// </summary>
+    private IReadOnlyList<string> Prefixes()
+    {
+        var solutions = _drawn.All(s => s.IsDefaultSolution) ? _drawn : _drawn.Where(s => !s.IsDefaultSolution);
+        return solutions.Select(s => s.PublisherPrefix).OfType<string>().Where(p => p.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private ErdOptions Options() => new(Columns, ShowOutsideTables, ShowSystemRelationships, ShowPeople, Prefixes(), ShowReferenceTables, ShowStandalone);
+
+    private void TickSuggested()
+    {
+        var suggested = Suggested();
+        foreach (var table in Tables) table.IsChosen = suggested.Contains(table.Table.LogicalName);
+    }
+
+    /// <summary>Draws one table and the tables related to it, to read a large diagram a piece at a time.</summary>
+    private void TickNeighbours(ErdTableChoice? choice)
+    {
+        if (choice is null) return;
+
+        var neighbours = ErdBuilder.Neighbours(choice.Table.LogicalName, Tables.Select(t => t.Table).ToList(), Options());
+        foreach (var table in Tables) table.IsChosen = neighbours.Contains(table.Table.LogicalName);
+
+        Status = neighbours.Count == 1
+            ? $"{choice.Table.Label} has no relationship to another table in these solutions."
+            : $"Drawing {choice.Table.Label} and the {neighbours.Count - 1:N0} table(s) related to it.";
+    }
+
     private void TableChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(ErdTableChoice.IsChosen)) return;
@@ -255,15 +302,54 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
 
     // ---------------------------------------------------------------- options
 
+    public IReadOnlyList<ErdLayoutChoice> LayoutChoices { get; } =
+    [
+        new(ErdLayoutStyle.Grouped, "Grouped - related tables together"),
+        new(ErdLayoutStyle.Layered, "Layered - tables looked up above")
+    ];
+
+    private ErdLayoutStyle _layout = ErdLayoutStyle.Grouped;
+    public ErdLayoutStyle Layout
+    {
+        get => _layout;
+        set
+        {
+            if (SetProperty(ref _layout, value)) Relayout();
+        }
+    }
+
+    private bool _showStandalone;
+    /// <summary>Draws the chosen tables with no line to another, which say nothing about the relationships.</summary>
+    public bool ShowStandalone
+    {
+        get => _showStandalone;
+        set
+        {
+            if (SetProperty(ref _showStandalone, value)) Relayout();
+        }
+    }
+
+    private bool _showReferenceTables;
+    /// <summary>Draws the tables only looked up - types, codes, statuses; otherwise the lookups to them are only listed.</summary>
+    public bool ShowReferenceTables
+    {
+        get => _showReferenceTables;
+        set
+        {
+            if (SetProperty(ref _showReferenceTables, value)) Relayout();
+        }
+    }
+
     public IReadOnlyList<ErdColumnChoice> ColumnChoices { get; } =
     [
         new(ErdColumnDetail.None, "Table names only"),
-        new(ErdColumnDetail.Keys, "Keys and lookups"),
+        new(ErdColumnDetail.Drawn, "Keys and the lookups drawn"),
+        new(ErdColumnDetail.Keys, "Keys and every lookup"),
         new(ErdColumnDetail.Custom, "Keys, lookups and custom columns"),
         new(ErdColumnDetail.All, "Every column")
     ];
 
-    private ErdColumnDetail _columns = ErdColumnDetail.Keys;
+    private ErdColumnDetail _columns = ErdColumnDetail.Drawn;
     public ErdColumnDetail Columns
     {
         get => _columns;
@@ -285,7 +371,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     }
 
     private bool _showSystemRelationships;
-    /// <summary>Draws owner, created by, modified by, currency and the other lookups every table has.</summary>
+    /// <summary>Draws the platform's relationships too - owner, regarding, Microsoft's apps' - not only the solutions' own.</summary>
     public bool ShowSystemRelationships
     {
         get => _showSystemRelationships;
@@ -295,9 +381,23 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool _showPeople;
+    /// <summary>Draws users, teams and business units and the lines to them; otherwise their lookups are only listed.</summary>
+    public bool ShowPeople
+    {
+        get => _showPeople;
+        set
+        {
+            if (SetProperty(ref _showPeople, value)) Relayout();
+        }
+    }
+
     // ---------------------------------------------------------------- the diagram
 
     private ErdDiagram? _diagram;
+
+    /// <summary>The diagram as Mermaid writes it: every lookup listed, where the boxes list only those drawn.</summary>
+    private ErdDiagram? _mermaid;
 
     private ErdPlacedDiagram? _placed;
     /// <summary>The diagram as laid out - what is shown and saved.</summary>
@@ -356,6 +456,8 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     public RelayCommand ClearCommand { get; }
     public RelayCommand AllTablesCommand { get; }
     public RelayCommand NoTablesCommand { get; }
+    public RelayCommand SuggestedTablesCommand { get; }
+    public RelayCommand NeighboursCommand { get; }
     public RelayCommand CopyMermaidCommand { get; }
     public RelayCommand CopyImageCommand { get; }
     public RelayCommand SaveSvgCommand { get; }
@@ -453,13 +555,13 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // A table unticked before stays unticked; a many-to-many's own table starts unticked,
-            // as its relationship is drawn as a line between the tables it joins.
-            var unticked = Tables.Where(t => !t.IsChosen).Select(t => t.Table.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // A table listed before keeps its tick; a new one is ticked if it is suggested.
+            var before = Tables.ToDictionary(t => t.Table.LogicalName, t => t.IsChosen, StringComparer.OrdinalIgnoreCase);
             var missing = 0;
 
             foreach (var table in Tables) table.PropertyChanged -= TableChanged;
             Tables.Clear();
+            _drawn = solutions;
 
             foreach (var (id, (item, holders)) in found)
             {
@@ -469,22 +571,24 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
                     continue;
                 }
 
-                var choice = new ErdTableChoice(table, item, holders)
-                {
-                    IsChosen = !table.IsIntersect && !unticked.Contains(table.LogicalName)
-                };
+                Tables.Add(new ErdTableChoice(table, item, holders) { IsChosen = before.GetValueOrDefault(table.LogicalName) });
+            }
+
+            var suggested = Suggested();
+            foreach (var choice in Tables)
+            {
+                if (!before.ContainsKey(choice.Table.LogicalName)) choice.IsChosen = suggested.Contains(choice.Table.LogicalName);
                 choice.PropertyChanged += TableChanged;
-                Tables.Add(choice);
             }
 
             TablesView.SortDescriptions.Clear();
             TablesView.SortDescriptions.Add(new SortDescription("Table.Label", ListSortDirection.Ascending));
 
-            _drawn = solutions;
             OnPropertyChanged(nameof(HasTables));
             OnPropertyChanged(nameof(TablesLabel));
             AllTablesCommand.RaiseCanExecuteChanged();
             NoTablesCommand.RaiseCanExecuteChanged();
+            SuggestedTablesCommand.RaiseCanExecuteChanged();
 
             await RelayoutAsync();
 
@@ -552,14 +656,18 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         var cts = _layoutCts = new CancellationTokenSource();
 
         var tables = Tables.Where(t => t.IsChosen).Select(t => t.Table).ToList();
-        var diagram = ErdBuilder.Build(tables, new ErdOptions(Columns, ShowOutsideTables, ShowSystemRelationships), _displayNames);
+        var diagram = ErdBuilder.Build(tables, Options(), _displayNames);
         var (title, caption) = Heading(diagram);
         var measure = Measure;
 
-        var placed = await Task.Run(() => ErdLayout.Arrange(diagram, measure, title, caption, cts.Token), cts.Token);
+        var style = Layout;
+        var placed = await Task.Run(() => ErdLayout.Arrange(diagram, measure, title, caption, cts.Token, style), cts.Token);
         cts.Token.ThrowIfCancellationRequested();
 
         _diagram = diagram;
+        _mermaid = Columns == ErdColumnDetail.Drawn
+            ? ErdBuilder.Build(tables, Options() with { Columns = ErdColumnDetail.Keys }, _displayNames)
+            : diagram;
         Placed = placed;
         Image = HasDiagram ? Render(placed) : null;
     }
@@ -602,7 +710,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         ? $"{DocPage.Slug(_drawn[0].UniqueName)}-erd"
         : $"{DocPage.Slug(_session.Title)}-erd-{DateTime.Now:yyyy-MM-dd}";
 
-    private string Mermaid() => ErdMermaidWriter.ToMermaid(_diagram!, Placed?.Title);
+    private string Mermaid() => ErdMermaidWriter.ToMermaid(_mermaid ?? _diagram!, Placed?.Title);
 
     private void CopyMermaid()
     {

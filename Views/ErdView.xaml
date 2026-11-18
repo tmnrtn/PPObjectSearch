@@ -117,6 +117,9 @@
                     <DockPanel Grid.Row="1" Visibility="{Binding HasTables, Converter={StaticResource BoolToVis}}">
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Style="{StaticResource LinkButton}" Content="Suggested" Height="22" Margin="0,0,10,0"
+                                        Command="{Binding SuggestedTablesCommand}"
+                                        ToolTip="The solutions' own tables, the out-of-box tables they add columns to, and the tables their own lookups point at" />
                                 <Button Style="{StaticResource LinkButton}" Content="All" Height="22"
                                         Command="{Binding AllTablesCommand}" ToolTip="Tick every table listed" />
                                 <Button Style="{StaticResource LinkButton}" Content="None" Height="22" Margin="10,0,0,0"
@@ -129,13 +132,23 @@
                                  AutomationProperties.Name="Filter tables"
                                  Text="{Binding TableFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                         <ListBox ItemsSource="{Binding TablesView}" MinHeight="80"
+                                 ToolTip="Right-click a table to draw only it and the tables related to it"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  VirtualizingPanel.IsVirtualizing="True"
                                  AutomationProperties.Name="Tables to draw">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
+                                    <!-- The screen's view model rides in Tag for the menu, which is outside the visual tree. -->
                                     <CheckBox IsChecked="{Binding IsChosen}" Margin="0,3"
-                                              AutomationProperties.Name="{Binding Table.Label}">
+                                              AutomationProperties.Name="{Binding Table.Label}"
+                                              Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}">
+                                        <CheckBox.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Draw only this table and the tables related to it"
+                                                          Command="{Binding PlacementTarget.Tag.NeighboursCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding}" />
+                                            </ContextMenu>
+                                        </CheckBox.ContextMenu>
                                         <StackPanel>
                                             <TextBlock Text="{Binding Table.Label}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource Muted}"
@@ -149,13 +162,23 @@
 
                     <StackPanel Grid.Row="2" Margin="0,14,0,0">
                         <TextBlock Text="Show" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
+                        <ComboBox Height="30" Margin="0,0,0,6" ItemsSource="{Binding LayoutChoices}" DisplayMemberPath="Label"
+                                  SelectedValuePath="Value" SelectedValue="{Binding Layout}"
+                                  AutomationProperties.Name="Layout"
+                                  ToolTip="Grouped keeps a large diagram about as tall as it is wide; layers grow as wide as their widest" />
                         <ComboBox Height="30" ItemsSource="{Binding ColumnChoices}" DisplayMemberPath="Label"
                                   SelectedValuePath="Value" SelectedValue="{Binding Columns}"
                                   AutomationProperties.Name="Columns listed in each table" />
-                        <CheckBox Content="Tables outside the solutions that they look up" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
+                        <CheckBox Content="Tables outside the solutions that their lookups point at" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
                                   ToolTip="Drawn dashed, by name only - account, contact or another solution's table" />
-                        <CheckBox Content="Owner, created by and other system lookups" IsChecked="{Binding ShowSystemRelationships}" Margin="0,6,0,0"
-                                  ToolTip="Owner, owning user, team and business unit, created and modified by, organization, currency, process and stage, SLA - the lookups every table has" />
+                        <CheckBox Content="Tables with no relationships" IsChecked="{Binding ShowStandalone}" Margin="0,6,0,0"
+                                  ToolTip="Ticked tables with no line to another - a process flow's table, an activity held for a form. Drawn anyway when no table has a line" />
+                        <CheckBox Content="Reference tables - types, codes, statuses" IsChecked="{Binding ShowReferenceTables}" Margin="0,6,0,0"
+                                  ToolTip="Tables other tables look up that look up nothing themselves. Left out, a lookup to one is still listed in its table, naming it, without a line" />
+                        <CheckBox Content="Users, teams and business units" IsChecked="{Binding ShowPeople}" Margin="0,6,0,0"
+                                  ToolTip="Nearly every table looks them up. Left out, a lookup to one is still listed in its table, naming it, without a line" />
+                        <CheckBox Content="The platform's own relationships" IsChecked="{Binding ShowSystemRelationships}" Margin="0,6,0,0"
+                                  ToolTip="Relationships the solutions' publishers did not make: owner, created by, regarding, an account's parent, a contact's merged-into, and those Microsoft's apps add (msdyn_, msa_, adx_)" />
                     </StackPanel>
                 </Grid>
 

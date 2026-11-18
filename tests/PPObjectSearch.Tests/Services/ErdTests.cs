@@ -34,13 +34,18 @@ public class ErdTests
             [new("ect_case_contact_watchers", "ect_case", "contact", "ect_case_contact_watchers")])
     ];
 
-    private static ErdDiagram Build(ErdOptions? options = null) =>
-        ErdBuilder.Build(Tables(), options ?? new ErdOptions(), new Dictionary<string, string?> { ["account"] = "Account" });
+    /// <summary>The shared tables, drawn for the ect publisher - with reference tables, as contact is one here.</summary>
+    private static ErdDiagram Build(ErdOptions? options = null)
+    {
+        var shaped = options ?? new ErdOptions();
+        shaped = shaped with { Prefixes = shaped.Prefixes ?? ["ect"], ShowReferenceTables = true };
+        return ErdBuilder.Build(Tables(), shaped, new Dictionary<string, string?> { ["account"] = "Account" });
+    }
 
     // ---- builder ----
 
     [Fact]
-    public void Lookups_between_the_tables_and_to_tables_outside_are_drawn_from_their_one_end()
+    public void The_solutions_own_lookups_are_drawn_from_their_one_end()
     {
         var diagram = Build();
 
@@ -49,8 +54,7 @@ public class ErdTests
 
         var lookups = diagram.Links.Where(l => !l.IsManyToMany).Select(l => $"{l.One}<-{l.Many}.{l.Label}").ToList();
         Assert.Equal(
-            ["account<-contact.parentcustomerid", "account<-ect_case.ect_accountid", "contact<-contact.parentcustomerid",
-             "contact<-ect_case.ect_contactid", "ect_case<-ect_case.ect_parentcaseid"],
+            ["account<-ect_case.ect_accountid", "contact<-ect_case.ect_contactid", "ect_case<-ect_case.ect_parentcaseid"],
             lookups.Order(StringComparer.Ordinal));
     }
 
@@ -65,24 +69,52 @@ public class ErdTests
     }
 
     [Fact]
-    public void System_lookups_are_left_out_unless_asked_for()
+    public void The_platforms_lookups_are_left_out_unless_asked_for()
     {
-        Assert.DoesNotContain(Build().Boxes, b => b.LogicalName == "systemuser");
+        var diagram = Build();
+        Assert.DoesNotContain(diagram.Links, l => l.Label is "parentcustomerid" or "ownerid" or "createdby");
+        Assert.DoesNotContain(diagram.Boxes.Single(b => b.LogicalName == "ect_case").Rows, r => r.Name == "ownerid");
 
-        var diagram = Build(new ErdOptions(ShowSystemRelationships: true));
+        var platform = Build(new ErdOptions(ErdColumnDetail.Keys, ShowSystemRelationships: true));
+        Assert.Equal(["account", "contact"], platform.Links.Where(l => l.Label == "parentcustomerid").Select(l => l.One).Order(StringComparer.Ordinal));
+        // Users and teams are still left out: the owner lookup is listed, naming them, without a line.
+        Assert.DoesNotContain(platform.Boxes, b => b.LogicalName is "systemuser" or "team");
+        Assert.Equal("systemuser, team", platform.Boxes.Single(b => b.LogicalName == "ect_case").Rows.Single(r => r.Name == "ownerid").References);
 
-        Assert.Contains(diagram.Boxes, b => b.LogicalName == "systemuser" && b.IsOutside);
-        Assert.Contains(diagram.Boxes, b => b.LogicalName == "team");
-        Assert.Equal(2, diagram.Links.Count(l => l.Label == "ownerid"));
+        var people = Build(new ErdOptions(ShowSystemRelationships: true, ShowPeople: true));
+        Assert.Contains(people.Boxes, b => b.LogicalName == "systemuser" && b.IsOutside);
+        Assert.Contains(people.Boxes, b => b.LogicalName == "team");
+        Assert.Equal(2, people.Links.Count(l => l.Label == "ownerid"));
     }
 
     [Fact]
-    public void Without_outside_tables_only_lines_between_the_chosen_tables_are_drawn()
+    public void A_lookup_to_a_user_team_or_business_unit_is_listed_without_a_line()
     {
-        var diagram = Build(new ErdOptions(ShowOutsideTables: false));
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("ect_case", "Case", [Id("ect_caseid"), Lookup("ect_approver")], [new("ect_case_approver", "ect_approver", "systemuser")], [], IsCustom: true),
+            new("systemuser", "User", [Id("systemuserid"), Lookup("ect_caseid")], [new("ect_user_case", "ect_caseid", "ect_case")], [])
+        ];
+
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(ErdColumnDetail.Keys, Prefixes: ["ect"], ShowReferenceTables: true));
+
+        Assert.Equal(["ect_case"], diagram.Boxes.Select(b => b.LogicalName));
+        Assert.Empty(diagram.Links);
+        var row = diagram.Boxes[0].Rows.Single(r => r.Name == "ect_approver");
+        Assert.Equal(("FK", "systemuser"), (row.Marker, row.References));
+
+        var people = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true, ShowPeople: true));
+        Assert.Equal(2, people.Links.Count);
+    }
+
+    [Fact]
+    public void Without_outside_tables_a_lookup_to_one_is_listed_without_a_line()
+    {
+        var diagram = Build(new ErdOptions(ErdColumnDetail.Keys, ShowOutsideTables: false));
 
         Assert.Equal(["ect_case", "contact"], diagram.Boxes.Select(b => b.LogicalName));
         Assert.DoesNotContain(diagram.Links, l => l.One == "account");
+        Assert.Equal("account", diagram.Boxes[0].Rows.Single(r => r.Name == "ect_accountid").References);
     }
 
     [Fact]
@@ -95,7 +127,7 @@ public class ErdTests
     }
 
     [Fact]
-    public void Keys_list_the_primary_key_the_primary_name_and_the_lookups_drawn()
+    public void Keys_list_the_primary_key_the_primary_name_and_the_lookups()
     {
         var rows = Build().Boxes.Single(b => b.LogicalName == "ect_case").Rows;
 
@@ -109,9 +141,155 @@ public class ErdTests
     [Fact]
     public void A_lookup_reaching_two_tables_names_both()
     {
-        var row = Build().Boxes.Single(b => b.LogicalName == "contact").Rows.Single(r => r.Name == "parentcustomerid");
+        var row = Build(new ErdOptions(ShowSystemRelationships: true)).Boxes.Single(b => b.LogicalName == "contact").Rows.Single(r => r.Name == "parentcustomerid");
 
         Assert.Equal("account, contact", row.References);
+    }
+
+    [Fact]
+    public void Microsofts_columns_are_not_the_solutions_own_though_dataverse_calls_them_custom()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("account", "Account", [Id("accountid"), Lookup("msdyn_segmentid"), Lookup("ect_tierid")],
+                [new("msdyn_segment_account", "msdyn_segmentid", "msdyn_segment"), new("ect_tier_account", "ect_tierid", "ect_tier")],
+                [new("msdyn_warranty_account", "msdyn_warranty", "account", null), new("ect_account_region", "account", "ect_region", null)])
+        ];
+
+        var own = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true));
+        Assert.Equal(["ect_account_region", "ect_tierid"], own.Links.Select(l => l.Label).Order(StringComparer.Ordinal));
+
+        // With no prefix known, custom stands in for own - and Microsoft's columns count.
+        Assert.Equal(4, ErdBuilder.Build(tables, new ErdOptions(ShowReferenceTables: true)).Links.Count);
+    }
+
+    [Fact]
+    public void An_out_of_box_lookup_to_almost_any_table_is_the_platforms_own()
+    {
+        var targets = new[] { "ect_case", "ect_hearing", "ect_court", "ect_offence" };
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("task", "Task", [Id("activityid"), Lookup("regardingobjectid", custom: false), Lookup("ect_subjectid")],
+                [.. targets.Select(t => new ErdLookup("task_" + t, "regardingobjectid", t)), .. targets.Select(t => new ErdLookup("ect_task_" + t, "ect_subjectid", t))], []),
+            .. targets.Select(t => new ErdTable(t, t, [Id(t + "id")], [], [], IsCustom: true))
+        ];
+
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true));
+
+        Assert.DoesNotContain(diagram.Links, l => l.Label == "regardingobjectid");
+        Assert.Equal(4, diagram.Links.Count(l => l.Label == "ect_subjectid"));
+        Assert.Equal(8, ErdBuilder.Build(tables, new ErdOptions(ShowSystemRelationships: true, ShowReferenceTables: true)).Links.Count);
+    }
+
+    [Fact]
+    public void A_reference_table_is_listed_in_the_tables_that_look_it_up_rather_than_drawn()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("ect_case", "Case", [Id("ect_caseid"), Lookup("ect_casetypeid"), Lookup("ect_vehicleid")],
+                [new("ect_casetype_case", "ect_casetypeid", "ect_casetype"), new("ect_vehicle_case", "ect_vehicleid", "ect_vehicle")], [], IsCustom: true),
+            new("ect_casetype", "Case Type", [Id("ect_casetypeid"), Lookup("ect_parenttypeid")], [new("ect_casetype_parent", "ect_parenttypeid", "ect_casetype")], [], IsCustom: true),
+            new("ect_vehicle", "Vehicle", [Id("ect_vehicleid"), Lookup("ect_makeid")], [new("ect_make_vehicle", "ect_makeid", "ect_make")], [], IsCustom: true),
+            new("ect_make", "Make", [Id("ect_makeid")], [], [], IsCustom: true)
+        ];
+
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(ErdColumnDetail.Keys, Prefixes: ["ect"]));
+
+        // Case type looks up only itself and make nothing; vehicle looks up make, so it stays.
+        Assert.Equal(["ect_case", "ect_vehicle"], diagram.Boxes.Select(b => b.LogicalName));
+        Assert.Equal(["ect_vehicleid"], diagram.Links.Select(l => l.Label));
+        Assert.Equal("ect_casetype", diagram.Boxes[0].Rows.Single(r => r.Name == "ect_casetypeid").References);
+        Assert.Equal("ect_make", diagram.Boxes[1].Rows.Single(r => r.Name == "ect_makeid").References);
+
+        Assert.Equal(4, ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true)).Boxes.Count);
+    }
+
+    [Fact]
+    public void The_default_rows_are_the_keys_and_the_lookups_drawn()
+    {
+        // Without outside tables, the lookup to account has no line, so it is not listed.
+        var rows = Build(new ErdOptions(ShowOutsideTables: false)).Boxes.Single(b => b.LogicalName == "ect_case").Rows;
+
+        Assert.Equal(["ect_caseid", "ect_name", "ect_contactid", "ect_parentcaseid"], rows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void A_table_with_no_line_to_another_is_left_out_unless_asked_for()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("ect_case", "Case", [Id("ect_caseid"), Lookup("ect_contactid")], [new("a", "ect_contactid", "ect_contact")], [], IsCustom: true),
+            new("ect_contact", "Contact", [Id("ect_contactid")], [], [], IsCustom: true),
+            new("ect_flow", "Flow", [Id("ect_flowid"), Lookup("ect_parentid")], [new("b", "ect_parentid", "ect_flow")], [], IsCustom: true),
+            new("appointment", "Appointment", [Id("activityid")], [], [])
+        ];
+        var options = new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true);
+
+        // A table looking up only itself has no line to another.
+        Assert.Equal(["ect_case", "ect_contact"], ErdBuilder.Build(tables, options).Boxes.Select(b => b.LogicalName));
+        Assert.Equal(4, ErdBuilder.Build(tables, options with { ShowStandalone = true }).Boxes.Count);
+        // With no line anywhere, the tables are all there is to draw.
+        Assert.Equal(2, ErdBuilder.Build(tables.Skip(2).ToList(), options).Boxes.Count);
+    }
+
+    [Fact]
+    public void A_platform_many_to_many_to_a_table_outside_is_left_out()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("contact", "Contact", [Id("contactid")], [],
+                [new("adx_invitation_invitecontacts", "adx_invitation", "contact", null),
+                 new("ect_contact_region", "contact", "ect_region", null)])
+        ];
+
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"]));
+
+        Assert.Equal(["ect_contact_region"], diagram.Links.Select(l => l.Label));
+        Assert.Equal(2, ErdBuilder.Build(tables, new ErdOptions(ShowSystemRelationships: true, Prefixes: ["ect"])).Links.Count);
+    }
+
+    // ---- suggested tables and neighbours ----
+
+    private static IReadOnlyList<ErdTable> Solution() =>
+    [
+        new("ect_case", "Case", [Id("ect_caseid"), Lookup("ect_contactid")], [new("ect_contact_case", "ect_contactid", "contact")], [], IsCustom: true),
+        new("contact", "Contact", [Id("contactid"), Lookup("parentcustomerid", custom: false)], [new("contact_account", "parentcustomerid", "account")], []),
+        new("account", "Account", [Id("accountid"), new("ect_tier", "Tier", "Picklist", IsCustom: true)], [], []),
+        new("audit", "Audit", [Id("auditid"), new("msdyn_flag", "Flag", "Boolean", IsCustom: true)], [], []),
+        new("appointment", "Appointment", [Id("activityid")], [], []),
+        new("ect_case_contact", null, [Id("ect_case_contactid")], [], [], IsCustom: true, IsIntersect: true),
+        new("msdyn_widget", "Widget", [Id("msdyn_widgetid")], [], [], IsCustom: true)
+    ];
+
+    [Fact]
+    public void Suggested_tables_are_the_solutions_own_those_they_extend_and_those_their_lookups_reach()
+    {
+        var suggested = ErdBuilder.Suggested(Solution(), ["ect"]);
+
+        // ect_case its own; account extended with ect_tier; contact looked up by ect_contactid.
+        // Audit's column is another publisher's; appointment is held for a form; the intersect table is a line.
+        Assert.Equal(["account", "contact", "ect_case"], suggested.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Without_a_publisher_prefix_custom_tables_and_columns_stand_in()
+    {
+        var suggested = ErdBuilder.Suggested(Solution(), []);
+
+        Assert.Equal(["account", "audit", "contact", "ect_case", "msdyn_widget"], suggested.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_tables_neighbours_are_joined_to_it_either_way()
+    {
+        var options = new ErdOptions(Prefixes: ["ect"]);
+
+        // Contact is only looked up, but a neighbourhood draws it all the same.
+        Assert.Equal(["contact", "ect_case"], ErdBuilder.Neighbours("ect_case", Solution(), options).Order(StringComparer.Ordinal));
+        Assert.Equal(["contact", "ect_case"], ErdBuilder.Neighbours("contact", Solution(), options).Order(StringComparer.Ordinal));
+        Assert.Equal(["account", "contact", "ect_case"],
+            ErdBuilder.Neighbours("contact", Solution(), options with { ShowSystemRelationships = true }).Order(StringComparer.Ordinal));
+        Assert.Equal(["appointment"], ErdBuilder.Neighbours("appointment", Solution(), options));
     }
 
     [Theory]
@@ -179,10 +357,12 @@ public class ErdTests
 
     // ---- layout ----
 
-    [Fact]
-    public void Layout_places_every_box_without_overlap_inside_the_diagram()
+    [Theory]
+    [InlineData(ErdLayoutStyle.Grouped)]
+    [InlineData(ErdLayoutStyle.Layered)]
+    public void Layout_places_every_box_without_overlap_inside_the_diagram(ErdLayoutStyle style)
     {
-        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowSystemRelationships: true)), Measure, "Core", "ECT-Prod");
+        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowSystemRelationships: true, ShowPeople: true)), Measure, "Core", "ECT-Prod", style: style);
 
         Assert.Equal(5, placed.Boxes.Count);
         foreach (var box in placed.Boxes)
@@ -199,9 +379,9 @@ public class ErdTests
     }
 
     [Fact]
-    public void Layout_puts_a_table_looked_up_above_the_table_that_looks_it_up()
+    public void Layered_puts_a_table_looked_up_above_the_table_that_looks_it_up()
     {
-        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowOutsideTables: false)), Measure);
+        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowOutsideTables: false)), Measure, style: ErdLayoutStyle.Layered);
 
         var contact = placed.Boxes.Single(b => b.Box.LogicalName == "contact");
         var @case = placed.Boxes.Single(b => b.Box.LogicalName == "ect_case");
@@ -211,7 +391,7 @@ public class ErdTests
     [Fact]
     public void Each_line_runs_from_its_one_end_to_its_many_end_with_its_marks()
     {
-        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowOutsideTables: false)), Measure);
+        var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowOutsideTables: false)), Measure, style: ErdLayoutStyle.Layered);
 
         var link = placed.Links.Single(l => l.Link.Label == "ect_contactid");
         var contact = placed.Boxes.Single(b => b.Box.LogicalName == "contact");
@@ -231,6 +411,69 @@ public class ErdTests
         var placed = ErdLayout.Arrange(Build(new ErdOptions(ShowOutsideTables: false)), Measure);
 
         Assert.NotEmpty(placed.Links.Single(l => l.Link.Label == "ect_parentcaseid").Path);
+    }
+
+    [Fact]
+    public void Lookups_from_one_table_to_another_are_drawn_as_one_line()
+    {
+        IReadOnlyList<ErdTable> tables =
+        [
+            new("ect_mivr", "Visit", [Id("ect_mivrid"), Lookup("ect_tyres", required: true), Lookup("ect_brakes"), Lookup("ect_lights")],
+                [new("a", "ect_tyres", "ect_scoredresponse"), new("b", "ect_brakes", "ect_scoredresponse"), new("c", "ect_lights", "ect_scoredresponse")], [], IsCustom: true),
+            new("ect_scoredresponse", "Response", [Id("ect_scoredresponseid")], [], [], IsCustom: true)
+        ];
+        var diagram = ErdBuilder.Build(tables, new ErdOptions(Prefixes: ["ect"], ShowReferenceTables: true));
+
+        var line = Assert.Single(ErdLayout.Arrange(diagram, Measure).Links);
+
+        Assert.Equal(3, line.Merged.Count);
+        Assert.Equal("ect_brakes, ect_lights, ect_tyres", line.Link.Label);
+        // One of them is optional, so the line says zero or one.
+        Assert.Equal(ErdCardinality.ZeroOrOne, line.Link.OneEnd);
+        Assert.Equal("ect_mivr looks up ect_scoredresponse in 3 columns: ect_brakes, ect_lights, ect_tyres", ErdSvgWriter.Describe(line));
+        // Each is still listed in the box, and in the Mermaid.
+        Assert.Equal(3, diagram.Boxes.Single(b => b.LogicalName == "ect_mivr").Rows.Count(r => r.IsForeignKey));
+        Assert.Equal(3, ErdMermaidWriter.ToMermaid(diagram).Split('\n').Count(l => l.Contains("--o{")));
+    }
+
+    /// <summary>Thirty tables: a hub, ten tables looking it up, each looked up by two more of its own.</summary>
+    private static ErdDiagram Large()
+    {
+        var boxes = new List<ErdBox> { new("hub", "Hub", null, [], false) };
+        var links = new List<ErdLink>();
+        for (var i = 0; i < 10; i++)
+        {
+            boxes.Add(new ErdBox($"t{i}", $"Table {i}", null, [], false));
+            links.Add(new ErdLink("hub", $"t{i}", ErdCardinality.ZeroOrOne, ErdCardinality.ZeroOrMany, "hubid", false));
+            for (var j = 0; j < 2; j++)
+            {
+                boxes.Add(new ErdBox($"t{i}_{j}", $"Table {i}.{j}", null, [], false));
+                links.Add(new ErdLink($"t{i}", $"t{i}_{j}", ErdCardinality.ZeroOrOne, ErdCardinality.ZeroOrMany, "parentid", false));
+            }
+        }
+
+        return new ErdDiagram(boxes, links);
+    }
+
+    [Fact]
+    public void Grouped_places_a_large_diagram_the_same_every_time_and_squarer_than_layers()
+    {
+        var grouped = ErdLayout.Arrange(Large(), Measure);
+        var again = ErdLayout.Arrange(Large(), Measure);
+        var layered = ErdLayout.Arrange(Large(), Measure, style: ErdLayoutStyle.Layered);
+
+        Assert.Equal(grouped.Boxes.Select(b => (b.X, b.Y)), again.Boxes.Select(b => (b.X, b.Y)));
+        Assert.True(grouped.Width / grouped.Height < layered.Width / layered.Height,
+            $"grouped {grouped.Width:0}x{grouped.Height:0}, layered {layered.Width:0}x{layered.Height:0}");
+    }
+
+    [Fact]
+    public void Grouped_lays_a_few_tables_out_in_layers()
+    {
+        var diagram = Build(new ErdOptions(ShowOutsideTables: false));
+
+        Assert.Equal(ErdLayout.Arrange(diagram, Measure, style: ErdLayoutStyle.Layered).Boxes.Select(b => (b.X, b.Y)),
+            ErdLayout.Arrange(diagram, Measure).Boxes.Select(b => (b.X, b.Y)));
     }
 
     [Fact]
@@ -295,11 +538,11 @@ public class ErdTests
 
         try
         {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            var invariant = ErdSvgWriter.ToSvg(placed);
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
-            var svg = ErdSvgWriter.ToSvg(placed);
 
-            Assert.DoesNotMatch("[0-9],[0-9]+\"", svg.Replace("\" ", "\""));
-            XDocument.Parse(svg);
+            Assert.Equal(invariant, ErdSvgWriter.ToSvg(placed));
         }
         finally
         {
