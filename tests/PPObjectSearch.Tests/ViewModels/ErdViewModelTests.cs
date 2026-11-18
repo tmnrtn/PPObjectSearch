@@ -10,7 +10,11 @@ using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Tests.ViewModels;
 
-/// <summary>The entity relationship diagram screen: reading the solutions' tables, shaping the diagram, and saving it.</summary>
+/// <summary>
+/// The entity relationship diagram screen: reading the solutions' tables, shaping the diagram, and
+/// saving it. Laying out hops to the thread pool, so a test that draws runs on one thread, as the
+/// app does - the table list's view refuses changes from any other.
+/// </summary>
 public sealed class ErdViewModelTests : IDisposable
 {
     private static readonly Guid CaseId = Guid.Parse("aaaaaaaa-2222-0000-0000-000000000001");
@@ -73,7 +77,7 @@ public sealed class ErdViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Draw_reads_the_solutions_tables_and_lays_them_out()
+    public void Draw_reads_the_solutions_tables_and_lays_them_out() => AdminUiThread.Run(async () =>
     {
         var erd = Erd(Handler());
 
@@ -88,10 +92,10 @@ public sealed class ErdViewModelTests : IDisposable
         Assert.Equal(["Case", "Contact"], erd.Placed!.Boxes.Select(b => b.Box.Title).Order());
         Assert.Contains("1 table(s) and 2 relationship(s), with 1 table(s) outside the solutions.", erd.Status);
         Assert.Equal("Case Management", erd.Placed.Title);
-    }
+    });
 
     [Fact]
-    public async Task Changing_what_is_shown_lays_the_diagram_out_again_without_reading()
+    public void Changing_what_is_shown_lays_the_diagram_out_again_without_reading() => AdminUiThread.Run(async () =>
     {
         var handler = Handler();
         var erd = Erd(handler);
@@ -103,10 +107,10 @@ public sealed class ErdViewModelTests : IDisposable
 
         Assert.Equal(["ect_case"], erd.Placed!.Boxes.Select(b => b.Box.LogicalName));
         Assert.Equal(requests, handler.Requests.Count);
-    }
+    });
 
     [Fact]
-    public async Task Drawing_again_reads_no_table_twice_and_keeps_a_table_unticked()
+    public void Drawing_again_reads_no_table_twice_and_keeps_a_table_unticked() => AdminUiThread.Run(async () =>
     {
         var handler = Handler();
         var erd = Erd(handler);
@@ -119,10 +123,10 @@ public sealed class ErdViewModelTests : IDisposable
         Assert.False(erd.Tables[0].IsChosen);
         Assert.False(erd.HasDiagram);
         Assert.Equal("No tables ticked", erd.EmptyHeading);
-    }
+    });
 
     [Fact]
-    public async Task Saving_as_svg_writes_the_diagram_under_the_solutions_name()
+    public void Saving_as_svg_writes_the_diagram_under_the_solutions_name() => AdminUiThread.Run(async () =>
     {
         var path = Path.Combine(_folder, "diagram.svg");
         var erd = Erd(Handler(), path);
@@ -133,10 +137,10 @@ public sealed class ErdViewModelTests : IDisposable
         Assert.Equal(["ect_cases-erd.svg"], _suggested);
         Assert.StartsWith("<svg", File.ReadAllText(path));
         Assert.Equal($"Saved {path}.", erd.Status);
-    }
+    });
 
     [Fact]
-    public async Task Saving_as_markdown_fences_the_mermaid()
+    public void Saving_as_markdown_fences_the_mermaid() => AdminUiThread.Run(async () =>
     {
         var path = Path.Combine(_folder, "diagram.md");
         var erd = Erd(Handler(), path);
@@ -148,10 +152,10 @@ public sealed class ErdViewModelTests : IDisposable
         Assert.StartsWith("```mermaid\n%% Case Management - drawn by PPObjectSearch", text.ReplaceLineEndings("\n"));
         Assert.Contains("contact ||--o{ ect_case : \"ect_contactid\"", text);
         Assert.EndsWith("```\n", text.ReplaceLineEndings("\n"));
-    }
+    });
 
     [Fact]
-    public async Task Saving_as_mermaid_writes_the_diagram_alone()
+    public void Saving_as_mermaid_writes_the_diagram_alone() => AdminUiThread.Run(async () =>
     {
         var path = Path.Combine(_folder, "diagram.mmd");
         var erd = Erd(Handler(), path);
@@ -160,10 +164,10 @@ public sealed class ErdViewModelTests : IDisposable
         erd.SaveMermaidCommand.Execute(null);
 
         Assert.StartsWith("%% Case Management", File.ReadAllText(path));
-    }
+    });
 
     [Fact]
-    public async Task A_cancelled_save_writes_nothing()
+    public void A_cancelled_save_writes_nothing() => AdminUiThread.Run(async () =>
     {
         var erd = Erd(Handler(), target: null);
         await erd.DrawCommand.ExecuteAsync(null);
@@ -173,10 +177,10 @@ public sealed class ErdViewModelTests : IDisposable
 
         Assert.Equal(status, erd.Status);
         Assert.Empty(Directory.GetFiles(_folder));
-    }
+    });
 
     [Fact]
-    public async Task A_failed_read_says_so()
+    public void A_failed_read_says_so() => AdminUiThread.Run(async () =>
     {
         var handler = new FakeHttpHandler()
             .OnError(HttpMethod.Get, "msdyn_solutioncomponentsummaries", HttpStatusCode.Forbidden, "no access");
@@ -186,10 +190,10 @@ public sealed class ErdViewModelTests : IDisposable
 
         Assert.StartsWith("Could not read the tables - ", erd.Status);
         Assert.False(erd.IsBusy);
-    }
+    });
 
     [Fact]
-    public async Task Double_clicking_a_table_outside_the_solutions_says_so()
+    public void Double_clicking_a_table_outside_the_solutions_says_so() => AdminUiThread.Run(async () =>
     {
         var erd = Erd(Handler());
         await erd.DrawCommand.ExecuteAsync(null);
@@ -198,7 +202,7 @@ public sealed class ErdViewModelTests : IDisposable
         erd.OpenTableAt(contact.X + 5, contact.Y + 5);
 
         Assert.Equal("contact is outside the solutions drawn.", erd.Status);
-    }
+    });
 
     [Fact]
     public void Zoom_stays_within_its_limits()
