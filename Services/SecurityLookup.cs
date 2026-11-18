@@ -2,13 +2,79 @@ using PPObjectSearch.Models;
 
 namespace PPObjectSearch.Services;
 
-/// <summary>One cell of an effective matrix: the widest depth, and the roles that grant it.</summary>
-public sealed record EffectiveCell(PrivilegeDepth Depth, IReadOnlyList<string> GrantedBy)
+/// <summary>
+/// A role as it reaches a user: its name, the business unit of the copy assigned - where a
+/// Business unit or Parent depth reaches from - and the team it comes through, if any.
+/// </summary>
+public sealed record EffectiveGrant(string Role, string? BusinessUnit, string? Team)
 {
-    public static readonly EffectiveCell None = new(PrivilegeDepth.None, Array.Empty<string>());
+    /// <summary>"Salesperson", or "Sales Manager via team EMEA" - as Who can words a path.</summary>
+    public string Label => Team is null ? Role : $"{Role} via team {Team}";
+}
+
+/// <summary>
+/// One cell of an effective matrix: the widest depth, and the roles that grant it. A Business
+/// unit or Parent depth reaches from the unit each granting role is held in, so roles held in
+/// two units grant it in both.
+/// </summary>
+public sealed record EffectiveCell(PrivilegeDepth Depth, IReadOnlyList<EffectiveGrant> Grants)
+{
+    public static readonly EffectiveCell None = new(PrivilegeDepth.None, Array.Empty<EffectiveGrant>());
 
     public string Label => Depth == PrivilegeDepth.None ? string.Empty : PrivilegeMatrix.DepthLabel(Depth);
+
+    /// <summary>The depth is bounded by a business unit - Business unit or Parent; User and Organization are not.</summary>
+    private bool InUnits => Depth is PrivilegeDepth.BusinessUnit or PrivilegeDepth.ParentChild;
+
+    /// <summary>The business units a Business unit or Parent depth covers, as first granted; none for any other depth.</summary>
+    public IReadOnlyList<string> BusinessUnits => InUnits
+        ? Grants.Select(g => g.BusinessUnit).OfType<string>().Where(u => u.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        : Array.Empty<string>();
+
+    /// <summary>The roles granting the depth, each once - with the unit it is held in where the depth reaches from it.</summary>
+    public IReadOnlyList<string> GrantedBy => Grants
+        .Select(g => InUnits && !string.IsNullOrWhiteSpace(g.BusinessUnit) ? $"{g.Label} in {g.BusinessUnit}" : g.Label)
+        .Distinct()
+        .ToList();
+
     public string GrantedByLabel => string.Join(", ", GrantedBy);
+
+    /// <summary>The depth, and for Business unit or Parent the units it reaches from: "Business unit (North; South)".</summary>
+    public string ExportLabel => BusinessUnits.Count == 0 ? Label : $"{Label} ({string.Join("; ", BusinessUnits)})";
+
+    /// <summary>
+    /// Whose records the depth covers: "records in each of Probation North and Sales", "records
+    /// owned by them or team EMEA" - User depth through a team covers what the team owns.
+    /// </summary>
+    public string Reach
+    {
+        get
+        {
+            var units = SecurityLookup.Listed(BusinessUnits);
+            var owners = Grants.Where(g => g.Team is null).Select(_ => "them")
+                .Concat(Grants.Select(g => g.Team).OfType<string>().Select(t => $"team {t}"))
+                .Distinct().ToList();
+
+            return Depth switch
+            {
+                PrivilegeDepth.User => "records owned by " + SecurityLookup.Listed(owners, "or"),
+                PrivilegeDepth.BusinessUnit when BusinessUnits.Count == 0 => "records in their business unit",
+                PrivilegeDepth.BusinessUnit when BusinessUnits.Count == 1 => $"records in {units}",
+                PrivilegeDepth.BusinessUnit => $"records in each of {units}",
+                PrivilegeDepth.ParentChild when BusinessUnits.Count == 0 => "records in their business unit and the units beneath it",
+                PrivilegeDepth.ParentChild when BusinessUnits.Count == 1 => $"records in {units} and the units beneath it",
+                PrivilegeDepth.ParentChild => $"records in each of {units} and the units beneath them",
+                PrivilegeDepth.Organization => "every record in the organization",
+                _ => string.Empty
+            };
+        }
+    }
+
+    /// <summary>The cell's hover: the depth and what it reaches, then a line per role granting it. None for an empty cell.</summary>
+    public string? ToolTip => Depth == PrivilegeDepth.None
+        ? null
+        : string.Join(Environment.NewLine, GrantedBy.Prepend($"{Label} - {Reach}"));
 }
 
 /// <summary>One table of a user's effective privileges.</summary>
@@ -44,6 +110,23 @@ public sealed record AccessHolder(string Name, string Kind, PrivilegeDepth Depth
     public string Via => string.Join("; ", Paths);
 }
 
+/// <summary>A business unit a user holds roles in: their own or not, directly, and through which teams.</summary>
+public sealed record RoleUnit(string Name, bool IsOwn, bool Direct, IReadOnlyList<string> Teams)
+{
+    /// <summary>"Sales (their own)", "EMEA (direct)", "Probation North (team Probation North)", "Sales (their own; teams A and B)".</summary>
+    public string Label
+    {
+        get
+        {
+            var how = new List<string>();
+            if (IsOwn) how.Add("their own");
+            else if (Direct) how.Add("direct");
+            if (Teams.Count > 0) how.Add((Teams.Count == 1 ? "team " : "teams ") + SecurityLookup.Listed(Teams));
+            return $"{Name} ({string.Join("; ", how)})";
+        }
+    }
+}
+
 /// <summary>A role holder as the lookup needs it: who, and through which team if any.</summary>
 public sealed record HeldRole(string RoleName, PrivilegeDepth Depth, string Principal, bool IsTeam, string? BusinessUnit, string? ViaTeam);
 
@@ -54,13 +137,14 @@ public static class SecurityLookup
 
     /// <summary>
     /// A user's effective privileges: per table and action, the widest depth any of their roles
-    /// grants - directly or through a team - and which roles grant that depth.
+    /// grants - directly or through a team - and which roles, held in which business units, grant
+    /// that depth.
     /// </summary>
-    public static IReadOnlyList<EffectiveRow> Effective(IEnumerable<(string Role, IReadOnlyList<RolePrivilege> Privileges)> roles)
+    public static IReadOnlyList<EffectiveRow> Effective(IEnumerable<(EffectiveGrant Grant, IReadOnlyList<RolePrivilege> Privileges)> roles)
     {
-        var cells = new Dictionary<string, Dictionary<string, (PrivilegeDepth Depth, List<string> By)>>(StringComparer.OrdinalIgnoreCase);
+        var cells = new Dictionary<string, Dictionary<string, (PrivilegeDepth Depth, List<EffectiveGrant> By)>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (role, privileges) in roles)
+        foreach (var (grant, privileges) in roles)
         {
             foreach (var privilege in privileges)
             {
@@ -68,17 +152,17 @@ public static class SecurityLookup
 
                 if (!cells.TryGetValue(parsed.Table, out var actions))
                 {
-                    actions = new Dictionary<string, (PrivilegeDepth, List<string>)>(StringComparer.Ordinal);
+                    actions = new Dictionary<string, (PrivilegeDepth, List<EffectiveGrant>)>(StringComparer.Ordinal);
                     cells[parsed.Table] = actions;
                 }
 
                 if (!actions.TryGetValue(parsed.Action, out var cell) || privilege.Depth > cell.Depth)
                 {
-                    actions[parsed.Action] = (privilege.Depth, [role]);
+                    actions[parsed.Action] = (privilege.Depth, [grant]);
                 }
-                else if (privilege.Depth == cell.Depth && !cell.By.Contains(role))
+                else if (privilege.Depth == cell.Depth && !cell.By.Contains(grant))
                 {
-                    cell.By.Add(role);
+                    cell.By.Add(grant);
                 }
             }
         }
@@ -92,6 +176,59 @@ public static class SecurityLookup
             })
             .ToList();
     }
+
+    /// <summary>
+    /// The business units a user holds roles in, and how: their own unit first, then units they
+    /// hold roles in directly - modernized business units allow it - then the ones only teams
+    /// bring. A role with no unit read is left out.
+    /// </summary>
+    public static IReadOnlyList<RoleUnit> UnitsHeldIn(IEnumerable<EffectiveGrant> grants, string? ownUnit)
+    {
+        return grants
+            .Where(g => !string.IsNullOrWhiteSpace(g.BusinessUnit))
+            .GroupBy(g => g.BusinessUnit!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new RoleUnit(g.Key,
+                string.Equals(g.Key, ownUnit, StringComparison.OrdinalIgnoreCase),
+                g.Any(r => r.Team is null),
+                g.Select(r => r.Team).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
+            .OrderByDescending(u => u.IsOwn)
+            .ThenByDescending(u => u.Direct)
+            .ThenBy(u => u.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>How many units <see cref="HeldInLabel"/> names before it counts the rest.</summary>
+    private const int UnitsNamed = 3;
+
+    /// <summary>
+    /// "Roles held in Sales (their own) and Probation North (team Probation North)" - past four
+    /// units, the first three and a count. Empty for none.
+    /// </summary>
+    public static string HeldInLabel(IReadOnlyList<RoleUnit> units)
+    {
+        if (units.Count == 0) return string.Empty;
+
+        var labels = units.Select(u => u.Label).ToList();
+        if (labels.Count > UnitsNamed + 1)
+        {
+            labels = [.. labels.Take(UnitsNamed), $"{units.Count - UnitsNamed:N0} more"];
+        }
+        return "Roles held in " + Listed(labels);
+    }
+
+    /// <summary>Every unit, one a line, under what they mean - none for no units.</summary>
+    public static string? HeldInToolTip(IReadOnlyList<RoleUnit> units) => units.Count == 0
+        ? null
+        : string.Join(Environment.NewLine, units.Select(u => u.Label)
+            .Prepend("Business unit and Parent access reaches from each unit a role is held in:"));
+
+    /// <summary>"A", "A and B", "A, B and C" - or with "or".</summary>
+    public static string Listed(IReadOnlyList<string> items, string conjunction = "and") => items.Count switch
+    {
+        0 => string.Empty,
+        1 => items[0],
+        _ => $"{string.Join(", ", items.Take(items.Count - 1))} {conjunction} {items[^1]}"
+    };
 
     /// <summary>Every privilege two roles grant at different depths - the second side missing reads as None.</summary>
     public static IReadOnlyList<RoleDifference> Diff(IReadOnlyList<RolePrivilege> left, IReadOnlyList<RolePrivilege> right)
