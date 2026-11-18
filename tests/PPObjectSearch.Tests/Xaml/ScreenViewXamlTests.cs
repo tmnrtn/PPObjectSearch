@@ -30,7 +30,7 @@ public class ScreenViewXamlTests
 
         Assert.Contains("ObjectDetailsView", names);
         Assert.Contains("FailuresView", names);
-        Assert.Equal(21, names.Count);
+        Assert.Equal(22, names.Count);
     }
 
     [Fact]

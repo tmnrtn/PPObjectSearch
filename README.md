@@ -96,6 +96,9 @@ straight into the maker portal.
   - **Tables**: their columns, relationships, keys, forms and views; Dataverse's stored row count
     (refreshed about daily) as soon as the window opens, and an exact, current **Count rows** -
     one aggregate request up to 50,000 rows, a search for the last page of 5,000 beyond that.
+- **Entity relationship diagram** (*Solution tools*) — the tables of one or more solutions with
+  the lookups and many-to-many relationships between them, saved as SVG, PNG or Mermaid. See
+  [Entity relationship diagram](#entity-relationship-diagram).
 - **Failures** (in the sidebar, under the selected environment) — cloud flow runs, classic
   workflow jobs and plug-in trace log entries that ended in error over a period, with the trend,
   each failing component and its errors grouped, optionally narrowed to the solution on screen.
@@ -658,6 +661,49 @@ runs are counted row by row where the flowrun table will not aggregate.
 
 Choose the sections, and either one Markdown file or a folder with an index and one file per
 component - for a docs repository. A section that cannot be read is listed under *Not documented*.
+
+## Entity relationship diagram
+
+**Entity relationship diagram** (*Solution tools*, or the command palette) draws the tables of one or
+more solutions with the relationships between them. The selected solution is ticked; tick others
+(filter the list by name) to draw several together, and **Include the patches** to bring each ticked
+solution's patches with them. **Draw** reads each table's columns, lookups and many-to-many
+relationships from the environment's metadata; tables already read are not read again.
+
+- **Layout** - tables a lookup points at sit above the tables that hold the lookup, and lines are
+  routed around the boxes. A table that looks itself up (a parent case, a parent account) has a loop
+  at its corner.
+- **Lines** use crow's-foot ends: a lookup's table is *exactly one* when the lookup is required and
+  *zero or one* when it is not, and the table holding it *zero or many*. A many-to-many is dashed,
+  with *zero or many* at both ends. A customer, owner or regarding lookup draws a line to each table
+  it can point at.
+- **Tables** - the list of tables read lets you leave some out (the tables behind many-to-many
+  relationships start unticked, as those relationships are drawn as lines).
+- **Columns** - names only; keys and lookups (the default: primary key, primary name and the lookups
+  drawn); keys, lookups and custom columns; or every column. **PK** and **FK** mark keys, a lookup
+  names the table it points at, and required columns are in bold.
+- **Tables outside the solutions** that they look up - account, contact, another solution's table -
+  are drawn dashed, by name only. Switch them off to see only the solutions' own tables.
+- **System lookups** - owner, owning user, team and business unit, created and modified by,
+  organization, currency, process and stage, SLA - are left out unless asked for, as every table
+  has them and they tie everything to systemuser.
+
+The diagram redraws as you change what it shows. **Ctrl+wheel** or the zoom buttons zoom; **Fit**
+shows it whole. Double-click a table to open its details.
+
+**Save** writes it as:
+
+- **SVG** - vector, sharp at any size, for Word, PowerPoint, Visio, draw.io or a browser. Hovering a
+  line in a browser names its lookup column;
+- **PNG** - a picture at twice the size on screen (smaller for a very large diagram), for slides,
+  chats and tickets;
+- **Mermaid** - an `erDiagram`, in a `.mmd` file or fenced in a `.md` file, for GitHub, Azure DevOps
+  and other wikis. Tables are named by logical name, lines are labelled with their lookup column, and
+  columns are listed with their type and keys.
+
+**Copy as Mermaid** and **Copy image** put the same on the clipboard. Saved diagrams are drawn
+light, whatever the app's theme, and headed with the solutions, the environment, the number of
+tables and the day.
 
 ## Recent changes
 

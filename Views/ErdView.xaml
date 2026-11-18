@@ -1,0 +1,225 @@
+<local:ScreenView x:Class="PPObjectSearch.Views.ErdView"
+                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:local="clr-namespace:PPObjectSearch.Views"
+                  xmlns:core="clr-namespace:PPObjectSearch.Core"
+                  ScreenTitle="{Binding Title}"
+                  WindowWidth="1240"
+                  WindowHeight="780">
+
+    <Border Style="{StaticResource WindowBody}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="2" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============================================================ header -->
+            <Grid Grid.Row="0" Margin="18,12,18,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <local:EnvironmentLine DataContext="{Binding Session}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Entity relationship diagram" Style="{StaticResource WindowHeading}" />
+                        <ContentControl Style="{StaticResource Chip}" Content="Read-only" Foreground="{DynamicResource Muted}"
+                                        Margin="8,2,0,0" ToolTip="Reads the environment's metadata - nothing is written" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding SolutionLabel}" Foreground="{DynamicResource Muted}" Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding SolutionLabel}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="Copy as Mermaid" Command="{Binding CopyMermaidCommand}"
+                            ToolTip="The diagram as a Mermaid erDiagram, for a wiki, README or pull request" />
+                    <Button Content="Copy image" Margin="6,0,0,0" Command="{Binding CopyImageCommand}"
+                            ToolTip="The diagram as a picture, to paste into a document or a chat" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" IsEnabled="{Binding HasDiagram}"
+                            ToolTip="Save the diagram as a vector image, a picture or Mermaid">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Save" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="SVG - vector…" Command="{Binding SaveSvgCommand}"
+                                          ToolTip="Sharp at any size; opens in a browser, Word, PowerPoint, Visio, Inkscape or draw.io" />
+                                <MenuItem Header="PNG - picture…" Command="{Binding SavePngCommand}"
+                                          ToolTip="At twice the size on screen, for slides, chats and tickets" />
+                                <MenuItem Header="Mermaid - text…" Command="{Binding SaveMermaidCommand}"
+                                          ToolTip="An erDiagram in a .mmd file, or fenced in a .md file ready to render" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <ProgressBar Grid.Row="1" Style="{StaticResource BusyBar}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="330" MinWidth="260" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MinWidth="300" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ============================================================ what to draw -->
+                <Grid Margin="18,4,14,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Clear" Height="22"
+                                    Command="{Binding ClearCommand}" ToolTip="Untick every solution" />
+                            <TextBlock Text="Solutions" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBox Height="30" Margin="0,0,0,6"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter solutions by name"
+                                 AutomationProperties.Name="Filter solutions"
+                                 Text="{Binding SolutionFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                        <ListBox ItemsSource="{Binding ChoicesView}" Height="150"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="Solutions to draw">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsChosen}" Margin="0,3"
+                                              AutomationProperties.Name="{Binding Solution.FriendlyName}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Solution.DisplayLabel}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <CheckBox Content="Include the patches of the ticked solutions" IsChecked="{Binding IncludePatches}" Margin="0,8,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,14">
+                            <Button Style="{StaticResource PrimaryButton}" Content="Draw" Height="30" Padding="18,0"
+                                    Command="{Binding DrawCommand}"
+                                    ToolTip="Reads the ticked solutions' tables, with their columns and relationships, and draws them" />
+                            <Button Content="Stop" Height="30" Margin="8,0,0,0" Command="{Binding CancelCommand}"
+                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- The tables read, to leave some out. -->
+                    <DockPanel Grid.Row="1" Visibility="{Binding HasTables, Converter={StaticResource BoolToVis}}">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Style="{StaticResource LinkButton}" Content="All" Height="22"
+                                        Command="{Binding AllTablesCommand}" ToolTip="Tick every table listed" />
+                                <Button Style="{StaticResource LinkButton}" Content="None" Height="22" Margin="10,0,0,0"
+                                        Command="{Binding NoTablesCommand}" ToolTip="Untick every table listed" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding TablesLabel}" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBox DockPanel.Dock="Top" Height="30" Margin="0,0,0,6"
+                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter tables by name"
+                                 AutomationProperties.Name="Filter tables"
+                                 Text="{Binding TableFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
+                        <ListBox ItemsSource="{Binding TablesView}" MinHeight="80"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 AutomationProperties.Name="Tables to draw">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsChosen}" Margin="0,3"
+                                              AutomationProperties.Name="{Binding Table.Label}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Table.Label}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+
+                    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                        <TextBlock Text="Show" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
+                        <ComboBox Height="30" ItemsSource="{Binding ColumnChoices}" DisplayMemberPath="Label"
+                                  SelectedValuePath="Value" SelectedValue="{Binding Columns}"
+                                  AutomationProperties.Name="Columns listed in each table" />
+                        <CheckBox Content="Tables outside the solutions that they look up" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
+                                  ToolTip="Drawn dashed, by name only - account, contact or another solution's table" />
+                        <CheckBox Content="Owner, created by and other system lookups" IsChecked="{Binding ShowSystemRelationships}" Margin="0,6,0,0"
+                                  ToolTip="Owner, owning user, team and business unit, created and modified by, organization, currency, process and stage, SLA - the lookups every table has" />
+                    </StackPanel>
+                </Grid>
+
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                              Background="{DynamicResource Border}" ResizeBehavior="PreviousAndNext" />
+
+                <!-- ============================================================ the diagram -->
+                <Grid Grid.Column="2">
+                    <ScrollViewer x:Name="Canvas" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                  Background="{DynamicResource Bg}" PreviewMouseWheel="Canvas_PreviewMouseWheel"
+                                  Visibility="{Binding HasDiagram, Converter={StaticResource BoolToVis}}">
+                        <!-- The diagram on its own white page, as it is saved. -->
+                        <Border Margin="24" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                BorderBrush="{DynamicResource Border2}" BorderThickness="1">
+                            <Image x:Name="Diagram" Source="{Binding Image}" Stretch="None" Cursor="Hand"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   MouseLeftButtonDown="Diagram_MouseLeftButtonDown"
+                                   ToolTip="Double-click a table to open its details"
+                                   AutomationProperties.Name="Entity relationship diagram">
+                                <Image.LayoutTransform>
+                                    <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}" />
+                                </Image.LayoutTransform>
+                            </Image>
+                        </Border>
+                    </ScrollViewer>
+
+                    <!-- − | 100% | + and Fit, over the diagram's top-right corner. -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,26,0"
+                                Visibility="{Binding HasDiagram, Converter={StaticResource BoolToVis}}">
+                        <Button Style="{StaticResource SmallButton}" Content="Fit" Height="24" Margin="0,0,6,0" Click="Fit_Click"
+                                ToolTip="Zoom to show the whole diagram" />
+                        <Border BorderBrush="{DynamicResource Border2}" BorderThickness="1" CornerRadius="4"
+                                Background="{DynamicResource Surface}" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource SmallButton}" Content="−" Width="26" Padding="0" BorderThickness="0"
+                                        Height="22" Background="Transparent" Command="{Binding ZoomOutCommand}"
+                                        ToolTip="Zoom out (Ctrl+wheel)" />
+                                <Rectangle Width="1" Fill="{DynamicResource Border2}" />
+                                <Button Style="{StaticResource SmallButton}" Content="{Binding ZoomLabel}" MinWidth="46" BorderThickness="0"
+                                        Height="22" Background="Transparent" Command="{Binding ResetZoomCommand}" ToolTip="Back to 100%" />
+                                <Rectangle Width="1" Fill="{DynamicResource Border2}" />
+                                <Button Style="{StaticResource SmallButton}" Content="+" Width="26" Padding="0" BorderThickness="0"
+                                        Height="22" Background="Transparent" Command="{Binding ZoomInCommand}"
+                                        ToolTip="Zoom in (Ctrl+wheel)" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Nothing drawn: not yet, still reading, or every table unticked. -->
+                    <Border Background="{DynamicResource Bg}"
+                            Visibility="{Binding HasDiagram, Converter={StaticResource NotBoolToVis}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
+                            <TextBlock Text="{Binding EmptyHeading}" Style="{StaticResource SectionHeading}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       TextAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="3" Style="{StaticResource StatusBar}">
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" ToolTip="{Binding Status}" />
+            </Border>
+        </Grid>
+    </Border>
+</local:ScreenView>

@@ -2,6 +2,11 @@
   "version": 1,
   "dependencies": {
     "net10.0-windows7.0": {
+      "AutomaticGraphLayout": {
+        "type": "Transitive",
+        "resolved": "1.1.12",
+        "contentHash": "Txc1uVLwnKemnPWmGSAVSZaBR95VTxU7/LfarvSOuJC6KuwPW4xrLpIGTOUbCXYZiSnkxN2jiC3FwX/2051+9g=="
+      },
       "AvalonEdit": {
         "type": "Transitive",
         "resolved": "6.3.1.120",
@@ -23,6 +28,7 @@
       "ppobjectsearch": {
         "type": "Project",
         "dependencies": {
+          "AutomaticGraphLayout": "[1.1.12, )",
           "AvalonEdit": "[6.3.1.120, )",
           "Microsoft.Identity.Client": "[4.90.1, )"
         }
