@@ -335,6 +335,25 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
     public ObservableCollection<FieldPermissionGrant> FieldGrants { get; } = new();
     public ObservableCollection<RoleDifference> Differences { get; } = new();
 
+    private IReadOnlyList<RoleUnit> _effectiveUnits = [];
+    /// <summary>The business units the shown user's roles are held in - where their Business unit and Parent access reaches from.</summary>
+    public IReadOnlyList<RoleUnit> EffectiveUnits
+    {
+        get => _effectiveUnits;
+        private set
+        {
+            if (!SetProperty(ref _effectiveUnits, value)) return;
+            OnPropertyChanged(nameof(EffectiveUnitsLabel));
+            OnPropertyChanged(nameof(EffectiveUnitsToolTip));
+        }
+    }
+
+    /// <summary>"Roles held in Sales (their own) and Probation North (team Probation North)" - empty until a user is shown.</summary>
+    public string EffectiveUnitsLabel => SecurityLookup.HeldInLabel(EffectiveUnits);
+
+    /// <summary>Every unit, one a line, on hover over the line - whether or not it was trimmed.</summary>
+    public string? EffectiveUnitsToolTip => SecurityLookup.HeldInToolTip(EffectiveUnits);
+
     /// <summary>A compared role's column: "{role} · {env}", with the environment's colour.</summary>
     public sealed record RoleColumn(string Header, Dataverse.EnvironmentSku Sku);
 
@@ -497,6 +516,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
     internal async Task EffectiveAsync(CancellationToken ct)
     {
         EffectiveRows.Clear();
+        EffectiveUnits = [];
         var user = SelectedUser!;
 
         Status = $"Reading {user.FullName}'s roles...";
@@ -504,10 +524,13 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         var assignments = new List<RoleAssignment>(await Client.GetUserRolesAsync(user.SystemUserId, ct));
         foreach (var team in await Client.GetUserTeamsAsync(user.SystemUserId, ct))
         {
-            assignments.AddRange(await Client.GetTeamRolesAsync(team.TeamId, team.Name, ct));
+            // A team holds its own business unit's copy of a role, so the team's unit stands in
+            // for a copy whose unit was not read.
+            assignments.AddRange((await Client.GetTeamRolesAsync(team.TeamId, team.Name, ct))
+                .Select(a => a with { BusinessUnit = a.BusinessUnit ?? team.BusinessUnit }));
         }
 
-        var roles = new List<(string, IReadOnlyList<RolePrivilege>)>();
+        var roles = new List<(EffectiveGrant Grant, IReadOnlyList<RolePrivilege> Privileges)>();
         var privileges = new Dictionary<Guid, IReadOnlyList<RolePrivilege>>();
 
         foreach (var assignment in assignments)
@@ -519,14 +542,16 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
                 privileges[assignment.DefinitionId] = granted;
             }
 
-            roles.Add((assignment.IsDirect ? assignment.RoleName : $"{assignment.RoleName} ({assignment.Via})", granted));
+            // The copy assigned says the business unit a Business unit or Parent depth reaches from.
+            roles.Add((new EffectiveGrant(assignment.RoleName, assignment.BusinessUnit, assignment.TeamName), granted));
         }
 
         foreach (var row in SecurityLookup.Effective(roles)) EffectiveRows.Add(row);
+        EffectiveUnits = SecurityLookup.UnitsHeldIn(roles.Select(r => r.Grant), user.BusinessUnit);
 
         _reads[Tab] = new TabRead(
             $"Read {user.FullName}'s {Plural(assignments.Count, "role assignment")} ({assignments.Count(a => !a.IsDirect):N0} through teams) " +
-            $"in {Seconds(clock)} - hover a cell for the roles that grant it",
+            $"in {Seconds(clock)} - hover a cell for the roles that grant it, and where",
             "No access",
             $"{user.FullName} holds no role that grants a table privilege - directly or through a team. Try another user.");
         Status = string.Empty;

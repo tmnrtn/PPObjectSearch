@@ -522,6 +522,13 @@ not. Read-only, and each view exports to CSV:
   roles, once each, with the widest depth and every path ("Sales Manager via team EMEA in Sales").
 - **Effective access** - a user's privileges across every role they hold, directly and through
   their teams: the widest depth per table and action, with the roles that grant it on hover.
+  Business unit and Parent access reaches from the business unit each role is held in - the
+  user's own for a role assigned to them (or another, with modernized business units), the
+  team's for a role held through a team - so the hover names the units ("Business unit - records
+  in each of Probation North and Sales", then "Basic User via team Probation North in Probation
+  North"), and a line under the user picker lists every unit their roles are held in ("Roles held
+  in Sales (their own) and Probation North (team Probation North)"). User access through a team
+  names the team, whose records it covers; Organization access needs no unit.
 - **Secured column** - the field security profiles that grant read, create or update on a column,
   and the users and teams holding each.
 - **Compare roles** - two roles side by side, or the same role in two connected environments

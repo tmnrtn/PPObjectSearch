@@ -82,6 +82,30 @@ public class DataverseAdminClientTests
     }
 
     [Fact]
+    public async Task Role_assignments_carry_the_business_unit_of_the_copy_assigned()
+    {
+        Guid root = Guid.NewGuid(), copy = Guid.NewGuid();
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"systemusers({UserId})/systemuserroles_association", Rows(new Dictionary<string, object?>
+            {
+                ["roleid"] = copy.ToString(), ["name"] = "Salesperson", ["_parentrootroleid_value"] = root.ToString(),
+                ["_businessunitid_value" + F] = "Probation North",
+            }))
+            .OnJson(HttpMethod.Get, $"teams({TeamId})/teamroles_association", Rows(new Dictionary<string, object?>
+            {
+                ["roleid"] = Guid.NewGuid().ToString(), ["name"] = "Basic User", ["_businessunitid_value" + F] = "Probation South",
+            }));
+        var client = Fakes.Dataverse(handler);
+
+        var direct = Assert.Single(await client.GetUserRolesAsync(UserId));
+        var team = Assert.Single(await client.GetTeamRolesAsync(TeamId, "Probation South"));
+
+        Assert.Equal(("Probation North", true, root), (direct.BusinessUnit, direct.IsDirect, direct.DefinitionId));
+        Assert.Equal(("Probation South", "Probation South"), (team.BusinessUnit, team.TeamName));
+        Assert.All(handler.Requests, r => Assert.Contains("_businessunitid_value", r.Url));
+    }
+
+    [Fact]
     public async Task GetQueuesAsync_reads_active_queues()
     {
         var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "/queues?", Rows(new Dictionary<string, object?>
