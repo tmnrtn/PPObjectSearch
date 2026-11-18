@@ -90,7 +90,8 @@ public sealed class ErdViewModelTests : IDisposable
 
         // ect_case, and contact outside the solution - named from the display names read.
         Assert.Equal(["Case", "Contact"], erd.Placed!.Boxes.Select(b => b.Box.Title).Order());
-        Assert.Contains("1 table(s) and 2 relationship(s), with 1 table(s) outside the solutions.", erd.Status);
+        // The lookup to contact; the many-to-many is the platform's, so it is left out.
+        Assert.Contains("1 table(s) and 1 relationship(s), with 1 table(s) outside the solutions.", erd.Status);
         Assert.Equal("Case Management", erd.Placed.Title);
     });
 
