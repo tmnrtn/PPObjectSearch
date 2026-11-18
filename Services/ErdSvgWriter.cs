@@ -56,7 +56,7 @@ public static class ErdSvgWriter
         {
             var dash = link.Link.IsManyToMany ? " stroke-dasharray=\"5 4\"" : string.Empty;
             svg.AppendLine($"    <g stroke=\"{ErdPalette.Line}\">");
-            svg.AppendLine($"      <title>{X(Describe(link.Link))}</title>");
+            svg.AppendLine($"      <title>{X(Describe(link))}</title>");
             svg.AppendLine($"      <path d=\"{PathData(link.Path)}\"{dash} />");
             foreach (var (from, to) in link.Strokes)
             {
@@ -79,10 +79,22 @@ public static class ErdSvgWriter
         return svg.ToString();
     }
 
-    /// <summary>"account (parentcustomerid) to contact" - a line's hover text.</summary>
-    internal static string Describe(ErdLink link) => link.IsManyToMany
-        ? $"{link.One} many-to-many {link.Many} ({link.Label})"
-        : $"{link.Many}.{link.Label} looks up {link.One}";
+    /// <summary>
+    /// A line's hover text: "contact.parentcustomerid looks up account", or for a line standing
+    /// for several, "ect_mivr looks up ect_scoredresponse in 34 columns: ect_tmcpd, ...".
+    /// </summary>
+    internal static string Describe(ErdPlacedLink line)
+    {
+        var link = line.Link;
+        var labels = line.Merged.Select(l => l.Label).ToList();
+
+        if (link.IsManyToMany) return $"{link.One} many-to-many {link.Many} ({string.Join(", ", labels)})";
+        if (labels.Count == 1) return $"{link.Many}.{link.Label} looks up {link.One}";
+
+        const int named = 12;
+        var list = string.Join(", ", labels.Take(named)) + (labels.Count > named ? $" and {labels.Count - named:N0} more" : string.Empty);
+        return $"{link.Many} looks up {link.One} in {labels.Count:N0} columns: {list}";
+    }
 
     private static void Box(StringBuilder svg, ErdPlacedBox box)
     {

@@ -162,13 +162,21 @@
 
                     <StackPanel Grid.Row="2" Margin="0,14,0,0">
                         <TextBlock Text="Show" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
+                        <ComboBox Height="30" Margin="0,0,0,6" ItemsSource="{Binding LayoutChoices}" DisplayMemberPath="Label"
+                                  SelectedValuePath="Value" SelectedValue="{Binding Layout}"
+                                  AutomationProperties.Name="Layout"
+                                  ToolTip="Grouped keeps a large diagram about as tall as it is wide; layers grow as wide as their widest" />
                         <ComboBox Height="30" ItemsSource="{Binding ColumnChoices}" DisplayMemberPath="Label"
                                   SelectedValuePath="Value" SelectedValue="{Binding Columns}"
                                   AutomationProperties.Name="Columns listed in each table" />
-                        <CheckBox Content="Tables outside the solutions that custom lookups point at" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
+                        <CheckBox Content="Tables outside the solutions that their lookups point at" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"
                                   ToolTip="Drawn dashed, by name only - account, contact or another solution's table" />
+                        <CheckBox Content="Reference tables - types, codes, statuses" IsChecked="{Binding ShowReferenceTables}" Margin="0,6,0,0"
+                                  ToolTip="Tables other tables look up that look up nothing themselves. Left out, a lookup to one is still listed in its table, naming it, without a line" />
+                        <CheckBox Content="Users, teams and business units" IsChecked="{Binding ShowPeople}" Margin="0,6,0,0"
+                                  ToolTip="Nearly every table looks them up. Left out, a lookup to one is still listed in its table, naming it, without a line" />
                         <CheckBox Content="The platform's own relationships" IsChecked="{Binding ShowSystemRelationships}" Margin="0,6,0,0"
-                                  ToolTip="Owner, created by, modified by, business unit, currency, stage and SLA lookups; lookups to almost any table, such as an activity's regarding; and out-of-box tables' lookups and many-to-many relationships to tables outside the solutions" />
+                                  ToolTip="Relationships the solutions' publishers did not make: owner, created by, regarding, an account's parent, a contact's merged-into, and those Microsoft's apps add (msdyn_, msa_, adx_)" />
                     </StackPanel>
                 </Grid>
 

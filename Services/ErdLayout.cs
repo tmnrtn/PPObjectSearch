@@ -6,6 +6,19 @@ using MsaglPoint = Microsoft.Msagl.Core.Geometry.Point;
 
 namespace PPObjectSearch.Services;
 
+/// <summary>How the boxes are placed.</summary>
+public enum ErdLayoutStyle
+{
+    /// <summary>
+    /// Related tables drawn near each other, in a block about as tall as it is wide - for a large
+    /// diagram. One of a few tables is laid out in layers.
+    /// </summary>
+    Grouped,
+
+    /// <summary>In layers, each table looked up above the tables that look it up - clearest for a small one.</summary>
+    Layered
+}
+
 /// <summary>Measures a line of text: its width at a font size, bold or not.</summary>
 public delegate double ErdTextMeasure(string text, double fontSize, bool bold);
 
@@ -30,12 +43,16 @@ public sealed record ErdPlacedBox(
 
 /// <summary>
 /// A line where it is drawn, and its ends' crow's-foot marks as short strokes and circles - so
-/// every renderer draws the same marks without working them out again.
+/// every renderer draws the same marks without working them out again. One line stands for every
+/// relationship of its kind between its two tables, which <see cref="Merged"/> holds.
 /// </summary>
 public sealed record ErdPlacedLink(
     ErdLink Link, IReadOnlyList<ErdSegment> Path,
     IReadOnlyList<(ErdPoint From, ErdPoint To)> Strokes,
-    IReadOnlyList<(ErdPoint Centre, double Radius)> Circles);
+    IReadOnlyList<(ErdPoint Centre, double Radius)> Circles)
+{
+    public IReadOnlyList<ErdLink> Merged { get; init; } = [Link];
+}
 
 /// <summary>The placed diagram, in pixels from its top-left corner, with an optional heading.</summary>
 public sealed record ErdPlacedDiagram(
@@ -46,9 +63,9 @@ public sealed record ErdPlacedDiagram(
 }
 
 /// <summary>
-/// Places an entity relationship diagram: sizes each box to its text, then lays the boxes out in
-/// layers with MSAGL - tables looked up above the tables that look them up - and routes the lines
-/// around them as splines.
+/// Places an entity relationship diagram: sizes each box to its text, then lays the boxes out with
+/// MSAGL - grouped by how they are related (multidimensional scaling), or in layers with tables
+/// looked up above the tables that look them up - and routes the lines around them as splines.
 /// </summary>
 public static class ErdLayout
 {
@@ -76,7 +93,8 @@ public static class ErdLayout
         ErdTextMeasure measure,
         string? title = null,
         string? caption = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ErdLayoutStyle style = ErdLayoutStyle.Grouped)
     {
         var graph = new GeometryGraph();
         var nodes = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
@@ -91,10 +109,14 @@ public static class ErdLayout
             sized[node] = placed;
         }
 
+        // The lookups from one table to another are drawn as one line - a table with thirty
+        // lookups to another would otherwise draw thirty. Each is still listed in its box.
+        var merged = Merge(diagram.Links);
+
         var edges = new List<(Edge Edge, ErdLink Link)>();
         var loops = new List<ErdLink>();
         var depths = Depths(diagram.Links);
-        foreach (var link in diagram.Links)
+        foreach (var link in merged.Keys)
         {
             if (!nodes.TryGetValue(link.One, out var one) || !nodes.TryGetValue(link.Many, out var many)) continue;
 
@@ -124,17 +146,23 @@ public static class ErdLayout
             return new ErdPlacedDiagram(Math.Max(MinWidth, Heading(title, caption, measure)) + Margin * 2, top + Margin, title, caption, boxes, links);
         }
 
-        var settings = new SugiyamaLayoutSettings
-        {
-            NodeSeparation = 36,
-            LayerSeparation = 64,
-            EdgeRoutingSettings = { EdgeRoutingMode = Microsoft.Msagl.Core.Routing.EdgeRoutingMode.Spline }
-        };
+        // Layers grow as wide as their widest one: thirty tables looking up one stand in a row.
+        // Grouping keeps a large diagram about as tall as it is wide; a small one reads best in
+        // layers either way, and MSAGL's grouping can fail on a handful of boxes.
+        var grouped = style == ErdLayoutStyle.Grouped && graph.Nodes.Count > MaxLayeredWhenGrouped;
 
         var cancel = new Microsoft.Msagl.Core.CancelToken();
         using (ct.Register(() => cancel.Canceled = true))
         {
-            LayoutHelpers.CalculateLayout(graph, settings, cancel);
+            try
+            {
+                LayoutHelpers.CalculateLayout(graph, Settings(grouped), cancel);
+            }
+            catch (Exception ex) when (grouped && ex is not OperationCanceledException && !ct.IsCancellationRequested)
+            {
+                Services.Log.Warn("ERD: grouping the tables failed; laying them out in layers instead", ex);
+                LayoutHelpers.CalculateLayout(graph, Settings(grouped: false), cancel);
+            }
         }
 
         ct.ThrowIfCancellationRequested();
@@ -155,7 +183,7 @@ public static class ErdLayout
 
             var path = new List<ErdSegment>();
             Flatten(curve, path, P);
-            if (path.Count > 0) links.Add(Marked(link, path));
+            if (path.Count > 0) links.Add(Marked(link, path) with { Merged = merged[link] });
         }
 
         foreach (var table in loops.GroupBy(l => l.One, StringComparer.OrdinalIgnoreCase))
@@ -169,7 +197,8 @@ public static class ErdLayout
                 var reach = 76 + k * 18;
                 var right = new ErdPoint(box.X + box.Width, box.Y + box.Height - Math.Min(offset, Math.Max(8, box.Height - 8)));
                 var bottom = new ErdPoint(box.X + box.Width - offset, box.Y + box.Height);
-                links.Add(Marked(link, [new ErdSegment(right, bottom, right with { X = right.X + reach }, bottom with { Y = bottom.Y + reach })]));
+                links.Add(Marked(link, [new ErdSegment(right, bottom, right with { X = right.X + reach }, bottom with { Y = bottom.Y + reach })])
+                    with { Merged = merged[link] });
                 k++;
             }
         }
@@ -187,6 +216,47 @@ public static class ErdLayout
         }
 
         return new ErdPlacedDiagram(width + Margin, height + Margin, title, caption, boxes, links);
+    }
+
+    /// <summary>Up to this many tables, a grouped diagram is laid out in layers.</summary>
+    internal const int MaxLayeredWhenGrouped = 15;
+
+    private static LayoutAlgorithmSettings Settings(bool grouped)
+    {
+        LayoutAlgorithmSettings settings = grouped
+            ? new Microsoft.Msagl.Layout.MDS.MdsLayoutSettings { NodeSeparation = 36, ScaleX = 3, ScaleY = 3, RemoveOverlaps = true }
+            : new SugiyamaLayoutSettings { NodeSeparation = 36, LayerSeparation = 64 };
+        settings.EdgeRoutingSettings.EdgeRoutingMode = Microsoft.Msagl.Core.Routing.EdgeRoutingMode.Spline;
+        return settings;
+    }
+
+    /// <summary>
+    /// The lines to draw: lookups from one table to another as one, required at the one end only
+    /// if every one of them is; many-to-many relationships between two tables as one, either way.
+    /// </summary>
+    private static Dictionary<ErdLink, IReadOnlyList<ErdLink>> Merge(IReadOnlyList<ErdLink> links)
+    {
+        var merged = new Dictionary<ErdLink, IReadOnlyList<ErdLink>>();
+        foreach (var group in links.GroupBy(l => l.IsManyToMany
+                     ? (true, Min(l.One, l.Many), Max(l.One, l.Many))
+                     : (false, l.One.ToLowerInvariant(), l.Many.ToLowerInvariant())))
+        {
+            var all = group.ToList();
+            var first = all[0];
+            var line = all.Count == 1
+                ? first
+                : first with
+                {
+                    OneEnd = all.All(l => l.OneEnd == first.OneEnd) ? first.OneEnd : ErdCardinality.ZeroOrOne,
+                    Label = string.Join(", ", all.Select(l => l.Label))
+                };
+            merged[line] = all;
+        }
+
+        return merged;
+
+        static string Min(string a, string b) => string.CompareOrdinal(a.ToLowerInvariant(), b.ToLowerInvariant()) <= 0 ? a.ToLowerInvariant() : b.ToLowerInvariant();
+        static string Max(string a, string b) => string.CompareOrdinal(a.ToLowerInvariant(), b.ToLowerInvariant()) <= 0 ? b.ToLowerInvariant() : a.ToLowerInvariant();
     }
 
     /// <summary>A line with its ends' marks, each pointing away from its box along the line.</summary>

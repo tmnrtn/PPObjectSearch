@@ -12,7 +12,7 @@ public sealed partial class DataverseClient
     /// </summary>
     public async Task<ErdTable?> GetErdTableAsync(Guid metadataId, string? logicalNameHint, CancellationToken ct = default)
     {
-        const string select = "?$select=MetadataId,LogicalName,DisplayName,IsCustomEntity,IsIntersect";
+        const string select = "?$select=MetadataId,LogicalName,DisplayName,IsCustomEntity,IsIntersect,PrimaryIdAttribute";
 
         var keys = new List<string>();
         if (metadataId != Guid.Empty) keys.Add($"EntityDefinitions({metadataId})");
@@ -26,6 +26,7 @@ public sealed partial class DataverseClient
             string? logicalName;
             string? displayName;
             bool isCustom, isIntersect;
+            string? primaryId;
 
             try
             {
@@ -35,6 +36,7 @@ public sealed partial class DataverseClient
                 displayName = ReadLabel(row, "DisplayName");
                 isCustom = JsonHelper.GetBool(row, "IsCustomEntity") ?? false;
                 isIntersect = JsonHelper.GetBool(row, "IsIntersect") ?? false;
+                primaryId = JsonHelper.GetString(row, "PrimaryIdAttribute");
             }
             catch (DataverseException) when (i + 1 < keys.Count)
             {
@@ -55,11 +57,14 @@ public sealed partial class DataverseClient
                 if (JsonHelper.GetString(a, "AttributeOf") is { Length: > 0 }) return;
                 if (JsonHelper.GetString(a, "LogicalName") is not { Length: > 0 } name) return;
 
+                // An account's address ids say they are primary ids too; the table names its own.
                 columns.Add(new ErdColumn(
                     name,
                     ReadLabel(a, "DisplayName"),
                     ColumnType(a),
-                    JsonHelper.GetBool(a, "IsPrimaryId") ?? false,
+                    primaryId is { Length: > 0 }
+                        ? string.Equals(name, primaryId, StringComparison.OrdinalIgnoreCase)
+                        : JsonHelper.GetBool(a, "IsPrimaryId") ?? false,
                     JsonHelper.GetBool(a, "IsPrimaryName") ?? false,
                     ReadNested(a, "RequiredLevel", "Value") is "ApplicationRequired" or "SystemRequired",
                     JsonHelper.GetBool(a, "IsCustomAttribute") ?? false));

@@ -25,17 +25,18 @@ public class DataverseClientErdTests
                "RequiredLevel":{"Value":"None"},"IsCustomAttribute":true,"AttributeOf":"ect_contactid"},
               {"LogicalName":"ect_tags","AttributeType":"Virtual","AttributeTypeName":{"Value":"MultiSelectPicklistType"},
                "RequiredLevel":{"Value":"None"},"IsCustomAttribute":true},
-              {"LogicalName":"versionnumber","AttributeType":"BigInt","RequiredLevel":{"Value":"None"},"IsCustomAttribute":false}
+              {"LogicalName":"versionnumber","AttributeType":"BigInt","RequiredLevel":{"Value":"None"},"IsCustomAttribute":false},
+              {"LogicalName":"address1_addressid","AttributeType":"Uniqueidentifier","RequiredLevel":{"Value":"None"},"IsPrimaryId":true,"IsCustomAttribute":false}
             ]}
             """)
         .OnJson(HttpMethod.Get, key + "/ManyToOneRelationships", """
             {"value":[{"SchemaName":"ect_contact_case","ReferencedEntity":"contact","ReferencingAttribute":"ect_contactid"}]}
             """)
         .OnJson(HttpMethod.Get, key + "/ManyToManyRelationships", """
-            {"value":[{"SchemaName":"ect_case_contact","Entity1LogicalName":"ect_case","Entity2LogicalName":"contact","IntersectEntityName":"ect_case_contact"}]}
+            {"value":[{"SchemaName":"ect_case_contact","Entity1LogicalName":"ect_case","Entity2LogicalName":"contact","IntersectEntityName":"ect_case_contact","IsCustomRelationship":false}]}
             """)
         .OnJson(HttpMethod.Get, key, $$"""
-            {"MetadataId":"{{TableId}}","LogicalName":"ect_case","DisplayName":{{Label("Case")}},"IsCustomEntity":true,"IsIntersect":false}
+            {"MetadataId":"{{TableId}}","LogicalName":"ect_case","DisplayName":{{Label("Case")}},"IsCustomEntity":true,"IsIntersect":false,"PrimaryIdAttribute":"ect_caseid"}
             """);
 
     [Fact]
@@ -50,7 +51,9 @@ public class DataverseClientErdTests
         Assert.Equal(("ect_case", "Case", true, false), (table.LogicalName, table.DisplayName, table.IsCustom, table.IsIntersect));
 
         // The lookup's shadow name column is left out.
-        Assert.Equal(["ect_caseid", "ect_name", "ect_contactid", "ect_tags", "versionnumber"], table.Columns.Select(c => c.LogicalName));
+        Assert.Equal(["ect_caseid", "ect_name", "ect_contactid", "ect_tags", "versionnumber", "address1_addressid"], table.Columns.Select(c => c.LogicalName));
+        // An address id says it is a primary id too; only the table's own is.
+        Assert.Equal(["ect_caseid"], table.Columns.Where(c => c.IsPrimaryId).Select(c => c.LogicalName));
         var id = table.Columns[0];
         Assert.Equal(("Uniqueidentifier", true, true, true), (id.Type, id.IsPrimaryId, id.IsRequired, id.IsCustom));
         Assert.True(table.Columns[1].IsPrimaryName);
@@ -61,7 +64,7 @@ public class DataverseClientErdTests
         var lookup = Assert.Single(table.Lookups);
         Assert.Equal(("ect_contact_case", "ect_contactid", "contact"), (lookup.SchemaName, lookup.Column, lookup.Target));
         var manyToMany = Assert.Single(table.ManyToMany);
-        Assert.Equal(("ect_case", "contact", "ect_case_contact"), (manyToMany.Table1, manyToMany.Table2, manyToMany.IntersectTable));
+        Assert.Equal(("ect_case", "contact", "ect_case_contact", false), (manyToMany.Table1, manyToMany.Table2, manyToMany.IntersectTable, manyToMany.IsCustom));
 
         Assert.Contains(handler.Requests, r => r.Url.Contains("/Attributes?$select=LogicalName,DisplayName,AttributeType,AttributeTypeName,"));
     }

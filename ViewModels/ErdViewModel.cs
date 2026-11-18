@@ -46,6 +46,9 @@ public sealed class ErdTableChoice : ObservableObject
 /// <summary>An entry in the column detail list.</summary>
 public sealed record ErdColumnChoice(ErdColumnDetail Value, string Label);
 
+/// <summary>An entry in the layout list.</summary>
+public sealed record ErdLayoutChoice(ErdLayoutStyle Value, string Label);
+
 /// <summary>
 /// An entity relationship diagram of the tables in one or more solutions, drawn as it is shaped -
 /// which tables, how many of their columns, and whether the tables outside they look up are shown -
@@ -253,10 +256,22 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     /// </summary>
     private IReadOnlySet<string> Suggested()
     {
-        var prefixes = _drawn.Select(s => s.PublisherPrefix).OfType<string>().Where(p => p.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return ErdBuilder.Suggested(Tables.Select(t => t.Table).ToList(), prefixes);
+        return ErdBuilder.Suggested(Tables.Select(t => t.Table).ToList(), Prefixes());
     }
+
+    /// <summary>
+    /// The drawn solutions' publisher prefixes - "ect" - which name the relationships they made.
+    /// The default solution's publisher counts only when it is drawn alone: beside real
+    /// solutions, its prefix names whatever makers built outside them.
+    /// </summary>
+    private IReadOnlyList<string> Prefixes()
+    {
+        var solutions = _drawn.All(s => s.IsDefaultSolution) ? _drawn : _drawn.Where(s => !s.IsDefaultSolution);
+        return solutions.Select(s => s.PublisherPrefix).OfType<string>().Where(p => p.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private ErdOptions Options() => new(Columns, ShowOutsideTables, ShowSystemRelationships, ShowPeople, Prefixes(), ShowReferenceTables);
 
     private void TickSuggested()
     {
@@ -269,7 +284,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     {
         if (choice is null) return;
 
-        var neighbours = ErdBuilder.Neighbours(choice.Table.LogicalName, Tables.Select(t => t.Table).ToList(), ShowSystemRelationships);
+        var neighbours = ErdBuilder.Neighbours(choice.Table.LogicalName, Tables.Select(t => t.Table).ToList(), Options());
         foreach (var table in Tables) table.IsChosen = neighbours.Contains(table.Table.LogicalName);
 
         Status = neighbours.Count == 1
@@ -286,6 +301,33 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     }
 
     // ---------------------------------------------------------------- options
+
+    public IReadOnlyList<ErdLayoutChoice> LayoutChoices { get; } =
+    [
+        new(ErdLayoutStyle.Grouped, "Grouped - related tables together"),
+        new(ErdLayoutStyle.Layered, "Layered - tables looked up above")
+    ];
+
+    private ErdLayoutStyle _layout = ErdLayoutStyle.Grouped;
+    public ErdLayoutStyle Layout
+    {
+        get => _layout;
+        set
+        {
+            if (SetProperty(ref _layout, value)) Relayout();
+        }
+    }
+
+    private bool _showReferenceTables;
+    /// <summary>Draws the tables only looked up - types, codes, statuses; otherwise the lookups to them are only listed.</summary>
+    public bool ShowReferenceTables
+    {
+        get => _showReferenceTables;
+        set
+        {
+            if (SetProperty(ref _showReferenceTables, value)) Relayout();
+        }
+    }
 
     public IReadOnlyList<ErdColumnChoice> ColumnChoices { get; } =
     [
@@ -317,13 +359,24 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     }
 
     private bool _showSystemRelationships;
-    /// <summary>Draws owner, created by, modified by, currency and the other lookups every table has.</summary>
+    /// <summary>Draws the platform's relationships too - owner, regarding, Microsoft's apps' - not only the solutions' own.</summary>
     public bool ShowSystemRelationships
     {
         get => _showSystemRelationships;
         set
         {
             if (SetProperty(ref _showSystemRelationships, value)) Relayout();
+        }
+    }
+
+    private bool _showPeople;
+    /// <summary>Draws users, teams and business units and the lines to them; otherwise their lookups are only listed.</summary>
+    public bool ShowPeople
+    {
+        get => _showPeople;
+        set
+        {
+            if (SetProperty(ref _showPeople, value)) Relayout();
         }
     }
 
@@ -588,11 +641,12 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         var cts = _layoutCts = new CancellationTokenSource();
 
         var tables = Tables.Where(t => t.IsChosen).Select(t => t.Table).ToList();
-        var diagram = ErdBuilder.Build(tables, new ErdOptions(Columns, ShowOutsideTables, ShowSystemRelationships), _displayNames);
+        var diagram = ErdBuilder.Build(tables, Options(), _displayNames);
         var (title, caption) = Heading(diagram);
         var measure = Measure;
 
-        var placed = await Task.Run(() => ErdLayout.Arrange(diagram, measure, title, caption, cts.Token), cts.Token);
+        var style = Layout;
+        var placed = await Task.Run(() => ErdLayout.Arrange(diagram, measure, title, caption, cts.Token, style), cts.Token);
         cts.Token.ThrowIfCancellationRequested();
 
         _diagram = diagram;
