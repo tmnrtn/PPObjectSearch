@@ -93,6 +93,8 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         }, _ => !IsBusy && Choices.Any(c => c.IsChosen));
         AllTablesCommand = new RelayCommand(_ => TickTables(true), _ => Tables.Count > 0);
         NoTablesCommand = new RelayCommand(_ => TickTables(false), _ => Tables.Count > 0);
+        SuggestedTablesCommand = new RelayCommand(_ => TickSuggested(), _ => Tables.Count > 0);
+        NeighboursCommand = new RelayCommand(p => TickNeighbours(p as ErdTableChoice), p => p is ErdTableChoice);
 
         CopyMermaidCommand = new RelayCommand(_ => CopyMermaid(), _ => _diagram is not null);
         CopyImageCommand = new RelayCommand(_ => CopyImage(), _ => Placed is not null);
@@ -245,6 +247,36 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         foreach (var table in TablesView.Cast<ErdTableChoice>()) table.IsChosen = chosen;
     }
 
+    /// <summary>
+    /// The solutions' own tables, the out-of-box tables they extend, and the tables their own
+    /// lookups point at - an out-of-box table held only for a form or a view stays out.
+    /// </summary>
+    private IReadOnlySet<string> Suggested()
+    {
+        var prefixes = _drawn.Select(s => s.PublisherPrefix).OfType<string>().Where(p => p.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return ErdBuilder.Suggested(Tables.Select(t => t.Table).ToList(), prefixes);
+    }
+
+    private void TickSuggested()
+    {
+        var suggested = Suggested();
+        foreach (var table in Tables) table.IsChosen = suggested.Contains(table.Table.LogicalName);
+    }
+
+    /// <summary>Draws one table and the tables related to it, to read a large diagram a piece at a time.</summary>
+    private void TickNeighbours(ErdTableChoice? choice)
+    {
+        if (choice is null) return;
+
+        var neighbours = ErdBuilder.Neighbours(choice.Table.LogicalName, Tables.Select(t => t.Table).ToList(), ShowSystemRelationships);
+        foreach (var table in Tables) table.IsChosen = neighbours.Contains(table.Table.LogicalName);
+
+        Status = neighbours.Count == 1
+            ? $"{choice.Table.Label} has no relationship to another table in these solutions."
+            : $"Drawing {choice.Table.Label} and the {neighbours.Count - 1:N0} table(s) related to it.";
+    }
+
     private void TableChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(ErdTableChoice.IsChosen)) return;
@@ -356,6 +388,8 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
     public RelayCommand ClearCommand { get; }
     public RelayCommand AllTablesCommand { get; }
     public RelayCommand NoTablesCommand { get; }
+    public RelayCommand SuggestedTablesCommand { get; }
+    public RelayCommand NeighboursCommand { get; }
     public RelayCommand CopyMermaidCommand { get; }
     public RelayCommand CopyImageCommand { get; }
     public RelayCommand SaveSvgCommand { get; }
@@ -453,13 +487,13 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // A table unticked before stays unticked; a many-to-many's own table starts unticked,
-            // as its relationship is drawn as a line between the tables it joins.
-            var unticked = Tables.Where(t => !t.IsChosen).Select(t => t.Table.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // A table listed before keeps its tick; a new one is ticked if it is suggested.
+            var before = Tables.ToDictionary(t => t.Table.LogicalName, t => t.IsChosen, StringComparer.OrdinalIgnoreCase);
             var missing = 0;
 
             foreach (var table in Tables) table.PropertyChanged -= TableChanged;
             Tables.Clear();
+            _drawn = solutions;
 
             foreach (var (id, (item, holders)) in found)
             {
@@ -469,22 +503,24 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
                     continue;
                 }
 
-                var choice = new ErdTableChoice(table, item, holders)
-                {
-                    IsChosen = !table.IsIntersect && !unticked.Contains(table.LogicalName)
-                };
+                Tables.Add(new ErdTableChoice(table, item, holders) { IsChosen = before.GetValueOrDefault(table.LogicalName) });
+            }
+
+            var suggested = Suggested();
+            foreach (var choice in Tables)
+            {
+                if (!before.ContainsKey(choice.Table.LogicalName)) choice.IsChosen = suggested.Contains(choice.Table.LogicalName);
                 choice.PropertyChanged += TableChanged;
-                Tables.Add(choice);
             }
 
             TablesView.SortDescriptions.Clear();
             TablesView.SortDescriptions.Add(new SortDescription("Table.Label", ListSortDirection.Ascending));
 
-            _drawn = solutions;
             OnPropertyChanged(nameof(HasTables));
             OnPropertyChanged(nameof(TablesLabel));
             AllTablesCommand.RaiseCanExecuteChanged();
             NoTablesCommand.RaiseCanExecuteChanged();
+            SuggestedTablesCommand.RaiseCanExecuteChanged();
 
             await RelayoutAsync();
 

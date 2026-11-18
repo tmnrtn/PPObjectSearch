@@ -54,7 +54,13 @@ public sealed record ErdDiagram(IReadOnlyList<ErdBox> Boxes, IReadOnlyList<ErdLi
 /// <summary>
 /// Turns the chosen tables' metadata into a diagram: a box per table, a line per lookup and
 /// many-to-many relationship between them, and - if asked for - a bare box for each table outside
-/// them that they look up.
+/// them that their custom lookups point at.
+///
+/// The platform's own relationships are left out unless asked for: the lookups every table has
+/// (owner, created by), lookups that can point at almost any table (an activity's regarding,
+/// an audit's object), and an out-of-box table's own lookups and many-to-many relationships to
+/// tables outside - an account's territory, SLA or price list. They are true, but drawn they bury
+/// the relationships that make this data model its own.
 /// </summary>
 public static class ErdBuilder
 {
@@ -63,6 +69,9 @@ public static class ErdBuilder
     /// its business process stage. Drawn, they tie every table to systemuser and businessunit and
     /// bury the relationships that make this data model its own.
     /// </summary>
+    /// <summary>Past this many tables, an out-of-box lookup is the platform's plumbing - regarding, an audit's object.</summary>
+    internal const int MaxPlatformTargets = 3;
+
     internal static readonly IReadOnlySet<string> SystemLookups = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "createdby", "createdonbehalfby", "modifiedby", "modifiedonbehalfby",
@@ -99,10 +108,19 @@ public static class ErdBuilder
         foreach (var table in chosen.Values.OrderBy(t => t.LogicalName, StringComparer.OrdinalIgnoreCase))
         {
             var required = table.Columns.Where(c => c.IsRequired).Select(c => c.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var custom = table.Columns.Where(c => c.IsCustom).Select(c => c.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var targetCounts = table.Lookups.GroupBy(l => l.Column, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
             foreach (var lookup in table.Lookups.OrderBy(l => l.Column, StringComparer.OrdinalIgnoreCase).ThenBy(l => l.Target, StringComparer.OrdinalIgnoreCase))
             {
-                if (!options.ShowSystemRelationships && SystemLookups.Contains(lookup.Column)) continue;
+                var isCustom = custom.Contains(lookup.Column);
+                if (!options.ShowSystemRelationships)
+                {
+                    if (IsSystemLookup(lookup.Column, isCustom, targetCounts[lookup.Column])) continue;
+                    if (!isCustom && !chosen.ContainsKey(lookup.Target)) continue;
+                }
+
                 if (!Reaches(lookup.Target)) continue;
 
                 var target = chosen.TryGetValue(lookup.Target, out var t) ? t.LogicalName : lookup.Target.ToLowerInvariant();
@@ -124,6 +142,8 @@ public static class ErdBuilder
             foreach (var relationship in table.ManyToMany.OrderBy(r => r.SchemaName, StringComparer.OrdinalIgnoreCase))
             {
                 if (seen.Contains(relationship.SchemaName)) continue;
+                if (!options.ShowSystemRelationships && !relationship.IsCustom &&
+                    !(chosen.ContainsKey(relationship.Table1) && chosen.ContainsKey(relationship.Table2))) continue;
                 if (!Reaches(relationship.Table1) || !Reaches(relationship.Table2)) continue;
 
                 seen.Add(relationship.SchemaName);
@@ -153,6 +173,60 @@ public static class ErdBuilder
         return new ErdDiagram(boxes, links);
 
         string NameOf(string table) => chosen.TryGetValue(table, out var t) ? t.LogicalName : table.ToLowerInvariant();
+    }
+
+    /// <summary>A lookup every table has, or an out-of-box one that can point at almost any table.</summary>
+    internal static bool IsSystemLookup(string column, bool isCustom, int targets) =>
+        SystemLookups.Contains(column) || (!isCustom && targets > MaxPlatformTargets);
+
+    /// <summary>
+    /// The tables worth drawing by default: the solutions' own - named with their publishers'
+    /// prefixes - the out-of-box tables they add columns to, and the tables their own lookups
+    /// point at. An out-of-box table a solution holds only for a form or a view is left out.
+    /// With no prefix known, custom tables and columns stand in for the solutions' own.
+    /// </summary>
+    public static IReadOnlySet<string> Suggested(IReadOnlyList<ErdTable> tables, IReadOnlyCollection<string> prefixes)
+    {
+        bool Own(string name, bool isCustom) => prefixes.Count == 0
+            ? isCustom
+            : prefixes.Any(p => name.StartsWith(p + "_", StringComparison.OrdinalIgnoreCase));
+
+        var names = tables.Select(t => t.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var suggested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var table in tables.Where(t => !t.IsIntersect))
+        {
+            if (Own(table.LogicalName, table.IsCustom) || table.Columns.Any(c => Own(c.LogicalName, c.IsCustom))) suggested.Add(table.LogicalName);
+        }
+
+        foreach (var table in tables.Where(t => suggested.Contains(t.LogicalName)).ToList())
+        {
+            var own = table.Columns.Where(c => Own(c.LogicalName, c.IsCustom)).Select(c => c.LogicalName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var lookup in table.Lookups.Where(l => own.Contains(l.Column) && names.Contains(l.Target)))
+            {
+                suggested.Add(names.First(n => string.Equals(n, lookup.Target, StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        return suggested;
+    }
+
+    /// <summary>
+    /// A table and the tables joined to it either way by a relationship the diagram would draw -
+    /// to narrow a large diagram to one table's neighbourhood.
+    /// </summary>
+    public static IReadOnlySet<string> Neighbours(string table, IReadOnlyList<ErdTable> tables, bool showSystemRelationships = false)
+    {
+        var diagram = Build(tables, new ErdOptions(ErdColumnDetail.None, ShowOutsideTables: false, showSystemRelationships));
+        var neighbours = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { table };
+
+        foreach (var link in diagram.Links)
+        {
+            if (string.Equals(link.One, table, StringComparison.OrdinalIgnoreCase)) neighbours.Add(link.Many);
+            else if (string.Equals(link.Many, table, StringComparison.OrdinalIgnoreCase)) neighbours.Add(link.One);
+        }
+
+        return neighbours;
     }
 
     /// <summary>The logical name under the display name, unless it would say the same again.</summary>

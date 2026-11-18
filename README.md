@@ -677,16 +677,24 @@ relationships from the environment's metadata; tables already read are not read 
   *zero or one* when it is not, and the table holding it *zero or many*. A many-to-many is dashed,
   with *zero or many* at both ends. A customer, owner or regarding lookup draws a line to each table
   it can point at.
-- **Tables** - the list of tables read lets you leave some out (the tables behind many-to-many
-  relationships start unticked, as those relationships are drawn as lines).
+- **Tables** - the list of tables read lets you leave some out. It starts with the **suggested**
+  tables ticked: the solutions' own (named with their publishers' prefixes), the out-of-box tables
+  they add columns to, and the tables their own lookups point at. An out-of-box table a solution
+  holds only for a form or a view (Audit, Appointment) starts unticked, as does the table behind a
+  many-to-many relationship, which is drawn as a line. **Suggested** ticks them again; right-click a
+  table to draw only it and the tables related to it.
 - **Columns** - names only; keys and lookups (the default: primary key, primary name and the lookups
   drawn); keys, lookups and custom columns; or every column. **PK** and **FK** mark keys, a lookup
   names the table it points at, and required columns are in bold.
-- **Tables outside the solutions** that they look up - account, contact, another solution's table -
-  are drawn dashed, by name only. Switch them off to see only the solutions' own tables.
-- **System lookups** - owner, owning user, team and business unit, created and modified by,
-  organization, currency, process and stage, SLA - are left out unless asked for, as every table
-  has them and they tie everything to systemuser.
+- **Tables outside the solutions** that custom lookups point at - account, contact, another
+  solution's table - are drawn dashed, by name only. Switch them off to see only the solutions'
+  own tables.
+- **The platform's own relationships** are left out unless asked for: the lookups every table has
+  (owner, owning user, team and business unit, created and modified by, organization, currency,
+  process and stage, SLA); out-of-box lookups that can point at almost any table (an activity's
+  regarding, an audit's object); and an out-of-box table's own lookups and many-to-many
+  relationships to tables outside the solutions (an account's territory or price list, a user's
+  roles). Between two tables drawn, an out-of-box lookup is kept - contact to account.
 
 The diagram redraws as you change what it shows. **Ctrl+wheel** or the zoom buttons zoom; **Fit**
 shows it whole. Double-click a table to open its details.

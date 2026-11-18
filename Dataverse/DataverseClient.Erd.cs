@@ -76,14 +76,15 @@ public sealed partial class DataverseClient
             }, ct).ConfigureAwait(false);
 
             var manyToMany = new List<ErdManyToMany>();
-            await ForEachRowAsync(root + "ManyToManyRelationships?$select=SchemaName,Entity1LogicalName,Entity2LogicalName,IntersectEntityName", null, r =>
+            await ForEachRowAsync(root + "ManyToManyRelationships?$select=SchemaName,Entity1LogicalName,Entity2LogicalName,IntersectEntityName,IsCustomRelationship", null, r =>
             {
                 if (JsonHelper.GetString(r, "Entity1LogicalName") is { Length: > 0 } first &&
                     JsonHelper.GetString(r, "Entity2LogicalName") is { Length: > 0 } second)
                 {
                     manyToMany.Add(new ErdManyToMany(
                         JsonHelper.GetString(r, "SchemaName") ?? $"{first}_{second}", first, second,
-                        JsonHelper.GetString(r, "IntersectEntityName")));
+                        JsonHelper.GetString(r, "IntersectEntityName"),
+                        JsonHelper.GetBool(r, "IsCustomRelationship") ?? true));
                 }
             }, ct).ConfigureAwait(false);
 

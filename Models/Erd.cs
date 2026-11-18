@@ -15,8 +15,8 @@ public sealed record ErdColumn(
 /// <param name="Target">The table looked up - one of several, for a customer, owner or regarding lookup.</param>
 public sealed record ErdLookup(string SchemaName, string Column, string Target);
 
-/// <summary>A many-to-many relationship, held in its intersect table.</summary>
-public sealed record ErdManyToMany(string SchemaName, string Table1, string Table2, string? IntersectTable);
+/// <summary>A many-to-many relationship, held in its intersect table - custom, or one the platform made.</summary>
+public sealed record ErdManyToMany(string SchemaName, string Table1, string Table2, string? IntersectTable, bool IsCustom = true);
 
 /// <summary>A table's metadata for the diagram: its columns and the relationships it starts.</summary>
 public sealed record ErdTable(
