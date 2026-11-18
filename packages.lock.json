@@ -2,6 +2,12 @@
   "version": 1,
   "dependencies": {
     "net10.0-windows7.0": {
+      "AutomaticGraphLayout": {
+        "type": "Direct",
+        "requested": "[1.1.12, )",
+        "resolved": "1.1.12",
+        "contentHash": "Txc1uVLwnKemnPWmGSAVSZaBR95VTxU7/LfarvSOuJC6KuwPW4xrLpIGTOUbCXYZiSnkxN2jiC3FwX/2051+9g=="
+      },
       "AvalonEdit": {
         "type": "Direct",
         "requested": "[6.3.1.120, )",

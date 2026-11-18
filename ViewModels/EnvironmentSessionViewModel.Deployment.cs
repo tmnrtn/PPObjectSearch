@@ -36,6 +36,15 @@ public sealed partial class EnvironmentSessionViewModel
         new Views.DocumentationWindow { DataContext = new DocumentationViewModel(this), Owner = Application.Current.MainWindow }.ShowDialog();
     });
 
+    // ---------------------------------------------------------------- entity relationship diagram
+
+    private RelayCommand? _entityDiagramCommand;
+    public RelayCommand EntityDiagramCommand => _entityDiagramCommand ??= new RelayCommand(_ =>
+    {
+        if (_client is null || !IsConnected) return;
+        new Views.ErdView { DataContext = new ErdViewModel(this) }.Open();
+    });
+
     // ---------------------------------------------------------------- recent changes
 
     private RelayCommand? _recentChangesCommand;
