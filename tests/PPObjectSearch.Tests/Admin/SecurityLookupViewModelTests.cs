@@ -25,7 +25,7 @@ public class SecurityLookupViewModelTests
     private static Dictionary<string, object?> UserRow(Guid id, string name, bool disabled) => new()
     {
         ["systemuserid"] = id, ["fullname"] = name, ["domainname"] = name.ToLowerInvariant() + "@contoso.com",
-        ["isdisabled"] = disabled, ["accessmode"] = 0, ["accessmode" + F] = "Read-Write"
+        ["isdisabled"] = disabled, ["accessmode"] = 0, ["accessmode" + F] = "Read-Write", ["_businessunitid_value" + F] = "Contoso"
     };
 
     private static string RolePrivileges(params (Guid Id, string Name, string Depth)[] privileges) =>
@@ -34,8 +34,9 @@ public class SecurityLookupViewModelTests
     /// <summary>
     /// Sales Manager grants delete on accounts organization-wide and is held by Alice and by the
     /// EMEA team, whose member is Sam; Salesperson grants only read, and Alice holds it directly.
+    /// Routes in <paramref name="first"/> are matched before these.
     /// </summary>
-    private static FakeHttpHandler Handler() => new FakeHttpHandler()
+    private static FakeHttpHandler Handler(FakeHttpHandler? first = null) => (first ?? new FakeHttpHandler())
         .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='account')", $$"""
             {"Privileges":[
               {"PrivilegeId":"{{DeleteAccount}}","Name":"prvDeleteAccount","PrivilegeType":"Delete"},
@@ -358,13 +359,46 @@ public class SecurityLookupViewModelTests
         var account = Assert.Single(lookup.EffectiveRows);
         Assert.Equal("Account", account.Table);
         Assert.Equal(PrivilegeDepth.Organization, account.Read.Depth);
-        Assert.Equal(["Sales Manager (Team: EMEA)"], account.Read.GrantedBy);
+        Assert.Equal(["Sales Manager via team EMEA"], account.Read.GrantedBy);
         Assert.Equal(PrivilegeDepth.Organization, account.Delete.Depth);
         Assert.Equal("1 table", lookup.ResultCountLabel);
         Assert.True(lookup.HasResults);
-        Assert.Matches(@"^Read Alice's 2 role assignments \(1 through teams\) in \d+\.\d s - hover a cell for the roles that grant it$", lookup.ReadSummary);
+        Assert.Matches(@"^Read Alice's 2 role assignments \(1 through teams\) in \d+\.\d s - hover a cell for the roles that grant it, and where$", lookup.ReadSummary);
         Assert.Equal("No access", lookup.EmptyHeading);
         Assert.Equal(1, handler.Requests.Count(r => r.Url.Contains($"RoleId={Manager}")));
+    });
+
+    [Fact]
+    public void Effective_access_says_which_business_units_each_depth_reaches_in() => AdminUiThread.Run(async () =>
+    {
+        // Alice holds Salesperson in her own unit, and Sales Manager through EMEA - a team in
+        // Contoso EMEA, whose role copy's unit is not in the reply.
+        var handler = Handler(new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"RoleId={Manager}", RolePrivileges((ReadAccount, "prvReadAccount", "Local")))
+            .OnJson(HttpMethod.Get, $"RoleId={Salesperson}", RolePrivileges((ReadAccount, "prvReadAccount", "Local"), (DeleteAccount, "prvDeleteAccount", "Basic")))
+            .OnJson(HttpMethod.Get, $"systemusers({Alice})/systemuserroles_association", Rows(
+                new Dictionary<string, object?> { ["roleid"] = Salesperson, ["name"] = "Salesperson", ["_businessunitid_value" + F] = "Contoso" }))
+            .OnJson(HttpMethod.Get, $"systemusers({Alice})/teammembership_association", Rows(
+                new Dictionary<string, object?> { ["teamid"] = Emea, ["name"] = "EMEA", ["isdefault"] = false, ["_businessunitid_value" + F] = "Contoso EMEA" })));
+        var lookup = Lookup(handler);
+        await lookup.EnsureListsAsync();
+        lookup.Tab = SecurityLookupTab.Effective;
+        lookup.SelectedUser = lookup.Users[0];
+
+        await lookup.RunCommand.ExecuteAsync(null);
+
+        var account = Assert.Single(lookup.EffectiveRows);
+        Assert.Equal(PrivilegeDepth.BusinessUnit, account.Read.Depth);
+        Assert.Equal(["Contoso", "Contoso EMEA"], account.Read.BusinessUnits);
+        Assert.Equal(string.Join(Environment.NewLine,
+            "Business unit - records in each of Contoso and Contoso EMEA",
+            "Salesperson in Contoso",
+            "Sales Manager via team EMEA in Contoso EMEA"), account.Read.ToolTip);
+        Assert.Equal("User - records owned by them" + Environment.NewLine + "Salesperson", account.Delete.ToolTip);
+        Assert.Equal("Roles held in Contoso (their own) and Contoso EMEA (team EMEA)", lookup.EffectiveUnitsLabel);
+        // The export names the units too; User access needs none.
+        Assert.Equal("Account,,Business unit (Contoso; Contoso EMEA),,User,,,,", lookup.ExportLines()[1]);
+        Assert.EndsWith("Contoso EMEA (team EMEA)", lookup.EffectiveUnitsToolTip);
     });
 
     [Fact]

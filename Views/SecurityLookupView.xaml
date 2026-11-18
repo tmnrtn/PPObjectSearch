@@ -8,10 +8,10 @@
                   WindowWidth="1180">
 
     <local:ScreenView.Resources>
-        <!-- A matrix cell: the depth as a pill, with the roles that grant it on hover. -->
+        <!-- A matrix cell: the depth as a pill; on hover, what it reaches - in which business units - and the roles that grant it. -->
         <DataTemplate x:Key="EffectiveCellTemplate">
             <ContentControl Style="{StaticResource DepthPill}" Tag="{Binding Depth}"
-                            Content="{Binding Depth, Converter={StaticResource DepthShort}}" ToolTip="{Binding GrantedByLabel}" />
+                            Content="{Binding Depth, Converter={StaticResource DepthShort}}" ToolTip="{Binding ToolTip}" />
         </DataTemplate>
 
         <!-- DataGrid columns are outside the visual tree; this carries the view model to their headers. -->
@@ -155,6 +155,11 @@
                                     ToolTip="The widest depth across every role the user holds, directly and through their teams" />
                             <ContentControl Style="{StaticResource ReachKey}" Margin="8,0,0,6" />
                         </WrapPanel>
+                        <!-- The business units the user's roles are held in - where BU and Parent reach from. -->
+                        <TextBlock DockPanel.Dock="Top" Margin="16,-4,16,10" Text="{Binding EffectiveUnitsLabel}"
+                                   ToolTip="{Binding EffectiveUnitsToolTip}" Foreground="{DynamicResource Muted}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding EffectiveUnitsLabel, Converter={StaticResource EmptyToCollapsed}}" />
                         <Grid>
                             <DataGrid ItemsSource="{Binding EffectiveRows}" IsReadOnly="True" AutomationProperties.Name="Effective privileges"
                                       BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"

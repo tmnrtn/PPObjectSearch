@@ -9,24 +9,116 @@ public class SecurityLookupTests
 {
     private static RolePrivilege P(string name, PrivilegeDepth depth) => new(Guid.NewGuid(), name, depth);
 
+    private static EffectiveGrant G(string role, string? unit = "Sales", string? team = null) => new(role, unit, team);
+
     [Fact]
     public void Effective_access_takes_the_widest_depth_and_names_the_roles_granting_it()
     {
         var rows = SecurityLookup.Effective(
         [
-            ("Salesperson", [P("prvReadAccount", PrivilegeDepth.User), P("prvDeleteAccount", PrivilegeDepth.User)]),
-            ("Sales Manager (Team: EMEA)", [P("prvReadAccount", PrivilegeDepth.BusinessUnit), P("prvExportToExcel", PrivilegeDepth.Organization)]),
-            ("Reader", [P("prvReadAccount", PrivilegeDepth.BusinessUnit), P("prvReadContact", PrivilegeDepth.None)])
+            (G("Salesperson"), [P("prvReadAccount", PrivilegeDepth.User), P("prvDeleteAccount", PrivilegeDepth.User)]),
+            (G("Sales Manager", "Sales", "EMEA"), [P("prvReadAccount", PrivilegeDepth.BusinessUnit), P("prvExportToExcel", PrivilegeDepth.Organization)]),
+            (G("Reader"), [P("prvReadAccount", PrivilegeDepth.BusinessUnit), P("prvReadContact", PrivilegeDepth.None)])
         ]);
 
         var account = Assert.Single(rows);
         Assert.Equal("Account", account.Table);
         Assert.Equal(PrivilegeDepth.BusinessUnit, account.Read.Depth);
-        Assert.Equal(["Sales Manager (Team: EMEA)", "Reader"], account.Read.GrantedBy);
+        Assert.Equal(["Sales Manager via team EMEA in Sales", "Reader in Sales"], account.Read.GrantedBy);
         Assert.Equal(PrivilegeDepth.User, account.Delete.Depth);
         Assert.Equal("Salesperson", account.Delete.GrantedByLabel);
         Assert.Equal(PrivilegeDepth.None, account.Share.Depth);
         Assert.Equal(string.Empty, account.Share.Label);
+        Assert.Null(account.Share.ToolTip);
+    }
+
+    [Fact]
+    public void A_business_unit_depth_held_in_two_units_reaches_in_each()
+    {
+        var account = Assert.Single(SecurityLookup.Effective(
+        [
+            (G("Salesperson", "Probation North"), [P("prvReadAccount", PrivilegeDepth.BusinessUnit)]),
+            (G("Basic User", "Probation South", "Probation South"), [P("prvReadAccount", PrivilegeDepth.BusinessUnit)]),
+            (G("Basic User", "Probation North", "Probation North"), [P("prvReadAccount", PrivilegeDepth.BusinessUnit)])
+        ]));
+
+        Assert.Equal(["Probation North", "Probation South"], account.Read.BusinessUnits);
+        Assert.Equal("records in each of Probation North and Probation South", account.Read.Reach);
+        Assert.Equal("Business unit (Probation North; Probation South)", account.Read.ExportLabel);
+        Assert.Equal(string.Join(Environment.NewLine,
+            "Business unit - records in each of Probation North and Probation South",
+            "Salesperson in Probation North",
+            "Basic User via team Probation South in Probation South",
+            "Basic User via team Probation North in Probation North"), account.Read.ToolTip);
+    }
+
+    [Fact]
+    public void A_parent_depth_reaches_from_its_unit_down()
+    {
+        var account = Assert.Single(SecurityLookup.Effective([(G("Area Manager", "North"), [P("prvWriteAccount", PrivilegeDepth.ParentChild)])]));
+
+        Assert.Equal("Parent: child BUs - records in North and the units beneath it" + Environment.NewLine + "Area Manager in North",
+            account.Write.ToolTip);
+        Assert.Equal("Parent: child BUs (North)", account.Write.ExportLabel);
+    }
+
+    [Fact]
+    public void User_and_organization_depths_name_no_business_unit()
+    {
+        var account = Assert.Single(SecurityLookup.Effective(
+        [
+            (G("Salesperson"), [P("prvReadAccount", PrivilegeDepth.User), P("prvDeleteAccount", PrivilegeDepth.Organization)]),
+            (G("Sales Manager", "EMEA", "EMEA"), [P("prvReadAccount", PrivilegeDepth.User)])
+        ]));
+
+        Assert.Empty(account.Read.BusinessUnits);
+        Assert.Equal("records owned by them or team EMEA", account.Read.Reach);
+        Assert.Equal(["Salesperson", "Sales Manager via team EMEA"], account.Read.GrantedBy);
+        Assert.Empty(account.Delete.BusinessUnits);
+        Assert.Equal("Organization - every record in the organization" + Environment.NewLine + "Salesperson", account.Delete.ToolTip);
+    }
+
+    [Fact]
+    public void A_business_unit_depth_whose_unit_was_not_read_says_their_own()
+    {
+        var account = Assert.Single(SecurityLookup.Effective([(G("Salesperson", null), [P("prvReadAccount", PrivilegeDepth.BusinessUnit)])]));
+
+        Assert.Equal("Business unit - records in their business unit" + Environment.NewLine + "Salesperson", account.Read.ToolTip);
+        Assert.Equal("Business unit", account.Read.ExportLabel);
+    }
+
+    [Fact]
+    public void Units_held_in_put_the_users_own_first_then_direct_then_through_teams()
+    {
+        var units = SecurityLookup.UnitsHeldIn(
+        [
+            G("Basic User", "Probation North", "Probation North"),
+            G("Auditor", "Head Office"),
+            G("Salesperson", "Sales"),
+            G("Sales Manager", "sales", "EMEA"),
+            G("Sales Manager", "Sales", "UK"),
+            G("Lost", null)
+        ], "Sales");
+
+        Assert.Equal(["Sales (their own; teams EMEA and UK)", "Head Office (direct)", "Probation North (team Probation North)"],
+            units.Select(u => u.Label));
+        Assert.Equal("Roles held in Sales (their own; teams EMEA and UK), Head Office (direct) and Probation North (team Probation North)",
+            SecurityLookup.HeldInLabel(units));
+        Assert.StartsWith("Business unit and Parent access reaches from each unit a role is held in:" + Environment.NewLine + "Sales (their own;",
+            SecurityLookup.HeldInToolTip(units));
+    }
+
+    [Fact]
+    public void Many_units_held_in_are_trimmed_to_three_and_a_count_with_all_on_hover()
+    {
+        var four = SecurityLookup.UnitsHeldIn(new[] { "A", "B", "C", "D" }.Select(u => G("Basic User", u, u)), null);
+        var six = SecurityLookup.UnitsHeldIn(new[] { "A", "B", "C", "D", "E", "F" }.Select(u => G("Basic User", u, u)), null);
+
+        Assert.Equal("Roles held in A (team A), B (team B), C (team C) and D (team D)", SecurityLookup.HeldInLabel(four));
+        Assert.Equal("Roles held in A (team A), B (team B), C (team C) and 3 more", SecurityLookup.HeldInLabel(six));
+        Assert.Contains("F (team F)", SecurityLookup.HeldInToolTip(six));
+        Assert.Equal(string.Empty, SecurityLookup.HeldInLabel([]));
+        Assert.Null(SecurityLookup.HeldInToolTip([]));
     }
 
     [Fact]
