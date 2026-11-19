@@ -72,7 +72,7 @@ public class AiWorkspaceTests
         screens.Show(new OpenScreen(new object(), "Compare"), ScreenPlacement.Window);
         workspace.ReadView = (_, title) => new AiScreen(title, "differences")
         {
-            Environments = [new(dev.Title, dev.EnvironmentUrl), new(prod.Title, ProdUrl)]
+            Environments = [new(dev.Title, dev.EnvironmentUrl, dev.EnvironmentSku), new(prod.Title, ProdUrl, prod.EnvironmentSku)]
         };
 
         Assert.Equal("differences", workspace.ReadScreen("compare")!.Content);

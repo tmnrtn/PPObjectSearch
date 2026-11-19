@@ -80,8 +80,8 @@ public sealed class CommandPaletteViewModelTests : IDisposable
             Query = "settings"
         };
 
-        // Table settings matches by its title; the rest only by their group.
-        Assert.Equal(["Open log folder", "Table settings", "Theme: dark", "Theme: follow Windows", "Theme: light"],
+        // Table settings and Ask AI settings match by their titles; the rest only by their group.
+        Assert.Equal(["Ask AI settings…", "Open log folder", "Table settings", "Theme: dark", "Theme: follow Windows", "Theme: light"],
             Titles(palette).Order(StringComparer.Ordinal));
     }
 

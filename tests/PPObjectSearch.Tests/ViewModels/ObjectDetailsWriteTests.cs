@@ -128,7 +128,7 @@ public sealed class ObjectDetailsWriteTests : IDisposable
         await details.SetEnvironmentValueCommand.ExecuteAsync(null);
 
         var (_, action) = Assert.Single(_asked);
-        Assert.EndsWith(new string('v', 400) + "...", action);
+        Assert.EndsWith(new string('v', 400) + "…", action);
     }
 
     [Fact]
