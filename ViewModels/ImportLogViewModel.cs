@@ -77,7 +77,7 @@ public sealed class ImportLogViewModel : ObservableObject
         }
     }
 
-    private string _status = "Finding the import job...";
+    private string _status = "Finding the import job…";
     public string Status
     {
         get => _status;
@@ -182,7 +182,7 @@ public sealed class ImportLogViewModel : ObservableObject
             // Taken once: the source is disposed when the window closes, and the token outlives it.
             var ct = _cts.Token;
 
-            Status = "Finding the import job...";
+            Status = "Finding the import job…";
             var jobs = await _client.GetImportJobsAsync(_entry.SolutionName, ct);
             var job = DataverseClient.MatchImportJob(jobs, _entry);
 
@@ -205,7 +205,7 @@ public sealed class ImportLogViewModel : ObservableObject
             }
 
             Progress = null;
-            Status = "Reading the import log...";
+            Status = "Reading the import log…";
             var clock = Stopwatch.StartNew();
             _rawXml = await _client.GetImportJobDataAsync(job.Id, ct);
 

@@ -50,8 +50,8 @@
                     <local:EnvironmentLine DataContext="{Binding Session}" />
                     <TextBlock Text="Queue membership sync" Style="{StaticResource WindowHeading}" />
                 </StackPanel>
-                <Button AutomationProperties.Name="Read the teams and queues again" Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Width="30" Height="30" Command="{Binding RefreshCommand}" ToolTip="Read the teams and queues again" />
+                <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Width="30" Height="30" Command="{Binding RefreshCommand}" ToolTip="Refresh - read the teams and queues again" />
             </Grid>
 
             <Rectangle Grid.Row="1" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Border}" />
@@ -78,7 +78,7 @@
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Text="1. Team - the members to copy" FontWeight="SemiBold" Margin="2,0,0,8" />
-                        <TextBox Grid.Row="1" Height="30" Margin="0,0,0,8"
+                        <TextBox AutomationProperties.Name="Team or business unit" Grid.Row="1" Height="30" Margin="0,0,0,8"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Team or business unit"
                                  Text="{Binding TeamSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                         <ListBox Grid.Row="2" ItemsSource="{Binding TeamsView}" SelectedItem="{Binding SelectedTeam}"
@@ -99,7 +99,7 @@
                         </ListBox>
 
                         <TextBlock Grid.Row="3" Text="2. Queue - made to match" FontWeight="SemiBold" Margin="2,14,0,8" />
-                        <TextBox Grid.Row="4" Height="30" Margin="0,0,0,8"
+                        <TextBox AutomationProperties.Name="Queue, email or owner" Grid.Row="4" Height="30" Margin="0,0,0,8"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Queue, email or owner"
                                  Text="{Binding QueueSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                         <ListBox Grid.Row="5" ItemsSource="{Binding QueuesView}" SelectedItem="{Binding SelectedQueue}"
@@ -189,7 +189,7 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBox Grid.Column="1" Height="30" Margin="8,0,0,0"
+                        <TextBox AutomationProperties.Name="Name, UPN or email" Grid.Column="1" Height="30" Margin="8,0,0,0"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, UPN or email"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
                     </Grid>

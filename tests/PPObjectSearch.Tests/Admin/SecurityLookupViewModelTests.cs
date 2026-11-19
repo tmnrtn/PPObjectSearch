@@ -293,7 +293,7 @@ public class SecurityLookupViewModelTests
         Assert.True(lookup.IsBusy);
         Assert.True(lookup.CancelCommand.CanExecute(null));
         Assert.False(lookup.ExportCommand.CanExecute(null));
-        Assert.Equal("Reading account's privileges...", lookup.StatusLine);
+        Assert.Equal("Reading account's privileges…", lookup.StatusLine);
 
         lookup.CancelCommand.Execute(null);
         gate.SetResult(FakeHttpHandler.Json($$"""{"Privileges":[{"PrivilegeId":"{{DeleteAccount}}","Name":"prvDeleteAccount","PrivilegeType":"Delete"}]}"""));

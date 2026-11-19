@@ -100,18 +100,6 @@
                     </StackPanel>
                 </Button>
 
-                <Button AutomationProperties.Name="More" Grid.Column="3" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
-                        FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE712;"
-                        ToolTip="More" core:Ui.OpensMenu="True">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="New configuration" Command="{Binding NewConfigurationCommand}" />
-                            <MenuItem Header="Rename…" Command="{Binding RenameConfigurationCommand}" />
-                            <Separator />
-                            <MenuItem Header="Delete" Command="{Binding DeleteConfigurationCommand}" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
 
                 <!-- Saved with the configuration, so kept beside Save rather than on the bar. -->
                 <Grid Grid.Column="2" Margin="6,0,0,0">
@@ -149,6 +137,18 @@
                         </Grid>
                     </Popup>
                 </Grid>
+                <Button AutomationProperties.Name="More" Grid.Column="3" Width="32" Height="32" Padding="0" Margin="6,0,0,0"
+                        FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE712;"
+                        ToolTip="More" core:Ui.OpensMenu="True">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="New configuration" Command="{Binding NewConfigurationCommand}" />
+                            <MenuItem Header="Rename…" Command="{Binding RenameConfigurationCommand}" />
+                            <Separator />
+                            <MenuItem Header="Delete" Command="{Binding DeleteConfigurationCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
                 <Rectangle Grid.Column="4" Style="{StaticResource VDivider}" Margin="12,0" />
 
@@ -312,7 +312,7 @@
                                   ItemsSource="{Binding EntityFilters}"
                                   SelectedItem="{Binding SelectedEntityFilter}" />
 
-                        <TextBox Grid.Column="2" Height="30" Margin="8,0,0,0"
+                        <TextBox AutomationProperties.Name="Key, name or column" Grid.Column="2" Height="30" Margin="8,0,0,0"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Key, name or column"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Matches the key, the name and the list of differing columns." />
@@ -395,7 +395,8 @@
                                 </DataGridTemplateColumn.CellStyle>
                                 <DataGridTemplateColumn.Header>
                                     <CheckBox x:Name="SelectAllBox" IsThreeState="True" Margin="8,0,0,0"
-                                              Click="SelectAll_Click" ToolTip="Select every row shown" />
+                                              AutomationProperties.Name="Select every row shown"
+                                              Click="SelectAll_Click" ToolTip="Select every row shown. From the keyboard, Ctrl+Space ticks or unticks the current row." />
                                 </DataGridTemplateColumn.Header>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

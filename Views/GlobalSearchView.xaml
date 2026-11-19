@@ -68,7 +68,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBox x:Name="SearchBox" Height="34" FontSize="13" Padding="9,0"
+                    <TextBox AutomationProperties.Name="Search every connected environment" x:Name="SearchBox" Height="34" FontSize="13" Padding="9,0"
                              core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search every connected environment"
                              core:Ui.TrailingText="Environment names match too"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"

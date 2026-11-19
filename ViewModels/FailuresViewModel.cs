@@ -17,8 +17,11 @@ namespace PPObjectSearch.ViewModels;
 /// the failed plug-ins, requests and exceptions its telemetry holds - a summary band with the trend and each source's count, then the
 /// failing components, each with its failures grouped by error and its latest ones a click away.
 /// </summary>
-public sealed class FailuresViewModel : ObservableObject, IDisposable
+public sealed class FailuresViewModel : ObservableObject, IDisposable, Ai.IAiSelection
 {
+    /// <summary>The selected component, for Ask AI's suggestion.</summary>
+    public string? SelectedNameForAi => SelectedComponent?.ComponentName;
+
     private const int ProcessType = 29;
     private const int PluginTypeType = 90;
     private const int PluginStepType = 92;
@@ -407,7 +410,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
 
         var cts = _stepsCts = new CancellationTokenSource();
         var unread = runs.Where(e => !_stepsByRun.ContainsKey(e.RunName!)).ToList();
-        if (unread.Count > 0) StepsNote = $"Reading which step failed in the latest {runs.Count} run(s) from Power Automate...";
+        if (unread.Count > 0) StepsNote = $"Reading which step failed in the latest {runs.Count} run(s) from Power Automate…";
 
         var problems = new ConcurrentBag<string>();
         try
@@ -574,7 +577,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
 
         try
         {
-            Status = $"Reading failures from {from.ToLocalTime():yyyy-MM-dd HH:mm} to {to.ToLocalTime():yyyy-MM-dd HH:mm}...";
+            Status = $"Reading failures from {from.ToLocalTime():yyyy-MM-dd HH:mm} to {to.ToLocalTime():yyyy-MM-dd HH:mm}…";
             var clock = Stopwatch.StartNew();
             var data = await client.GetFailuresAsync(from, to, query, progress, cts.Token);
             if (cts.IsCancellationRequested) return;
@@ -713,7 +716,7 @@ public sealed class FailuresViewModel : ObservableObject, IDisposable
         var hasComponent = failure.Source != FailureSource.AppInsights || failure.IsPlugin;
         if (!hasComponent || _session.Client is not { } client) return (null, notLoaded);
 
-        Status = $"Finding {failure.ComponentName} in the environment...";
+        Status = $"Finding {failure.ComponentName} in the environment…";
         try
         {
             var found = await client.FindFailureComponentAsync(failure);

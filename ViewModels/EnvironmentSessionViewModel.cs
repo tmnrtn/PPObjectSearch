@@ -708,6 +708,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             OnPropertyChanged(nameof(EnvironmentSku));
             OnPropertyChanged(nameof(EnvironmentTypeDescription));
             RaiseWriteAllowlist();
+            RaiseAiAllowed();
         }
     }
 
@@ -723,6 +724,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             OnPropertyChanged(nameof(EnvironmentTypeDescription));
             OnPropertyChanged(nameof(EnvironmentSku));
             RaiseWriteAllowlist();
+            RaiseAiAllowed();
         }
     }
 
@@ -1180,11 +1182,11 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             _environmentUrl = _client.EnvironmentUrl;
             OnPropertyChanged(nameof(EnvironmentUrl));
 
-            Status = "Identifying tenant...";
+            Status = "Identifying tenant…";
             await _authContext.EnsureTenantAsync(_client.EnvironmentUrl, cts.Token);
             _authContext.ForceAccountPicker = forceAccountPicker;
 
-            Status = "Signing in...";
+            Status = "Signing in…";
             await _client.WhoAmIAsync(cts.Token);
 
             IsConnected = true;
@@ -1192,7 +1194,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
             OnPropertyChanged(nameof(AccountInitials));
             OnPropertyChanged(nameof(TenantId));
 
-            Status = "Resolving environment...";
+            Status = "Resolving environment…";
             var organization = await _client.RetrieveCurrentOrganizationAsync(cts.Token);
 
             OrganizationId = organization?.OrganizationId;
@@ -1215,7 +1217,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 environmentId, _client.EnvironmentUrl, _settings.MakerLinkTemplates, tables);
             LinksAvailable = _linkBuilder.CanBuildLinks;
 
-            Status = "Loading solutions...";
+            Status = "Loading solutions…";
             FillSolutions(await _client.GetSolutionsAsync(cts.Token));
 
             if (SelectedSolution is null)
@@ -1280,7 +1282,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
 
         try
         {
-            Status = "Reading the solutions...";
+            Status = "Reading the solutions…";
             var solutions = await client.GetSolutionsAsync(CancellationToken.None);
 
             // Disconnected or connected again meanwhile: the tab is no longer this refresh's.
@@ -1488,7 +1490,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         if (cached is not null)
         {
             Populate(cached.Items, solution);
-            Status = $"Showing {cached.Items.Count:N0} objects cached at {cached.LoadedAt:g} - refreshing...";
+            Status = $"Showing {cached.Items.Count:N0} objects cached at {cached.LoadedAt:g} - refreshing…";
             return;
         }
 
@@ -1500,7 +1502,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         StateFilters.Clear();
         LayerFilters.Clear();
         ResultSummary = string.Empty;
-        Status = $"Loading objects in '{solution.FriendlyName}'...";
+        Status = $"Loading objects in '{solution.FriendlyName}'…";
     }
 
     /// <summary>

@@ -580,7 +580,7 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
                 ct.ThrowIfCancellationRequested();
 
                 done++;
-                Status = $"({done}/{toWrite.Count}) {row.ActionLabel.ToLowerInvariant()} {row.Table} {row.Key}...";
+                Status = $"({done}/{toWrite.Count}) {row.ActionLabel.ToLowerInvariant()} {row.Table} {row.Key}…";
 
                 // Stop takes effect between rows: a write cancelled half-way leaves no telling
                 // whether it landed, so the one in flight is always allowed to finish.
@@ -686,7 +686,7 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
             foreach (var step in steps)
             {
                 undone++;
-                Status = $"Undoing ({undone}/{steps.Count}) - {step.Label}...";
+                Status = $"Undoing ({undone}/{steps.Count}) - {step.Label}…";
 
                 string? error = null;
                 try
@@ -717,7 +717,7 @@ public sealed class ReconcileViewModel : ObservableObject, IDisposable
             _hasUndone = true;
             AnyWritesSucceeded = true;
 
-            var more = failed.Count > 3 ? " ..." : string.Empty;
+            var more = failed.Count > 3 ? " …" : string.Empty;
             Status = failed.Count == 0
                 ? $"Undone - {steps.Count:N0} write(s) reversed in {TargetName}."
                 : $"Undo finished with problems - {failed.Count:N0} of {steps.Count:N0} could not be reversed: " +

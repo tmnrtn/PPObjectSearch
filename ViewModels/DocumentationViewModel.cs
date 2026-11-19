@@ -217,7 +217,7 @@ public sealed class DocumentationViewModel : ObservableObject, IDisposable
             var components = new Dictionary<Guid, IReadOnlyList<SolutionComponentItem>>();
             for (var i = 0; i < solutions.Count; i++)
             {
-                if (solutions.Count > 1) Status = $"Reading the components of {solutions[i].FriendlyName} ({i + 1:N0} of {solutions.Count:N0})...";
+                if (solutions.Count > 1) Status = $"Reading the components of {solutions[i].FriendlyName} ({i + 1:N0} of {solutions.Count:N0})…";
                 components[solutions[i].SolutionId] = await client.GetSolutionComponentsAsync(solutions[i].SolutionId, ct: cts.Token);
             }
 

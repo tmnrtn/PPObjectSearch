@@ -30,7 +30,7 @@ public class ScreenViewXamlTests
 
         Assert.Contains("ObjectDetailsView", names);
         Assert.Contains("FailuresView", names);
-        Assert.Equal(22, names.Count);
+        Assert.Equal(23, names.Count);
     }
 
     [Fact]
@@ -44,6 +44,24 @@ public class ScreenViewXamlTests
                        text.Contains("{x:Type Window}", StringComparison.Ordinal) ||
                        text.Contains("<Window", StringComparison.Ordinal);
             })
+            .Select(Path.GetFileName)
+            .ToList();
+
+        Assert.Empty(offending);
+    }
+
+    /// <summary>
+    /// A control shown inside a screen - the flow diagram in details - is in a tab as often as in a
+    /// window, so it must not reach for its window either: in a tab that is the main window, whose
+    /// view model is the shell. Only the environment view lives in the main window alone.
+    /// </summary>
+    [Fact]
+    public void No_control_inside_a_screen_looks_for_its_window()
+    {
+        var offending = Directory.EnumerateFiles(Path.Combine(FindRoot(), "Views"), "*.xaml")
+            .Where(f => File.ReadAllText(f).TrimStart('\uFEFF', ' ', '\r', '\n').StartsWith("<UserControl", StringComparison.Ordinal))
+            .Where(f => Path.GetFileNameWithoutExtension(f) != "EnvironmentSessionView")
+            .Where(f => File.ReadAllText(f).Contains("AncestorType=Window", StringComparison.Ordinal))
             .Select(Path.GetFileName)
             .ToList();
 

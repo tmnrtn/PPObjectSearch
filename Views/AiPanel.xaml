@@ -1,0 +1,238 @@
+<UserControl x:Class="PPObjectSearch.Views.AiPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:PPObjectSearch.Core"
+             xmlns:local="clr-namespace:PPObjectSearch.Views"
+             xmlns:vm="clr-namespace:PPObjectSearch.ViewModels"
+             MouseEnter="Panel_MouseEnter">
+
+    <!-- Ask AI beside a screen: what a question would be about, then the conversation. -->
+    <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Heading and provider; New chat and settings. -->
+            <Border Grid.Row="0" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="12,8,6,8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource LinkButton}" Content="New chat" FontSize="11" Margin="0,0,6,0"
+                                Command="{Binding ClearCommand}" ToolTip="Start the conversation over"
+                                Visibility="{Binding HasEntries, Converter={StaticResource BoolToVis}}" />
+                        <Button AutomationProperties.Name="Ask AI settings" Style="{StaticResource GhostButton}"
+                                Width="26" Height="26" Padding="0" FontFamily="{StaticResource IconFont}" FontSize="12"
+                                Foreground="{DynamicResource Muted}" Content="&#xE713;" ToolTip="Ask AI settings"
+                                Command="{Binding OpenSettingsCommand}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Ask AI" Style="{StaticResource SectionHeading}" Margin="0" />
+                        <TextBlock Text="{Binding ProviderLabel}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- What a question would be about: said before anything is typed. -->
+            <StackPanel Grid.Row="1" Margin="12,10,12,0" Visibility="{Binding IsConfigured, Converter={StaticResource BoolToVis}}">
+                <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                        CornerRadius="6" Padding="9,6"
+                        Visibility="{Binding IsBlocked, Converter={StaticResource NotBoolToVis}}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="What's sent" FontSize="11"
+                                Margin="8,0,0,0" Click="WhatsSent_Click"
+                                ToolTip="See the screen's content exactly as a question would send it" />
+                        <Border DockPanel.Dock="Left" Style="{StaticResource EnvBar}" Width="3" Height="11" Margin="0,0,7,0"
+                                Tag="{Binding ContextEnvironment.Sku}"
+                                Visibility="{Binding HasContextEnvironment, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                            <Run Text="Reads" /> <Run Text="{Binding ContextTitle, Mode=OneWay}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Text}" />
+                            <Run Text="{Binding ContextEnvironments, Mode=OneWay, StringFormat=· {0}}" />
+                        </TextBlock>
+                    </DockPanel>
+                </Border>
+
+                <!-- An environment Ask AI may not read: said now, with a way to allow it. -->
+                <Border Style="{StaticResource Banner}" Padding="12,10"
+                        Visibility="{Binding IsBlocked, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource EnvBar}" Width="3" Height="12" Margin="0,0,7,0" Tag="{Binding BlockedSku}" />
+                            <TextBlock Text="{Binding BlockedHeading}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock TextWrapping="Wrap" Margin="0,6,0,8" LineHeight="17"
+                                   Text="Nothing from this screen is sent while it's off. Production environments, and any whose type couldn't be read, start with Ask AI off." />
+                        <Button HorizontalAlignment="Left" Content="{Binding AllowLabel}" Command="{Binding AllowEnvironmentCommand}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Not set up: the providers to choose from, each opening settings with it chosen. -->
+            <StackPanel Grid.Row="2" Margin="14,16,14,0"
+                        Visibility="{Binding IsConfigured, Converter={StaticResource NotBoolToVis}}">
+                <TextBlock TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,12"
+                           Text="Ask about the screen you're on: what a flow does, why a run failed, what stands out in a list. Choose where questions go:" />
+                <ItemsControl ItemsSource="{x:Static vm:AiAssistantViewModel.Providers}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button HorizontalContentAlignment="Left" Height="Auto" Padding="11,8" Margin="0,0,0,8"
+                                    Command="{Binding DataContext.OpenSettingsCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding Kind}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Note}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Set up, nothing asked yet: questions to start with, as chips. -->
+            <StackPanel Grid.Row="2" Margin="14,16,14,0">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsConfigured}" Value="True" />
+                                    <Condition Binding="{Binding HasEntries}" Value="False" />
+                                    <Condition Binding="{Binding IsBlocked}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="Try:" Foreground="{DynamicResource Muted}" Margin="0,0,0,8" />
+                <ItemsControl ItemsSource="{Binding Suggestions}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource ChipButton}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                    Command="{Binding DataContext.AskCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- The conversation. -->
+            <ScrollViewer x:Name="Scroller" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          ScrollChanged="Scroller_ScrollChanged"
+                          PreviewMouseWheel="Scroller_PreviewMouseWheel"
+                          Visibility="{Binding HasEntries, Converter={StaticResource BoolToVis}}">
+                <ItemsControl ItemsSource="{Binding Entries}" Margin="12,10,12,6" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:AiChatEntry}">
+                            <Grid Margin="0,0,0,12">
+                                <!-- A question: on the right, in a soft bubble. -->
+                                <Border HorizontalAlignment="Right" MaxWidth="300" Padding="10,7" CornerRadius="8"
+                                        Background="{DynamicResource AccentSoft}"
+                                        Visibility="{Binding IsUser, Converter={StaticResource BoolToVis}}">
+                                    <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                                             Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
+                                             AutomationProperties.Name="Your question" />
+                                </Border>
+
+                                <!-- An answer: what it looked at, the answer formatted, then Copy and Retry. -->
+                                <StackPanel Visibility="{Binding IsUser, Converter={StaticResource NotBoolToVis}}">
+                                    <ItemsControl ItemsSource="{Binding Steps}" Focusable="False" Margin="0,0,0,4">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border HorizontalAlignment="Left" Background="{DynamicResource Hover}" CornerRadius="4"
+                                                        Padding="7,2" Margin="0,0,0,4">
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                                        <Run Text="✓" /> <Run Text="{Binding Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding Activity}" Foreground="{DynamicResource Muted}" FontStyle="Italic"
+                                               TextWrapping="Wrap" Margin="0,0,0,4"
+                                               Visibility="{Binding Activity, Converter={StaticResource EmptyToCollapsed}}" />
+                                    <RichTextBox IsReadOnly="True" IsDocumentEnabled="True" BorderThickness="0" Padding="0"
+                                                 Background="Transparent" Foreground="{DynamicResource Text}"
+                                                 AutomationProperties.Name="Answer"
+                                                 local:MarkdownText.Markdown="{Binding Text}">
+                                        <RichTextBox.Style>
+                                            <Style TargetType="RichTextBox">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </RichTextBox.Style>
+                                    </RichTextBox>
+                                    <ProgressBar Style="{StaticResource BusyBar}" Margin="0,4,0,0"
+                                                 Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVis}}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                                Visibility="{Binding IsDone, Converter={StaticResource BoolToVis}}">
+                                        <Button Style="{StaticResource LinkButton}" Content="Copy" FontSize="11"
+                                                Command="{Binding CopyCommand}" ToolTip="Copy the answer as Markdown" />
+                                        <Button Style="{StaticResource LinkButton}" Content="Retry" FontSize="11" Margin="12,0,0,0"
+                                                Command="{Binding DataContext.RetryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" ToolTip="Ask this question again, with the screen as it is now" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- The question box. -->
+            <Border Grid.Row="3" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,10,12,10"
+                    Visibility="{Binding IsConfigured, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="Question" Grid.Column="0" Text="{Binding Input, UpdateSourceTrigger=PropertyChanged}"
+                                 TextWrapping="Wrap" AcceptsReturn="False" MaxHeight="140" MinHeight="32"
+                                 VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Padding="7,6"
+                                 AutomationProperties.Name="Question for Ask AI"
+                                 IsEnabled="{Binding IsBlocked, Converter={StaticResource NotBool}}"
+                                 PreviewKeyDown="Question_PreviewKeyDown">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                    <Setter Property="core:Ui.Placeholder" Value="Ask about this screen…" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasEntries}" Value="True">
+                                            <Setter Property="core:Ui.Placeholder" Value="Ask a follow-up…" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsBlocked}" Value="True">
+                                            <Setter Property="core:Ui.Placeholder" Value="Off for this environment" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <Button Grid.Column="1" AutomationProperties.Name="Send (Enter)" Style="{StaticResource PrimaryButton}"
+                                Width="32" Height="32" Padding="0" Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE724;" ToolTip="Send (Enter)"
+                                Command="{Binding SendCommand}"
+                                Visibility="{Binding IsBusy, Converter={StaticResource NotBoolToVis}}" />
+                        <Button Grid.Column="1" AutomationProperties.Name="Stop" Width="32" Height="32" Padding="0"
+                                Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE71A;" ToolTip="Stop"
+                                Command="{Binding StopCommand}"
+                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    </Grid>
+                    <TextBlock Text="{Binding PrivacyNote}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

@@ -469,12 +469,12 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
         try
         {
             var clock = Stopwatch.StartNew();
-            Status = $"Reading {Count(chosen.Count, "environment")}...";
+            Status = $"Reading {Count(chosen.Count, "environment")}…";
 
             var snapshots = await Task.WhenAll(chosen.Select(s =>
                 TableSettingsReader.ReadAsync(s.Title, s.Client!, cts.Token)));
 
-            Status = "Working out which tables are covered...";
+            Status = "Working out which tables are covered…";
             var tables = await ResolveScopeAsync(snapshots, chosen, scope, scopeSession, solutions, cts.Token);
 
             if (columns)
@@ -482,7 +482,7 @@ public sealed class TableSettingsViewModel : ObservableObject, IDisposable
                 var audited = TableSettingsReader.AuditedTables(snapshots, tables);
                 if (audited.Count > 0)
                 {
-                    Status = $"Reading the columns of {Count(audited.Count, "audited table")} in each environment...";
+                    Status = $"Reading the columns of {Count(audited.Count, "audited table")} in each environment…";
                     await Task.WhenAll(snapshots.Select((snapshot, i) =>
                         TableSettingsReader.ReadColumnsAsync(snapshot, chosen[i].Client!, audited, cts.Token)));
                 }

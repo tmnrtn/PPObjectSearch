@@ -33,7 +33,7 @@ public sealed partial class EnvironmentSessionViewModel
             return;
         }
 
-        new Views.DocumentationWindow { DataContext = new DocumentationViewModel(this), Owner = Application.Current.MainWindow }.ShowDialog();
+        new Views.DocumentationView { DataContext = new DocumentationViewModel(this) }.Open();
     });
 
     // ---------------------------------------------------------------- entity relationship diagram

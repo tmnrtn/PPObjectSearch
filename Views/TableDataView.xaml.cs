@@ -63,15 +63,39 @@ public partial class TableDataView : ScreenView
         RowsGrid.CurrentCell = new DataGridCellInfo(cell);
     }
 
-    /// <summary>A double-click on a row - not its column header or the scroll bar - opens it in Dynamics 365.</summary>
+    /// <summary>
+    /// A double-click on a row - not its column header or the scroll bar, and not a link, whose own
+    /// click has already followed it - opens it in Dynamics 365.
+    /// </summary>
     private void RowsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.ChangedButton != System.Windows.Input.MouseButton.Left || DataContext is not TableDataViewModel viewModel) return;
+        if (IsInLink(e.OriginalSource as DependencyObject)) return;
         if (ItemsControl.ContainerFromElement(RowsGrid, e.OriginalSource as DependencyObject) is not DataGridRow { Item: TableDataRow row }) return;
 
         if (viewModel.OpenRecordCommand.CanExecute(row)) viewModel.OpenRecordCommand.Execute(row);
         e.Handled = true;
     }
+
+    private static bool IsInLink(DependencyObject? element)
+    {
+        for (; element is not null; element = element is System.Windows.Media.Visual
+                 ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                 : LogicalTreeHelper.GetParent(element))
+        {
+            if (element is System.Windows.Documents.Hyperlink) return true;
+            if (element is DataGridCell) return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>The filter form opens on its column, ready to type.</summary>
+    private void AddFilterPopup_Opened(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(() => FilterColumnBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+
+    /// <summary>Once added, the form closes; the chip shows the filter.</summary>
+    private void AddFilter_Click(object sender, RoutedEventArgs e) => AddFilterToggle.IsChecked = false;
 
     /// <summary>
     /// A link's click - a lookup's name, or a row's related rows - opens what it points at. The

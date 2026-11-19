@@ -71,6 +71,15 @@ public sealed class TableDataRow(DataRecord record, IReadOnlyList<string?> cells
     public bool Matches(string text) => Cells.Any(c => c?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false);
 }
 
+/// <summary>A table followed to from another, by a link: where Back returns to.</summary>
+public sealed record TableDataCrumb(EntitySummary Table, IReadOnlyList<TableServerFilter> Filters)
+{
+    public string Label => string.IsNullOrWhiteSpace(Table.DisplayName) ? Table.LogicalName : Table.DisplayName;
+}
+
+/// <summary>One value of the selected row, for the row pane: its column, what it shows, and whether it links on.</summary>
+public sealed record TableDataField(string Header, string Value, int Column, bool IsLink, bool IsRelationship);
+
 /// <summary>One server-side condition: the OData the rows are read with, and the words it is shown as.</summary>
 public sealed record TableServerFilter(string Filter, string Label)
 {
@@ -95,8 +104,12 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     private readonly AppSettings? _settings;
     private readonly string? _initialTable;
 
-    /// <summary>A condition the initial table opens with - its owner, from Owned records. Used once.</summary>
-    private TableServerFilter? _initialFilter;
+    /// <summary>The conditions a table opens with - its owner from Owned records, or a followed link. Used once.</summary>
+    private IReadOnlyList<TableServerFilter> _pendingFilters = [];
+    private string? _pendingTable;
+
+    /// <summary>Set while a link or Back chooses the table, so the trail is kept rather than started again.</summary>
+    private bool _navigating;
     private CancellationTokenSource? _cts;
     private IReadOnlyList<DataRecord> _records = [];
 
@@ -119,7 +132,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         _session = session;
         _settings = settings;
         _initialTable = tableLogicalName;
-        _initialFilter = initialFilter;
+        _pendingTable = tableLogicalName;
+        _pendingFilters = initialFilter is null ? [] : [initialFilter];
 
         TablesView = (ListCollectionView)CollectionViewSource.GetDefaultView(Tables);
         TablesView.Filter = o => o is EntitySummary t && MatchesTable(t, TableSearch);
@@ -215,6 +229,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _selectedTable, value)) return;
 
+            // A table chosen from the list starts afresh; one reached by a link keeps the way back.
+            if (!_navigating && Trail.Count > 0)
+            {
+                Trail.Clear();
+                RaiseTrail();
+            }
+
             OnPropertyChanged(nameof(TableHeading));
             OnPropertyChanged(nameof(TableDisplayName));
             OnPropertyChanged(nameof(TableLogicalName));
@@ -269,6 +290,13 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     }
 
     public string ColumnsLabel => $"Columns · {ShownColumns.Count}";
+
+    /// <summary>Whether the columns shown are this table's remembered ones, rather than its view's.</summary>
+    public bool AreColumnsRemembered => SelectedTable is { } table && _settings?.TableDataColumns?.ContainsKey(ColumnsKey(table)) == true;
+
+    public string ColumnsToolTip => AreColumnsRemembered
+        ? $"Choose the columns to read and show. These are remembered for {SelectedTable!.Label}, in any environment."
+        : "Choose the columns to read and show. The table's default view chooses them until you do.";
 
     private IReadOnlyList<TableDataColumn> _filterColumns = [];
     /// <summary>The table's own columns, which a server filter can test - not the related rows.</summary>
@@ -524,7 +552,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
         try
         {
-            Status = $"Reading which tables {column.Header} points at...";
+            Status = $"Reading which tables {column.Header} points at…";
             var names = await client.GetLookupNavigationsAsync(table.LogicalName, column.LogicalName, CancellationToken.None);
             _lookupNames[column.LogicalName] = names;
             Status = string.Empty;
@@ -761,7 +789,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     {
         await RunAsync("Could not read the tables", async (client, ct) =>
         {
-            Status = "Reading the tables...";
+            Status = "Reading the tables…";
             var tables = await client.GetEntitiesAsync(ct);
             ct.ThrowIfCancellationRequested();
 
@@ -792,7 +820,7 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
 
     private Task OpenTableAsync(EntitySummary table) => Pending = RunAsync($"Could not read {table.Label}", async (client, ct) =>
     {
-        Status = $"Reading the columns of {table.Label}...";
+        Status = $"Reading the columns of {table.Label}…";
         _records = [];
         Rows.ReplaceAll([]);
         Warnings = string.Empty;
@@ -801,10 +829,10 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         FilterValue = string.Empty;
         QuickFilter = string.Empty;
 
-        if (_initialFilter is { } initial && table.LogicalName.Equals(_initialTable, StringComparison.OrdinalIgnoreCase))
+        if (_pendingFilters.Count > 0 && table.LogicalName.Equals(_pendingTable, StringComparison.OrdinalIgnoreCase))
         {
-            _initialFilter = null;
-            ServerFilters.Add(initial);
+            foreach (var pending in _pendingFilters) ServerFilters.Add(pending);
+            _pendingFilters = [];
             FiltersChanged();
         }
 
@@ -835,11 +863,11 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         }
 
         var filter = EffectiveFilter;
-        Status = $"Reading {table.Label}...";
+        Status = $"Reading {table.Label}…";
         var clock = Stopwatch.StartNew();
 
         var result = await client.GetTableRowsAsync(table, columns.Where(c => !c.IsRelationship).Select(c => c.SelectName), filter, RowCap,
-            n => Status = $"Reading {table.Label} - {n:N0} rows so far...", ct);
+            n => Status = $"Reading {table.Label} - {n:N0} rows so far…", ct);
         ct.ThrowIfCancellationRequested();
 
         _records = result.Rows;
@@ -848,6 +876,8 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
         BuildRows(columns);
         IsColumnPickerOpen = false;
         RememberColumns(table, columns);
+        OnPropertyChanged(nameof(AreColumnsRemembered));
+        OnPropertyChanged(nameof(ColumnsToolTip));
 
         var more = filter is null ? string.Empty : " that match the filter";
         Warnings = result.IsTruncated
@@ -904,8 +934,18 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     /// <summary>Told by the grid which cell is current, so the copy commands know what to copy.</summary>
     public void SetCurrentCell(TableDataRow? row, int column)
     {
+        var rowChanged = !ReferenceEquals(CurrentRow, row);
         CurrentRow = row;
         CurrentColumn = row is null || column < 0 || column >= ShownColumns.Count ? -1 : column;
+        _followLinkInNewScreenCommand?.RaiseCanExecuteChanged();
+        if (rowChanged)
+        {
+            OnPropertyChanged(nameof(CurrentFields));
+            OnPropertyChanged(nameof(CurrentValues));
+            OnPropertyChanged(nameof(CurrentRelated));
+            OnPropertyChanged(nameof(HasCurrentRow));
+            OnPropertyChanged(nameof(CurrentRowLabel));
+        }
         CopyValueCommand.RaiseCanExecuteChanged();
         CopyRawValueCommand.RaiseCanExecuteChanged();
         CopyColumnCommand.RaiseCanExecuteChanged();
@@ -985,8 +1025,16 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
     private EntitySummary? FindTable(string logicalName) =>
         Tables.FirstOrDefault(t => t.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Opens a cell's link in a table data window of its own, filtered to the rows it points at.</summary>
-    public void FollowLink(TableDataRow? row, int column)
+    /// <summary>
+    /// Follows a cell's link here: the table it points at, filtered to the rows it means, with the
+    /// table it came from added to the trail for Back.
+    /// </summary>
+    public void FollowLink(TableDataRow? row, int column) => Follow(row, column, inNewScreen: false);
+
+    /// <summary>Opens a cell's link in a table data screen of its own, leaving this one as it is.</summary>
+    public void FollowLinkInNewScreen(TableDataRow? row, int column) => Follow(row, column, inNewScreen: true);
+
+    private void Follow(TableDataRow? row, int column, bool inNewScreen)
     {
         if (LinkTarget(row, column) is not { } link)
         {
@@ -997,9 +1045,90 @@ public sealed class TableDataViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _session.OpenTableData(link.Table.LogicalName, link.Filter);
-        Status = $"Opened {link.Table.Label} where {link.Filter.Label}.";
+        if (inNewScreen)
+        {
+            _session.OpenTableData(link.Table.LogicalName, link.Filter);
+            Status = $"Opened {link.Table.Label} where {link.Filter.Label}.";
+            return;
+        }
+
+        if (SelectedTable is { } here) Trail.Add(new TableDataCrumb(here, ServerFilters.ToList()));
+        NavigateTo(link.Table, [link.Filter]);
     }
+
+    /// <summary>The tables followed to get here, oldest first, for the breadcrumb and Back.</summary>
+    public ObservableCollection<TableDataCrumb> Trail { get; } = new();
+
+    public bool HasTrail => Trail.Count > 0;
+
+    public RelayCommand BackCommand => _backCommand ??= new RelayCommand(
+        p => GoBack(p as TableDataCrumb ?? Trail.LastOrDefault()), _ => Trail.Count > 0);
+    private RelayCommand? _backCommand;
+
+    /// <summary>Back to a table on the trail - the last one, or one further back - as it was left.</summary>
+    private void GoBack(TableDataCrumb? crumb)
+    {
+        if (crumb is null) return;
+        var at = Trail.IndexOf(crumb);
+        if (at < 0) return;
+
+        while (Trail.Count > at) Trail.RemoveAt(Trail.Count - 1);
+        NavigateTo(crumb.Table, crumb.Filters);
+    }
+
+    private void NavigateTo(EntitySummary table, IReadOnlyList<TableServerFilter> filters)
+    {
+        RaiseTrail();
+        _pendingTable = table.LogicalName;
+        _pendingFilters = filters;
+        _navigating = true;
+        try
+        {
+            TableSearch = string.Empty;
+            if (ReferenceEquals(SelectedTable, table)) _ = OpenTableAsync(table);
+            else SelectedTable = table;
+        }
+        finally
+        {
+            _navigating = false;
+        }
+
+        Status = filters.Count == 0 ? $"Back to {table.Label}." : $"{table.Label} where {string.Join(" and ", filters.Select(f => f.Label))}.";
+    }
+
+    private void RaiseTrail()
+    {
+        OnPropertyChanged(nameof(HasTrail));
+        BackCommand.RaiseCanExecuteChanged();
+    }
+
+    // ---------------------------------------------------------------- the selected row
+
+    /// <summary>The row of the cell last chosen, value by value, for the row pane.</summary>
+    public IReadOnlyList<TableDataField> CurrentFields => CurrentRow is not { } row
+        ? []
+        : ShownColumns.Select((c, i) => new TableDataField(c.Header, row.Cells.ElementAtOrDefault(i) ?? "—", i,
+            c.IsLink && LinkTarget(row, i) is not null, c.IsRelationship)).ToList();
+
+    public IReadOnlyList<TableDataField> CurrentValues => CurrentFields.Where(f => !f.IsRelationship).ToList();
+    public IReadOnlyList<TableDataField> CurrentRelated => CurrentFields.Where(f => f.IsRelationship && f.IsLink).ToList();
+
+    public bool HasCurrentRow => CurrentRow is not null;
+
+    /// <summary>The selected row's name - its primary name, else its id.</summary>
+    public string CurrentRowLabel => CurrentRow is { } row ? Describe(row) : string.Empty;
+
+    /// <summary>A value's link in the row pane, followed here as a click in the grid is.</summary>
+    public RelayCommand FollowFieldCommand => _followFieldCommand ??= new RelayCommand(p =>
+    {
+        if (p is TableDataField chosen) FollowLink(CurrentRow, chosen.Column);
+    });
+    private RelayCommand? _followFieldCommand;
+
+    /// <summary>The right-click menu's: the cell's link in a screen of its own.</summary>
+    public RelayCommand FollowLinkInNewScreenCommand => _followLinkInNewScreenCommand ??= new RelayCommand(
+        _ => FollowLinkInNewScreen(CurrentRow, CurrentColumn), _ => LinkTarget(CurrentRow, CurrentColumn) is not null);
+    private RelayCommand? _followLinkInNewScreenCommand;
 
     private void ShowAuditHistory(TableDataRow? row)
     {

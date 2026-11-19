@@ -15,6 +15,9 @@ public static class AppVersion
     /// <summary>"1.9.0".</summary>
     public static string Version => Current.Version;
 
+    /// <summary>"v1.9.0", for the foot of the sidebar.</summary>
+    public static string Short => $"v{Current.Version}";
+
     /// <summary>"Version 1.9.0".</summary>
     public static string Label => $"Version {Current.Version}";
 

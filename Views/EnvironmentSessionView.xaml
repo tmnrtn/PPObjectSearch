@@ -108,7 +108,7 @@
                 <!-- Not connected: URL + Connect. -->
                 <StackPanel Orientation="Horizontal"
                             Visibility="{Binding IsConnected, Converter={StaticResource NotBoolToVis}}">
-                    <TextBox x:Name="EnvironmentBox" Width="340"
+                    <TextBox AutomationProperties.Name="https://contoso.crm11.dynamics.com" x:Name="EnvironmentBox" Width="340"
                              core:Ui.Placeholder="https://contoso.crm11.dynamics.com"
                              Text="{Binding EnvironmentUrl, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="e.g. https://contoso.crm11.dynamics.com">
@@ -169,7 +169,7 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button AutomationProperties.Name="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
+                    <Button AutomationProperties.Name="Refresh (F5)" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="12,0,0,0"
                             Command="{Binding RefreshCommand}"
                             ToolTip="Refresh (F5) - reads the solution list and the solution's objects again, bypassing the cache." />
                 </StackPanel>
@@ -232,7 +232,7 @@
 
             <WrapPanel Grid.Column="0" Orientation="Horizontal">
                 <!-- Esc, ↑↓ and Enter are handled in code: they drive the dropdown first. -->
-                <TextBox x:Name="SearchBox" Width="280" Margin="0,0,6,0"
+                <TextBox AutomationProperties.Name="Search" x:Name="SearchBox" Width="280" Margin="0,0,6,0"
                          core:Ui.Icon="&#xE721;" core:Ui.KeyHint="Esc" core:Ui.Placeholder="Search"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                          GotKeyboardFocus="SearchBox_GotKeyboardFocus"

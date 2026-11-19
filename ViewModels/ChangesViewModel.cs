@@ -205,12 +205,12 @@ public sealed class ChangesViewModel : ObservableObject, IDisposable
 
         try
         {
-            Status = "Reading components changed since " + _since.ToString("yyyy-MM-dd HH:mm") + "...";
+            Status = "Reading components changed since " + _since.ToString("yyyy-MM-dd HH:mm") + "…";
             var clock = Stopwatch.StartNew();
             var notes = new List<string>();
             var changed = await client.GetRecentlyChangedAsync(defaultSolution.SolutionId, _since, cts.Token);
 
-            Status = $"Reading who changed {changed.Count:N0} component(s)...";
+            Status = $"Reading who changed {changed.Count:N0} component(s)…";
             var by = await client.GetModifiedByAsync(changed, cts.Token);
 
             var history = await ReadHistoryAsync(client, notes, cts.Token);

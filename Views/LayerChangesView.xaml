@@ -60,7 +60,7 @@
 
             <Border Grid.Row="2" Style="{StaticResource StatusBar}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource StatusCount}" VerticalAlignment="Center"
                                Text="Select text in either pane to copy it" />
                     <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" Margin="0,0,16,0" />

@@ -375,7 +375,7 @@ public class ReadinessViewModelTests
 
         Assert.True(vm.IsRunning);
         Assert.False(vm.IsEmpty);
-        Assert.Equal("Reading Contoso Core in dev...", vm.Status);
+        Assert.Equal("Reading Contoso Core in dev…", vm.Status);
         Assert.True(vm.CancelCommand.CanExecute(null));
         Assert.False(vm.RunCommand.CanExecute(null));
 

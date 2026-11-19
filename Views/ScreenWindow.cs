@@ -1,8 +1,11 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using PPObjectSearch.Ai;
 using PPObjectSearch.Core;
 using PPObjectSearch.Services;
+using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Views;
 
@@ -26,13 +29,63 @@ public sealed class ScreenWindow : Window
 
         // Code that finds a screen's window by its view model still finds this one.
         DataContext = view.DataContext;
-        Content = view;
+        _view = view;
+
+        // The screen, and the AI assistant beside it - the same conversation it had as a tab.
+        _layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 360 });
+        _layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0) });
+        _layout.Children.Add(view);
+
+        var splitter = new GridSplitter
+        {
+            Width = 5,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ResizeBehavior = GridResizeBehavior.PreviousAndCurrent,
+            ResizeDirection = GridResizeDirection.Columns
+        };
+        Grid.SetColumn(splitter, 1);
+        Panel.SetZIndex(splitter, 1);
+        splitter.DragCompleted += (_, _) =>
+        {
+            if (_layout.ColumnDefinitions[1].ActualWidth > 0) _aiWidth = Math.Max(300, _layout.ColumnDefinitions[1].ActualWidth);
+        };
+
+        _assistant = new AiPanel
+        {
+            DataContext = AiAssistantViewModel.For(screen, () => ScreenText.Read(view, screen.Title), () => AiWorkspace.Describe(screen))
+        };
+        Grid.SetColumn(_assistant, 1);
+        _layout.Children.Add(splitter);
+        _layout.Children.Add(_assistant);
+        _splitter = splitter;
+        Content = _layout;
+
+        WindowChromeSupport.SetCanAskAi(this, true);
+        ShowAssistant(AiService.Current?.Settings.IsPanelOpen == true);
 
         CommandBindings.Add(new CommandBinding(WindowChromeSupport.MoveToMainWindowCommand,
             (_, _) => ScreenHost.Current.PopIn(screen)));
+        CommandBindings.Add(new CommandBinding(WindowChromeSupport.AskAiCommand,
+            (_, _) => ShowAssistant(_assistant.Visibility != Visibility.Visible)));
     }
 
+    private readonly ScreenView _view;
+    private readonly Grid _layout = new();
+    private readonly AiPanel _assistant;
+    private readonly GridSplitter _splitter;
+    private double _aiWidth = 380;
+
     public OpenScreen Screen { get; }
+
+    private void ShowAssistant(bool show)
+    {
+        _assistant.Visibility = _splitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        WindowChromeSupport.SetIsAiOpen(this, show);
+        _layout.ColumnDefinitions[1].Width = new GridLength(show ? _aiWidth : 0);
+    }
+
+    /// <summary>Takes the screen's view out of the window, which is closing while the view moves to a tab.</summary>
+    internal void ReleaseView() => _layout.Children.Remove(_view);
 }
 
 /// <summary>The screen windows the app has open, for <see cref="ScreenHost"/>.</summary>
@@ -71,7 +124,7 @@ public sealed class ScreenWindows : IScreenWindows
         if (!_windows.Remove(screen, out var window)) return;
 
         // The view is about to go into a tab, and an element can have only one parent.
-        window.Content = null;
+        window.ReleaseView();
         window.Close();
     }
 

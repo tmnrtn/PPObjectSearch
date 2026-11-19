@@ -66,13 +66,13 @@
                             <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center">
                                 <Run Text="Entra group teams" /><Run Text="{Binding Teams.Count, Mode=OneWay, StringFormat=' · {0:N0}'}" />
                             </TextBlock>
-                            <Button AutomationProperties.Name="Read the teams again" Style="{StaticResource GhostButton}" Content="&#xE72C;" HorizontalAlignment="Right"
+                            <Button AutomationProperties.Name="Refresh" Style="{StaticResource GhostButton}" Content="&#xE72C;" HorizontalAlignment="Right"
                                     FontFamily="{StaticResource IconFont}" FontSize="11" Padding="0"
                                     Foreground="{DynamicResource Muted}"
-                                    Width="24" Height="24" Command="{Binding RefreshTeamsCommand}" ToolTip="Read the teams again" />
+                                    Width="24" Height="24" Command="{Binding RefreshTeamsCommand}" ToolTip="Refresh - read the teams again" />
                         </Grid>
 
-                        <TextBox Grid.Row="1" Height="28" Margin="0,0,0,8"
+                        <TextBox AutomationProperties.Name="Team or business unit" Grid.Row="1" Height="28" Margin="0,0,0,8"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Team or business unit"
                                  Text="{Binding TeamSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
@@ -146,9 +146,9 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                             <TextBlock Text="{Binding LastReadLabel}" FontSize="11" Foreground="{DynamicResource Muted}"
                                        VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <Button AutomationProperties.Name="Read the team and the group again, without changing anything." Style="{StaticResource IconButton}" Content="&#xE72C;" Height="28"
+                            <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="28"
                                     Command="{Binding ReloadCommand}"
-                                    ToolTip="Read the team and the group again, without changing anything." />
+                                    ToolTip="Refresh - read the team and the group again, without changing anything." />
                         </StackPanel>
                     </Grid>
 
@@ -184,7 +184,7 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBox Grid.Column="1" Height="30" Margin="8,0,0,0"
+                        <TextBox AutomationProperties.Name="Name, UPN or diagnosis" Grid.Column="1" Height="30" Margin="8,0,0,0"
                                  core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, UPN or diagnosis"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 

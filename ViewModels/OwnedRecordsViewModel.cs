@@ -82,7 +82,7 @@ public sealed class OwnedRecordsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The status bar while counting. Apart from <see cref="Status"/>, which a late progress report must not overwrite.</summary>
-    public string Progress => Total == 0 ? "Reading which tables have an owner..." : $"Counted {Done:N0} of {Total:N0} tables...";
+    public string Progress => Total == 0 ? "Reading which tables have an owner…" : $"Counted {Done:N0} of {Total:N0} tables…";
 
     private string _summary = string.Empty;
     /// <summary>"Alice owns 1,234 records in 12 tables." - or what is being counted.</summary>
@@ -105,7 +105,7 @@ public sealed class OwnedRecordsViewModel : ObservableObject, IDisposable
         Rows.Clear();
         ExportCsvCommand.RaiseCanExecuteChanged();
         Done = Total = 0;
-        Summary = $"Counting the records {OwnerName} owns...";
+        Summary = $"Counting the records {OwnerName} owns…";
         Status = string.Empty;
         var clock = System.Diagnostics.Stopwatch.StartNew();
 

@@ -170,7 +170,7 @@ public class SolutionHistoryViewModelTests
     {
         var handler = new FakeHttpHandler().OnError(HttpMethod.Get, Route, HttpStatusCode.Forbidden, "No privilege");
         var history = History(handler);
-        Assert.Equal("Loading solution history...", history.Status);
+        Assert.Equal("Loading solution history…", history.Status);
 
         await history.RefreshCommand.ExecuteAsync(null);
 

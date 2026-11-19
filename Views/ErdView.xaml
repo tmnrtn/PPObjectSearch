@@ -5,7 +5,9 @@
                   xmlns:core="clr-namespace:PPObjectSearch.Core"
                   ScreenTitle="{Binding Title}"
                   WindowWidth="1240"
-                  WindowHeight="780">
+                  WindowHeight="780"
+                  WindowMinWidth="900"
+                  WindowMinHeight="560">
 
     <Border Style="{StaticResource WindowBody}">
         <Grid>
@@ -34,19 +36,22 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
-                    <Button Content="Copy as Mermaid" Command="{Binding CopyMermaidCommand}"
-                            ToolTip="The diagram as a Mermaid erDiagram, for a wiki, README or pull request" />
-                    <Button Content="Copy image" Margin="6,0,0,0" Command="{Binding CopyImageCommand}"
-                            ToolTip="The diagram as a picture, to paste into a document or a chat" />
-                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" IsEnabled="{Binding HasDiagram}"
-                            ToolTip="Save the diagram as a vector image, a picture or Mermaid">
+                    <Button core:Ui.OpensMenu="True" IsEnabled="{Binding HasDiagram}"
+                            ToolTip="Copy or save the diagram: Mermaid, a picture or a vector image">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Save" VerticalAlignment="Center" />
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
                                        Foreground="{DynamicResource Muted}" />
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Copy" />
+                                <MenuItem Header="As Mermaid" Command="{Binding CopyMermaidCommand}"
+                                          ToolTip="The diagram as a Mermaid erDiagram, for a wiki, README or pull request" />
+                                <MenuItem Header="As a picture" Command="{Binding CopyImageCommand}"
+                                          ToolTip="The diagram as a picture, to paste into a document or a chat" />
+                                <Separator />
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
                                 <MenuItem Header="SVG - vector…" Command="{Binding SaveSvgCommand}"
                                           ToolTip="Sharp at any size; opens in a browser, Word, PowerPoint, Visio, Inkscape or draw.io" />
                                 <MenuItem Header="PNG - picture…" Command="{Binding SavePngCommand}"
@@ -78,32 +83,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel>
-                        <DockPanel Margin="0,0,0,6">
-                            <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Clear" Height="22"
-                                    Command="{Binding ClearCommand}" ToolTip="Untick every solution" />
-                            <TextBlock Text="Solutions" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
-                        </DockPanel>
-                        <TextBox Height="30" Margin="0,0,0,6"
-                                 core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter solutions by name"
-                                 AutomationProperties.Name="Filter solutions"
-                                 Text="{Binding SolutionFilter, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
-                        <ListBox ItemsSource="{Binding ChoicesView}" Height="150"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 AutomationProperties.Name="Solutions to draw">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsChosen}" Margin="0,3"
-                                              AutomationProperties.Name="{Binding Solution.FriendlyName}">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Solution.DisplayLabel}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource Muted}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                    </CheckBox>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                        <CheckBox Content="Include the patches of the ticked solutions" IsChecked="{Binding IncludePatches}" Margin="0,8,0,0" />
+                        <local:SolutionPicker />
                         <StackPanel Orientation="Horizontal" Margin="0,10,0,14">
                             <Button Style="{StaticResource PrimaryButton}" Content="Draw" Height="30" Padding="18,0"
                                     Command="{Binding DrawCommand}"
@@ -162,11 +142,11 @@
 
                     <StackPanel Grid.Row="2" Margin="0,14,0,0">
                         <TextBlock Text="Show" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
-                        <ComboBox Height="30" Margin="0,0,0,6" ItemsSource="{Binding LayoutChoices}" DisplayMemberPath="Label"
+                        <ComboBox Margin="0,0,0,6" core:Ui.InlineLabel="Layout" ItemsSource="{Binding LayoutChoices}" DisplayMemberPath="Label"
                                   SelectedValuePath="Value" SelectedValue="{Binding Layout}"
                                   AutomationProperties.Name="Layout"
                                   ToolTip="Grouped keeps a large diagram about as tall as it is wide; layers grow as wide as their widest" />
-                        <ComboBox Height="30" ItemsSource="{Binding ColumnChoices}" DisplayMemberPath="Label"
+                        <ComboBox core:Ui.InlineLabel="Columns" ItemsSource="{Binding ColumnChoices}" DisplayMemberPath="Label"
                                   SelectedValuePath="Value" SelectedValue="{Binding Columns}"
                                   AutomationProperties.Name="Columns listed in each table" />
                         <CheckBox Content="Tables outside the solutions that their lookups point at" IsChecked="{Binding ShowOutsideTables}" Margin="0,8,0,0"

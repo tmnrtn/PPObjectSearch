@@ -27,6 +27,18 @@ public partial class FlowDiagramView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>Zooms so the whole flow fits the space it has, within the zoom's limits.</summary>
+    private void Fit_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not FlowDiagramViewModel diagram || Diagram.ActualWidth <= 0 || Diagram.ActualHeight <= 0) return;
+
+        // The diagram's size at 100%, margins included, against the space the scroller shows.
+        var width = Diagram.ActualWidth / diagram.Zoom + Diagram.Margin.Left + Diagram.Margin.Right;
+        var height = Diagram.ActualHeight / diagram.Zoom + Diagram.Margin.Top + Diagram.Margin.Bottom;
+        diagram.Zoom = Math.Min(Canvas.ViewportWidth / width, Canvas.ViewportHeight / height);
+        Canvas.ScrollToHome();
+    }
+
     /// <summary>
     /// The iteration picked is scrolled to - above all the first failed one, picked for you, which
     /// in a loop of hundreds is otherwise somewhere off the list. Once the list has laid out.

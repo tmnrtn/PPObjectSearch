@@ -112,7 +112,7 @@ public sealed class SolutionHistoryViewModel : ObservableObject
         private set => SetProperty(ref _isBusy, value);
     }
 
-    private string _status = "Loading solution history...";
+    private string _status = "Loading solution history…";
     public string Status
     {
         get => _status;
@@ -129,7 +129,7 @@ public sealed class SolutionHistoryViewModel : ObservableObject
     public async Task LoadAsync()
     {
         IsBusy = true;
-        Status = "Loading solution history...";
+        Status = "Loading solution history…";
 
         try
         {

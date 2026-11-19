@@ -50,8 +50,8 @@
                               ToolTip="Direct customisations - changes made in this environment rather than imported" />
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read again" />
                     <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The changes shown, as CSV or Markdown">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Export" VerticalAlignment="Center" />

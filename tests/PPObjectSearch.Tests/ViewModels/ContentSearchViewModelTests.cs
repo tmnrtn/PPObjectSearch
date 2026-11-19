@@ -101,7 +101,7 @@ public class ContentSearchViewModelTests
         Assert.Equal(2, search.Hits.Count);
         Assert.True(search.HasHits);
         Assert.Equal("2 matches", search.MatchCountLabel);
-        Assert.Equal("Reading 2 definition(s)...", statuses[0]);
+        Assert.Equal("Reading 2 definition(s)…", statuses[0]);
         Assert.Equal(string.Empty, search.Status);
         Assert.StartsWith("Searched 2 definitions in ", search.ReadSummary);
         Assert.EndsWith(", found in 2 components - double-click a match to open it", search.ReadSummary);

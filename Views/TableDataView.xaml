@@ -51,8 +51,8 @@
                     </ComboBox>
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding RefreshCommand}" ToolTip="Read the rows again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read the rows again" />
                     <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The rows and columns shown, as CSV or Markdown">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Export" VerticalAlignment="Center" />
@@ -61,6 +61,7 @@
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
                                 <MenuItem Header="CSV: the rows shown…" Command="{Binding ExportCsvCommand}"
                                           ToolTip="Every row shown, with the columns shown" />
                                 <MenuItem Header="Markdown: the rows shown…" Command="{Binding ExportMarkdownCommand}"
@@ -122,67 +123,76 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- The table, then what narrows the rows already read and which columns are read. -->
-                    <Grid Margin="14,10,14,8">
+                    <!-- Where the rows came from - the trail of links followed, then the table - and what
+                         narrows them: the quick filter, the columns, and the view's switches. -->
+                    <Grid Margin="14,10,14,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TableHeading}">
-                            <Run Text="{Binding TableDisplayName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" /><Run Text="  " /><Run
-                                 Text="{Binding TableLogicalName, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
-                                 Foreground="{DynamicResource Muted}" />
-                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ItemsControl ItemsSource="{Binding Trail}" Focusable="False" VerticalAlignment="Center"
+                                          AutomationProperties.Name="Tables followed to get here">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource LinkButton}" Content="{Binding Label}" Padding="0"
+                                                    Command="{Binding DataContext.BackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" ToolTip="Back to this table, as you left it" />
+                                            <TextBlock Text="›" Foreground="{DynamicResource Muted}" Margin="6,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding TableHeading}">
+                                <Run Text="{Binding TableDisplayName, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" /><Run Text="  " /><Run
+                                     Text="{Binding TableLogicalName, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                     Foreground="{DynamicResource Muted}" />
+                            </TextBlock>
+                        </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <TextBox Width="220" Height="28" core:Ui.Icon="&#xE71C;" core:Ui.Placeholder="Quick filter"
-                                     AutomationProperties.Name="Quick filter"
+                            <TextBox Width="200" core:Ui.Icon="&#xE71C;" core:Ui.Placeholder="Filter these rows"
+                                     AutomationProperties.Name="Filter these rows"
                                      ToolTip="Narrows the rows already read to those with this text in any column shown - nothing is read again"
                                      Text="{Binding QuickFilter, UpdateSourceTrigger=PropertyChanged}" />
-                            <CheckBox Content="Raw values" Margin="12,0,6,0" VerticalAlignment="Center" IsChecked="{Binding ShowRawValues}"
-                                      ToolTip="Ids and option numbers rather than the names and labels Dataverse shows" />
                             <ToggleButton Style="{StaticResource FilterToggle}" Margin="6,0,0,0" Padding="10,0"
-                                          IsChecked="{Binding IsColumnPickerOpen}" Content="{Binding ColumnsLabel}"
-                                          ToolTip="Choose the columns to read and show" />
+                                          IsChecked="{Binding IsColumnPickerOpen}" ToolTip="{Binding ColumnsToolTip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding ColumnsLabel}" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE735;" FontSize="10" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Muted}" AutomationProperties.Name="Remembered"
+                                               Visibility="{Binding AreColumnsRemembered, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="How the rows are shown and read">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="View" VerticalAlignment="Center" />
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                               Foreground="{DynamicResource Muted}" />
+                                </StackPanel>
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Raw values" IsCheckable="True" IsChecked="{Binding ShowRawValues}"
+                                                  ToolTip="Ids and option numbers rather than the names and labels Dataverse shows" />
+                                        <MenuItem Header="Active rows only" IsCheckable="True" IsChecked="{Binding ActiveOnly}"
+                                                  IsEnabled="{Binding HasStateCode}"
+                                                  ToolTip="Only rows whose status is Active - for tables that have a status" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Server-side conditions, added one at a time: the rows are read again matching every one. -->
-                    <Grid Grid.Row="1" Margin="14,0,14,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <ComboBox Width="210" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
-                                      ItemsSource="{Binding FilterColumns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
-                                      IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
-                            <ComboBox Width="140" Margin="6,0,0,0" AutomationProperties.Name="Filter operator"
-                                      ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
-                            <TextBox Width="200" Height="28" Margin="6,0,0,0" AutomationProperties.Name="Filter value"
-                                     core:Ui.Placeholder="{Binding FilterHint}"
-                                     IsEnabled="{Binding NeedsFilterValue}"
-                                     Text="{Binding FilterValue, UpdateSourceTrigger=PropertyChanged}">
-                                <TextBox.InputBindings>
-                                    <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
-                                </TextBox.InputBindings>
-                            </TextBox>
-                            <Button Content="Add filter" Margin="6,0,0,0" Command="{Binding ApplyFilterCommand}"
-                                    ToolTip="Add this condition to the filters and read the rows again - a row has to match every filter" />
-                        </StackPanel>
-                        <CheckBox Grid.Column="2" Content="Active only" Margin="12,0,0,0" VerticalAlignment="Center" IsChecked="{Binding ActiveOnly}"
-                                  Visibility="{Binding HasStateCode, Converter={StaticResource BoolToVis}}"
-                                  ToolTip="Only rows whose status is Active" />
-                    </Grid>
-
-                    <!-- The filters the rows shown were read with - only once there is one. -->
-                    <DockPanel Grid.Row="2" Margin="14,0,14,10" LastChildFill="False"
-                               Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="Read with" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                    <!-- The filters the rows are read with, as chips, and one more added from a small form. -->
+                    <WrapPanel Grid.Row="1" Margin="14,0,14,10">
                         <ItemsControl ItemsSource="{Binding ServerFilters}" VerticalAlignment="Center" Focusable="False"
                                       AutomationProperties.Name="Filters applied">
                             <ItemsControl.ItemsPanel>
@@ -192,11 +202,10 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="{DynamicResource Surface2}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
-                                            CornerRadius="3" Height="22" Padding="7,0,2,0" Margin="4,2,0,2" SnapsToDevicePixels="True"
-                                            ToolTip="A filter the rows shown were read with">
+                                    <Border Background="{DynamicResource AccentSoft}" CornerRadius="12" Height="24" Padding="10,0,4,0"
+                                            Margin="0,2,6,2" SnapsToDevicePixels="True" ToolTip="A filter the rows shown were read with">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
                                             <Button AutomationProperties.Name="Remove this filter" Style="{StaticResource LinkButton}"
                                                     Content="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9"
                                                     Foreground="{DynamicResource Muted}"
@@ -209,11 +218,55 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="8,0,0,0" VerticalAlignment="Center"
-                                Command="{Binding ClearFilterCommand}" />
-                    </DockPanel>
 
-                    <Grid Grid.Row="3">
+                        <Grid Margin="0,2,0,2">
+                            <ToggleButton x:Name="AddFilterToggle" Height="24" Padding="10,0"
+                                          IsHitTestVisible="{Binding IsOpen, ElementName=AddFilterPopup, Converter={StaticResource NotBool}}"
+                                          ToolTip="Add a condition the rows are read with - a row has to match every filter">
+                                <ToggleButton.Style>
+                                    <Style TargetType="ToggleButton" BasedOn="{StaticResource FilterToggle}">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Border2}" />
+                                    </Style>
+                                </ToggleButton.Style>
+                                <TextBlock Text="+ Add filter" Foreground="{DynamicResource Muted}" />
+                            </ToggleButton>
+                            <Popup x:Name="AddFilterPopup" PlacementTarget="{Binding ElementName=AddFilterToggle}" Placement="Bottom"
+                                   IsOpen="{Binding IsChecked, ElementName=AddFilterToggle}" StaysOpen="False" AllowsTransparency="True"
+                                   Opened="AddFilterPopup_Opened">
+                                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}" BorderThickness="1"
+                                        CornerRadius="6" Padding="12" Margin="0,4,8,8">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.18" />
+                                    </Border.Effect>
+                                    <StackPanel Width="300">
+                                        <ComboBox x:Name="FilterColumnBox" core:Ui.InlineLabel="Where" AutomationProperties.Name="Filter column"
+                                                  ItemsSource="{Binding FilterColumns}" SelectedItem="{Binding FilterColumn}" DisplayMemberPath="Header"
+                                                  IsTextSearchEnabled="True" TextSearch.TextPath="Header" />
+                                        <ComboBox Margin="0,6,0,0" AutomationProperties.Name="Filter operator"
+                                                  ItemsSource="{Binding FilterOperators}" SelectedItem="{Binding FilterOperator}" DisplayMemberPath="Label" />
+                                        <TextBox Margin="0,6,0,0" AutomationProperties.Name="Filter value"
+                                                 core:Ui.Placeholder="{Binding FilterHint}"
+                                                 IsEnabled="{Binding NeedsFilterValue}"
+                                                 Text="{Binding FilterValue, UpdateSourceTrigger=PropertyChanged}">
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Enter" Command="{Binding ApplyFilterCommand}" />
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                            <Button Style="{StaticResource PrimaryButton}" Content="Add filter" Command="{Binding ApplyFilterCommand}"
+                                                    Click="AddFilter_Click"
+                                                    ToolTip="Add this condition and read the rows again" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <Button Style="{StaticResource LinkButton}" Content="Clear filters" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Command="{Binding ClearFilterCommand}"
+                                Visibility="{Binding HasServerFilter, Converter={StaticResource BoolToVis}}" />
+                    </WrapPanel>
+
+                    <Grid Grid.Row="2">
                         <!-- Columns are the table's, so they are made in code when the rows change. -->
                         <DataGrid x:Name="RowsGrid" ItemsSource="{Binding RowsView}" IsReadOnly="True"
                                   AutoGenerateColumns="False" ClipboardCopyMode="IncludeHeader"
@@ -226,14 +279,19 @@
                                   MouseDoubleClick="RowsGrid_MouseDoubleClick"
                                   Hyperlink.Click="RowsGrid_LinkClick"
                                   Visibility="{Binding HasRows, Converter={StaticResource BoolToVis}}">
+                            <DataGrid.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding OpenRecordCommand}" />
+                            </DataGrid.InputBindings>
                             <!-- Right-click a cell: open its row, follow its link, see its audit history, or copy its value, its id or
                                  option number, its column, or the row's id. Double-click a row to open it; click a link to follow it. -->
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Open in Dynamics 365" Command="{Binding OpenRecordCommand}" InputGestureText="Double-click"
-                                              ToolTip="The row on its form, in the browser" />
-                                    <MenuItem Header="Open link" Command="{Binding FollowLinkCommand}" InputGestureText="Click"
-                                              ToolTip="A lookup's row, or this row's related rows, in a table data window of their own" />
+                                    <MenuItem Header="Open in Dynamics 365" Command="{Binding OpenRecordCommand}" InputGestureText="Enter"
+                                              ToolTip="The row on its form, in the browser. Double-clicking the row does the same." />
+                                    <MenuItem Header="Open link" Command="{Binding FollowLinkCommand}"
+                                              ToolTip="A lookup's row, or this row's related rows, here - Back returns" />
+                                    <MenuItem Header="Open link in a new screen" Command="{Binding FollowLinkInNewScreenCommand}"
+                                              ToolTip="The same, in a table data screen of its own" />
                                     <MenuItem Header="Audit history" Command="{Binding AuditHistoryCommand}"
                                               ToolTip="Who changed this row, when, and from what to what - where auditing is on" />
                                     <Separator />
@@ -261,6 +319,74 @@
                         </StackPanel>
                     </Grid>
                 </Grid>
+
+                <!-- ============================================================ the row -->
+                <!-- The row last chosen: its actions as buttons, its values, and its related rows. -->
+                <Border Grid.Column="2" Width="290" BorderBrush="{DynamicResource Border}" BorderThickness="1,1,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasCurrentRow}" Value="True" />
+                                        <Condition Binding="{Binding IsColumnPickerOpen}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="14,12,14,12">
+                            <TextBlock Text="{Binding CurrentRowLabel}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding TableDisplayName}" Foreground="{DynamicResource Muted}" Margin="0,2,0,10" />
+                            <WrapPanel Margin="0,0,0,12">
+                                <Button Style="{StaticResource PrimaryButton}" Content="Open in Dynamics 365" Margin="0,0,6,6"
+                                        Command="{Binding OpenRecordCommand}" ToolTip="The row on its form, in the browser (Enter)" />
+                                <Button Content="Audit history" Margin="0,0,6,6" Command="{Binding AuditHistoryCommand}"
+                                        ToolTip="Who changed this row, when, and from what to what - where auditing is on" />
+                            </WrapPanel>
+                            <ItemsControl ItemsSource="{Binding CurrentValues}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="100" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Header}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Header}" Margin="0,0,8,0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" HorizontalAlignment="Left"
+                                                       core:CopyOnClick.IsEnabled="True"
+                                                       Visibility="{Binding IsLink, Converter={StaticResource NotBoolToVis}}" />
+                                            <Button Grid.Column="1" Style="{StaticResource LinkButton}" Content="{Binding Value}" Padding="0"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding DataContext.FollowFieldCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" ToolTip="Open this row here - Back returns"
+                                                    Visibility="{Binding IsLink, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="RELATED ROWS" Style="{StaticResource Label}" Margin="0,8,0,4"
+                                       Visibility="{Binding CurrentRelated.Count, Converter={StaticResource CountToVis}}" />
+                            <ItemsControl ItemsSource="{Binding CurrentRelated}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource LinkButton}" Padding="0" Margin="0,0,0,4" HorizontalAlignment="Left"
+                                                Command="{Binding DataContext.FollowFieldCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" ToolTip="This row's related rows, here - Back returns">
+                                            <TextBlock>
+                                                <Run Text="{Binding Header, Mode=OneWay}" /><Run Text=" →" />
+                                            </TextBlock>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
 
                 <!-- ============================================================ column picker -->
                 <Border Grid.Column="2" Width="290" BorderBrush="{DynamicResource Border}" BorderThickness="1,1,0,0"

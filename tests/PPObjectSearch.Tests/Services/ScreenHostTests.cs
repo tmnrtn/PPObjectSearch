@@ -275,6 +275,6 @@ public sealed class ScreenHostTests
         details.Title = "Order approval";
 
         Assert.Equal("Order approval", details.Title);
-        Assert.Equal([nameof(OpenScreen.Title)], changed);
+        Assert.Equal([nameof(OpenScreen.Title), nameof(OpenScreen.ToolTipText)], changed);
     }
 }

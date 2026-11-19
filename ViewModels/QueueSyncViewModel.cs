@@ -236,7 +236,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         }
     }
 
-    private string _status = "Loading teams and queues...";
+    private string _status = "Loading teams and queues…";
     public string Status
     {
         get => _status;
@@ -246,7 +246,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
     public async Task LoadAsync()
     {
         IsBusy = true;
-        Status = "Loading teams and queues...";
+        Status = "Loading teams and queues…";
 
         try
         {
@@ -302,7 +302,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         if (superseded is not null) await superseded.CancelAsync();
 
         IsBusy = true;
-        Status = $"Reading the members of {team.Name} and {queue.Name}...";
+        Status = $"Reading the members of {team.Name} and {queue.Name}…";
 
         try
         {
@@ -365,7 +365,7 @@ public sealed class QueueSyncViewModel : ObservableObject, IDisposable
         try
         {
             IsBusy = true;
-            Status = "Checking what kind of environment this is...";
+            Status = "Checking what kind of environment this is…";
             permission = await Session.EvaluateWritePermissionAsync(CancellationToken.None);
         }
         catch (Exception ex)

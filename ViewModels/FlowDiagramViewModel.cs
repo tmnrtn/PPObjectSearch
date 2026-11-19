@@ -311,7 +311,7 @@ public sealed class FlowCardViewModel : FlowStepViewModel
 /// A cloud flow drawn as the designer draws it: trigger, then steps top to bottom, branches side
 /// by side. Read-only - selecting a step shows its JSON, nothing here can change the flow.
 /// </summary>
-public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
+public sealed class FlowDiagramViewModel : ObservableObject, IDisposable, Ai.IAiContext
 {
     public const double MinZoom = 0.4;
     public const double MaxZoom = 1.5;
@@ -350,6 +350,9 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         ResetZoomCommand = new RelayCommand(_ => Zoom = 1);
         CopyMermaidCommand = new RelayCommand(_ => CopyMermaid());
         JumpToFailureCommand = new RelayCommand(_ => JumpToFailure(), _ => FailedCards.Any());
+        NextFailureCommand = new RelayCommand(_ => SelectNext(FailedCards.ToList(), +1), _ => FailedCards.Any());
+        NextMatchCommand = new RelayCommand(_ => SelectNext(_cards.Where(c => c.IsMatch).ToList(), +1), _ => MatchCount > 0);
+        PreviousMatchCommand = new RelayCommand(_ => SelectNext(_cards.Where(c => c.IsMatch).ToList(), -1), _ => MatchCount > 0);
         ClearRunCommand = new RelayCommand(_ => ClearRun(), _ => IsRunMode);
         ShowInputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: true), _ => InputsLink is not null);
         ShowOutputsCommand = new AsyncRelayCommand(_ => ShowContentAsync(inputs: false), _ => OutputsLink is not null);
@@ -377,6 +380,12 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 
     /// <summary>The whole flow as a Mermaid flowchart, for documentation.</summary>
     public string Mermaid => FlowMermaidExporter.ToMermaid(Design, _flowName, _childFlowNames);
+
+    /// <summary>On screen the design is boxes and lines; the assistant reads it as its flowchart.</summary>
+    public string DescribeForAi() =>
+        "The flow's design, as a Mermaid flowchart (steps in run-after order; the screen draws the same):\n```mermaid\n" +
+        Mermaid.TrimEnd() + "\n```" +
+        (Selected is { } step ? $"\nSelected step: {step.Title}" : string.Empty);
 
     private IReadOnlyDictionary<Guid, string> _childFlowNames = new Dictionary<Guid, string>();
 
@@ -437,6 +446,13 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, Task<FlowRepetitions>> _repetitions = new(StringComparer.Ordinal);
 
     public RelayCommand JumpToFailureCommand { get; }
+
+    /// <summary>The failed step after the one selected - through a loop's failures in order - wrapping round.</summary>
+    public RelayCommand NextFailureCommand { get; }
+
+    /// <summary>Enter and Shift+Enter in Find a step: the next or previous matching step, opening what holds it.</summary>
+    public RelayCommand NextMatchCommand { get; }
+    public RelayCommand PreviousMatchCommand { get; }
     public RelayCommand ClearRunCommand { get; }
     public AsyncRelayCommand ShowInputsCommand { get; }
     public AsyncRelayCommand ShowOutputsCommand { get; }
@@ -644,7 +660,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
     {
         var steps = missing.Count == 1 ? "1 step in this run is" : $"{missing.Count} steps in this run are";
         var them = missing.Count == 1 ? "it" : "them";
-        var end = missing.Count > 6 ? ", ..." : ".";
+        var end = missing.Count > 6 ? ", …" : ".";
         return $"{steps} no longer in the flow (renamed or removed since), so the diagram cannot show {them}: " +
                string.Join(", ", missing.Take(6).Select(n => n.Replace('_', ' '))) + end +
                " The flow has changed since this run, so steps added since show as did not run.";
@@ -682,9 +698,25 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsRunSucceeded));
         OnPropertyChanged(nameof(StatusLine));
         JumpToFailureCommand.RaiseCanExecuteChanged();
+        NextFailureCommand.RaiseCanExecuteChanged();
         ClearRunCommand.RaiseCanExecuteChanged();
         RaiseExportCommands();
         RefreshSelectedRun();
+    }
+
+    /// <summary>Selects the step after (or before) the selected one in a list - matches, failures - wrapping round.</summary>
+    private void SelectNext(IReadOnlyList<FlowCardViewModel> among, int by)
+    {
+        if (among.Count == 0) return;
+
+        var at = Selected is { } selected ? among.ToList().IndexOf(selected) : -1;
+        var next = at < 0
+            ? (by > 0 ? 0 : among.Count - 1)
+            : ((at + by) % among.Count + among.Count) % among.Count;
+
+        for (var parent = among[next].Parent; parent is not null; parent = parent.Parent) parent.IsExpanded = true;
+        Selected = among[next];
+        OnPropertyChanged(nameof(MatchLabel));
     }
 
     /// <summary>Selects the first failed step, opening whatever holds it.</summary>
@@ -929,7 +961,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 
     public int FailedIterationCount => _allIterations.Count(r => IsFailure(r.Outcome));
     public bool HasFailedIterations => FailedIterationCount > 0;
-    public string FailedOnlyLabel => $"Failed only ({FailedIterationCount:N0})";
+    public string FailedOnlyLabel => $"Failed {FailedIterationCount:N0}";
 
     private bool _showFailedIterationsOnly;
     /// <summary>One failure in hundreds of iterations is lost in the list; this lists only the failures.</summary>
@@ -1058,7 +1090,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 
     private async Task LoadIterationsAsync(FlowCardViewModel card, int version)
     {
-        IterationStatus = "Reading iterations...";
+        IterationStatus = "Reading iterations…";
 
         try
         {
@@ -1439,6 +1471,7 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
             if (value is not null) value.IsSelected = true;
 
             OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(MatchLabel));
             OnPropertyChanged(nameof(SelectedRunAfter));
             OnPropertyChanged(nameof(SelectedRunOutcome));
             Notice = string.Empty;
@@ -1481,12 +1514,22 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string MatchLabel => (string.IsNullOrWhiteSpace(SearchText), MatchCount) switch
+    /// <summary>"3 matches" - or, once one is selected, "2 of 3".</summary>
+    public string MatchLabel
     {
-        (true, _) => string.Empty,
-        (_, 1) => "1 match",
-        _ => $"{MatchCount:N0} matches"
-    };
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchText)) return string.Empty;
+
+            var matches = _cards.Where(c => c.IsMatch).ToList();
+            if (Selected is { IsMatch: true } selected && matches.IndexOf(selected) is var at and >= 0)
+            {
+                return $"{at + 1:N0} of {matches.Count:N0}";
+            }
+
+            return MatchCount == 1 ? "1 match" : $"{MatchCount:N0} matches";
+        }
+    }
 
     private double _zoom = 1;
     public double Zoom
@@ -1520,6 +1563,8 @@ public sealed class FlowDiagramViewModel : ObservableObject, IDisposable
 
         MatchCount = count;
         OnPropertyChanged(nameof(MatchLabel));
+        NextMatchCommand.RaiseCanExecuteChanged();
+        PreviousMatchCommand.RaiseCanExecuteChanged();
     }
 
     private void SetExpanded(bool expanded)

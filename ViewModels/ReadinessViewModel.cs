@@ -292,7 +292,7 @@ public sealed class ReadinessViewModel : ObservableObject, IDisposable
 
         try
         {
-            Status = $"Reading {solution.DisplayLabel} in {source.Title}...";
+            Status = $"Reading {solution.DisplayLabel} in {source.Title}…";
             var clock = Stopwatch.StartNew();
             var sourceClient = source.Client!;
             var components = await sourceClient.GetSolutionComponentsAsync(solution.SolutionId, ct: cts.Token);

@@ -14,13 +14,19 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="4" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Header: the environment, then whose records these are. Read-only throughout. -->
-            <StackPanel Grid.Row="0" Margin="18,12,18,6">
+            <!-- Header: the environment, then whose records these are, with Stop, Refresh and Export on
+                 the right as on every screen. Read-only throughout. -->
+            <Grid Grid.Row="0" Margin="18,12,18,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
                 <local:EnvironmentLine DataContext="{Binding Session}" />
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Owned records" Style="{StaticResource WindowHeading}" VerticalAlignment="Center" />
@@ -35,22 +41,33 @@
                 </TextBlock>
             </StackPanel>
 
-            <!-- What was found, and what can be done with it. -->
-            <DockPanel Grid.Row="1" Margin="18,6,18,10">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Style="{StaticResource RowButton}" Content="Stop" Command="{Binding CancelCommand}" Margin="0,0,8,0"
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="Stop" Command="{Binding CancelCommand}" Margin="6,0,0,0"
                             ToolTip="Stop counting"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button Style="{StaticResource RowButton}" Content="Export CSV…" Command="{Binding ExportCsvCommand}" Margin="0,0,8,0"
-                            ToolTip="Every table listed, with its count - or why it could not be counted" />
-                    <Button AutomationProperties.Name="Count again" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30"
-                            Command="{Binding RunCommand}" ToolTip="Count again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RunCommand}" ToolTip="Refresh - count again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="Every table listed, with its count - or why it could not be counted">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
+                                <MenuItem Header="CSV: every table counted…" Command="{Binding ExportCsvCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
-                <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
-            </DockPanel>
+            </Grid>
 
-            <ProgressBar Grid.Row="2" Height="4" Margin="18,0" Maximum="{Binding Total, Mode=OneWay}" Value="{Binding Done, Mode=OneWay}"
-                         AutomationProperties.Name="Tables counted"
+            <!-- What was found. -->
+            <TextBlock Grid.Row="1" Margin="18,6,18,10" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+
+            <ProgressBar Grid.Row="2" Style="{StaticResource BusyBar}"
+                         AutomationProperties.Name="Counting"
                          Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
 
             <DataGrid Grid.Row="3" ItemsSource="{Binding Rows}" IsReadOnly="True" SelectionMode="Single"
@@ -77,7 +94,7 @@
                                             <Setter Property="Text" Value="{Binding Rows, StringFormat={}{0:N0}}" />
                                             <Setter Property="FontWeight" Value="SemiBold" />
                                             <Style.Triggers>
-                                                <!-- Not a zero: unknown. The reason is in the tooltip. -->
+                                                <!-- Not a zero: unknown. The reason is in the column beside it. -->
                                                 <DataTrigger Binding="{Binding Failed}" Value="True">
                                                     <Setter Property="Text" Value="Could not count" />
                                                     <Setter Property="FontWeight" Value="Normal" />
@@ -91,29 +108,39 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Width="130" CanUserSort="False">
+                    <!-- The rows themselves, or - where they could not be counted - why, in words rather
+                         than a tooltip. -->
+                    <DataGridTemplateColumn Header="Rows" Width="*" MinWidth="200" CanUserSort="False">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Style="{StaticResource LinkButton}" Content="Show rows →" Height="20" Padding="2,0" Margin="12,0,0,0"
-                                        HorizontalAlignment="Left"
-                                        ToolTip="Open this table in Table data, filtered to these rows"
-                                        Command="{Binding DataContext.ShowRowsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                        CommandParameter="{Binding}"
-                                        Visibility="{Binding Failed, Converter={StaticResource NotBoolToVis}}" />
+                                <Grid>
+                                    <Button Style="{StaticResource LinkButton}" Content="Show rows →" Height="20" Padding="2,0" Margin="12,0,0,0"
+                                            HorizontalAlignment="Left"
+                                            ToolTip="Open this table in Table data, filtered to these rows"
+                                            Command="{Binding DataContext.ShowRowsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}"
+                                            Visibility="{Binding Failed, Converter={StaticResource NotBoolToVis}}" />
+                                    <TextBlock Style="{StaticResource CellMuted}" Text="{Binding Error}" ToolTip="{Binding Error}"
+                                               Visibility="{Binding Failed, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
+            <TextBlock Grid.Row="3" Style="{StaticResource EmptyHint}" Text="Nothing counted yet."
+                       Visibility="{Binding Rows.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
 
             <Border Grid.Row="4" Style="{StaticResource StatusBar}">
-                <Grid>
-                    <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Foreground="{DynamicResource Muted}"
-                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding IsBusy, Converter={StaticResource NotBoolToVis}}" />
-                    <TextBlock Text="{Binding Progress}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
-                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                </Grid>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource StatusCount}" Text="{Binding Rows.Count, StringFormat={}{0:N0} tables}" />
+                    <Grid>
+                        <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Style="{StaticResource StatusText}"
+                                   Visibility="{Binding IsBusy, Converter={StaticResource NotBoolToVis}}" />
+                        <TextBlock Text="{Binding Progress}" Style="{StaticResource StatusText}"
+                                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    </Grid>
+                </DockPanel>
             </Border>
         </Grid>
     </Border>

@@ -47,8 +47,8 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
-                    <Button AutomationProperties.Name="Check again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding RunCommand}" ToolTip="Check again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RunCommand}" ToolTip="Refresh - check again" />
                     <Button Content="Export Markdown…" Margin="6,0,0,0" Command="{Binding ExportCommand}"
                             ToolTip="The report as Markdown, for a pull request or a change ticket" />
                 </StackPanel>

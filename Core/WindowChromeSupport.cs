@@ -24,6 +24,24 @@ public static partial class WindowChromeSupport
     public static bool GetIsScreen(DependencyObject d) => (bool)d.GetValue(IsScreenProperty);
     public static void SetIsScreen(DependencyObject d, bool value) => d.SetValue(IsScreenProperty, value);
 
+    /// <summary>A window with the AI assistant beside its screen, which shows the title bar's Ask AI button.</summary>
+    public static readonly DependencyProperty CanAskAiProperty = DependencyProperty.RegisterAttached(
+        "CanAskAi", typeof(bool), typeof(WindowChromeSupport), new PropertyMetadata(false));
+
+    public static bool GetCanAskAi(DependencyObject d) => (bool)d.GetValue(CanAskAiProperty);
+    public static void SetCanAskAi(DependencyObject d, bool value) => d.SetValue(CanAskAiProperty, value);
+
+    /// <summary>Ask AI is showing beside the window's screen: its title-bar button reads as pressed.</summary>
+    public static readonly DependencyProperty IsAiOpenProperty = DependencyProperty.RegisterAttached(
+        "IsAiOpen", typeof(bool), typeof(WindowChromeSupport), new PropertyMetadata(false));
+
+    public static bool GetIsAiOpen(DependencyObject d) => (bool)d.GetValue(IsAiOpenProperty);
+    public static void SetIsAiOpen(DependencyObject d, bool value) => d.SetValue(IsAiOpenProperty, value);
+
+    /// <summary>The title bar's Ask AI button, and Ctrl+Shift+I: shows or hides the assistant beside the screen.</summary>
+    public static readonly RoutedUICommand AskAiCommand = new("Ask AI", "AskAi", typeof(WindowChromeSupport),
+        new InputGestureCollection { new KeyGesture(Key.I, ModifierKeys.Control | ModifierKeys.Shift) });
+
     /// <summary>The screen window's title-bar button: back into the main window as a tab.</summary>
     public static readonly RoutedUICommand MoveToMainWindowCommand =
         new("Move to the main window", "MoveToMainWindow", typeof(WindowChromeSupport));

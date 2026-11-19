@@ -37,7 +37,10 @@ public sealed class OpenScreen : ObservableObject
     public string Title
     {
         get => _title;
-        set => SetProperty(ref _title, value ?? string.Empty);
+        set
+        {
+            if (SetProperty(ref _title, value ?? string.Empty)) OnPropertyChanged(nameof(ToolTipText));
+        }
     }
 
     private bool _isInWindow;
@@ -55,6 +58,38 @@ public sealed class OpenScreen : ObservableObject
         get => _isSelected;
         internal set => SetProperty(ref _isSelected, value);
     }
+
+    /// <summary>
+    /// The one environment the screen shows - set as it opens, from its view model - so its tab can
+    /// carry that environment's colour. Null for a screen across several, such as Compare.
+    /// </summary>
+    public string? EnvironmentUrl { get; private set; }
+    public string? EnvironmentTitle { get; private set; }
+    public Dataverse.EnvironmentSku EnvironmentSku { get; private set; }
+    public bool HasEnvironment => EnvironmentUrl is not null;
+
+    public void SetEnvironment(string url, string title, Dataverse.EnvironmentSku sku)
+    {
+        EnvironmentUrl = url;
+        EnvironmentTitle = title;
+        EnvironmentSku = sku;
+        OnPropertyChanged(nameof(EnvironmentUrl));
+        OnPropertyChanged(nameof(EnvironmentTitle));
+        OnPropertyChanged(nameof(EnvironmentSku));
+        OnPropertyChanged(nameof(HasEnvironment));
+        OnPropertyChanged(nameof(ToolTipText));
+    }
+
+    private bool _isOtherEnvironment;
+    /// <summary>Of an environment other than the one selected in the sidebar: its tab reads quieter.</summary>
+    public bool IsOtherEnvironment
+    {
+        get => _isOtherEnvironment;
+        set => SetProperty(ref _isOtherEnvironment, value);
+    }
+
+    /// <summary>The tab's tooltip: the title, and the environment it shows.</summary>
+    public string ToolTipText => EnvironmentTitle is { } env ? $"{Title}\n{env}" : Title;
 
     public bool IsClosed { get; private set; }
 
@@ -106,6 +141,7 @@ public sealed class ScreenHost : ObservableObject
         PopOutCommand = new RelayCommand(p => { if (p is OpenScreen s) PopOut(s); }, p => p is OpenScreen);
         PopInCommand = new RelayCommand(p => { if (p is OpenScreen s) PopIn(s); }, p => p is OpenScreen);
         ShowHomeCommand = new RelayCommand(_ => ShowHome());
+        ActivateCommand = new RelayCommand(p => { if (p is OpenScreen s) Activate(s); }, p => p is OpenScreen);
     }
 
     /// <summary>The app's host. Windows are attached once the application is running.</summary>
@@ -135,6 +171,9 @@ public sealed class ScreenHost : ObservableObject
     public RelayCommand PopInCommand { get; }
     public RelayCommand ShowHomeCommand { get; }
 
+    /// <summary>Brings a screen into view, from the strip's list of every open screen or the palette.</summary>
+    public RelayCommand ActivateCommand { get; }
+
     private OpenScreen? _selectedTab;
     /// <summary>The tab showing in the main window; null while the environment itself shows.</summary>
     public OpenScreen? SelectedTab
@@ -158,6 +197,18 @@ public sealed class ScreenHost : ObservableObject
 
     /// <summary>Shows the selected environment rather than a screen.</summary>
     public void ShowHome() => SelectedTab = null;
+
+    /// <summary>
+    /// Ctrl+Tab and Ctrl+Shift+Tab: the next or previous tab in the strip, the environment counting
+    /// as the first, wrapping round at either end.
+    /// </summary>
+    public void Step(int by)
+    {
+        var count = Tabs.Count + 1;
+        var at = SelectedTab is null ? 0 : Tabs.IndexOf(SelectedTab) + 1;
+        var next = ((at + by) % count + count) % count;
+        SelectedTab = next == 0 ? null : Tabs[next - 1];
+    }
 
     /// <summary>Opens a screen where the setting says, and brings it into view.</summary>
     public OpenScreen Show(OpenScreen screen) => Show(screen, Placement);

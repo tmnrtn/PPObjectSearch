@@ -172,7 +172,7 @@ public sealed class ContentSearchViewModel : ObservableObject, IDisposable
             var stale = _cache.Stale(_scope);
             if (stale.Count > 0)
             {
-                Status = $"Reading {stale.Count:N0} definition(s)...";
+                Status = $"Reading {stale.Count:N0} definition(s)…";
                 var progress = new Progress<int>(done => Status = $"Reading definitions... {done:N0} of {stale.Count:N0}");
                 var bodies = await _client.GetDefinitionBodiesAsync(stale, progress, cts.Token);
                 _cache.Store(stale, bodies);

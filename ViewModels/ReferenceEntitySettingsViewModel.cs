@@ -94,7 +94,7 @@ public sealed class ReferenceEntitySettingsViewModel : ObservableObject
         private set => SetProperty(ref _isBusy, value);
     }
 
-    private string _status = "Loading table metadata...";
+    private string _status = "Loading table metadata…";
     public string Status
     {
         get => _status;

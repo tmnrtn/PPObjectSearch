@@ -218,7 +218,7 @@ public partial class ObjectDetailsTableTests
         await details.LoadAsync();
 
         details.SelectedChild = details.Children[0];
-        await Until(() => !details.IsLoadingProperties && details.ChildStatus != "Loading properties...");
+        await Until(() => !details.IsLoadingProperties && details.ChildStatus != "Loading properties…");
 
         Assert.Equal("Dataverse returned no properties for this component.", details.ChildStatus);
     }

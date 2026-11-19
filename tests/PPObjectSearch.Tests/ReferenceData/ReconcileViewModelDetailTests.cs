@@ -259,7 +259,7 @@ public sealed class ReconcileViewModelDetailTests : IDisposable
         await vm.UndoCommand.ExecuteAsync(null);
 
         Assert.StartsWith("Undo finished with problems - 4 of 4 could not be reversed: ", vm.Status);
-        Assert.EndsWith(" ...", vm.Status);
+        Assert.EndsWith(" …", vm.Status);
         Assert.False(vm.CanUndo);
         Assert.True(vm.AnyWritesSucceeded);
 

@@ -613,7 +613,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
                 ct.ThrowIfCancellationRequested();
 
                 done++;
-                Status = $"({done}/{configured.Count}) {entity.LogicalName}: reading metadata...";
+                Status = $"({done}/{configured.Count}) {entity.LogicalName}: reading metadata…";
 
                 var plan = await planner.BuildAsync(entity.Config, MatchLookupsByName, ct);
 
@@ -627,10 +627,10 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
 
                 if (plan.Plan is null) continue;
 
-                Status = $"({done}/{configured.Count}) {entity.LogicalName}: reading rows...";
+                Status = $"({done}/{configured.Count}) {entity.LogicalName}: reading rows…";
 
                 void Progress(string side, int count) => dispatcher?.InvokeAsync(() =>
-                    Status = $"({done}/{configured.Count}) {entity.LogicalName}: {count:N0} {side} row(s)...");
+                    Status = $"({done}/{configured.Count}) {entity.LogicalName}: {count:N0} {side} row(s)…");
 
                 // Neither side depends on the other, so the two reads overlap.
                 var sourceRows = sourceClient.GetRecordsAsync(
@@ -885,7 +885,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
         try
         {
             IsBusy = true;
-            Status = $"Checking what kind of environment {TargetHeader} is...";
+            Status = $"Checking what kind of environment {TargetHeader} is…";
 
             permission = await EnsurePermissionAsync(targetClient);
             targetEntities = await EnsureTargetEntitiesAsync(targetClient);
@@ -1110,7 +1110,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
             if (_sourceEntities is null || !ReferenceEquals(_sourceEntitiesFrom, client))
             {
                 IsBusy = true;
-                Status = $"Reading the table list from {SourceHeader}...";
+                Status = $"Reading the table list from {SourceHeader}…";
 
                 _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;
@@ -1197,7 +1197,7 @@ public sealed class ReferenceDataCompareViewModel : ObservableObject, IDisposabl
             if (_sourceEntities is null || !ReferenceEquals(_sourceEntitiesFrom, client))
             {
                 IsBusy = true;
-                Status = $"Reading the table list from {SourceHeader}...";
+                Status = $"Reading the table list from {SourceHeader}…";
 
                 _sourceEntities = await client.GetEntitiesAsync(CancellationToken.None);
                 _sourceEntitiesFrom = client;

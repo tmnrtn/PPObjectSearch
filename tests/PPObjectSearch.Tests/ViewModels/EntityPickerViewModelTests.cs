@@ -291,7 +291,7 @@ public class EntityPickerViewModelTests
 
         Assert.True(picker.IsReadingSolution);
         Assert.Empty(Shown(picker));
-        Assert.Equal("0 selected · 0 of 4 tables shown · reading Core...", picker.Summary);
+        Assert.Equal("0 selected · 0 of 4 tables shown · reading Core…", picker.Summary);
 
         pending.SetResult(["contact"]);
         await picker.SolutionRead;

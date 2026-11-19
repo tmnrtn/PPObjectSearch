@@ -27,7 +27,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBox x:Name="SearchBox" Height="30"
+                <TextBox AutomationProperties.Name="Search tables by name" x:Name="SearchBox" Height="30"
                          core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search tables by name"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
 
