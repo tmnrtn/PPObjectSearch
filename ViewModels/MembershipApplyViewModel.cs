@@ -292,7 +292,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
             foreach (var row in Enumerable.Reverse(rows))
             {
                 done++;
-                Status = $"Undoing ({done}/{rows.Count}) - {(row.IsRemove ? "adding back" : "removing")} {row.Name}...";
+                Status = $"Undoing ({done}/{rows.Count}) - {(row.IsRemove ? "adding back" : "removing")} {row.Name}…";
 
                 if (!await UndoOneAsync(undoEach, row)) failed++;
             }
@@ -651,7 +651,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
             ct.ThrowIfCancellationRequested();
 
             done++;
-            Status = $"({done}/{toWrite.Count}) {(row.IsRemove ? "removing" : "adding")} {row.Name}...";
+            Status = $"({done}/{toWrite.Count}) {(row.IsRemove ? "removing" : "adding")} {row.Name}…";
             AnyWritesAttempted = true;
 
             if (await ApplyOneAsync(row, applyEach)) succeeded++;
@@ -695,7 +695,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
     /// <summary>The request's follow-up, run once after the changes; returns what to add to the outcome.</summary>
     private async Task<string> RunAfterAllAsync(Func<CancellationToken, Task> afterAll, CancellationToken ct)
     {
-        Status = $"Running {_request.AfterAllLabel}...";
+        Status = $"Running {_request.AfterAllLabel}…";
         try
         {
             await afterAll(ct);
@@ -714,7 +714,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
     {
         var before = await _request.ReadMemberIds(ct);
 
-        Status = $"Asking Dataverse to sync {TargetName}...";
+        Status = $"Asking Dataverse to sync {TargetName}…";
         AnyWritesAttempted = true;
 
         try
@@ -729,7 +729,7 @@ public sealed class MembershipApplyViewModel : ObservableObject, IDisposable
 
         Record("Sync", null, true, $"Requested; {before.Count:N0} member(s) before.");
 
-        Status = "Sync requested. Reading the team's membership again...";
+        Status = "Sync requested. Reading the team's membership again…";
         var after = await _request.ReadMemberIds(ct);
 
         var pending = RecordSyncOutcomes(after);

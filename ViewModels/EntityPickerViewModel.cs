@@ -291,7 +291,7 @@ public sealed class EntityPickerViewModel : ObservableObject
 
             if (IsReadingSolution)
             {
-                parts.Add($"reading {SelectedSolution?.Solution?.FriendlyName}...");
+                parts.Add($"reading {SelectedSolution?.Solution?.FriendlyName}…");
             }
             else if (_solutionTables is not null && SelectedSolution?.Solution is { } solution)
             {

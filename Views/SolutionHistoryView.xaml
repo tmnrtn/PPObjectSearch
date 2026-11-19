@@ -72,12 +72,23 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Import log" Height="30" Margin="0,0,6,0" Command="{Binding ImportLogCommand}"
+                    <Button Content="Import log" Margin="0,0,6,0" Command="{Binding ImportLogCommand}"
                             ToolTip="The selected import's log: each component's result, error and timing. Follows an import that is still running." />
-                    <Button Content="Export CSV…" Height="30" Command="{Binding ExportCommand}"
-                            ToolTip="Exports the operations currently shown, filters and all." />
-                    <Button AutomationProperties.Name="Read the history again" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30" Margin="6,0,0,0"
-                            Command="{Binding RefreshCommand}" ToolTip="Read the history again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="0,0,6,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read the history again" />
+                    <Button core:Ui.OpensMenu="True" ToolTip="The operations shown, filters and all">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
+                                <MenuItem Header="CSV: the operations shown…" Command="{Binding ExportCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
             </Grid>
 
@@ -108,7 +119,7 @@
                     </StackPanel>
                 </Border>
 
-                <TextBox x:Name="SearchBox" Grid.Column="1" Height="30" Margin="8,0,0,0"
+                <TextBox AutomationProperties.Name="Solution, publisher, package or error code" x:Name="SearchBox" Grid.Column="1" Height="30" Margin="8,0,0,0"
                          core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Solution, publisher, package or error code"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
             </Grid>

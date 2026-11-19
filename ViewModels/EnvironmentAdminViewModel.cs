@@ -130,6 +130,34 @@ public sealed class EnvironmentAdminViewModel : ObservableObject, IDisposable
     public EnvironmentSessionViewModel Session { get; }
     public string Title => $"Environment admin — {Session.Title}";
 
+    /// <summary>The tab showing - users, teams, roles, mailboxes or queues - as the filters leave it, to a CSV file.</summary>
+    public RelayCommand ExportCsvCommand => _exportCsvCommand ??= new RelayCommand(_ => ExportCsv());
+    private RelayCommand? _exportCsvCommand;
+
+    /// <summary>Asks where to save; replaced in tests. Null when cancelled.</summary>
+    internal Func<string, string?> ChooseFile { get; set; } = suggested =>
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV file (*.csv)|*.csv", FileName = suggested };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    };
+
+    private void ExportCsv()
+    {
+        var pane = Pane(SelectedTab);
+        var lines = pane.CsvLines();
+        if (ChooseFile($"{pane.ExportName}-{Session.EnvironmentHost}.csv") is not { } path) return;
+
+        try
+        {
+            CsvExporter.WriteLines(path, lines);
+            pane.ReportExport($"Exported {lines.Count - 1:N0} row(s) to {path}.");
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            pane.ReportExport("Could not export - " + ex.Message);
+        }
+    }
+
     public AdminUsersViewModel Users { get; }
     public AdminTeamsViewModel Teams { get; }
     public AdminRolesViewModel Roles { get; }
@@ -199,6 +227,17 @@ public abstract class AdminPaneViewModel : ObservableObject
     protected DataverseClient Client { get; }
 
     public AsyncRelayCommand RefreshCommand { get; }
+
+    /// <summary>The file name the tab's export suggests, without the extension.</summary>
+    public abstract string ExportName { get; }
+
+    /// <summary>The rows the filters leave on show, as CSV lines under a header.</summary>
+    public abstract IReadOnlyList<string> CsvLines();
+
+    /// <summary>Says how the export went, where the status bar says what was read.</summary>
+    internal void ReportExport(string message) => Status = message;
+
+    protected static string? Date(DateTimeOffset? when) => when?.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
     private bool _isBusy;
     public bool IsBusy
@@ -301,6 +340,16 @@ public abstract class AdminPaneViewModel : ObservableObject
 
 public sealed class AdminUsersViewModel : AdminPaneViewModel
 {
+    public override string ExportName => "users";
+
+    public override IReadOnlyList<string> CsvLines() =>
+        View.Cast<UserInfo>()
+            .Select(u => CsvExporter.Line(u.FullName, u.DomainName, u.Email, u.UserType, u.BusinessUnit, u.Title, u.StatusLabel,
+                u.LicenseType, Date(u.CreatedOn), u.AadObjectId?.ToString(), u.SystemUserId.ToString()))
+            .Prepend(CsvExporter.Line("Name", "User name", "Email", "Type", "Business unit", "Title", "Status",
+                "Licence", "Created", "Entra object id", "User id"))
+            .ToList();
+
     public const string AllTypes = "All user types";
     public const string AllUnits = "All business units";
 
@@ -427,7 +476,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     protected override async Task LoadCoreAsync()
     {
-        Status = "Reading users...";
+        Status = "Reading users…";
         var selected = SelectedUser?.SystemUserId;
         var users = await Client.GetUsersAsync();
 
@@ -532,7 +581,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         _ = Owner.Work.Track(LoadLastSignInAsync(user, request));
 
         IsLoadingDetails = true;
-        DetailStatus = "Reading teams and roles...";
+        DetailStatus = "Reading teams and roles…";
 
         try
         {
@@ -599,7 +648,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         }
 
         LastSignIn = "…";
-        LastSignInToolTip = "Reading the audit log...";
+        LastSignInToolTip = "Reading the audit log…";
 
         try
         {
@@ -686,7 +735,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             return;
         }
 
-        LicenseStatus = "Reading licences from Entra...";
+        LicenseStatus = "Reading licences from Entra…";
 
         try
         {
@@ -780,6 +829,16 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
 public sealed class AdminTeamsViewModel : AdminPaneViewModel
 {
+    public override string ExportName => "teams";
+
+    public override IReadOnlyList<string> CsvLines() =>
+        View.Cast<TeamDetail>()
+            .Select(t => CsvExporter.Line(t.Name, t.TypeDisplay, t.BusinessUnit, t.Administrator, t.EmailAddress, t.QueueName,
+                t.AadObjectId?.ToString(), Date(t.CreatedOn), t.TeamId.ToString()))
+            .Prepend(CsvExporter.Line("Team", "Type", "Business unit", "Administrator", "Email", "Queue", "Entra group",
+                "Created", "Team id"))
+            .ToList();
+
     public const string AllUnits = "All business units";
 
     public AdminTeamsViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
@@ -866,7 +925,7 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
 
     protected override async Task LoadCoreAsync()
     {
-        Status = "Reading teams...";
+        Status = "Reading teams…";
         var selected = SelectedTeam?.TeamId;
         var teams = await Client.GetTeamDetailsAsync();
 
@@ -947,9 +1006,9 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
         if (team is null) return;
 
         IsLoadingDetails = true;
-        MemberStatus = "Reading members...";
-        RoleStatus = "Reading security roles...";
-        FieldProfileStatus = "Reading field security profiles...";
+        MemberStatus = "Reading members…";
+        RoleStatus = "Reading security roles…";
+        FieldProfileStatus = "Reading field security profiles…";
 
         var membersTask = Client.GetTeamMembersAsync(team.TeamId);
         var rolesTask = Client.GetTeamRolesAsync(team.TeamId, team.Name);
@@ -1033,6 +1092,14 @@ public sealed class AdminTeamsViewModel : AdminPaneViewModel
 
 public sealed class AdminRolesViewModel : AdminPaneViewModel
 {
+    public override string ExportName => "security-roles";
+
+    public override IReadOnlyList<string> CsvLines() =>
+        View.Cast<SecurityRoleInfo>()
+            .Select(r => CsvExporter.Line(r.Name, r.BusinessUnit, r.IsManaged ? "Managed" : "Unmanaged", Date(r.ModifiedOn), r.RoleId.ToString()))
+            .Prepend(CsvExporter.Line("Role", "Business unit", "State", "Modified", "Role id"))
+            .ToList();
+
     public AdminRolesViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
     {
         View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
@@ -1105,7 +1172,7 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
 
     protected override async Task LoadCoreAsync()
     {
-        Status = "Reading security roles...";
+        Status = "Reading security roles…";
         var selected = SelectedRole?.RoleId;
         var roles = await Client.GetSecurityRolesAsync();
 
@@ -1192,8 +1259,8 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
         if (role is null) return;
 
         IsLoadingDetails = true;
-        DetailStatus = "Reading privileges...";
-        HolderStatus = "Reading who holds this role...";
+        DetailStatus = "Reading privileges…";
+        HolderStatus = "Reading who holds this role…";
 
         var privilegesTask = Client.GetRolePrivilegesAsync(role.RoleId);
         var holdersTask = Client.GetRoleHoldersAsync(role.RoleId);
@@ -1245,6 +1312,16 @@ public sealed class AdminRolesViewModel : AdminPaneViewModel
 
 public sealed class AdminMailboxesViewModel : AdminPaneViewModel
 {
+    public override string ExportName => "mailboxes";
+
+    public override IReadOnlyList<string> CsvLines() =>
+        View.Cast<MailboxInfo>()
+            .Select(m => CsvExporter.Line(m.Name, m.EmailAddress, m.RegardingName, m.RegardingType, m.ApprovalLabel,
+                m.IncomingStatusLabel, m.OutgoingStatusLabel, m.AppointmentsStatusLabel, Date(m.TestCompletedOn), m.MailboxId.ToString()))
+            .Prepend(CsvExporter.Line("Mailbox", "Email", "Regarding", "Regarding type", "Approval", "Incoming", "Outgoing",
+                "Appointments", "Last tested", "Mailbox id"))
+            .ToList();
+
     public const string AnyApproval = "Any approval";
     public const string AnyTest = "Any test result";
 
@@ -1330,7 +1407,7 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
 
     protected override async Task LoadCoreAsync()
     {
-        Status = "Reading mailboxes...";
+        Status = "Reading mailboxes…";
         var selected = SelectedMailbox?.MailboxId;
         var mailboxes = await Client.GetMailboxesAsync();
 
@@ -1388,6 +1465,15 @@ public sealed class AdminMailboxesViewModel : AdminPaneViewModel
 
 public sealed class AdminQueuesViewModel : AdminPaneViewModel
 {
+    public override string ExportName => "queues";
+
+    public override IReadOnlyList<string> CsvLines() =>
+        View.Cast<QueueDetail>()
+            .Select(q => CsvExporter.Line(q.Name, q.EmailAddress, q.ViewTypeLabel, q.Owner, q.OwnerType, q.BusinessUnit,
+                q.MailboxName, q.QueueId.ToString()))
+            .Prepend(CsvExporter.Line("Queue", "Email", "Type", "Owner", "Owner type", "Business unit", "Mailbox", "Queue id"))
+            .ToList();
+
     public AdminQueuesViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
     {
         View = (ListCollectionView)CollectionViewSource.GetDefaultView(Items);
@@ -1457,7 +1543,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
 
     protected override async Task LoadCoreAsync()
     {
-        Status = "Reading queues...";
+        Status = "Reading queues…";
         var selected = SelectedQueue?.QueueId;
         var queues = await Client.GetQueueDetailsAsync();
 
@@ -1521,7 +1607,7 @@ public sealed class AdminQueuesViewModel : AdminPaneViewModel
         }
 
         IsLoadingDetails = true;
-        DetailStatus = "Reading members and mailbox...";
+        DetailStatus = "Reading members and mailbox…";
 
         try
         {

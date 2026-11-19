@@ -46,8 +46,8 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;"
-                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read again" />
                     <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="The changes listed, one line per column changed, as CSV or Markdown">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Export" VerticalAlignment="Center" />
@@ -56,6 +56,7 @@
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
                                 <MenuItem Header="CSV: the changes…" Command="{Binding ExportCsvCommand}"
                                           ToolTip="Every change, one line per column changed, with the old and new values whole" />
                                 <MenuItem Header="Markdown: the changes…" Command="{Binding ExportMarkdownCommand}"

@@ -94,7 +94,7 @@ public sealed class EnvironmentDiffViewModel : DefinitionDiffViewModel
         if (IsBusy) return;
 
         IsBusy = true;
-        Status = "Loading both environments...";
+        Status = "Loading both environments…";
 
         try
         {

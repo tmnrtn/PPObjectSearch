@@ -46,10 +46,14 @@ straight into the maker portal.
   (Shift/Ctrl+click) and the menu copies all their names, links or ids - one per line - or copies
   them as a table for Excel, opens details for each, checks their layers or exports just them.
 - **Screens as tabs or windows** — object details, Failures, Recent changes, Compare and the app's
-  other screens open as tabs across the top of the main window, beside the environment itself.
-  Each tab's **Open in a new window** button pops it out into a window of its own, and that
-  window's title-bar button moves it back. `Ctrl+W` closes the tab showing (or, with the
-  environment showing, the environment's tab); a middle-click closes any tab. To open every screen
+  other screens open as tabs across the top of the main window, beside the environment itself. The
+  strip is always there; each tab carries the colour of the environment it shows, and a tab of an
+  environment other than the one selected reads quieter. Tabs past the strip's width scroll (the
+  wheel scrolls them), and the list button at its end names every open screen. `Ctrl+Tab` and
+  `Ctrl+Shift+Tab` move along the strip. Each tab's **Open in a new window** button pops it out
+  into a window of its own, and that window's title-bar button moves it back. `Ctrl+W` closes the
+  tab showing (or, with the environment showing, the environment's tab); a middle-click closes any
+  tab. To open every screen
   in its own window instead, choose **Open screens in › New windows** from the settings menu at the
   foot of the sidebar. Screen windows are not tied to the main window, so either can be in front,
   and they close when the main window closes.
@@ -67,12 +71,14 @@ straight into the maker portal.
     something other than plain success, its connector is dashed red and shows the outcomes it
     waits on (Succeeded, Failed, Timed out, Skipped); search finds a step by name, type,
     connector or condition, and selecting one shows its JSON. A "Run a child flow" step names
-    the flow it calls. **Copy as Mermaid** copies the flow as a Mermaid flowchart for a wiki,
-    README or pull request. Double-click a run in Run history (or **Show on diagram**)
+    the flow it calls. **Export ▾ › As Mermaid** copies the flow as a Mermaid flowchart for a wiki,
+    README or pull request. Find a step steps through its matches with Enter and Shift+Enter (or
+    the ‹ › beside it), and **Fit** zooms the whole flow into view. Double-click a run in Run history (or **Show on diagram**)
     to draw that run over the design, read step by step from the Power Automate API: each step's
     outcome and duration, skipped and unreached steps faded, loops with their iteration count,
-    and the first failure selected with its error. The run sits in the diagram's toolbar, with
-    **First failure**, ‹ › to step to the previous or next run, and a button to clear it. A step
+    and the first failure selected with its error. The run gets a band of its own under the
+    design's toolbar, tinted by how it ended, with **Older run** and **Newer run**, **First
+    failure** and **Next failure**, **Export run** and **Clear run**. A step
     inside a loop lists its iterations, each with its outcome dot - in a failed run the first
     failed iteration is picked and scrolled to, and **Failed only** lists just the failures. A
     failed step or iteration whose error is only a code (a connector's BadRequest) has the reason
@@ -125,9 +131,13 @@ straight into the maker portal.
   [Table settings](#table-settings).
 - **Environment admin** (in the sidebar, under the selected environment) — read-only views of
   users, teams, security roles, mailboxes and queues. See [Environment admin](#environment-admin).
-- **Admin tools** (in the sidebar, under the selected environment) — sync an Entra group team with its Entra (RBAC)
+- **Changes** (in the sidebar, under the selected environment, tagged WRITES) — sync an Entra group team with its Entra (RBAC)
   group, and make a queue's members match a team's. Every change is previewed and confirmed first,
   under the same production guard.
+- **Ask AI** (`Ctrl+Shift+I`, or **Ask AI** at the end of the tab strip) — ask questions about the
+  screen you're on, answered beside it, through your Claude subscription (via Claude Code), a
+  Claude API key, OpenRouter or a local Ollama. Production environments start with it off; each
+  environment can be switched on or off. See [AI assistant](#ai-assistant).
 
 ## Install
 
@@ -479,6 +489,8 @@ time it is opened, and links move between them: a user's role opens it on the Se
 a user's team on the Teams tab, a team's member on the Users tab, a role's holder on the Users or
 Teams tab, a queue's mailbox on the Mailboxes tab, a mailbox's owner on the Users or Queues tab. **Back** and
 **Forward** (Alt+Left / Alt+Right, or the mouse's back and forward buttons) retrace those links.
+**Export ▾** in the header saves the tab showing - users, teams, roles, mailboxes or queues, as
+its filters leave it - as CSV.
 
 - **Users** — every user, searchable, filtered by user type (application user, or the access
   mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled users
@@ -540,7 +552,7 @@ not. Read-only, and each view exports to CSV:
 
 ## Admin tools
 
-**Entra team sync…** and **Queue membership sync…**, marked *WRITES* in the sidebar under the
+**Entra team sync…** and **Queue membership sync…**, under *Changes* (marked *WRITES*) in the sidebar under the
 selected environment, are two membership tools. An environment allowed writes shows **Writes
 allowed** in the header of every window opened from it. Both only read until you ask
 for a preview of changes; nothing is written until you confirm it in a separate window that lists
@@ -619,8 +631,8 @@ and on an environment variable (Value tab) runs the same search for that name.
 ## Solution documentation
 
 **Document solutions** (*Solution tools*, with a solution selected) writes a readable inventory as
-Markdown, for a handover, an audit, support scoping or a wiki. The selected solution is ticked;
-tick others from the dialog's list (filter it by name) to document several together, and **Include
+Markdown, for a handover, an audit, support scoping or a wiki. It opens as a screen, like the
+rest. The selected solution is ticked; tick others from the list (filter it by name) to document several together, and **Include
 the patches** to bring each ticked solution's patches with it. A component in more than one of
 them is documented once, and tables carry a column saying which solutions hold each row.
 
@@ -720,7 +732,7 @@ shows it whole. Double-click a table to open its details.
   and other wikis. Tables are named by logical name, lines are labelled with their lookup column, and
   columns are listed with their type and keys.
 
-**Copy as Mermaid** and **Copy image** put the same on the clipboard. Saved diagrams are drawn
+**Export ▾ › Copy** puts the Mermaid or the picture on the clipboard instead. Saved diagrams are drawn
 light, whatever the app's theme, and headed with the solutions, the environment, the number of
 tables and the day.
 
@@ -759,31 +771,36 @@ environment-specific settings, option lists. A table's details window opens it o
   are remembered (in `settings.json`, by table, for every environment) and shown the next time it
   is opened; a column the table no longer has is dropped.
 - **Labels, not ids** - lookups show the name of the row they point at, choices their label, and
-  money and dates Dataverse's own formatting. **Raw values** shows the ids and option numbers instead.
+  money and dates Dataverse's own formatting. **View ▾ › Raw values** shows the ids and option
+  numbers instead. A ✓ beside **Columns** says the columns shown are the ones remembered for the table.
 - **Quick filter** narrows the rows already read to those with the text in any column shown,
   without reading again.
-- **Server filters** - a column, a comparison and a value (*Where Rate greater than 10*); **Add
-  filter** reads the rows again from Dataverse. Add as many as you like: a row has to match every
-  one. Each shows as a chip under the boxes - its ✕ removes it, and **Clear filters** removes them
-  all. The comparisons follow the column's type as its metadata states it: text (contains, equals,
+- **Server filters** - **+ Add filter** opens a small form: a column, a comparison and a value
+  (*Where Rate greater than 10*); adding it reads the rows again from Dataverse. Add as many as you
+  like: a row has to match every one. Each shows as a chip - its ✕ removes it, and **Clear
+  filters** removes them all. The comparisons follow the column's type as its metadata states it: text (contains, equals,
   begins with), numbers, choices (by label or number), yes/no, dates (on, on or before, on or after,
   in your time zone), and lookups. A lookup compares the **name of the row it points at** (*Where
   Parent contains Contoso*), through the lookup's relationship to that table's primary name column;
   type a row id (GUID) with equals or does not equal to compare ids instead. A customer or owner
   lookup matches the name in any of the tables it can point at. A column that holds dates as text -
-  as some virtual tables do - filters as text. **Active only** reads only active rows.
+  as some virtual tables do - filters as text. **View ▾ › Active rows only** reads only active rows.
 - **Row limit** - 500, 5,000 (the default) or 50,000 rows, sorted by primary name. When the limit
   stops a read before the table runs out, a banner says so; add a server filter or raise the limit.
   **Stop** ends a read in progress.
 - **Export** the rows and columns shown, after both filters, as CSV or as a Markdown table with the
   environment and filters above it.
-- **Open** - double-click a row (or right-click it, **Open in Dynamics 365**) to open it on its
-  form, in the environment's browser profile if one is set. It opens in your default app; where
+- **The row** - click a row and a pane beside the grid shows its values, with **Open in Dynamics
+  365** and **Audit history** as buttons, its lookups as links and its related rows listed.
+- **Open** - press Enter or double-click a row (or right-click it, **Open in Dynamics 365**) to open
+  it on its form, in the environment's browser profile if one is set. It opens in your default app; where
   there is none, Dataverse asks which app.
 - **Follow a lookup** - a lookup's name is a link: click it (or right-click, **Open link**) to open
-  the row it points at in a Table data window of its own, filtered to that row by its id. A customer
-  or owner lookup opens the table that row is actually in. From there its own lookups and related
-  rows can be followed in turn.
+  the row it points at here, filtered to that row by its id, with the table you came from in a
+  trail above the grid - click it to go back, filters and all. **Open link in a new screen**, on the
+  right-click menu, opens it in a Table data screen of its own instead. A customer or owner lookup
+  opens the table that row is actually in. From there its own lookups and related rows can be
+  followed in turn.
 - **Related rows** - the column picker lists, after the table's own columns, each table whose rows
   point at this one (*Contact (parentcustomerid)*), one per relationship. Tick one and each row shows
   a **View rows** link that opens that table filtered to the rows whose lookup holds this row - a
@@ -972,10 +989,57 @@ The choice is saved per environment under `AppInsights` in `settings.json`. Read
 the account the environment's tab is signed in with. Resources in Azure Government and Azure China
 are read through those clouds' own endpoints; a GCC environment is taken to use commercial Azure.
 
-**Check Azure access…**, on the same menus, tries each Azure API the feature uses - Resource
-Manager to list resources, and the Application Insights query API - as the tab's
-account, and says what worked and, for what did not, whether the sign-in client or the account's
-Azure role is the reason. The results can be copied, and are written to the log.
+**Check Azure access…**, on the same menus, opens the picker and tries each Azure API the feature
+uses - Resource Manager to list resources, and the Application Insights query API - as the tab's
+account, listing each one there as OK or failed and, for what failed, whether the sign-in client or
+the account's Azure role is the reason. **Check Azure access** in the picker runs it again. The
+results can be copied, and are written to the log.
+
+## AI assistant
+
+**Ask AI**, at the end of the main window's tab strip and in the title bar of every screen window
+(or `Ctrl+Shift+I`), opens a panel beside the screen for asking about what it shows: what a flow does, why its runs
+fail, what stands out in a list of users or a solution's import log. Each question is sent with
+the screen as it is at that moment, read as text - headings, labels and values as laid out, and
+each table's visible columns and the rows its filters let through (the first 300), with selected
+rows marked. Flow designs and entity relationship diagrams are sent as their Mermaid. Before you
+type, the panel says which screen and environment a question would read; **What's sent** there
+shows exactly that text. Each screen keeps its own conversation, moving with it between a tab and a
+window; **New chat** starts it over, and **Retry** asks an answer's question again. What the
+assistant looked at on the way - another screen, a search - stays beside its answer.
+
+Choose where questions go in **Ask AI settings…**, in the settings menu at the foot of the sidebar
+(or from the panel). Its switch turns Ask AI off without forgetting the provider.
+
+| Provider | What it needs | Reads other screens |
+| --- | --- | --- |
+| **Your Claude subscription, through Claude Code** | [Claude Code](https://code.claude.com) installed and signed in (run `claude` in a terminal once). The app runs the unmodified `claude` program for each question, with all of its tools and MCP servers off, in a folder of its own; it never handles your Claude sign-in. Usage counts against your plan. | No |
+| **Claude API key** | A key from [platform.claude.com](https://platform.claude.com), billed to that account. Defaults to `claude-opus-5-5`; server-side fallback is on, so a request the model declines for policy reasons is retried on Anthropic's default fallback model. | Yes |
+| **OpenRouter** | An [OpenRouter](https://openrouter.ai) key and any model it lists (**Load models**). | With models that use tools |
+| **Ollama** | An [Ollama](https://ollama.com) server - `http://localhost:11434` unless you say otherwise - and one of its models (**Load models**). The app asks for a 32,768-token context, as Ollama's default is too short for most screens; change it in the dialog. | With models that use tools |
+
+API keys are saved in `%LOCALAPPDATA%\PPObjectSearch\ai-keys.dat`, encrypted with DPAPI for your
+Windows account - never in `settings.json`. **Test connection** asks the chosen model one short
+question with what is on the dialog, saved or not.
+
+With a provider that can use tools, the assistant can also, when a question needs it, list the
+app's open screens and environments, read any of them as it reads the one it was asked about, and
+search an environment's loaded solution objects. Everything it can do is reading; it cannot change
+anything, and neither can the app on its behalf.
+
+### Which environments Ask AI may read
+
+**Production environments start with Ask AI off**, and so does any environment whose type could
+not be read - as the write guard does, an unknown type is not taken to be safe. Every other
+environment starts allowed. While an environment is off, a question about any screen showing it -
+its own view, an object's details from it, a comparison or search that includes it - is refused
+before anything is sent, and the assistant's tools neither read nor search it. The panel says so as
+soon as such a screen is in front, with **Allow for …**, which asks first.
+
+**Ask AI settings…** lists every environment with a switch, open ones first. Right-click an
+environment in the sidebar for **Let AI read this environment**, the same switch. A choice is saved
+by host, so it holds in every tab and after a restart; only a choice that differs from the
+environment's default is recorded.
 
 ## Updates
 
@@ -1049,6 +1113,24 @@ fixed and the app restarted.
   // Where screens such as details and Failures open: "Tab" in the main window, or "Window" each
   // in a window of its own. Set from the sidebar's settings menu.
   "OpenScreensIn": "Tab",
+
+  // Ask AI, set in "Ask AI settings…". Provider is None, ClaudeCode, Anthropic, OpenRouter or
+  // Ollama; models left out use the defaults. API keys are not here (see AI assistant).
+  "Ai": {
+    "Enabled": true,
+    "Provider": "Anthropic",
+    "AnthropicModel": "claude-opus-5-5",
+    "OpenRouterModel": "anthropic/claude-opus-5.5",
+    "ClaudeCodeModel": "opus",
+    "OllamaUrl": "http://localhost:11434",
+    "OllamaModel": "qwen3:14b",
+    "OllamaContextLength": 32768,
+    "IsPanelOpen": false,
+    // Choices that differ from an environment's default: hosts turned off by hand, and
+    // production (or unknown-type) hosts allowed by hand. Production starts off.
+    "ExcludedEnvironments": [ "contoso-uat.crm11.dynamics.com" ],
+    "AllowedEnvironments": [ "contoso.crm11.dynamics.com" ]
+  },
 
   // The Application Insights resource each environment's telemetry is read from, keyed by host.
   // Set with "App Insights resource…" on the environment's menu. Kind is what the resource holds;

@@ -55,10 +55,21 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button AutomationProperties.Name="Look up again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding RunCommand}" ToolTip="Look up again" />
-                    <Button Content="Export CSV…" Margin="6,0,0,0" Command="{Binding ExportCommand}"
-                            ToolTip="Export what this tab shows" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RunCommand}" ToolTip="Refresh - look up again" />
+                    <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="What this tab shows">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Export" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="8" Margin="7,1,0,0"
+                                       Foreground="{DynamicResource Muted}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
+                                <MenuItem Header="CSV: what this tab shows…" Command="{Binding ExportCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
             </Grid>
 
@@ -158,7 +169,7 @@
                         <!-- The business units the user's roles are held in - where BU and Parent reach from. -->
                         <TextBlock DockPanel.Dock="Top" Margin="16,-4,16,10" Text="{Binding EffectiveUnitsLabel}"
                                    ToolTip="{Binding EffectiveUnitsToolTip}" Foreground="{DynamicResource Muted}"
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Visibility="{Binding EffectiveUnitsLabel, Converter={StaticResource EmptyToCollapsed}}" />
                         <Grid>
                             <DataGrid ItemsSource="{Binding EffectiveRows}" IsReadOnly="True" AutomationProperties.Name="Effective privileges"

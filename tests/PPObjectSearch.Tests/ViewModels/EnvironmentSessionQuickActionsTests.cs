@@ -139,7 +139,7 @@ public sealed class EnvironmentSessionQuickActionsTests : IDisposable
         Assert.EndsWith("  Workflow 14\n  ... and 1 more", action);
         Assert.Equal(16, Patches(env).Count());
         Assert.StartsWith("Turn on - 0 done, 16 failed: Workflow 00: ", session.Status);
-        Assert.EndsWith(" ...", session.Status);
+        Assert.EndsWith(" …", session.Status);
     });
 
     [Fact]

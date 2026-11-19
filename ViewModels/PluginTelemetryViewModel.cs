@@ -151,7 +151,7 @@ public sealed class PluginTelemetryViewModel : ObservableObject, IDisposable
         if (superseded is not null) await superseded.CancelAsync();
 
         IsBusy = true;
-        Status = "Reading App Insights...";
+        Status = "Reading App Insights…";
         try
         {
             _names ??= await _typeNames(cts.Token);

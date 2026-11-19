@@ -35,7 +35,7 @@
 
         <!-- A pane's heading row: 36 tall, heading at left, extras at right. -->
         <Style TargetType="Border" x:Key="PaneHeading">
-            <Setter Property="Height" Value="36" />
+            <Setter Property="MinHeight" Value="36" />
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
             <Setter Property="BorderThickness" Value="0,0,0,1" />
@@ -171,38 +171,38 @@
                         <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" Foreground="{DynamicResource Amber}"
                                    Margin="6,0,0,0" ToolTip="{Binding RowCountWarning}"
                                    Visibility="{Binding RowCountWarning, Converter={StaticResource EmptyToCollapsed}}" />
-                        <Button Style="{StaticResource RowButton}" Content="{Binding CountButtonLabel}" Margin="10,0,0,0"
+                        <Button Content="{Binding CountButtonLabel}" Margin="10,0,0,0"
                                 Command="{Binding CountRowsCommand}"
                                 ToolTip="An exact, current count: one aggregate request up to 50,000 rows, and beyond that a search for the last page of 5,000 - a couple of dozen requests even for millions of rows. The number shown before counting is Dataverse's stored count, refreshed about daily." />
-                        <Button Style="{StaticResource RowButton}" Content="Browse rows" Margin="6,0,0,0"
+                        <Button Content="Browse rows" Margin="6,0,0,0"
                                 Command="{Binding BrowseRowsCommand}"
                                 ToolTip="The table's rows in the read-only Table data window - filter, choose columns, export" />
                     </StackPanel>
 
                     <!-- Read-only views of the object kept elsewhere: its audited changes, the app's player, the role in Environment admin. -->
-                    <Button Content="Audit history" Height="30" Margin="0,0,8,0" Command="{Binding AuditHistoryCommand}"
+                    <Button Content="Audit history" Margin="0,0,8,0" Command="{Binding AuditHistoryCommand}"
                             ToolTip="Who changed it and how - each audited change, where Dataverse auditing records it"
                             Visibility="{Binding HasAuditHistory, Converter={StaticResource BoolToVis}}" />
-                    <Button Content="Play app" Height="30" Margin="0,0,8,0" Command="{Binding PlayCommand}"
+                    <Button Content="Play app" Margin="0,0,8,0" Command="{Binding PlayCommand}"
                             ToolTip="Open the app to run it, rather than in the studio"
                             Visibility="{Binding HasPlayUrl, Converter={StaticResource BoolToVis}}" />
-                    <Button Content="Open in Environment admin" Height="30" Margin="0,0,8,0" Command="{Binding ShowRoleInAdminCommand}"
+                    <Button Content="Open in Environment admin" Margin="0,0,8,0" Command="{Binding ShowRoleInAdminCommand}"
                             ToolTip="The role's users, teams and business units, in the Environment admin role view"
                             Visibility="{Binding CanShowRoleInAdmin, Converter={StaticResource BoolToVis}}" />
 
                     <!-- A cloud flow lives in Power Automate too; both buttons are secondary then. -->
-                    <Button Content="Open in Power Automate" Height="30" Margin="0,0,8,0"
+                    <Button Content="Open in Power Automate" Margin="0,0,8,0"
                             Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}"
                             Command="{Binding OpenInPowerAutomateCommand}"
                             ToolTip="{Binding FlowUrl, TargetNullValue='The environment id is unknown, so the Power Automate link cannot be built.'}" />
-                    <Button Content="Maker portal" Height="30"
+                    <Button Content="Open in maker portal"
                             Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}"
                             Command="{Binding OpenLinkCommand}" ToolTip="Open this object in make.powerapps.com" />
-                    <Button Style="{StaticResource PrimaryButton}" Content="Open in maker portal" Height="30"
+                    <Button Style="{StaticResource PrimaryButton}" Content="Open in maker portal"
                             Visibility="{Binding IsCloudFlow, Converter={StaticResource NotBoolToVis}}"
                             Command="{Binding OpenLinkCommand}" />
-                    <Button AutomationProperties.Name="Read everything again" Style="{StaticResource IconButton}" Content="&#xE72C;" Height="30" Width="30" Margin="8,0,0,0"
-                            Command="{Binding RefreshCommand}" ToolTip="Read everything again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="8,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read everything again" />
 
                     <!-- Turn on/off, activate/deactivate, enable/disable - kept apart from what only reads:
                          through the write guard, confirmed, logged. -->
@@ -210,7 +210,7 @@
                                 Visibility="{Binding HasSwitch, Converter={StaticResource BoolToVis}}">
                         <Rectangle Style="{StaticResource VDivider}" Margin="12,0" />
                         <TextBlock Style="{StaticResource WritesTag}" Margin="0,0,8,0" />
-                        <Button Style="{StaticResource SmallButton}" Content="{Binding SwitchButtonText}"
+                        <Button Content="{Binding SwitchButtonText}"
                                 Command="{Binding ToggleSwitchCommand}" ToolTip="{Binding SwitchToolTip}" />
                     </StackPanel>
                 </StackPanel>
@@ -474,7 +474,7 @@
                             <DockPanel Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
                                     <DockPanel>
-                                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource FilterToggle}" Height="24" Margin="8,0,0,0"
+                                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource FailedFilter}" Height="24" Margin="8,0,0,0"
                                                       IsChecked="{Binding FailedRunsOnly}" ToolTip="Show only the runs that failed"
                                                       AutomationProperties.Name="Failed runs only">
                                             <StackPanel Orientation="Horizontal">
@@ -491,28 +491,32 @@
                                             <TextBlock Text="Dataverse" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
                                             <TextBox Text="{Binding DataverseRunCount, UpdateSourceTrigger=PropertyChanged}" Width="56" Height="24" Margin="6,0,0,0"
                                                      AutomationProperties.Name="Runs read from Dataverse"
-                                                     ToolTip="How many of the latest runs to read from Dataverse" />
+                                                     ToolTip="How many of the latest runs to read from Dataverse - press Enter to read again" />
                                             <TextBlock Text="Live" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0"
                                                        Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}" />
                                             <TextBox Text="{Binding LiveRunCount, UpdateSourceTrigger=PropertyChanged}" Width="48" Height="24" Margin="6,0,0,0"
                                                      AutomationProperties.Name="Runs read live from Power Automate"
-                                                     ToolTip="How many of the latest runs to read live from Power Automate - those in progress or not yet in Dataverse"
+                                                     ToolTip="How many of the latest runs to read live from Power Automate - those in progress or not yet in Dataverse. Press Enter to read again."
                                                      Visibility="{Binding IsCloudFlow, Converter={StaticResource BoolToVis}}" />
-                                            <Button AutomationProperties.Name="Read the runs again" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                                            <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;"
                                                     Height="24" Width="24" Margin="6,0,0,0" Command="{Binding ReloadRunsCommand}"
-                                                    ToolTip="Read the runs again at these counts" />
+                                                    ToolTip="Refresh - read the runs again at these counts" />
                                         </StackPanel>
-                                        <TextBlock Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
-                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding RunsStatus}" />
+                                        <TextBlock Text="Runs" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
                                     </DockPanel>
                                 </Border>
+                                <!-- What was read, and anything missing - whole, never trimmed. -->
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding RunsStatus}" Foreground="{DynamicResource Muted}"
+                                           TextWrapping="Wrap" Margin="12,6,12,6"
+                                           Visibility="{Binding RunsStatus, Converter={StaticResource EmptyToCollapsed}}" />
                                 <!-- A double-click shows the run on the diagram; the pane beside has both actions. -->
                                 <DataGrid x:Name="RunsGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding RunsView}"
                                           SelectedItem="{Binding SelectedRun}" SelectionMode="Single" IsReadOnly="True">
                                     <DataGrid.InputBindings>
                                         <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ShowRunOnDiagramCommand}"
                                                       CommandParameter="{Binding SelectedItem, ElementName=RunsGrid}" />
+                                        <KeyBinding Key="Enter" Command="{Binding ShowRunOnDiagramCommand}"
+                                                    CommandParameter="{Binding SelectedItem, ElementName=RunsGrid}" />
                                     </DataGrid.InputBindings>
                                     <DataGrid.Columns>
                                         <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="Status"
@@ -631,14 +635,14 @@
                                         <DockPanel Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
                                             <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}"
                                                     BorderThickness="0,1,0,1" Background="{DynamicResource Surface2}">
-                                                <TextBlock Text="Error" Style="{StaticResource SectionHeading}"
+                                                <TextBlock Text="Why it failed" Style="{StaticResource SectionHeading}"
                                                            Foreground="{DynamicResource Red}" VerticalAlignment="Center" />
                                             </Border>
 
                                             <!-- A flow run's own error mostly says only that an action failed: the steps say which, and why. -->
                                             <StackPanel DockPanel.Dock="Top" Margin="16,10,16,4"
                                                         Visibility="{Binding DataContext.ShowsFailedSteps, RelativeSource={RelativeSource AncestorType=local:ScreenView}, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="Failed step" Style="{StaticResource DetailKey}" />
+                                                <TextBlock Text="Where it failed" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Text="{Binding DataContext.FailedStepsStatus, RelativeSource={RelativeSource AncestorType=local:ScreenView}}"
                                                            Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"
                                                            Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource EmptyToCollapsed}}" />
@@ -646,12 +650,15 @@
                                                               Focusable="False">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <StackPanel Margin="0,0,0,6">
-                                                                <TextBlock Style="{StaticResource DetailValue}" Text="{Binding Label}" FontWeight="SemiBold"
-                                                                           Margin="0,0,0,2" core:CopyOnClick.Text="{Binding Name}" />
-                                                                <TextBlock Style="{StaticResource DetailValue}" Text="{Binding ErrorLine}"
-                                                                           Foreground="{DynamicResource Red}" ToolTip="{Binding ErrorMessage}" />
-                                                            </StackPanel>
+                                                            <!-- The step and the reason Power Automate gives, whole, ahead of the raw error. -->
+                                                            <Border Background="{DynamicResource RedSoft}" CornerRadius="4" Padding="9,7" Margin="0,0,0,6">
+                                                                <StackPanel>
+                                                                    <TextBlock Style="{StaticResource DetailValue}" Text="{Binding Label}" FontWeight="SemiBold"
+                                                                               Margin="0,0,0,2" />
+                                                                    <TextBlock Style="{StaticResource DetailValue}" Text="{Binding ErrorLine}"
+                                                                               Foreground="{DynamicResource Red}" TextWrapping="Wrap" />
+                                                                </StackPanel>
+                                                            </Border>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
@@ -790,8 +797,7 @@
                             <DockPanel Grid.Row="1" Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
                                     <TextBlock Text="{Binding TraceStatus}" Foreground="{DynamicResource Muted}"
-                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding TraceStatus}" />
+                                               VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,8" />
                                 </Border>
                                 <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding TraceEntries}"
                                           SelectedItem="{Binding SelectedTrace}" SelectionMode="Single" IsReadOnly="True">
@@ -936,8 +942,9 @@
                                             </Style>
                                         </ComboBox.ItemContainerStyle>
                                     </ComboBox>
-                                    <Button Content="Refresh" Height="28" Margin="6,0,0,0" Command="{Binding RefreshCommand}" />
-                                    <Button Content="Open in Azure portal" Height="28" Margin="6,0,0,0" Command="{Binding OpenInPortalCommand}"
+                                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read the telemetry again" />
+                                    <Button Content="Open in Azure portal" Margin="6,0,0,0" Command="{Binding OpenInPortalCommand}"
                                             ToolTip="The selected failure's operation in the resource's Logs - or, with none selected, this plug-in's executions" />
                                 </StackPanel>
                             </Grid>
@@ -950,11 +957,11 @@
                                     </Style>
                                 </WrapPanel.Resources>
                                 <StackPanel>
-                                    <TextBlock Text="EXECUTIONS" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="Executions" Style="{StaticResource Label}" />
                                     <TextBlock Text="{Binding ExecutionsLabel}" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="FAILURES" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="Failures" Style="{StaticResource Label}" />
                                     <TextBlock FontSize="18" FontWeight="SemiBold">
                                         <Run Text="{Binding FailuresLabel, Mode=OneWay}" />
                                         <Run Text="{Binding FailureRateLabel, Mode=OneWay}" FontSize="12" FontWeight="Normal"
@@ -962,15 +969,15 @@
                                     </TextBlock>
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="AVERAGE" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="Average" Style="{StaticResource Label}" />
                                     <TextBlock Text="{Binding AverageLabel}" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="P95" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="95th percentile" Style="{StaticResource Label}" />
                                     <TextBlock Text="{Binding P95Label}" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="LAST RAN" Style="{StaticResource SectionHeading}" />
+                                    <TextBlock Text="Last ran" Style="{StaticResource Label}" />
                                     <TextBlock Text="{Binding LastLabel}" FontSize="18" FontWeight="SemiBold" />
                                 </StackPanel>
                             </WrapPanel>
@@ -978,8 +985,7 @@
                             <DockPanel Grid.Row="2" Grid.Column="0">
                                 <Border DockPanel.Dock="Top" Style="{StaticResource PaneHeading}">
                                     <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Muted}"
-                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding Status}" />
+                                               VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,8" />
                                 </Border>
                                 <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Failures}"
                                           SelectedItem="{Binding SelectedFailure}" SelectionMode="Single" IsReadOnly="True">
@@ -1418,10 +1424,12 @@
                                 </Border>
 <Grid>
                                     <DataGrid x:Name="DependentsGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding Dependents}" IsReadOnly="True"
-                                              SelectionMode="Single" ToolTip="Double-click a component in the loaded list to open its details">
+                                              SelectionMode="Single" ToolTip="Double-click or press Enter on a component in the loaded list to open its details">
                                         <DataGrid.InputBindings>
                                             <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenDependencyCommand}"
                                                           CommandParameter="{Binding SelectedItem, ElementName=DependentsGrid}" />
+                                            <KeyBinding Key="Enter" Command="{Binding OpenDependencyCommand}"
+                                                        CommandParameter="{Binding SelectedItem, ElementName=DependentsGrid}" />
                                         </DataGrid.InputBindings>
                                         <DataGrid.Columns>
                                             <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="DisplayName"
@@ -1472,10 +1480,12 @@
                                 <Border BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
 <Grid>
                                     <DataGrid x:Name="RequiredGrid" Style="{StaticResource NestedGrid}" ItemsSource="{Binding Required}" IsReadOnly="True"
-                                              SelectionMode="Single" ToolTip="Double-click a component in the loaded list to open its details">
+                                              SelectionMode="Single" ToolTip="Double-click or press Enter on a component in the loaded list to open its details">
                                         <DataGrid.InputBindings>
                                             <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenDependencyCommand}"
                                                           CommandParameter="{Binding SelectedItem, ElementName=RequiredGrid}" />
+                                            <KeyBinding Key="Enter" Command="{Binding OpenDependencyCommand}"
+                                                        CommandParameter="{Binding SelectedItem, ElementName=RequiredGrid}" />
                                         </DataGrid.InputBindings>
                                         <DataGrid.Columns>
                                             <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="DisplayName"

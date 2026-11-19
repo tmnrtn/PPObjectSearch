@@ -13,8 +13,11 @@ namespace PPObjectSearch.ViewModels;
 /// (the question worth asking before deleting anything), and - for a table - what it owns,
 /// down to the properties of each column, relationship, key, form, view, chart and dashboard.
 /// </summary>
-public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
+public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable, Ai.IAiSelection
 {
+    /// <summary>The object these details are of, for Ask AI's suggestion.</summary>
+    public string? SelectedNameForAi => Item.PrimaryLabel;
+
     /// <summary>solutioncomponent type code for a table.</summary>
     private const int TableComponentType = 1;
 
@@ -259,7 +262,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         // The run's own record of the flow id is what Power Automate addresses it by.
         var flowId = run.FlowId ?? Item.WorkflowIdUnique?.ToString() ?? Item.ObjectId.ToString();
 
-        diagram.SetRunNotice($"Reading run {FlowDiagramViewModel.ShortRunName(run.Name)} from Power Automate...");
+        diagram.SetRunNotice($"Reading run {FlowDiagramViewModel.ShortRunName(run.Name)} from Power Automate…");
 
         try
         {
@@ -275,7 +278,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         }
     }
 
-    private string _designStatus = "Reading the flow's definition...";
+    private string _designStatus = "Reading the flow's definition…";
     /// <summary>Shown in place of the diagram while it loads, or when it could not be drawn.</summary>
     public string DesignStatus
     {
@@ -876,7 +879,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
 
         _isWriting = true;
         ToggleSwitchCommand.RaiseCanExecuteChanged();
-        Status = $"{verb}...";
+        Status = $"{verb}…";
 
         try
         {
@@ -975,7 +978,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
             RaiseEnvironmentValueCommands();
         }
 
-        static string Shorten(string text) => text.Length <= 400 ? text : text[..400] + "...";
+        static string Shorten(string text) => text.Length <= 400 ? text : text[..400] + "…";
     }
 
     private void RaiseEnvironmentValueCommands()
@@ -1107,7 +1110,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         var cts = _countCts = new CancellationTokenSource();
         IsCounting = true;
         RowCountWarning = null;
-        RowCountText = "Counting...";
+        RowCountText = "Counting…";
 
         try
         {
@@ -1311,7 +1314,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         }
 
         var cts = _failedStepsCts = new CancellationTokenSource();
-        FailedStepsStatus = "Reading which step failed from Power Automate...";
+        FailedStepsStatus = "Reading which step failed from Power Automate…";
 
         try
         {
@@ -1763,7 +1766,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         if (IsBusy || _detached) return;
 
         IsBusy = true;
-        Status = "Loading...";
+        Status = "Loading…";
 
         var problems = new List<string>();
 
@@ -2040,7 +2043,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
         if (child.Properties is null)
         {
             IsLoadingProperties = true;
-            ChildStatus = "Loading properties...";
+            ChildStatus = "Loading properties…";
 
             try
             {
@@ -2086,7 +2089,7 @@ public sealed class ObjectDetailsViewModel : ObservableObject, IDisposable
     private static string Shorten(string value)
     {
         var line = value.ReplaceLineEndings(" ");
-        return line.Length <= 120 ? line : line[..117] + "...";
+        return line.Length <= 120 ? line : line[..117] + "…";
     }
 
     /// <summary>

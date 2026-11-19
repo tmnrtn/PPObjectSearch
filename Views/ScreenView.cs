@@ -65,6 +65,12 @@ public class ScreenView : UserControl
     internal OpenScreen Open(ScreenHost host, bool isDetails)
     {
         Screen = new OpenScreen(this, ScreenTitle, isDetails, OnScreenClosed);
+
+        // A screen of one environment says so on its tab; one across several does not pick one.
+        var finder = new ViewModels.AiEnvironmentFinder();
+        finder.Add(DataContext);
+        if (finder.Found is [var only]) Screen.SetEnvironment(only.Url, only.Title, only.Sku);
+
         return host.Show(Screen);
     }
 }

@@ -121,13 +121,24 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Compare data", Group = across, Shortcut = "Ctrl+Shift+D", Command = shell.CompareDataCommand },
             new() { Title = "Readiness check", Group = across, Shortcut = "Ctrl+Shift+R", Command = shell.ReadinessCommand },
             new() { Title = "Table settings", Group = across, Detail = "audit, Synapse Link, search", Shortcut = "Ctrl+Shift+A", Command = shell.TableSettingsCommand },
-            new() { Title = "Close all details windows", Group = "Window", Shortcut = "Ctrl+Shift+W", Command = shell.CloseAllDetailsCommand },
+            new() { Title = "Close all details", Group = "Window", Shortcut = "Ctrl+Shift+W", Command = shell.CloseAllDetailsCommand },
             new() { Title = "New tab", Group = "Window", Shortcut = "Ctrl+T", Command = shell.AddTabCommand },
+            new() { Title = shell.IsAiPanelOpen ? "Hide Ask AI" : "Ask AI about this screen", Group = "Ask AI", Shortcut = "Ctrl+Shift+I", Command = shell.ToggleAiPanelCommand },
+            new() { Title = "Ask AI settings…", Group = "Ask AI", Detail = "provider, model, key and environments", Command = shell.OpenAiSettingsCommand },
             new() { Title = "Theme: light", Group = settings, Command = shell.SetThemeCommand, Parameter = "Light" },
             new() { Title = "Theme: dark", Group = settings, Command = shell.SetThemeCommand, Parameter = "Dark" },
             new() { Title = "Theme: follow Windows", Group = settings, Command = shell.SetThemeCommand, Parameter = "System" },
             new() { Title = "Open log folder", Group = settings, Command = shell.OpenLogFolderCommand }
         };
+
+        foreach (var screen in shell.Screens.Open)
+        {
+            items.Add(new PaletteItem
+            {
+                Title = $"Go to {screen.Title}", Group = "Open screens", Detail = screen.IsInWindow ? "window" : "tab",
+                Command = shell.Screens.ActivateCommand, Parameter = screen
+            });
+        }
 
         foreach (var other in shell.Sessions.Where(s => !ReferenceEquals(s, shell.SelectedSession)))
         {
@@ -152,17 +163,18 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Recent changes", Group = env, Command = session.RecentChangesCommand },
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
             new() { Title = "Table data", Group = env, Detail = "rows of a table, read-only", Command = session.TableDataCommand },
+            new() { Title = "Security lookup", Group = env, Detail = "who can, effective access, secured columns, compare roles", Command = session.SecurityLookupCommand },
             new() { Title = "Users", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Users" },
             new() { Title = "Teams", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Teams" },
             new() { Title = "Security roles", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Roles" },
             new() { Title = "Mailboxes", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Mailboxes" },
             new() { Title = "Queues", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Queues" },
-            new() { Title = "Security lookup", Group = admin, Command = session.SecurityLookupCommand },
-            new() { Title = "Entra team sync", Group = env, Detail = "writes", Command = session.EntraTeamSyncCommand },
-            new() { Title = "Queue membership sync", Group = env, Detail = "writes", Command = session.QueueSyncCommand },
+
+            new() { Title = "Entra team sync…", Group = env, Detail = "writes", Command = session.EntraTeamSyncCommand },
+            new() { Title = "Queue membership sync…", Group = env, Detail = "writes", Command = session.QueueSyncCommand },
             new() { Title = "Deployment settings…", Group = env, Detail = "settings file for pac solution import", Command = session.ExportDeploymentSettingsCommand },
-            new() { Title = "Documentation…", Group = env, Detail = "document solutions as Markdown, with a support-scoping inventory", Command = session.DocumentSolutionCommand },
-            new() { Title = "Entity relationship diagram", Group = env, Detail = "the solutions' tables and relationships, as SVG, PNG or Mermaid", Command = session.EntityDiagramCommand },
+            new() { Title = "Document solutions…", Group = env, Detail = "document solutions as Markdown, with a support-scoping inventory", Command = session.DocumentSolutionCommand },
+            new() { Title = "Entity relationship diagram…", Group = env, Detail = "the solutions' tables and relationships, as SVG, PNG or Mermaid", Command = session.EntityDiagramCommand },
             new() { Title = "Export CSV", Group = env, Command = session.ExportCsvCommand },
             new() { Title = "Check layers", Group = env, Command = session.CheckUnmanagedLayersCommand },
             new() { Title = "Turn on every flow listed that is off", Group = env, Detail = "writes", Command = session.TurnOnSolutionFlowsCommand },

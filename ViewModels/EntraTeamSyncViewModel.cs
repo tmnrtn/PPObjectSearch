@@ -331,7 +331,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         }
     }
 
-    private string _status = "Loading Entra group teams...";
+    private string _status = "Loading Entra group teams…";
     public string Status
     {
         get => _status;
@@ -343,7 +343,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
     public async Task LoadTeamsAsync()
     {
         IsBusy = true;
-        Status = "Loading Entra group teams...";
+        Status = "Loading Entra group teams…";
         TeamInfo? start = null;
 
         try
@@ -399,7 +399,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         }
 
         IsBusy = true;
-        Status = $"Reading {team.Name} and its Entra group...";
+        Status = $"Reading {team.Name} and its Entra group…";
 
         try
         {
@@ -615,7 +615,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         if (targets.Count == 0) return null;
 
         IsBusy = true;
-        Status = $"Looking up {targets.Count:N0} 'group only' user(s) in Dataverse...";
+        Status = $"Looking up {targets.Count:N0} 'group only' user(s) in Dataverse…";
 
         try
         {
@@ -699,7 +699,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         if (SelectedTeam is not { } team || Group is not { } group) return;
 
         IsBusy = true;
-        Status = "Preparing the sync preview...";
+        Status = "Preparing the sync preview…";
 
         WritePermission permission;
         List<MembershipChange> changes;
@@ -829,7 +829,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         try
         {
             IsBusy = true;
-            Status = "Checking what kind of environment this is...";
+            Status = "Checking what kind of environment this is…";
             permission = await EnsurePermissionAsync();
         }
         catch (Exception ex)
@@ -901,7 +901,7 @@ public sealed class EntraTeamSyncViewModel : ObservableObject, IDisposable
         try
         {
             IsBusy = true;
-            Status = "Checking what kind of environment this is...";
+            Status = "Checking what kind of environment this is…";
             permission = await EnsurePermissionAsync();
         }
         catch (Exception ex)

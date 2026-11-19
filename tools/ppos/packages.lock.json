@@ -2,6 +2,14 @@
   "version": 1,
   "dependencies": {
     "net10.0-windows7.0": {
+      "Anthropic": {
+        "type": "Transitive",
+        "resolved": "13.10.0",
+        "contentHash": "p9kXFfvKk2quABpikYRstGp522CAMp9nQkllnS5dV07T6lmY6OBX2pSW6QTrI844vovya0jYC84cSCQuxGVnDw==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.5.1"
+        }
+      },
       "AutomaticGraphLayout": {
         "type": "Transitive",
         "resolved": "1.1.12",
@@ -11,6 +19,11 @@
         "type": "Transitive",
         "resolved": "6.3.1.120",
         "contentHash": "6ASBKPzAg64BLDlFOJo4Ypr1sA/6hB5+TfHLJaZYUSTE0jgxvKlVqKeo/ISTG9qEMxu604qUu6BGugmJkfdrNw=="
+      },
+      "Microsoft.Extensions.AI.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.5.1",
+        "contentHash": "nB0l3IlsVbNeUxsE7nZNb9GY8rP1OSeqpj0pseORPejt474HNKEauTWTLdSJPkSvPlRMxowZNMo6nyp7APAiSg=="
       },
       "Microsoft.Identity.Client": {
         "type": "Transitive",
@@ -28,6 +41,7 @@
       "ppobjectsearch": {
         "type": "Project",
         "dependencies": {
+          "Anthropic": "[13.10.0, )",
           "AutomaticGraphLayout": "[1.1.12, )",
           "AvalonEdit": "[6.3.1.120, )",
           "Microsoft.Identity.Client": "[4.90.1, )"

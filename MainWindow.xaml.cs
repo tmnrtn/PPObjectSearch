@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using PPObjectSearch.Ai;
 using PPObjectSearch.Services;
 using PPObjectSearch.ViewModels;
 
@@ -20,6 +21,61 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _shell;
         Loaded += (_, _) => WarnAboutSettings();
+
+        // The assistant's tools read screens through their views, as the panel does.
+        _shell.AiWorkspace.ReadView = ReadForAi;
+        _shell.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ShellViewModel.IsAiPanelOpen)) SizeAiColumn();
+        };
+        SizeAiColumn();
+
+        // The tab chosen - by click, Ctrl+Tab or the list of every screen - scrolls into view.
+        _shell.Screens.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ScreenHost.SelectedTab) || _shell.Screens.SelectedTab is not { } tab) return;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (ScreenTabs.ItemContainerGenerator.ContainerFromItem(tab) is FrameworkElement container) container.BringIntoView();
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
+        };
+    }
+
+    /// <summary>The strip scrolls sideways under the wheel, as tabs past its width are not wrapped.</summary>
+    private void TabScroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        TabScroller.ScrollToHorizontalOffset(TabScroller.HorizontalOffset - e.Delta / 2.0);
+        e.Handled = true;
+    }
+
+    /// <summary>The assistant panel's width, kept while it is hidden and shown again.</summary>
+    private double _aiWidth = 380;
+
+    private void AskAi_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e) =>
+        _shell.ToggleAiPanelCommand.Execute(null);
+
+    private void SizeAiColumn() =>
+        AiColumn.Width = _shell.IsAiPanelOpen ? new GridLength(_aiWidth) : new GridLength(0);
+
+    private void AiSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (AiColumn.ActualWidth > 0) _aiWidth = Math.Max(300, AiColumn.ActualWidth);
+    }
+
+    /// <summary>
+    /// A screen as the assistant reads it: an open screen's view, or - for the selected environment -
+    /// the main window's view of it. Null for an environment not on screen.
+    /// </summary>
+    private AiScreen? ReadForAi(object key, string title)
+    {
+        if (!Dispatcher.CheckAccess()) return Dispatcher.Invoke(() => ReadForAi(key, title));
+
+        return key switch
+        {
+            OpenScreen { Content: DependencyObject view } => Views.ScreenText.Read(view, title),
+            EnvironmentSessionViewModel session when ReferenceEquals(session, _shell.SelectedSession) => Views.ScreenText.Read(HomeContent, title),
+            _ => null
+        };
     }
 
     /// <summary>

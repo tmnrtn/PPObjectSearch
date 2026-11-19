@@ -22,6 +22,8 @@
         <KeyBinding Key="A" Modifiers="Ctrl+Shift" Command="{Binding TableSettingsCommand}" />
         <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding CommandPaletteCommand}" />
         <KeyBinding Key="W" Modifiers="Ctrl+Shift" Command="{Binding CloseAllDetailsCommand}" />
+        <KeyBinding Key="Tab" Modifiers="Ctrl" Command="{Binding NextScreenCommand}" />
+        <KeyBinding Key="Tab" Modifiers="Ctrl+Shift" Command="{Binding PreviousScreenCommand}" />
     </Window.InputBindings>
 
     <Window.Resources>
@@ -32,6 +34,15 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource Muted}" />
             <Setter Property="Margin" Value="8,6,8,2" />
+        </Style>
+
+        <!-- A sidebar action's glyph, ahead of its name. -->
+        <Style TargetType="TextBlock" x:Key="SidebarGlyph">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,1,8,0" />
         </Style>
 
         <!-- The two halves of a two-column row of sidebar actions, 2px apart. -->
@@ -49,7 +60,7 @@
             <Setter Property="Height" Value="34" />
             <Setter Property="Padding" Value="8,0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -76,7 +87,7 @@
             <Setter Property="Height" Value="34" />
             <Setter Property="Padding" Value="8,0,2,0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -100,9 +111,16 @@
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Text}" />
                 </Trigger>
+                <DataTrigger Binding="{Binding IsOtherEnvironment}" Value="True">
+                    <Setter Property="Opacity" Value="0.6" />
+                </DataTrigger>
             </Style.Triggers>
         </Style>
     </Window.Resources>
+
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static core:WindowChromeSupport.AskAiCommand}" Executed="AskAi_Executed" />
+    </Window.CommandBindings>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -192,6 +210,11 @@
                                                       Visibility="{Binding IsWriteAllowlisted, Converter={StaticResource BoolToVis}}"
                                                       ToolTip="Blocks writes here again, as the production guard does by default." />
                                             <Separator />
+                                            <MenuItem Header="Let AI read this environment"
+                                                      IsChecked="{Binding IsAiAllowed, Mode=OneWay}"
+                                                      Command="{Binding ToggleAiAllowedCommand}"
+                                                      ToolTip="Cleared, the AI assistant is never sent a screen showing this environment, and its tools pass it over." />
+                                            <Separator />
                                             <MenuItem Header="Close tab" InputGestureText="Ctrl+W"
                                                       Click="CloseTab_Click" />
                                         </ContextMenu>
@@ -275,74 +298,104 @@
                                        MaxWidth="190" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <!-- What happened here: changes, failures, imports, who can do what. -->
+                        <!-- What happened here: changes, failures, imports, rows, who can do what. -->
                         <TextBlock Text="INVESTIGATE" Style="{StaticResource SidebarGroup}" />
                         <UniformGrid Columns="2">
                             <Button Style="{StaticResource SidebarLeft}" Command="{Binding RecentChangesCommand}"
                                     ToolTip="What changed here, when and by whom">
-                                <TextBlock Text="Recent changes" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE81C;" />
+                                    <TextBlock Text="Recent changes" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
                             <Button Style="{StaticResource SidebarRight}" Command="{Binding FailuresCommand}"
                                     ToolTip="Flow runs, workflow jobs and plug-ins that failed">
-                                <TextBlock Text="Failures" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE7BA;" />
+                                    <TextBlock Text="Failures" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
                             <Button Style="{StaticResource SidebarLeft}" Command="{Binding SolutionHistoryCommand}"
                                     ToolTip="Imports, upgrades, uninstalls and exports">
-                                <TextBlock Text="Solution history" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE8F1;" />
+                                    <TextBlock Text="Solution history" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource SidebarRight}" Command="{Binding SecurityLookupCommand}"
-                                    ToolTip="Who can…, effective access, secured columns, compare roles">
-                                <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding TableDataCommand}"
+                                    ToolTip="The rows of a table - reference and config data, lookups, option lists. Read-only.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE80A;" />
+                                    <TextBlock Text="Table data" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
                         </UniformGrid>
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding TableDataCommand}"
-                                ToolTip="The rows of a table - reference and config data, lookups, option lists. Read-only.">
-                            <TextBlock Text="Table data" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SecurityLookupCommand}"
+                                ToolTip="Who can…, effective access, secured columns, compare roles">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE72E;" />
+                                <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
 
                         <!-- Read-only: who is here, what they can do, and how mail reaches them. -->
-                        <TextBlock Text="ADMIN · READ-ONLY" Style="{StaticResource SidebarGroup}" />
+                        <TextBlock Text="ADMIN" Style="{StaticResource SidebarGroup}" />
                         <UniformGrid Columns="2">
-                            <Button Style="{StaticResource SidebarLeft}"
-                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Users"
+                            <Button Style="{StaticResource SidebarLeft}" Command="{Binding EnvironmentAdminCommand}" CommandParameter="Users"
                                     ToolTip="Users, with their teams and security roles">
-                                <TextBlock Text="Users" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE77B;" />
+                                    <TextBlock Text="Users" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource SidebarRight}"
-                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Teams"
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding EnvironmentAdminCommand}" CommandParameter="Teams"
                                     ToolTip="Teams, with their members, security roles and field security">
-                                <TextBlock Text="Teams" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE716;" />
+                                    <TextBlock Text="Teams" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource SidebarLeft}"
-                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Roles"
+                            <Button Style="{StaticResource SidebarLeft}" Command="{Binding EnvironmentAdminCommand}" CommandParameter="Roles"
                                     ToolTip="Privileges, and who holds each role">
-                                <TextBlock Text="Security roles" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE8D7;" />
+                                    <TextBlock Text="Security roles" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource SidebarRight}"
-                                    Command="{Binding EnvironmentAdminCommand}" CommandParameter="Mailboxes"
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding EnvironmentAdminCommand}" CommandParameter="Mailboxes"
                                     ToolTip="Server-side sync: approval and test results">
-                                <TextBlock Text="Mailboxes" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE715;" />
+                                    <TextBlock Text="Mailboxes" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </Button>
                         </UniformGrid>
-                        <Button Style="{StaticResource SidebarAction}"
-                                Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
+                        <Button Style="{StaticResource SidebarAction}" Command="{Binding EnvironmentAdminCommand}" CommandParameter="Queues"
                                 ToolTip="Owner, email settings, mailbox and members">
-                            <TextBlock Text="Queues" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE8FD;" />
+                                <TextBlock Text="Queues" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
 
+                        <!-- The environment's only tools that change it: each previews and asks first. -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="CHANGES" Style="{StaticResource SidebarGroup}" />
+                            <TextBlock Style="{StaticResource WritesTag}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding EntraTeamSyncCommand}"
                                 ToolTip="Compare an Entra group team with its Entra (RBAC) group, sync it, and remove users the sync leaves behind. Previews and asks before writing.">
-                            <Grid>
-                                <TextBlock Text="Entra team sync…" VerticalAlignment="Center" />
-                                <TextBlock Style="{StaticResource WritesTag}" />
-                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE895;" />
+                                <TextBlock Text="Entra team sync…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
                         <Button Style="{StaticResource SidebarAction}" Command="{Binding QueueSyncCommand}"
                                 ToolTip="Make a queue's members match a team's members, adding and removing. Previews and asks before writing.">
-                            <Grid>
-                                <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" />
-                                <TextBlock Style="{StaticResource WritesTag}" />
-                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE895;" />
+                                <TextBlock Text="Queue membership sync…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
                     </StackPanel>
 
@@ -364,33 +417,51 @@
                             </Style>
                         </Button.Style>
                         <Grid>
-                            <TextBlock Text="Command palette…" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE756;" />
+                                <TextBlock Text="Command palette…" VerticalAlignment="Center" />
+                            </StackPanel>
                             <TextBlock Text="Ctrl+K" Style="{StaticResource Shortcut}" />
                         </Grid>
                     </Button>
 
+                    <Button Style="{StaticResource SidebarAction}" Command="{Binding GlobalSearchCommand}"
+                            ToolTip="One keyword across every connected environment (Ctrl+Shift+F)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE721;" />
+                            <TextBlock Text="Search all environments" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
                     <UniformGrid Columns="2">
-                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding GlobalSearchCommand}"
-                                ToolTip="One keyword across every connected environment (Ctrl+Shift+F)">
-                            <TextBlock Text="Search all" VerticalAlignment="Center" />
-                        </Button>
-                        <Button Style="{StaticResource SidebarRight}" Command="{Binding CompareCommand}"
+                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding CompareCommand}"
                                 ToolTip="Diff the objects loaded in two environments (Ctrl+D)">
-                            <TextBlock Text="Compare" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE8AB;" />
+                                <TextBlock Text="Compare objects" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding CompareDataCommand}"
+                        <Button Style="{StaticResource SidebarRight}" Command="{Binding CompareDataCommand}"
                                 ToolTip="Diff reference data rows between two environments (Ctrl+Shift+D)">
-                            <TextBlock Text="Compare data" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE8AB;" />
+                                <TextBlock Text="Compare data" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource SidebarRight}" Command="{Binding ReadinessCommand}"
+                        <Button Style="{StaticResource SidebarLeft}" Command="{Binding ReadinessCommand}"
                                 ToolTip="Will a solution import cleanly into another environment? (Ctrl+Shift+R)">
-                            <TextBlock Text="Readiness" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE73E;" />
+                                <TextBlock Text="Readiness check" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource SidebarRight}" Command="{Binding TableSettingsCommand}"
+                                ToolTip="Audit, change tracking, Synapse Link and Dataverse search, table by table across environments (Ctrl+Shift+A)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE9E9;" />
+                                <TextBlock Text="Table settings" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Button>
                     </UniformGrid>
-                    <Button Style="{StaticResource SidebarAction}" Command="{Binding TableSettingsCommand}"
-                            ToolTip="Audit, change tracking, Synapse Link and Dataverse search, table by table across environments (Ctrl+Shift+A)">
-                        <TextBlock Text="Table settings" VerticalAlignment="Center" />
-                    </Button>
                 </StackPanel>
             </ScrollViewer>
 
@@ -408,7 +479,7 @@
                 <Grid Grid.Row="1">
                     <!-- The version is in this row's tooltip. -->
                     <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Height="30"
-                            Margin="0,0,34,0" Content="Sign out all"
+                            Margin="0,0,92,0" Content="Sign out all"
                             Command="{Binding SignOutAllCommand}">
                         <Button.ToolTip>
                             <StackPanel>
@@ -429,13 +500,17 @@
                         </Button.Style>
                     </Button>
 
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,38,0" FontSize="11"
+                               Foreground="{DynamicResource Muted}" Text="{x:Static core:AppVersion.Short}"
+                               ToolTip="{x:Static core:AppVersion.Description}" />
                     <Button AutomationProperties.Name="Settings and logs" HorizontalAlignment="Right" Width="30" Height="30" Padding="0"
                             Style="{StaticResource GhostButton}" FontFamily="{StaticResource IconFont}" FontSize="13"
                             Foreground="{DynamicResource Muted}" Content="&#xE793;" ToolTip="Settings and logs"
                             core:Ui.OpensMenu="True">
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Use Windows setting" IsChecked="{Binding IsSystemTheme, Mode=OneWay}"
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Theme" />
+                                <MenuItem Header="Follow Windows" IsChecked="{Binding IsSystemTheme, Mode=OneWay}"
                                           Command="{Binding SetThemeCommand}" CommandParameter="System" />
                                 <MenuItem Header="Light" IsChecked="{Binding IsLightTheme, Mode=OneWay}"
                                           Command="{Binding SetThemeCommand}" CommandParameter="Light" />
@@ -451,6 +526,9 @@
                                               Command="{Binding SetScreenPlacementCommand}" CommandParameter="Window"
                                               ToolTip="Each screen opens in a window of its own, which can be moved into a tab here." />
                                 </MenuItem>
+                                <Separator />
+                                <MenuItem Header="Ask AI settings…" Command="{Binding OpenAiSettingsCommand}"
+                                          ToolTip="Choose the AI provider, model and key, and the environments Ask AI may read" />
                                 <Separator />
                                 <MenuItem Header="Open log folder" Command="{Binding OpenLogFolderCommand}"
                                           ToolTip="The app's log - attach today's file to a problem report" />
@@ -470,10 +548,10 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Screens opened as tabs: the environment first, then each screen with its pop-out
-                     and close buttons. Only there while a screen is open. -->
-                <Border Grid.Row="0" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="10,0,6,0"
-                        Visibility="{Binding Screens.HasTabs, Converter={StaticResource BoolToVis}}">
+                <!-- Always there, so nothing jumps when the first screen opens: the environment first,
+                     then each screen marked with the environment it shows, then every open screen in a
+                     list and the Ask AI toggle. Tabs past the width scroll rather than wrap. -->
+                <Border Grid.Row="0" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="10,0,8,0">
                     <DockPanel>
                         <Button DockPanel.Dock="Left" Style="{StaticResource HomeTab}" VerticalAlignment="Top"
                                 Command="{Binding Screens.ShowHomeCommand}"
@@ -485,93 +563,147 @@
                                 <TextBlock Text="{Binding SelectedSession.Title}" MaxWidth="180" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Button>
-                        <Rectangle DockPanel.Dock="Left" Width="1" Height="16" Margin="4,9,6,0" VerticalAlignment="Top"
-                                   Fill="{DynamicResource Border}" />
 
-                        <ListBox ItemsSource="{Binding Screens.Tabs}" SelectedItem="{Binding Screens.SelectedTab}"
-                                 ItemContainerStyle="{StaticResource ScreenTab}"
-                                 Background="Transparent" BorderThickness="0" Padding="0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 ScrollViewer.VerticalScrollBarVisibility="Disabled">
-                            <ListBox.Template>
-                                <ControlTemplate TargetType="ListBox">
-                                    <ItemsPresenter />
-                                </ControlTemplate>
-                            </ListBox.Template>
-                            <ListBox.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Background="Transparent" ToolTip="{Binding Title}">
-                                        <StackPanel.InputBindings>
-                                            <MouseBinding Gesture="MiddleClick"
-                                                          Command="{Binding DataContext.Screens.CloseCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                          CommandParameter="{Binding}" />
-                                        </StackPanel.InputBindings>
-                                        <StackPanel.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Open in a new window"
-                                                          Command="{Binding PlacementTarget.Tag.PopOutCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                          CommandParameter="{Binding}" />
-                                                <Separator />
-                                                <MenuItem Header="Close tab" InputGestureText="Ctrl+W"
-                                                          Command="{Binding PlacementTarget.Tag.CloseCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                          CommandParameter="{Binding}" />
-                                            </ContextMenu>
-                                        </StackPanel.ContextMenu>
-                                        <StackPanel.Tag>
-                                            <Binding Path="DataContext.Screens" RelativeSource="{RelativeSource AncestorType=ListBox}" />
-                                        </StackPanel.Tag>
-                                        <TextBlock Text="{Binding Title}" MaxWidth="240" TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Center" />
-                                        <Button AutomationProperties.Name="Open in a new window" Style="{StaticResource GhostButton}"
-                                                Width="22" Height="22" Padding="0" Margin="6,0,0,0"
-                                                FontFamily="{StaticResource IconFont}" FontSize="10"
-                                                Foreground="{DynamicResource Muted}" Content="&#xE8A7;"
-                                                ToolTip="Open in a new window"
-                                                Command="{Binding DataContext.Screens.PopOutCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                CommandParameter="{Binding}" />
-                                        <Button AutomationProperties.Name="Close tab (Ctrl+W)" Style="{StaticResource GhostButton}"
-                                                Width="22" Height="22" Padding="0"
-                                                FontFamily="{StaticResource IconFont}" FontSize="9"
-                                                Foreground="{DynamicResource Muted}" Content="&#xE8BB;"
-                                                ToolTip="Close tab (Ctrl+W)"
-                                                Command="{Binding DataContext.Screens.CloseCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                CommandParameter="{Binding}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource FilterToggle}" Height="26" Margin="6,0,0,0"
+                                      VerticalAlignment="Center" IsChecked="{Binding IsAiPanelOpen}"
+                                      AutomationProperties.Name="Ask AI about this screen (Ctrl+Shift+I)"
+                                      ToolTip="Ask AI about this screen (Ctrl+Shift+I)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" FontSize="11" Margin="0,1,6,0" />
+                                <TextBlock Text="Ask AI" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <Button DockPanel.Dock="Right" AutomationProperties.Name="Every open screen" Style="{StaticResource GhostButton}"
+                                Width="28" Height="26" Padding="0" VerticalAlignment="Center"
+                                FontFamily="{StaticResource IconFont}" FontSize="12" Foreground="{DynamicResource Muted}"
+                                Content="&#xE712;" ToolTip="Every open screen" core:Ui.OpensMenu="True"
+                                Visibility="{Binding Screens.HasTabs, Converter={StaticResource BoolToVis}}">
+                            <Button.ContextMenu>
+                                <ContextMenu ItemsSource="{Binding Screens.Tabs}">
+                                    <ContextMenu.ItemContainerStyle>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                            <Setter Property="Header" Value="{Binding Title}" />
+                                            <Setter Property="IsChecked" Value="{Binding IsSelected, Mode=OneWay}" />
+                                            <Setter Property="Command"
+                                                    Value="{Binding DataContext.Screens.ActivateCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                            <Setter Property="CommandParameter" Value="{Binding}" />
+                                        </Style>
+                                    </ContextMenu.ItemContainerStyle>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Rectangle DockPanel.Dock="Left" Width="1" Height="16" Margin="4,9,6,0" VerticalAlignment="Top"
+                                   Fill="{DynamicResource Border}"
+                                   Visibility="{Binding Screens.HasTabs, Converter={StaticResource BoolToVis}}" />
+
+                        <ScrollViewer x:Name="TabScroller" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                      CanContentScroll="False" Focusable="False" PreviewMouseWheel="TabScroller_PreviewMouseWheel">
+                            <ListBox x:Name="ScreenTabs" ItemsSource="{Binding Screens.Tabs}" SelectedItem="{Binding Screens.SelectedTab}"
+                                     ItemContainerStyle="{StaticResource ScreenTab}"
+                                     AutomationProperties.Name="Open screens"
+                                     Background="Transparent" BorderThickness="0" Padding="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                <ListBox.Template>
+                                    <ControlTemplate TargetType="ListBox">
+                                        <ItemsPresenter />
+                                    </ControlTemplate>
+                                </ListBox.Template>
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Background="Transparent" ToolTip="{Binding ToolTipText}">
+                                            <StackPanel.InputBindings>
+                                                <MouseBinding Gesture="MiddleClick"
+                                                              Command="{Binding DataContext.Screens.CloseCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                              CommandParameter="{Binding}" />
+                                            </StackPanel.InputBindings>
+                                            <StackPanel.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Open in a new window"
+                                                              Command="{Binding PlacementTarget.Tag.PopOutCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}" />
+                                                    <Separator />
+                                                    <MenuItem Header="Close" InputGestureText="Ctrl+W"
+                                                              Command="{Binding PlacementTarget.Tag.CloseCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}" />
+                                                </ContextMenu>
+                                            </StackPanel.ContextMenu>
+                                            <StackPanel.Tag>
+                                                <Binding Path="DataContext.Screens" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                            </StackPanel.Tag>
+                                            <!-- The environment the screen shows; none for a screen across several. -->
+                                            <Border Style="{StaticResource EnvBar}" Width="3" Height="12" Margin="0,0,7,0"
+                                                    Tag="{Binding EnvironmentSku}"
+                                                    Visibility="{Binding HasEnvironment, Converter={StaticResource BoolToVis}}" />
+                                            <TextBlock Text="{Binding Title}" MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                            <Button AutomationProperties.Name="Open in a new window" Style="{StaticResource GhostButton}"
+                                                    Width="22" Height="22" Padding="0" Margin="6,0,0,0"
+                                                    FontFamily="{StaticResource IconFont}" FontSize="10"
+                                                    Foreground="{DynamicResource Muted}" Content="&#xE8A7;"
+                                                    ToolTip="Open in a new window"
+                                                    Command="{Binding DataContext.Screens.PopOutCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button AutomationProperties.Name="Close (Ctrl+W)" Style="{StaticResource GhostButton}"
+                                                    Width="22" Height="22" Padding="0"
+                                                    FontFamily="{StaticResource IconFont}" FontSize="9"
+                                                    Foreground="{DynamicResource Muted}" Content="&#xE8BB;"
+                                                    ToolTip="Close (Ctrl+W)"
+                                                    Command="{Binding DataContext.Screens.CloseCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
 
-                <ContentControl Grid.Row="1" Content="{Binding SelectedSession}" Focusable="False"
-                                Visibility="{Binding Screens.IsHomeSelected, Converter={StaticResource BoolToVis}}">
-                    <ContentControl.ContentTemplate>
-                        <DataTemplate>
-                            <views:EnvironmentSessionView />
-                        </DataTemplate>
-                    </ContentControl.ContentTemplate>
-                </ContentControl>
+                <!-- The screen showing, and Ask AI beside it inside the same card. -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="420" />
+                        <!-- Sized in code: nothing while Ask AI is hidden. -->
+                        <ColumnDefinition x:Name="AiColumn" Width="0" />
+                    </Grid.ColumnDefinitions>
 
-                <!-- Every screen tab stays loaded, one over another, so moving between them keeps
-                     each one's place; only the selected one shows. -->
-                <ItemsControl Grid.Row="1" ItemsSource="{Binding Screens.Tabs}" Focusable="False">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <Grid />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <ContentPresenter Content="{Binding Content}"
-                                              Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <ContentControl x:Name="HomeContent" Grid.Column="0" Content="{Binding SelectedSession}" Focusable="False"
+                                    Visibility="{Binding Screens.IsHomeSelected, Converter={StaticResource BoolToVis}}">
+                        <ContentControl.ContentTemplate>
+                            <DataTemplate>
+                                <views:EnvironmentSessionView />
+                            </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                    </ContentControl>
+
+                    <!-- Every screen tab stays loaded, one over another, so moving between them keeps
+                         each one's place; only the selected one shows. -->
+                    <ItemsControl Grid.Column="0" ItemsSource="{Binding Screens.Tabs}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Grid />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <ContentPresenter Content="{Binding Content}"
+                                                  Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Left" ResizeBehavior="PreviousAndCurrent"
+                                  ResizeDirection="Columns" Panel.ZIndex="1" DragCompleted="AiSplitter_DragCompleted"
+                                  Visibility="{Binding IsAiPanelOpen, Converter={StaticResource BoolToVis}}" />
+                    <views:AiPanel Grid.Column="1" DataContext="{Binding CurrentAssistant}"
+                                   Visibility="{Binding DataContext.IsAiPanelOpen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}" />
+                </Grid>
             </Grid>
         </Border>
     </Grid>

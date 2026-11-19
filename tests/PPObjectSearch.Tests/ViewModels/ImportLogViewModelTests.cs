@@ -80,7 +80,7 @@ public class ImportLogViewModelTests
 
         Assert.Equal("Import log — core 1.2.0.0", vm.Title);
         Assert.Equal("core 1.2.0.0", vm.SolutionLabel);
-        Assert.Equal("Finding the import job...", vm.StatusLine);
+        Assert.Equal("Finding the import job…", vm.StatusLine);
         Assert.NotNull(vm.Session);
         Assert.False(vm.IsRunning);
         Assert.False(vm.SaveXmlCommand.CanExecute(null));

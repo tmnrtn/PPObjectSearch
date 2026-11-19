@@ -184,10 +184,10 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 
         try
         {
-            Status = "Reading the audit history...";
+            Status = "Reading the audit history…";
             var clock = Stopwatch.StartNew();
             var state = await _client.GetAuditStatusAsync(table, cts.Token);
-            var records = await _read((done, of) => Status = $"Reading the values of the changes - {done:N0} of {of:N0}...", cts.Token);
+            var records = await _read((done, of) => Status = $"Reading the values of the changes - {done:N0} of {of:N0}…", cts.Token);
             if (cts.IsCancellationRequested) return;
 
             Records.Clear();

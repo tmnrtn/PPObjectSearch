@@ -99,7 +99,7 @@
                           StaysOpenOnEdit="True"
                           DisplayMemberPath="Label" />
 
-                <TextBox Grid.Column="2" Height="30" Margin="8,0,0,0"
+                <TextBox AutomationProperties.Name="Filter by name" Grid.Column="2" Height="30" Margin="8,0,0,0"
                          core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter by name"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
             </Grid>

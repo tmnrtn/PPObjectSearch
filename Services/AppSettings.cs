@@ -144,6 +144,12 @@ public sealed class AppSettings
     /// <summary>When the last update check ran, so it runs at most once a day.</summary>
     public DateTimeOffset? LastUpdateCheck { get; set; }
 
+    /// <summary>
+    /// The AI assistant: which provider and model, and the environments it may not read. Its API
+    /// keys are not kept here - see <see cref="Ai.AiKeyStore"/>.
+    /// </summary>
+    public Ai.AiSettings? Ai { get; set; }
+
     /// <summary>Whether the main window's object detail pane is showing.</summary>
     public bool IsDetailPaneOpen { get; set; } = true;
 

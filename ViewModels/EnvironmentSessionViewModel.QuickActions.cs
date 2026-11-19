@@ -161,7 +161,7 @@ public sealed partial class EnvironmentSessionViewModel
             return;
         }
 
-        Status = $"Checking which of {flows.Count:N0} flow(s) are off...";
+        Status = $"Checking which of {flows.Count:N0} flow(s) are off…";
 
         IReadOnlyDictionary<Guid, bool> states;
         try
@@ -207,7 +207,7 @@ public sealed partial class EnvironmentSessionViewModel
             foreach (var (item, kind) in targets)
             {
                 done++;
-                Status = $"({done}/{targets.Count}) {title.ToLowerInvariant()} {item.DisplayName ?? item.Name}...";
+                Status = $"({done}/{targets.Count}) {title.ToLowerInvariant()} {item.DisplayName ?? item.Name}…";
 
                 try
                 {
@@ -219,7 +219,7 @@ public sealed partial class EnvironmentSessionViewModel
                 }
             }
 
-            var more = failed.Count > 3 ? " ..." : string.Empty;
+            var more = failed.Count > 3 ? " …" : string.Empty;
             Status = failed.Count == 0
                 ? $"{title} - {targets.Count:N0} done. Recorded in the run log."
                 : $"{title} - {targets.Count - failed.Count:N0} done, {failed.Count:N0} failed: " +

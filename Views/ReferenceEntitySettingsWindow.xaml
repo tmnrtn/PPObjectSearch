@@ -116,7 +116,7 @@
                     <Run Text="Row filter" FontWeight="SemiBold" />
                     <Run Text="· OData $filter, optional, applied to both environments" Foreground="{DynamicResource Muted}" />
                 </TextBlock>
-                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Height="30"
+                <TextBox AutomationProperties.Name="e.g. statecode eq 0" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Height="30"
                          FontFamily="{StaticResource MonoFont}" core:Ui.Placeholder="e.g. statecode eq 0"
                          ToolTip="Applied to both environments, e.g. statecode eq 0" />
             </StackPanel>
@@ -131,7 +131,7 @@
 
                 <TextBlock Text="Columns to compare" Style="{StaticResource SectionHeading}" VerticalAlignment="Center"
                            Margin="0,0,10,0" />
-                <TextBox Grid.Column="1" Height="28" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter columns"
+                <TextBox AutomationProperties.Name="Filter columns" Grid.Column="1" Height="28" core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Filter columns"
                          Text="{Binding ColumnSearch, UpdateSourceTrigger=PropertyChanged}" />
 
                 <Border Grid.Column="2" Margin="8,0,0,0" BorderBrush="{DynamicResource Border2}" BorderThickness="1"

@@ -41,7 +41,7 @@ public class EnvironmentSessionLoadTests
         Assert.Equal(1, stateChanges);
         Assert.Equal("ect_core", session.ToState().SolutionUniqueName);
         Assert.Equal(["new_script.js", "new_style.css"], session.Items.Select(i => i.Name));
-        Assert.Contains("Loading objects in 'ECT Core'...", statuses);
+        Assert.Contains("Loading objects in 'ECT Core'…", statuses);
         Assert.Contains("Loading 'ECT Core'... 2", statuses);
         Assert.StartsWith("Loaded 2 objects from 'ECT Core'", session.Status);
     });
@@ -61,7 +61,7 @@ public class EnvironmentSessionLoadTests
         var gate = env.Gate(fallback);
 
         session.SelectedSolution = session.Solutions.Single(s => s.UniqueName == "Default");
-        await EnvironmentSessionThread.Until(() => session.Status.EndsWith("- refreshing...", StringComparison.Ordinal), "the cached copy");
+        await EnvironmentSessionThread.Until(() => session.Status.EndsWith("- refreshing…", StringComparison.Ordinal), "the cached copy");
 
         Assert.StartsWith("Showing 2 objects cached at ", session.Status);
         Assert.Equal(["Account", "Contact"], session.Items.Select(i => i.PrimaryLabel));

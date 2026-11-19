@@ -516,7 +516,7 @@ public class FlowDiagramStepDetailsTests
         Assert.Equal(795, d.SelectedIterations.Count);
         Assert.Equal("#611", d.SelectedIteration?.Label);
         Assert.True(d.HasFailedIterations);
-        Assert.Equal("Failed only (1)", d.FailedOnlyLabel);
+        Assert.Equal("Failed 1", d.FailedOnlyLabel);
 
         d.ShowFailedIterationsOnly = true;
 

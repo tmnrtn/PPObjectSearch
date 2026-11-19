@@ -465,7 +465,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         Holders.Clear();
 
         var table = TableName.Trim();
-        Status = $"Reading {table}'s privileges...";
+        Status = $"Reading {table}'s privileges…";
         var clock = Stopwatch.StartNew();
         var privilege = (await Client.GetTablePrivilegesAsync(table, ct)).FirstOrDefault(p => p.Action == Action);
 
@@ -483,7 +483,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
 
         foreach (var grant in grants)
         {
-            Status = $"Reading who holds {grant.RoleName}...";
+            Status = $"Reading who holds {grant.RoleName}…";
             var depth = (await Client.GetRolePrivilegesAsync(grant.RootRoleId, ct))
                 .FirstOrDefault(p => p.PrivilegeId == privilege.PrivilegeId)?.Depth ?? PrivilegeDepth.None;
             if (depth == PrivilegeDepth.None) continue;
@@ -519,7 +519,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         EffectiveUnits = [];
         var user = SelectedUser!;
 
-        Status = $"Reading {user.FullName}'s roles...";
+        Status = $"Reading {user.FullName}'s roles…";
         var clock = Stopwatch.StartNew();
         var assignments = new List<RoleAssignment>(await Client.GetUserRolesAsync(user.SystemUserId, ct));
         foreach (var team in await Client.GetUserTeamsAsync(user.SystemUserId, ct))
@@ -537,7 +537,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         {
             if (!privileges.TryGetValue(assignment.DefinitionId, out var granted))
             {
-                Status = $"Reading {assignment.RoleName}...";
+                Status = $"Reading {assignment.RoleName}…";
                 granted = await Client.GetRolePrivilegesAsync(assignment.DefinitionId, ct);
                 privileges[assignment.DefinitionId] = granted;
             }
@@ -561,7 +561,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
     internal async Task SecuredColumnAsync(CancellationToken ct)
     {
         FieldGrants.Clear();
-        Status = "Reading field security profiles...";
+        Status = "Reading field security profiles…";
         var clock = Stopwatch.StartNew();
 
         foreach (var grant in await Client.GetFieldPermissionGrantsAsync(TableName.Trim(), ColumnName.Trim(), ct)) FieldGrants.Add(grant);
@@ -580,7 +580,7 @@ public sealed class SecurityLookupViewModel : ObservableObject, IDisposable
         var left = LeftSession?.Client ?? Client;
         var right = RightSession?.Client ?? Client;
 
-        Status = "Reading both roles...";
+        Status = "Reading both roles…";
         var clock = Stopwatch.StartNew();
         var a = await left.GetRolePrivilegesAsync(LeftRole!.RoleId, ct);
         var b = await right.GetRolePrivilegesAsync(RightRole!.RoleId, ct);

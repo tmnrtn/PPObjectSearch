@@ -4,7 +4,7 @@
         xmlns:core="clr-namespace:PPObjectSearch.Core"
         Title="{Binding Title}"
         Style="{StaticResource DialogWindow}"
-        Height="620" Width="640"
+        Height="700" Width="660"
         MinHeight="380" MinWidth="480"
         WindowStartupLocation="CenterOwner">
 
@@ -26,7 +26,7 @@
                 <TextBlock Text="{Binding CurrentLabel}" Margin="0,4,0,0" Foreground="{DynamicResource Muted}" />
             </StackPanel>
 
-            <TextBox x:Name="SearchBox" Grid.Row="1" Height="30" Margin="16,0,16,12"
+            <TextBox x:Name="SearchBox" Grid.Row="1" Margin="16,0,16,12" AutomationProperties.Name="Search resources"
                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Search by name, subscription or resource group"
                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -98,10 +98,73 @@
                                 <DataTrigger Binding="{Binding CheckFoundTelemetry}" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource Green}" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding CheckFailed}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
+
+                <!-- Can this tab's account reach Azure at all: each API, OK or failed, listed here. -->
+                <DockPanel Margin="0,12,0,0" Visibility="{Binding CanCheckAccess, Converter={StaticResource BoolToVis}}">
+                    <Button DockPanel.Dock="Left" Content="Check Azure access" Command="{Binding CheckAccessCommand}"
+                            ToolTip="Tries each Azure API App Insights uses, as this tab's account, and says what worked. Changes nothing." />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Copy results" Margin="10,0,0,0"
+                            Command="{Binding CopyAccessCommand}" VerticalAlignment="Center"
+                            Visibility="{Binding HasAccessResults, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding AccessSummary}" Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AccessFailed}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DockPanel>
+                <ItemsControl ItemsSource="{Binding AccessResults}" Margin="0,8,0,0" Focusable="False"
+                              Visibility="{Binding HasAccessResults, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,0,0,6">
+                                <Border DockPanel.Dock="Left" CornerRadius="9" Padding="7,1" Margin="0,0,8,0" VerticalAlignment="Top">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource RedSoft}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Ok}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource GreenSoft}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock FontSize="11" FontWeight="SemiBold">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="Failed" />
+                                                <Setter Property="Foreground" Value="{DynamicResource Red}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Ok}" Value="True">
+                                                        <Setter Property="Text" Value="OK" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Green}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                                <TextBlock TextWrapping="Wrap">
+                                    <Run Text="{Binding Check, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=": " /><Run
+                                         Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource Muted}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
             <Border Grid.Row="5" Style="{StaticResource Footer}">
@@ -113,7 +176,7 @@
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
-                        <Button Style="{StaticResource LinkButton}" Content="Remove" Height="24" Margin="10,0,0,0"
+                        <Button Content="Remove" Margin="10,0,0,0" Foreground="{DynamicResource Red}"
                                 Click="Remove_Click" ToolTip="Stop reading App Insights for this environment"
                                 Visibility="{Binding HasCurrent, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>

@@ -36,9 +36,15 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _checkCts;
     private CancellationTokenSource? _loadCts;
 
+    /// <param name="checkAccess">Tries each Azure API the feature uses, as the tab's account; null offers no check.</param>
+    /// <param name="describeAccess">The check's results as text, to copy into a problem report.</param>
     public AppInsightsPickerViewModel(AzureMonitorClient client, TelemetryScope scope, TelemetryBinding? current,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<IReadOnlyList<AzureMonitor.AzureProbeResult>, string>? describeAccess = null,
+        Func<Task<IReadOnlyList<AzureMonitor.AzureProbeResult>?>>? checkAccess = null)
     {
+        _checkAccess = checkAccess;
+        _describeAccess = describeAccess;
         _client = client;
         _scope = scope;
         _current = current;
@@ -50,6 +56,82 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
     }
 
     public string Title => "App Insights resource";
+
+    // ---------------------------------------------------------------- Azure access
+
+    private readonly Func<Task<IReadOnlyList<AzureMonitor.AzureProbeResult>?>>? _checkAccess;
+    private readonly Func<IReadOnlyList<AzureMonitor.AzureProbeResult>, string>? _describeAccess;
+
+    public bool CanCheckAccess => _checkAccess is not null;
+
+    /// <summary>Each Azure API the feature uses, and whether this tab's account reached it - shown here, not in a dialog.</summary>
+    public ObservableCollection<AzureMonitor.AzureProbeResult> AccessResults { get; } = new();
+
+    public bool HasAccessResults => AccessResults.Count > 0;
+
+    private bool _isCheckingAccess;
+    public bool IsCheckingAccess
+    {
+        get => _isCheckingAccess;
+        private set
+        {
+            if (SetProperty(ref _isCheckingAccess, value)) CheckAccessCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _accessSummary = string.Empty;
+    public string AccessSummary
+    {
+        get => _accessSummary;
+        private set => SetProperty(ref _accessSummary, value);
+    }
+
+    private bool _accessFailed;
+    public bool AccessFailed
+    {
+        get => _accessFailed;
+        private set => SetProperty(ref _accessFailed, value);
+    }
+
+    public AsyncRelayCommand CheckAccessCommand => _checkAccessCommand ??= new AsyncRelayCommand(_ => CheckAccessAsync(), _ => CanCheckAccess && !IsCheckingAccess);
+    private AsyncRelayCommand? _checkAccessCommand;
+
+    public RelayCommand CopyAccessCommand => _copyAccessCommand ??= new RelayCommand(_ =>
+    {
+        if (_describeAccess is null || AccessResults.Count == 0) return;
+        AccessSummary = ClipboardText.TryCopy(_describeAccess(AccessResults.ToList()), out var problem)
+            ? "Copied the results."
+            : $"Could not copy - the clipboard is held by another application ({problem}).";
+    }, _ => HasAccessResults);
+    private RelayCommand? _copyAccessCommand;
+
+    /// <summary>Runs the Azure access check, its results listed in the picker.</summary>
+    public async Task CheckAccessAsync()
+    {
+        if (_checkAccess is null) return;
+
+        IsCheckingAccess = true;
+        AccessResults.Clear();
+        AccessSummary = "Checking Azure access…";
+        AccessFailed = false;
+        try
+        {
+            var results = await _checkAccess();
+            foreach (var result in results ?? []) AccessResults.Add(result);
+
+            var failed = AccessResults.Count(r => !r.Ok);
+            AccessFailed = results is null || failed > 0;
+            AccessSummary = results is null
+                ? "The check could not run - see the status bar of the environment."
+                : failed == 0 ? "Azure can be reached: every check worked." : $"{failed} of {AccessResults.Count} checks failed.";
+        }
+        finally
+        {
+            IsCheckingAccess = false;
+            OnPropertyChanged(nameof(HasAccessResults));
+            CopyAccessCommand.RaiseCanExecuteChanged();
+        }
+    }
 
     public ObservableCollection<AppInsightsChoice> Items { get; } = new();
     public ICollectionView ItemsView { get; }
@@ -126,6 +208,14 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _checkText, value);
     }
 
+    private bool _checkFailed;
+    /// <summary>The check of the selected resource could not run, as against finding nothing.</summary>
+    public bool CheckFailed
+    {
+        get => _checkFailed;
+        private set => SetProperty(ref _checkFailed, value);
+    }
+
     private bool _checkFoundTelemetry;
     public bool CheckFoundTelemetry
     {
@@ -138,7 +228,7 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
     {
         var cts = _loadCts = new CancellationTokenSource();
         IsLoading = true;
-        Status = "Listing Application Insights resources...";
+        Status = "Listing Application Insights resources…";
         try
         {
             var (components, notes) = await _client.ListAllComponentsAsync(new Progress<string>(m => Status = m), cts.Token);
@@ -180,6 +270,7 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
         if (superseded is not null) await superseded.CancelAsync();
 
         CheckFoundTelemetry = false;
+        CheckFailed = false;
         if (Selected is not { } choice)
         {
             CheckText = string.Empty;
@@ -189,10 +280,11 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
         if (!choice.HasAppId)
         {
             CheckText = "This resource has no app id, so it cannot be queried.";
+            CheckFailed = true;
             return;
         }
 
-        CheckText = $"Checking {choice.Name}...";
+        CheckText = $"Checking {choice.Name}…";
         try
         {
             var check = await TelemetryProfiles.CheckAsync(_client, DataverseExportProfile.Instance, choice.Component.AppId!,
@@ -208,7 +300,11 @@ public sealed class AppInsightsPickerViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            if (!cts.IsCancellationRequested) CheckText = "Could not check this resource - " + ex.Message;
+            if (!cts.IsCancellationRequested)
+            {
+                CheckText = "Could not check this resource - " + ex.Message;
+                CheckFailed = true;
+            }
         }
     }
 

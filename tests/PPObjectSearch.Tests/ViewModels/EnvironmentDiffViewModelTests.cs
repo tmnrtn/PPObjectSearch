@@ -166,7 +166,7 @@ public class EnvironmentDiffViewModelTests
         var first = vm.LoadAsync();
 
         Assert.True(vm.IsBusy);
-        Assert.Equal("Loading both environments...", vm.Status);
+        Assert.Equal("Loading both environments…", vm.Status);
         Assert.False(vm.RefreshCommand.CanExecute(null));
 
         await vm.LoadAsync();

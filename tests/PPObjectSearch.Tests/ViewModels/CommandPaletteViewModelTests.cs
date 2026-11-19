@@ -37,8 +37,9 @@ public sealed class CommandPaletteViewModelTests : IDisposable
 
         Assert.Equal(
         [
-            "Search all environments", "Compare objects", "Compare data", "Readiness check", "Table settings", "Close all details windows",
-            "New tab", "Theme: light", "Theme: dark", "Theme: follow Windows", "Open log folder", "Switch to fabrikam"
+            "Search all environments", "Compare objects", "Compare data", "Readiness check", "Table settings", "Close all details",
+            "New tab", "Ask AI about this screen", "Ask AI settings…", "Theme: light", "Theme: dark", "Theme: follow Windows",
+            "Open log folder", "Switch to fabrikam"
         ], Titles(palette));
         Assert.Same(palette.Results[0], palette.Selected);
         Assert.Equal("Ctrl+Shift+F", palette.Results[0].Shortcut);
@@ -120,7 +121,7 @@ public sealed class CommandPaletteViewModelTests : IDisposable
             Query = "close all details"
         };
 
-        Assert.Equal("Close all details windows", palette.Selected!.Title);
+        Assert.Equal("Close all details", palette.Selected!.Title);
         Assert.False(palette.Execute());
 
         palette.Query = "qqqqzzzz";

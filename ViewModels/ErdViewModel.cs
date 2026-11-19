@@ -54,7 +54,7 @@ public sealed record ErdLayoutChoice(ErdLayoutStyle Value, string Label);
 /// which tables, how many of their columns, and whether the tables outside they look up are shown -
 /// and saved as SVG, PNG or Mermaid.
 /// </summary>
-public sealed class ErdViewModel : ObservableObject, IDisposable
+public sealed class ErdViewModel : ObservableObject, IDisposable, Ai.IAiContext
 {
     private const int TableType = 1;
     private const int TableReads = 4;
@@ -508,8 +508,8 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
             for (var i = 0; i < solutions.Count; i++)
             {
                 Status = solutions.Count == 1
-                    ? $"Reading the tables of {solutions[i].FriendlyName}..."
-                    : $"Reading the tables of {solutions[i].FriendlyName} ({i + 1:N0} of {solutions.Count:N0})...";
+                    ? $"Reading the tables of {solutions[i].FriendlyName}…"
+                    : $"Reading the tables of {solutions[i].FriendlyName} ({i + 1:N0} of {solutions.Count:N0})…";
 
                 var components = await client.GetSolutionComponentsAsync(solutions[i].SolutionId, ct: cts.Token);
                 foreach (var item in components.Where(c => c.ComponentType == TableType))
@@ -538,7 +538,7 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
                     }
 
                     var count = Interlocked.Increment(ref done);
-                    Status = $"Reading the columns and relationships of {unread.Count:N0} table(s) - {count:N0} done...";
+                    Status = $"Reading the columns and relationships of {unread.Count:N0} table(s) - {count:N0} done…";
                 }));
             }
 
@@ -711,6 +711,11 @@ public sealed class ErdViewModel : ObservableObject, IDisposable
         : $"{DocPage.Slug(_session.Title)}-erd-{DateTime.Now:yyyy-MM-dd}";
 
     private string Mermaid() => ErdMermaidWriter.ToMermaid(_mermaid ?? _diagram!, Placed?.Title);
+
+    /// <summary>On screen the diagram is boxes and lines; the assistant reads it as its Mermaid.</summary>
+    public string? DescribeForAi() => _diagram is null
+        ? null
+        : "The entity relationship diagram, as Mermaid (the screen draws the same):\n```mermaid\n" + Mermaid().TrimEnd() + "\n```";
 
     private void CopyMermaid()
     {

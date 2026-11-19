@@ -114,7 +114,7 @@ public class ObjectDetailsViewModelTests
         var first = details.LoadAsync();
 
         Assert.True(details.IsBusy);
-        Assert.Equal("Loading...", details.Status);
+        Assert.Equal("Loading…", details.Status);
         Assert.False(details.RefreshCommand.CanExecute(null));
 
         await details.LoadAsync();

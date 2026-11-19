@@ -5,7 +5,9 @@
                   xmlns:local="clr-namespace:PPObjectSearch.Views"
                   ScreenTitle="{Binding Title}"
                   WindowHeight="660"
-                  WindowWidth="1100">
+                  WindowWidth="1100"
+                  WindowMinWidth="900"
+                  WindowMinHeight="560">
 
     <Border Style="{StaticResource WindowBody}">
         <Grid>
@@ -36,10 +38,10 @@
 
                 <!-- The filter first, then read again, then export. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
-                    <CheckBox Content="Failures and warnings only" Margin="0,0,6,0" VerticalAlignment="Center"
-                              IsChecked="{Binding ProblemsOnly}" />
-                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding RefreshCommand}" ToolTip="Read again" />
+                    <ToggleButton Style="{StaticResource FailedFilter}" Content="Failures and warnings" Margin="0,0,6,0"
+                                  IsChecked="{Binding ProblemsOnly}" ToolTip="Show only the components that failed or warned" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding RefreshCommand}" ToolTip="Refresh - read the log again" />
                     <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="Markdown: the failures and warnings · XML: the raw log">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Export" VerticalAlignment="Center" />
@@ -48,9 +50,12 @@
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Copy failures as Markdown" Command="{Binding CopyProblemsCommand}"
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Copy" />
+                                <MenuItem Header="Failures and warnings as Markdown" Command="{Binding CopyProblemsCommand}"
                                           ToolTip="The failures and warnings, to the clipboard" />
-                                <MenuItem Header="Save raw XML…" Command="{Binding SaveXmlCommand}"
+                                <Separator />
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
+                                <MenuItem Header="Raw XML…" Command="{Binding SaveXmlCommand}"
                                           ToolTip="The log exactly as Dataverse keeps it - what the maker portal offers as a download" />
                             </ContextMenu>
                         </Button.ContextMenu>

@@ -43,9 +43,10 @@ public sealed partial class EnvironmentSessionViewModel
     }
 
     private RelayCommand? _chooseAppInsightsCommand;
-    public RelayCommand ChooseAppInsightsCommand => _chooseAppInsightsCommand ??= new RelayCommand(_ => ChooseAppInsights());
+    public RelayCommand ChooseAppInsightsCommand => _chooseAppInsightsCommand ??= new RelayCommand(_ => ChooseAppInsights(checkAccess: false));
 
-    private void ChooseAppInsights()
+    /// <param name="checkAccess">Runs the Azure access check as the picker opens, its results listed there.</param>
+    private void ChooseAppInsights(bool checkAccess)
     {
         if (_client is not { } client || !IsConnected)
         {
@@ -54,8 +55,11 @@ public sealed partial class EnvironmentSessionViewModel
         }
 
         using var azure = client.CreateAzureMonitorClient();
-        var viewModel = new AppInsightsPickerViewModel(azure, TelemetryScope, AppInsightsBinding);
+        var viewModel = new AppInsightsPickerViewModel(azure, TelemetryScope, AppInsightsBinding,
+            describeAccess: results => AzureAccessProbe.ToText(EnvironmentHost, SignInClientDescription, results),
+            checkAccess: () => ProbeAzureAsync(azure));
         var window = new Views.AppInsightsPickerWindow { DataContext = viewModel, Owner = Application.Current?.MainWindow };
+        if (checkAccess) window.Loaded += (_, _) => _ = viewModel.CheckAccessAsync();
         if (window.ShowDialog() != true) return;
 
         SetAppInsights(window.Removed ? null : viewModel.Result());
@@ -76,50 +80,24 @@ public sealed partial class EnvironmentSessionViewModel
     // ---------------------------------------------------------------- Azure access check
 
     private AsyncRelayCommand? _checkAzureAccessCommand;
+    /// <summary>"Check Azure access…": the App Insights picker, with the check run and its results listed there.</summary>
     public AsyncRelayCommand CheckAzureAccessCommand => _checkAzureAccessCommand ??=
-        new AsyncRelayCommand(_ => CheckAzureAccessAsync());
+        new AsyncRelayCommand(_ =>
+        {
+            ChooseAppInsights(checkAccess: true);
+            return Task.CompletedTask;
+        });
 
-    /// <summary>The sign-in client in use, as the check reports it.</summary>
-    internal string SignInClientDescription => string.IsNullOrWhiteSpace(_settings.ClientId)
-        ? $"built-in ({AuthenticationService.DefaultClientId})"
-        : $"ClientId setting ({_settings.ClientId.Trim()})";
-
-    /// <summary>
-    /// Tries each Azure API the App Insights features use, as this tab's account, and says what
-    /// worked - and, for what did not, whether it is the sign-in client or the account's Azure role.
-    /// </summary>
-    internal async Task<IReadOnlyList<AzureProbeResult>?> CheckAzureAccessAsync()
+    /// <summary>The check itself, logged and summed up in the status bar; null if it could not run.</summary>
+    internal async Task<IReadOnlyList<AzureProbeResult>?> ProbeAzureAsync(AzureMonitorClient azure)
     {
-        if (_client is not { } client || !IsConnected) return null;
-
         try
         {
-            using var azure = client.CreateAzureMonitorClient();
-            var progress = new Progress<string>(message => Status = message);
-
-            var results = await AzureAccessProbe.RunAsync(azure, AppInsightsBinding?.AppId, progress);
-            var text = AzureAccessProbe.ToText(EnvironmentHost, SignInClientDescription, results);
-            Log.Info(text);
+            var results = await AzureAccessProbe.RunAsync(azure, AppInsightsBinding?.AppId, new Progress<string>(message => Status = message));
+            Log.Info(AzureAccessProbe.ToText(EnvironmentHost, SignInClientDescription, results));
 
             var failed = results.Count(r => !r.Ok);
             Status = failed == 0 ? "Azure access check: everything worked." : $"Azure access check: {failed} of {results.Count} checks failed.";
-
-            if (Ask(new AskRequest(failed == 0 ? "Azure can be reached" : "Some Azure checks failed",
-                    $"Signed in as {AccountName ?? "this tab's account"}, with the {SignInClientDescription} sign-in client.")
-                {
-                    Title = "Azure access",
-                    Environment = this,
-                    Points = results.Select(r => r.Line).ToList(),
-                    Note = "Nothing was changed. The results are in today's log too.",
-                    Confirm = "Copy results",
-                    Cancel = "Close"
-                }))
-            {
-                Status = ClipboardText.TryCopy(text, out var problem)
-                    ? "Copied the Azure access check."
-                    : $"Could not copy the results - the clipboard is held by another application ({problem}).";
-            }
-
             return results;
         }
         catch (Exception ex)
@@ -129,4 +107,10 @@ public sealed partial class EnvironmentSessionViewModel
             return null;
         }
     }
+
+    /// <summary>The sign-in client in use, as the check reports it.</summary>
+    internal string SignInClientDescription => string.IsNullOrWhiteSpace(_settings.ClientId)
+        ? $"built-in ({AuthenticationService.DefaultClientId})"
+        : $"ClientId setting ({_settings.ClientId.Trim()})";
+
 }

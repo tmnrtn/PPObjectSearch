@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Windows;
+using PPObjectSearch.Ai;
 using PPObjectSearch.Auth;
 using PPObjectSearch.Core;
 using PPObjectSearch.Services;
@@ -65,8 +66,106 @@ public sealed class ShellViewModel : ObservableObject
             if (Enum.TryParse<ScreenPlacement>(p as string, out var placement)) OpenScreensIn = placement;
         });
 
+        ShowAiSettings = OpenAiSettings;
+        Ai = new AiService(_settings.Ai ??= new AiSettings(), () => _settings.Save(_settingsPath), new AiKeyStore());
+        AiService.Current = Ai;
+        AiWorkspace = new AiWorkspace(Sessions, Screens, () => SelectedSession, Ai.Settings);
+        Ai.Workspace = AiWorkspace;
+        Ai.Changed += (_, _) =>
+        {
+            foreach (var session in Sessions) session.RaiseAiAllowed();
+        };
+        ToggleAiPanelCommand = new RelayCommand(_ => IsAiPanelOpen = !IsAiPanelOpen);
+        OpenAiSettingsCommand = new RelayCommand(_ => ShowAiSettings(null));
+        AiAssistantViewModel.OpenSettings = kind => ShowAiSettings(kind);
+        Screens.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ScreenHost.SelectedTab)) OnPropertyChanged(nameof(CurrentAssistant));
+        };
+        Screens.Changed += (_, _) => MarkOtherEnvironments();
+        NextScreenCommand = new RelayCommand(_ => Screens.Step(+1));
+        PreviousScreenCommand = new RelayCommand(_ => Screens.Step(-1));
+
         RestoreTabs();
         _ = CheckForUpdateAsync();
+    }
+
+    /// <summary>Ctrl+Tab and Ctrl+Shift+Tab: along the tab strip.</summary>
+    public RelayCommand NextScreenCommand { get; }
+    public RelayCommand PreviousScreenCommand { get; }
+
+    /// <summary>Screens of another environment than the one selected read quieter in the strip.</summary>
+    private void MarkOtherEnvironments()
+    {
+        var selected = SelectedSession?.EnvironmentUrl;
+        foreach (var screen in Screens.Open)
+        {
+            screen.IsOtherEnvironment = screen.EnvironmentUrl is { } url &&
+                                        !string.Equals(url, selected, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>The AI assistant: its provider, settings and keys.</summary>
+    public AiService Ai { get; }
+
+    /// <summary>The app as the assistant's tools see it.</summary>
+    public AiWorkspace AiWorkspace { get; }
+
+    /// <summary>Ctrl+Shift+I: shows or hides the assistant beside the screen showing.</summary>
+    public RelayCommand ToggleAiPanelCommand { get; }
+
+    public RelayCommand OpenAiSettingsCommand { get; }
+
+    /// <summary>Opens Ask AI settings, with a provider chosen when one is given; replaced in tests.</summary>
+    internal Action<AiProviderKind?> ShowAiSettings { get; set; }
+
+    private void OpenAiSettings(AiProviderKind? provider)
+    {
+        var environments = Sessions
+            .Where(s => !string.IsNullOrWhiteSpace(s.EnvironmentUrl))
+            .Select(s => new AiEnvironment(s.Title, s.EnvironmentUrl, s.EnvironmentSku))
+            .ToList();
+
+        var vm = new AiSettingsViewModel(Ai, environments);
+        if (provider is { } kind)
+        {
+            // Chosen from the panel's cards: that provider, and Ask AI on.
+            vm.Provider = kind;
+            vm.IsEnabled = true;
+        }
+        new Views.AiSettingsWindow { DataContext = vm, Owner = Application.Current.MainWindow }.ShowDialog();
+    }
+
+    /// <summary>Whether the assistant panel shows beside the main window's screen. Remembered in settings.</summary>
+    public bool IsAiPanelOpen
+    {
+        get => Ai.Settings.IsPanelOpen;
+        set
+        {
+            if (Ai.Settings.IsPanelOpen == value) return;
+            Ai.Settings.IsPanelOpen = value;
+            _settings.Save(_settingsPath);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// The conversation for what the main window shows: the screen tab in front, or else the
+    /// selected environment. Each keeps its own.
+    /// </summary>
+    public AiAssistantViewModel? CurrentAssistant
+    {
+        get
+        {
+            if (Screens.SelectedTab is { } screen)
+                return AiAssistantViewModel.For(screen, () => AiWorkspace.ReadView(screen, screen.Title), () => AiWorkspace.Describe(screen));
+
+            if (SelectedSession is { } session)
+                return AiAssistantViewModel.For(session, () => AiWorkspace.ReadView(session, session.Title) ?? AiWorkspace.Summary(session),
+                    () => AiWorkspace.Describe(session));
+
+            return null;
+        }
     }
 
     private Services.AvailableUpdate? _update;
@@ -288,7 +387,10 @@ public sealed class ShellViewModel : ObservableObject
         set
         {
             // Choosing an environment shows it, rather than whichever screen tab was in front.
-            if (SetProperty(ref _selectedSession, value)) Screens.ShowHome();
+            if (!SetProperty(ref _selectedSession, value)) return;
+            Screens.ShowHome();
+            MarkOtherEnvironments();
+            OnPropertyChanged(nameof(CurrentAssistant));
         }
     }
 

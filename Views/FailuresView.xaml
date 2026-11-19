@@ -96,8 +96,8 @@
                                 Visibility="{Binding IsCustom, Converter={StaticResource BoolToVis}}" />
                     <Button Content="Stop" Margin="6,0,0,0" Command="{Binding CancelCommand}"
                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-                    <Button AutomationProperties.Name="Read again" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
-                            Command="{Binding LoadCommand}" ToolTip="Read again" />
+                    <Button AutomationProperties.Name="Refresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0"
+                            Command="{Binding LoadCommand}" ToolTip="Refresh - read again" />
                     <Button Margin="6,0,0,0" core:Ui.OpensMenu="True" ToolTip="CSV: every failure · Markdown: the overview">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Export" VerticalAlignment="Center" />
@@ -106,6 +106,7 @@
                         </StackPanel>
                         <Button.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Style="{StaticResource MenuGroupHeader}" Header="Save" />
                                 <MenuItem Header="CSV: every failure…" Command="{Binding ExportCsvCommand}"
                                           ToolTip="Every failure shown, one per line" />
                                 <MenuItem Header="Markdown: the overview…" Command="{Binding ExportMarkdownCommand}"
@@ -241,6 +242,9 @@
 
                 <!-- The selected component: its failures grouped by error, and the latest ones. -->
                 <Border Grid.Column="1" BorderBrush="{DynamicResource Border}" BorderThickness="1,1,0,0">
+                    <Grid>
+                    <TextBlock Style="{StaticResource EmptyHint}" Text="Select a component to see its errors by step and its latest failures."
+                               Visibility="{Binding HasSelection, Converter={StaticResource NotBoolToVis}}" />
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
@@ -333,6 +337,7 @@
                             </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
+                    </Grid>
                 </Border>
             </Grid>
 
