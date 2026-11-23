@@ -10,6 +10,22 @@ public static class ClipboardText
     /// <summary>Puts the text on the clipboard; replaced in tests, which must not touch the real one.</summary>
     internal static Action<string> Set { get; set; } = text => Clipboard.SetDataObject(text, copy: true);
 
+    /// <summary>Reads the clipboard's text; replaced in tests, which must not touch the real one.</summary>
+    internal static Func<string?> Get { get; set; } = () => Clipboard.ContainsText() ? Clipboard.GetText() : null;
+
+    /// <summary>The clipboard's text, or null when it holds none or another app has it open.</summary>
+    public static string? TryRead()
+    {
+        try
+        {
+            return Get();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Clipboard.SetText makes a single OLE attempt and throws if anything else currently holds
     /// the clipboard - clipboard history, a remote desktop session, another app mid-copy - which

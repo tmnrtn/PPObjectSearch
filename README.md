@@ -122,6 +122,8 @@ straight into the maker portal.
 - **Table data** (in the sidebar) — a read-only, filterable look at the rows of one table, for
   checking reference and config data, with lookups and related rows to follow, each row's audit
   history, and export to CSV or Markdown. See [Table data](#table-data).
+- **Audit a row** (in the sidebar, or paste into the command palette) — a quick audit check of any
+  row from a link to it, or its table and id. See [Audit a row](#audit-a-row).
 - **Reference data comparison** — diff the *rows* of chosen tables between two environments, keyed
   on the primary key, an alternate key or columns you pick. Saved as named configurations.
 - **Reconcile differences** — write selected rows from the source into the target. Production
@@ -304,7 +306,8 @@ environments you choose. Those services' handling of data is covered by the
 and admin action, scoped to the current environment - a connected environment to switch to, a
 recent object or saved search, or (from two letters) any object in the list to open its details.
 Letters match in order, word starts first, so `cmpd` finds *Compare data*. Each command shows its
-shortcut. ↑/↓ choose, Enter runs, Esc closes.
+shortcut. ↑/↓ choose, Enter runs, Esc closes. Paste a link to a row, or type a table and a row id
+(`account 0f6a…`), and the first result is that row's [audit history](#audit-a-row).
 
 ## How objects are read
 
@@ -754,7 +757,28 @@ history covers its definition and its current value row. It reads Dataverse audi
 only what was recorded while auditing was on; the window says whether it is on now for the
 environment and the table, and needs the View Audit History privilege. **Export** writes the
 changes as CSV or Markdown, one line per column changed. Any table row's history is in
-[Table data](#table-data).
+[Table data](#table-data), or from a link to it with [Audit a row](#audit-a-row).
+
+## Audit a row
+
+A quick audit check of one row - who changed it, when, and each column's old and new value -
+without finding it in Table data first. **Audit a row…** (sidebar, under Investigate, or *Audit
+history of a row…* in the command palette) asks for the row, starting from a link on the clipboard:
+
+- **A link to it** - the browser's address on the row's form
+  (`…/main.aspx?…&etn=account&id=…`), an older one that names the table by number (`etc=1`), or a
+  Web API one (`…/api/data/v9.2/accounts(…)`).
+- **Its table and id** - the table's logical name and the row's id, in either order, separated by a
+  space, comma, colon, slash or brackets: `account 0f6a…`, `account(0f6a…)`.
+
+Or skip the question: paste the link, or type the table and id, into the **command palette**
+(`Ctrl+K`) and press Enter. A link is read in the tab connected to its environment, whichever tab
+is on show; a link to an environment no tab is connected to says so.
+
+The history opens at once and finds the table and the row as it loads - the same window, columns
+named and values formatted as in [Table data](#table-data), with the same export. A row since
+deleted still shows its history, and says it is not there now. A table name that is not in the
+environment says so where the history would be.
 
 ## Table data
 

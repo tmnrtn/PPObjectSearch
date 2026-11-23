@@ -184,4 +184,66 @@ public class AuditTests
         Assert.Contains("odata.include-annotations=\"*\"",
             handler.Requests.First(r => r.Url.Contains("RetrieveAuditDetails", StringComparison.Ordinal)).Header("Prefer"));
     }
+
+    private const string AccountTable = """
+        {"LogicalName":"account","DisplayName":{"UserLocalizedLabel":{"Label":"Account"}},"EntitySetName":"accounts",
+         "PrimaryIdAttribute":"accountid","PrimaryNameAttribute":"name","IsPrivate":false,"IsManaged":true,"IsActivity":false}
+        """;
+
+    [Fact]
+    public async Task A_table_is_found_by_its_logical_name()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='account')", AccountTable);
+
+        var table = await Fakes.Dataverse(handler).FindTableAsync("Account");
+
+        Assert.Equal("account", table!.LogicalName);
+        Assert.Equal("accounts", table.EntitySetName);
+        Assert.Equal("Account (account)", table.Label);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task A_web_api_links_entity_set_is_found_when_no_table_has_that_logical_name()
+    {
+        // No route for EntityDefinitions(LogicalName='accounts'): the fake answers 404.
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "EntityDefinitions?", $$"""{"value":[{{AccountTable}}]}""");
+
+        var table = await Fakes.Dataverse(handler).FindTableAsync("accounts");
+
+        Assert.Equal("account", table!.LogicalName);
+        Assert.Contains("$filter=EntitySetName eq 'accounts'", handler.Requests[^1].Url);
+    }
+
+    [Fact]
+    public async Task An_old_links_type_code_is_looked_up_and_an_unknown_table_is_none()
+    {
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "ObjectTypeCode eq 1", $$"""{"value":[{{AccountTable}}]}""")
+            .OnJson(HttpMethod.Get, "EntityDefinitions?", """{"value":[]}""");
+        var client = Fakes.Dataverse(handler);
+
+        Assert.Equal("account", (await client.FindTableAsync("1"))!.LogicalName);
+        Assert.Null(await client.FindTableAsync("acount"));
+    }
+
+    [Fact]
+    public async Task A_rows_heading_is_its_name_and_creation_and_a_deleted_row_is_not_there()
+    {
+        var table = new PPObjectSearch.Models.EntitySummary("account", "Account", "accounts", "accountid", "name", false, false);
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"accounts({Account})", """{"accountid":"x","name":"Contoso","createdon":"2026-03-01T09:00:00Z"}""")
+            .OnError(HttpMethod.Get, $"accounts({Flow})", HttpStatusCode.NotFound, "Does not exist")
+            .OnError(HttpMethod.Get, $"accounts({Definition})", HttpStatusCode.Forbidden, "No read privilege");
+        var client = Fakes.Dataverse(handler);
+
+        var heading = await client.GetRowHeadingAsync(table, Account, hasCreatedOn: true);
+        Assert.True(heading.Exists);
+        Assert.Equal("Contoso", heading.Name);
+        Assert.Equal(new DateTimeOffset(2026, 3, 1, 9, 0, 0, TimeSpan.Zero), heading.CreatedOn);
+        Assert.Contains("$select=accountid,name,createdon", handler.Requests[0].Url);
+
+        Assert.False((await client.GetRowHeadingAsync(table, Flow, hasCreatedOn: false)).Exists);
+        Assert.Null((await client.GetRowHeadingAsync(table, Definition, hasCreatedOn: false)).Exists);
+    }
 }
