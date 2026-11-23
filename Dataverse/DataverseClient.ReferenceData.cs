@@ -70,14 +70,15 @@ public sealed partial class DataverseClient
         return names;
     }
 
-    private static EntitySummary? ReadEntitySummary(JsonElement row)
+    /// <param name="anyTable">Keep a private table, or one with no rows to read - its audit history is still there.</param>
+    private static EntitySummary? ReadEntitySummary(JsonElement row, bool anyTable = false)
     {
         var logicalName = JsonHelper.GetString(row, "LogicalName");
         if (string.IsNullOrWhiteSpace(logicalName)) return null;
-        if (JsonHelper.GetBool(row, "IsPrivate") ?? false) return null;
+        if (!anyTable && (JsonHelper.GetBool(row, "IsPrivate") ?? false)) return null;
 
         var entitySetName = JsonHelper.GetString(row, "EntitySetName");
-        if (string.IsNullOrWhiteSpace(entitySetName)) return null;
+        if (!anyTable && string.IsNullOrWhiteSpace(entitySetName)) return null;
 
         return new EntitySummary(
             logicalName,

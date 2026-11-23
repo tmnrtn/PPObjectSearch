@@ -29,10 +29,12 @@ public sealed class CommandPaletteViewModel : ObservableObject
 
     private readonly IReadOnlyList<PaletteItem> _fixed;
     private readonly EnvironmentSessionViewModel? _session;
+    private readonly IReadOnlyList<EnvironmentSessionViewModel> _sessions;
 
     public CommandPaletteViewModel(ShellViewModel shell)
     {
         _session = shell.SelectedSession is { IsConnected: true } s ? s : null;
+        _sessions = shell.Sessions.ToList();
         _fixed = BuildItems(shell, _session);
         Apply();
     }
@@ -87,6 +89,9 @@ public sealed class CommandPaletteViewModel : ObservableObject
             .Select(x => x.Item)
             .ToList();
 
+        // A link to a row, or a table and id, pasted in: its audit history comes first.
+        if (AuditItem(query, _session, _sessions) is { } audit) ranked.Insert(0, audit);
+
         Results.Clear();
         foreach (var item in ranked) Results.Add(item);
         Selected = Results.FirstOrDefault();
@@ -98,6 +103,33 @@ public sealed class CommandPaletteViewModel : ObservableObject
     public bool NothingMatches => Results.Count == 0 && Query.Trim().Length > 0;
 
     public string NothingMatchesText => $"Nothing matches '{Query.Trim()}'";
+
+    /// <summary>
+    /// The audit history of the row a pasted link or a typed table and id names, read in the tab
+    /// connected to its environment. A link to an environment no tab is connected to says so, and does nothing.
+    /// </summary>
+    internal static PaletteItem? AuditItem(string query, EnvironmentSessionViewModel? current, IEnumerable<EnvironmentSessionViewModel> sessions)
+    {
+        if (!RecordReference.TryParse(query, out var reference, out _)) return null;
+
+        if (EnvironmentSessionViewModel.SessionFor(reference!, current, sessions) is not { } session)
+        {
+            return reference!.Host is null
+                ? null
+                : new PaletteItem
+                {
+                    Title = $"Audit history of {reference}", Group = "Audit",
+                    Detail = $"{reference.Host} - no tab is connected to it",
+                    Command = new RelayCommand(_ => { }, _ => false)
+                };
+        }
+
+        return new PaletteItem
+        {
+            Title = $"Audit history of {reference}", Group = session.Title, Detail = "who changed the row, and how",
+            Command = new RelayCommand(p => session.ShowRecordAuditHistory((RecordReference)p!)), Parameter = reference
+        };
+    }
 
     private static IEnumerable<PaletteItem> Objects(EnvironmentSessionViewModel session) =>
         session.Items.Select(item => new PaletteItem
@@ -164,6 +196,7 @@ public sealed class CommandPaletteViewModel : ObservableObject
             new() { Title = "Failures", Group = env, Command = session.FailuresCommand },
             new() { Title = "Table data", Group = env, Detail = "rows of a table, read-only", Command = session.TableDataCommand },
             new() { Title = "Security lookup", Group = env, Detail = "who can, effective access, secured columns, compare roles", Command = session.SecurityLookupCommand },
+            new() { Title = "Audit history of a row…", Group = env, Detail = "paste a link to it, or its table and id", Command = session.AuditRowCommand },
             new() { Title = "Users", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Users" },
             new() { Title = "Teams", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Teams" },
             new() { Title = "Security roles", Group = admin, Command = session.EnvironmentAdminCommand, Parameter = "Roles" },

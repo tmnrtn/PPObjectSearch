@@ -27,13 +27,16 @@ public sealed record AuditedRow(
 /// </summary>
 public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 {
-    private readonly Func<Action<int, int>, CancellationToken, Task<IReadOnlyList<AuditRecord>>> _read;
-    private readonly DateTimeOffset? _createdOn;
+    private Func<Action<int, int>, CancellationToken, Task<IReadOnlyList<AuditRecord>>> _read;
+    private DateTimeOffset? _createdOn;
     private readonly string _typeName;
     private readonly DataverseClient _client;
     private CancellationTokenSource? _cts;
-    private readonly string? _table;
+    private string? _table;
     private bool _readFailed;
+
+    /// <summary>A row named by a link or by its table and id, whose table and row are found as the window loads.</summary>
+    private readonly RecordReference? _reference;
 
     public AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, SolutionComponentItem item)
         : this(session, client, item.PrimaryLabel,
@@ -47,10 +50,23 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
     /// <summary>Any row of any table, its changes' values formatted and its columns named by <see cref="AuditedRow.ColumnNames"/>.</summary>
     public AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, AuditedRow row)
         : this(session, client, string.IsNullOrWhiteSpace(row.Name) ? row.Id.ToString() : row.Name,
-            row.Table.Label, "row", row.Table.LogicalName, row.CreatedOn,
-            async (progress, ct) => Named(await client.GetRecordAuditHistoryAsync(row.Table.LogicalName, row.Id, progress, ct), row.ColumnNames))
+            row.Table.Label, "row", row.Table.LogicalName, row.CreatedOn, ReadRow(client, row))
     {
     }
+
+    /// <summary>
+    /// Any row from a link to it, or its table and id: the window opens at once, then finds the
+    /// table and the row's name. A row since deleted still has its history.
+    /// </summary>
+    public AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, RecordReference reference)
+        : this(session, client, reference.Id.ToString(), reference.Table, "row", null, null,
+            (_, _) => Task.FromResult<IReadOnlyList<AuditRecord>>([]))
+    {
+        _reference = reference;
+    }
+
+    private static Func<Action<int, int>, CancellationToken, Task<IReadOnlyList<AuditRecord>>> ReadRow(DataverseClient client, AuditedRow row) =>
+        async (progress, ct) => Named(await client.GetRecordAuditHistoryAsync(row.Table.LogicalName, row.Id, progress, ct), row.ColumnNames);
 
     private AuditHistoryViewModel(EnvironmentSessionViewModel session, DataverseClient client, string name, string typeLabel,
         string typeName, string? table, DateTimeOffset? createdOn,
@@ -58,13 +74,13 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
     {
         Session = session;
         _client = client;
-        Name = name;
-        TypeLabel = typeLabel;
+        _name = name;
+        _typeLabel = typeLabel;
         _typeName = typeName;
         _table = table;
         _createdOn = createdOn;
         _read = read;
-        Title = $"Audit history — {name} ({session.Title})";
+        _title = $"Audit history — {name} ({session.Title})";
         RefreshCommand = new AsyncRelayCommand(_ => LoadAsync(), _ => !IsBusy);
         ExportCsvCommand = new RelayCommand(_ => Export(markdown: false), _ => HasRecords);
         ExportMarkdownCommand = new RelayCommand(_ => Export(markdown: true), _ => HasRecords);
@@ -80,11 +96,27 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
     /// <summary>The tab the window was opened from, for the header's environment line.</summary>
     public EnvironmentSessionViewModel Session { get; }
 
-    public string Title { get; }
+    private string _title;
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
 
+    private string _name;
     /// <summary>What the history is of, under the heading: its name, then what it is.</summary>
-    public string Name { get; }
-    public string TypeLabel { get; }
+    public string Name
+    {
+        get => _name;
+        private set => SetProperty(ref _name, value);
+    }
+
+    private string _typeLabel;
+    public string TypeLabel
+    {
+        get => _typeLabel;
+        private set => SetProperty(ref _typeLabel, value);
+    }
 
     public ObservableCollection<AuditRecord> Records { get; } = new();
 
@@ -175,7 +207,7 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 
     public async Task LoadAsync()
     {
-        if (_table is not { } table) return;
+        if (_table is null && _reference is null) return;
 
         if (_cts is { } running) await running.CancelAsync();
         var cts = _cts = new CancellationTokenSource();
@@ -184,9 +216,15 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
 
         try
         {
+            if (_table is null && !await FindRowAsync(_reference!, cts.Token))
+            {
+                _readFailed = true;
+                return;
+            }
+
             Status = "Reading the audit history…";
             var clock = Stopwatch.StartNew();
-            var state = await _client.GetAuditStatusAsync(table, cts.Token);
+            var state = await _client.GetAuditStatusAsync(_table!, cts.Token);
             var records = await _read((done, of) => Status = $"Reading the values of the changes - {done:N0} of {of:N0}…", cts.Token);
             if (cts.IsCancellationRequested) return;
 
@@ -228,6 +266,37 @@ public sealed class AuditHistoryViewModel : ObservableObject, IDisposable
             }
             cts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// The table a link or a typed name means, the row's name and creation date, and its columns'
+    /// display names - what the table data window knows already. False, saying why, when there is no such table.
+    /// </summary>
+    private async Task<bool> FindRowAsync(RecordReference reference, CancellationToken ct)
+    {
+        Status = "Finding the row…";
+        if (await _client.FindTableAsync(reference.Table, ct) is not { } table)
+        {
+            Status = reference.TypeCode is { } code
+                ? $"There is no table with type code {code} in {Session.Title}."
+                : $"There is no table named '{reference.Table}' in {Session.Title} - check its logical name.";
+            return false;
+        }
+
+        var columns = await _client.GetEntityColumnsAsync(table.LogicalName, ct);
+        var names = columns.Where(c => !string.IsNullOrWhiteSpace(c.DisplayName))
+            .ToDictionary(c => c.LogicalName, c => c.DisplayName!, StringComparer.OrdinalIgnoreCase);
+        var hasCreatedOn = columns.Any(c => string.Equals(c.LogicalName, "createdon", StringComparison.OrdinalIgnoreCase));
+        var heading = await _client.GetRowHeadingAsync(table, reference.Id, hasCreatedOn, ct);
+
+        var row = new AuditedRow(table, reference.Id, heading.Name, names, heading.CreatedOn);
+        _table = table.LogicalName;
+        _createdOn = row.CreatedOn;
+        _read = ReadRow(_client, row);
+        Name = string.IsNullOrWhiteSpace(row.Name) ? row.Id.ToString() : row.Name;
+        TypeLabel = heading.Exists == false ? $"{table.Label} · not there now - deleted?" : table.Label;
+        Title = $"Audit history — {Name} ({Session.Title})";
+        return true;
     }
 
     /// <summary>

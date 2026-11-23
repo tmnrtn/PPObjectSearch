@@ -330,13 +330,22 @@
                                 </StackPanel>
                             </Button>
                         </UniformGrid>
-                        <Button Style="{StaticResource SidebarAction}" Command="{Binding SecurityLookupCommand}"
-                                ToolTip="Who can…, effective access, secured columns, compare roles">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE72E;" />
-                                <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Button>
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource SidebarLeft}" Command="{Binding SecurityLookupCommand}"
+                                    ToolTip="Who can…, effective access, secured columns, compare roles">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE72E;" />
+                                    <TextBlock Text="Security lookup" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource SidebarRight}" Command="{Binding AuditRowCommand}"
+                                    ToolTip="Who changed a row, and how: paste a link to it, or its table and id">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource SidebarGlyph}" Text="&#xE890;" />
+                                    <TextBlock Text="Audit a row…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                        </UniformGrid>
 
                         <!-- Read-only: who is here, what they can do, and how mail reaches them. -->
                         <TextBlock Text="ADMIN" Style="{StaticResource SidebarGroup}" />

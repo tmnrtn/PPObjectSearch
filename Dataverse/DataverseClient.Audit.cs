@@ -100,6 +100,78 @@ public sealed partial class DataverseClient
         return records.OrderByDescending(r => r.When).ToList();
     }
 
+    /// <summary>
+    /// The table a pasted link or a typed name means: by logical name, else by entity set name (a
+    /// Web API link's), or by type code (an old link's <c>etc=</c>). Null when there is no such table here.
+    /// </summary>
+    public async Task<EntitySummary?> FindTableAsync(string table, CancellationToken ct = default)
+    {
+        const string select = "$select=LogicalName,DisplayName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute," +
+                              "IsPrivate,IsManaged,IsActivity";
+        var name = table.Trim().ToLowerInvariant().Replace("'", "''", StringComparison.Ordinal);
+
+        if (int.TryParse(name, out var code))
+        {
+            return await FirstTableAsync($"EntityDefinitions?{select}&$filter=ObjectTypeCode eq {code}", ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + $"EntityDefinitions(LogicalName='{Uri.EscapeDataString(name)}')?{select}", ct)
+                .ConfigureAwait(false);
+            if (ReadEntitySummary(doc.RootElement, anyTable: true) is { } found) return found;
+        }
+        catch (DataverseException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Not a logical name; it may be the entity set a Web API link names.
+        }
+
+        return await FirstTableAsync($"EntityDefinitions?{select}&$filter=EntitySetName eq '{Uri.EscapeDataString(name)}'", ct)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<EntitySummary?> FirstTableAsync(string query, CancellationToken ct)
+    {
+        using var doc = await GetJsonAsync(EnvironmentUrl + ApiPath + query, ct).ConfigureAwait(false);
+        return JsonHelper.Rows(doc.RootElement).Select(row => ReadEntitySummary(row, anyTable: true)).FirstOrDefault(t => t is not null);
+    }
+
+    /// <summary>
+    /// A row's primary name and creation date, for the heading of its audit history. A row that is
+    /// not there - deleted, as its history may say - is <see cref="RowHeading.Exists"/> false; one
+    /// that cannot be read is left unknown, since its history may still be readable.
+    /// </summary>
+    public async Task<RowHeading> GetRowHeadingAsync(EntitySummary table, Guid id, bool hasCreatedOn, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(table.EntitySetName)) return new RowHeading(null, null, null);
+
+        var columns = new[] { table.PrimaryIdAttribute, table.PrimaryNameAttribute, hasCreatedOn ? "createdon" : null }
+            .Where(c => !string.IsNullOrWhiteSpace(c));
+
+        try
+        {
+            using var doc = await GetJsonAsync(
+                EnvironmentUrl + ApiPath + $"{table.EntitySetName}({id})?$select={string.Join(',', columns)}", ct)
+                .ConfigureAwait(false);
+            var row = doc.RootElement;
+            var name = table.PrimaryNameAttribute is { } primary ? JsonHelper.GetString(row, primary) : null;
+            var created = DateTimeOffset.TryParse(JsonHelper.GetString(row, "createdon"), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var when) ? when : (DateTimeOffset?)null;
+            return new RowHeading(true, name, created);
+        }
+        catch (DataverseException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return new RowHeading(false, null, null);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Services.Log.Warn($"Row {id} of {table.LogicalName} could not be read", ex);
+            return new RowHeading(null, null, null);
+        }
+    }
+
     /// <summary>The most changes of one row whose values are read as the app shows them; older ones keep their stored values.</summary>
     internal const int RecordAuditDetailLimit = 250;
 

@@ -88,3 +88,7 @@ public sealed record AuditStatus(bool? EnvironmentEnabled, bool? TableEnabled)
         _ => "Whether auditing is on could not be read."
     };
 }
+
+/// <summary>What the heading of a row's audit history says about the row itself.</summary>
+/// <param name="Exists">False when the row is not there - deleted; null when it could not be read.</param>
+public sealed record RowHeading(bool? Exists, string? Name, DateTimeOffset? CreatedOn);

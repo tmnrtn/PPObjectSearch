@@ -1,3 +1,4 @@
+using PPObjectSearch.Models;
 using PPObjectSearch.Services;
 using PPObjectSearch.Tests.Infrastructure;
 using PPObjectSearch.ViewModels;
@@ -203,6 +204,49 @@ public sealed class CommandPaletteViewModelTests : IDisposable
         session.SetSelection([session.Items[1]]);
         Assert.True(session.CanShowAuditHistory);
         Assert.True(session.AuditHistoryCommand.CanExecute(null));
+    }
+
+    private const string RowId = "0f6a1c2d-3e4f-4a5b-8c7d-9e0f1a2b3c4d";
+
+    [Fact]
+    public void A_table_and_id_typed_in_offer_the_rows_audit_history_first()
+    {
+        var session = Connect();
+        var palette = new CommandPaletteViewModel(Shell) { Query = $"account {RowId}" };
+
+        var audit = palette.Results[0];
+        Assert.Same(audit, palette.Selected);
+        Assert.Equal($"Audit history of account {RowId}", audit.Title);
+        Assert.Equal(session.Title, audit.Group);
+        Assert.Equal(new RecordReference("account", Guid.Parse(RowId)), audit.Parameter);
+        Assert.True(audit.Command.CanExecute(audit.Parameter));
+
+        Assert.Contains(CommandPaletteViewModel.BuildItems(Shell, session), i => i.Title == "Audit history of a row…" && i.Command == session.AuditRowCommand);
+    }
+
+    [Fact]
+    public void A_link_is_audited_in_the_tab_connected_to_its_environment_or_says_none_is()
+    {
+        Connect();
+        var link = $"https://fabrikam.crm4.dynamics.com/main.aspx?pagetype=entityrecord&etn=contact&id={RowId}";
+
+        var notConnected = new CommandPaletteViewModel(Shell) { Query = link }.Results[0];
+        Assert.Equal("fabrikam.crm4.dynamics.com - no tab is connected to it", notConnected.Detail);
+        Assert.False(notConnected.Command.CanExecute(notConnected.Parameter));
+
+        var fabrikam = Shell.Sessions[1];
+        TestSessions.Connect(fabrikam, new FakeHttpHandler(), []);
+
+        var audit = new CommandPaletteViewModel(Shell) { Query = link }.Results[0];
+        Assert.Equal(fabrikam.Title, audit.Group);
+        Assert.Same(fabrikam, EnvironmentSessionViewModel.SessionFor((RecordReference)audit.Parameter!, Shell.SelectedSession, Shell.Sessions));
+    }
+
+    [Fact]
+    public void A_table_and_id_need_a_connected_tab_and_other_text_is_searched_as_usual()
+    {
+        Assert.Null(CommandPaletteViewModel.AuditItem($"account {RowId}", null, Shell.Sessions));
+        Assert.Null(CommandPaletteViewModel.AuditItem("account", Connect(), Shell.Sessions));
     }
 
     [Fact]

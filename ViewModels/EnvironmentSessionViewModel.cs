@@ -2047,6 +2047,63 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
         new Views.AuditHistoryView { DataContext = new AuditHistoryViewModel(this, _client, row) }.Open();
     }
 
+    /// <summary>Any row's history from a link to it, or its table and id; the window finds the table and the row.</summary>
+    public void ShowRecordAuditHistory(RecordReference reference)
+    {
+        if (_client is null || !IsConnected) return;
+
+        new Views.AuditHistoryView { DataContext = new AuditHistoryViewModel(this, _client, reference) }.Open();
+    }
+
+    private RelayCommand? _auditRowCommand;
+    /// <summary>
+    /// A quick audit check: asks for a link to a row, or its table and id - starting from a link on
+    /// the clipboard - and shows the row's history in the tab of the environment the link is to.
+    /// </summary>
+    public RelayCommand AuditRowCommand => _auditRowCommand ??= new RelayCommand(_ => AskForRowToAudit(), _ => IsConnected);
+
+    private void AskForRowToAudit()
+    {
+        var clipboard = ClipboardText.TryRead();
+        var text = RecordReference.TryParse(clipboard, out _, out _) ? clipboard!.Trim() : string.Empty;
+        var prompt = "Paste a link to the row - from the browser, or the Web API - or type its table's logical name and its id: account 0f6a…";
+
+        while (true)
+        {
+            var answer = Views.NamePromptWindow.Ask(Application.Current?.MainWindow, "Audit history of a row", prompt, text, "Show history");
+            if (answer is null) return;
+
+            if (RecordReference.TryParse(answer, out var reference, out var problem))
+            {
+                AuditRecord(reference!);
+                return;
+            }
+
+            (text, prompt) = (answer, problem);
+        }
+    }
+
+    /// <summary>The row's history, in the tab connected to the environment a link is to - or why it cannot be shown.</summary>
+    internal void AuditRecord(RecordReference reference)
+    {
+        var sessions = (Application.Current?.MainWindow?.DataContext as ShellViewModel)?.Sessions.AsEnumerable() ?? [this];
+        if (SessionFor(reference, this, sessions) is { } session) session.ShowRecordAuditHistory(reference);
+        else Status = $"That link is to {reference.Host}, which no tab is connected to - connect one to it, then try again.";
+    }
+
+    /// <summary>
+    /// The connected tab a row's history is read from: this one for a table and id typed in, or a
+    /// link to this environment; else the tab connected to the link's environment. Null when none is.
+    /// </summary>
+    internal static EnvironmentSessionViewModel? SessionFor(
+        RecordReference reference, EnvironmentSessionViewModel? current, IEnumerable<EnvironmentSessionViewModel> sessions)
+    {
+        if (reference.Host is not { } host) return current is { IsConnected: true } ? current : null;
+
+        return new[] { current }.Concat(sessions)
+            .FirstOrDefault(s => s is { IsConnected: true } && string.Equals(s.EnvironmentHost, host, StringComparison.OrdinalIgnoreCase));
+    }
+
     private RelayCommand? _exploreDependenciesCommand;
     /// <summary>The selected object's dependency tree, from the palette rather than its details window.</summary>
     public RelayCommand ExploreDependenciesCommand => _exploreDependenciesCommand ??= new RelayCommand(_ =>

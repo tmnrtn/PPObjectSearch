@@ -141,4 +141,78 @@ public sealed class AuditHistoryViewModelTests
         Assert.False(AuditHistoryViewModel.IsPartial([update, new AuditRecord { When = DateTimeOffset.UtcNow.AddYears(-1), Action = "Create" }],
             DateTimeOffset.UtcNow.AddYears(-1)));
     }
+
+    private static readonly Guid Account = Guid.Parse("b0000000-0000-0000-0000-000000000001");
+
+    /// <summary>The account table, its columns, the row, and one change to it - as a link to the row finds them.</summary>
+    private static FakeHttpHandler AccountHandler(bool rowThere) => new FakeHttpHandler()
+        .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='account')/Attributes", """
+            {"value":[
+              {"LogicalName":"name","DisplayName":{"UserLocalizedLabel":{"Label":"Account Name"}},"AttributeTypeName":{"Value":"StringType"}},
+              {"LogicalName":"createdon","DisplayName":{"UserLocalizedLabel":{"Label":"Created On"}},"AttributeTypeName":{"Value":"DateTimeType"}}
+            ]}
+            """)
+        .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='account')?$select=IsAuditEnabled", """{"IsAuditEnabled":{"Value":true}}""")
+        .OnJson(HttpMethod.Get, "EntityDefinitions(LogicalName='account')", """
+            {"LogicalName":"account","DisplayName":{"UserLocalizedLabel":{"Label":"Account"}},"EntitySetName":"accounts",
+             "PrimaryIdAttribute":"accountid","PrimaryNameAttribute":"name"}
+            """)
+        .On(HttpMethod.Get, $"accounts({Account})", _ => rowThere
+            ? FakeHttpHandler.Json("""{"name":"Contoso","createdon":"2026-03-01T09:00:00Z"}""")
+            : FakeHttpHandler.Json(FakeHttpHandler.ErrorJson("Does not exist"), HttpStatusCode.NotFound))
+        .OnJson(HttpMethod.Get, "organizations?", """{"value":[{"isauditenabled":true}]}""")
+        .OnJson(HttpMethod.Get, "RetrieveAuditDetails", """{"AuditDetail":{}}""")
+        .OnJson(HttpMethod.Get, "audits?", $$"""
+            {"value":[{"auditid":"c0000000-0000-0000-0000-000000000001","createdon":"2026-10-06T09:48:00Z","action{{Formatted}}":"Update",
+              "changedata":"{\"changedAttributes\":[{\"logicalName\":\"name\",\"oldValue\":\"Contoso Ltd\",\"newValue\":\"Contoso\"}]}"}]}
+            """);
+
+    [Fact]
+    public async Task A_link_to_a_row_finds_its_table_and_name_and_reads_its_history()
+    {
+        var handler = AccountHandler(rowThere: true);
+        var session = TestSessions.Connected(handler, []);
+        var vm = new AuditHistoryViewModel(session, Fakes.Dataverse(handler), new RecordReference("account", Account, "contoso.crm11.dynamics.com"));
+
+        Assert.Equal(Account.ToString(), vm.Name);
+        await vm.LoadAsync();
+
+        Assert.Equal("Contoso", vm.Name);
+        Assert.Equal("Account (account)", vm.TypeLabel);
+        Assert.Equal($"Audit history — Contoso ({session.Title})", vm.Title);
+        Assert.Equal("Account Name", Assert.Single(Assert.Single(vm.Records).Changes).ColumnLabel);
+
+        // The row's creation date is read too: the history starts after it, so its start is missing.
+        Assert.True(vm.IsAuditPartial);
+        Assert.StartsWith("The audited changes start on 2026-10-06, but this row was created on 2026-03-01", vm.AuditState);
+    }
+
+    [Fact]
+    public async Task A_deleted_row_still_shows_its_history_and_says_it_is_not_there()
+    {
+        var handler = AccountHandler(rowThere: false);
+        var vm = new AuditHistoryViewModel(TestSessions.Connected(handler, []), Fakes.Dataverse(handler), new RecordReference("account", Account));
+
+        await vm.LoadAsync();
+
+        Assert.Equal(Account.ToString(), vm.Name);
+        Assert.Equal("Account (account) · not there now - deleted?", vm.TypeLabel);
+        Assert.Single(vm.Records);
+    }
+
+    [Fact]
+    public async Task A_table_that_is_not_there_says_so_where_the_history_would_be()
+    {
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "EntityDefinitions?", """{"value":[]}""");
+        var session = TestSessions.Connected(handler, []);
+        var vm = new AuditHistoryViewModel(session, Fakes.Dataverse(handler), new RecordReference("acount", Account));
+
+        await vm.LoadAsync();
+
+        Assert.False(vm.HasRecords);
+        Assert.Equal("The audit history was not read", vm.EmptyHeading);
+        Assert.Equal($"There is no table named 'acount' in {session.Title} - check its logical name.", vm.EmptyText);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("audits", StringComparison.Ordinal));
+    }
 }
+
