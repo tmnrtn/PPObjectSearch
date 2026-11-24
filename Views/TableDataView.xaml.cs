@@ -38,12 +38,18 @@ public partial class TableDataView : ScreenView
     /// <summary>
     /// Tells the view model which cell the copy commands act on. A column's index in the grid's
     /// own list is its position in the row's cells, whatever order the columns were dragged into.
+    /// The grid forgets its current cell when focus leaves it - as it does on a click in the row
+    /// pane - so the row stays current then, while it is still among the rows shown; otherwise the
+    /// pane would close under the click before its button or value had it.
     /// </summary>
     private void RowsGrid_CurrentCellChanged(object? sender, EventArgs e)
     {
         if (DataContext is not TableDataViewModel viewModel) return;
 
         var cell = RowsGrid.CurrentCell;
+        if (cell.Item is not TableDataRow && !RowsGrid.IsKeyboardFocusWithin &&
+            viewModel.CurrentRow is { } row && RowsGrid.Items.Contains(row)) return;
+
         viewModel.SetCurrentCell(cell.Item as TableDataRow, cell.Column is null ? -1 : RowsGrid.Columns.IndexOf(cell.Column));
     }
 
