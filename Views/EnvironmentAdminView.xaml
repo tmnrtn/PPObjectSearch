@@ -410,6 +410,10 @@
                                                                      core:Ui.Count="{Binding Licenses.Count}"
                                                                      ToolTip="The licences assigned to the user in Entra, directly or through a group, with the service plans each switches on. Read from Microsoft Graph."
                                                                      IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Licenses}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Entra groups" GroupName="UserDetail"
+                                                                     core:Ui.Count="{Binding Groups.Count}"
+                                                                     ToolTip="The Entra groups the user is in, directly or through a nested group, and the team each is linked to in this environment. Read from Microsoft Graph."
+                                                                     IsChecked="{Binding DetailView, Converter={StaticResource EnumEquals}, ConverterParameter=Groups}" />
                                                     </StackPanel>
                                                 </Border>
                                             </DockPanel>
@@ -549,6 +553,52 @@
                                                 <TextBlock Text="{Binding LicenseStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
                                                            TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
                                                            Visibility="{Binding Licenses.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding DetailView, Converter={StaticResource EnumToVis}, ConverterParameter=Groups}">
+                                                <DataGrid Style="{StaticResource NestedGrid}" ItemsSource="{Binding Groups}" IsReadOnly="True">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Group" Width="*" Binding="{Binding Name}"
+                                                                            HeaderStyle="{StaticResource PaneFirstHeader}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CellPaneFirst}">
+                                                                    <Setter Property="ToolTip" Value="{Binding Description}" />
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                        <DataGridTextColumn Header="Type" Width="140" Binding="{Binding Kind}" ElementStyle="{StaticResource CellMuted}" />
+                                                        <DataGridTextColumn Header="Membership" Width="110" Binding="{Binding Membership}">
+                                                            <DataGridTextColumn.ElementStyle>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+                                                                    <Setter Property="ToolTip" Value="Nested: the user is in a group that is a member of this one." />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsDirect}" Value="True">
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                            <Setter Property="ToolTip" Value="The user is a member of this group themselves." />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </DataGridTextColumn.ElementStyle>
+                                                        </DataGridTextColumn>
+                                                        <!-- The group team linked to the group here, which a member is added to when they sign in. -->
+                                                        <DataGridTemplateColumn Header="Team here" Width="160" SortMemberPath="TeamLabel">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Style="{StaticResource Cell}" ToolTip="{Binding TeamsToolTip}"
+                                                                               Visibility="{Binding Teams.Count, Converter={StaticResource CountToVis}}">
+                                                                        <Hyperlink Command="{Binding DataContext.ShowGroupTeamCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                                   CommandParameter="{Binding}">
+                                                                            <Run Text="{Binding TeamLabel, Mode=OneWay}" />
+                                                                        </Hyperlink>
+                                                                    </TextBlock>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                                <TextBlock Text="{Binding GroupStatus}" Foreground="{DynamicResource Muted}" Margin="16,36,16,0"
+                                                           TextWrapping="Wrap" VerticalAlignment="Top" IsHitTestVisible="False"
+                                                           Visibility="{Binding Groups.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}" />
                                             </Grid>
                                         </Grid>
                                     </Grid>

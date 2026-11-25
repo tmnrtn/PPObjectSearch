@@ -56,3 +56,46 @@ public sealed record EntraLicense(string SkuId, string? SkuPartNumber, IReadOnly
 
     public string PlansLabel => string.Join(", ", EnabledPlans);
 }
+
+/// <summary>An Entra group a user is in - directly, or through a group nested in it.</summary>
+public sealed record EntraUserGroup(
+    string Id,
+    string? DisplayName,
+    string? Description,
+    bool? SecurityEnabled,
+    bool? MailEnabled,
+    bool IsMicrosoft365,
+    bool IsDynamic,
+    bool IsDirect)
+{
+    public string Name => DisplayName ?? Id;
+
+    /// <summary>Microsoft 365, Security, Mail-enabled security or Distribution - as the Entra admin center names them.</summary>
+    public string Kind => (IsMicrosoft365, SecurityEnabled, MailEnabled) switch
+    {
+        (true, _, _) => "Microsoft 365",
+        (_, true, true) => "Mail-enabled security",
+        (_, true, _) => "Security",
+        (_, _, true) => "Distribution",
+        _ => "Other"
+    };
+
+    /// <summary>"Direct" or "Nested", and whether Entra assigns the membership by rule.</summary>
+    public string Membership => (IsDirect ? "Direct" : "Nested") + (IsDynamic ? " · dynamic" : string.Empty);
+
+    /// <summary>The Dataverse teams in this environment linked to the group, if any.</summary>
+    public IReadOnlyList<TeamInfo> Teams { get; init; } = [];
+
+    /// <summary>The team a link in the list opens - the first, where a group is linked in several business units.</summary>
+    public TeamInfo? Team => Teams.Count > 0 ? Teams[0] : null;
+
+    /// <summary>"Case Work", or "Case Work +1" where there are more.</summary>
+    public string TeamLabel => Teams.Count switch
+    {
+        0 => string.Empty,
+        1 => Teams[0].Name,
+        var n => $"{Teams[0].Name} +{n - 1}"
+    };
+
+    public string TeamsToolTip => string.Join("\n", Teams.Select(t => $"{t.Name} ({t.BusinessUnit})"));
+}

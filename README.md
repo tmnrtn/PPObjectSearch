@@ -504,8 +504,11 @@ its filters leave it - as CSV.
   entry, so integrations and background jobs running as the user (*via Web Services*) do not
   count - and says *Not audited* where the environment does not log user access. **Licences**
   lists the user's licences in Entra, directly or through a group, with the service plans each
-  switches on; they are read from Microsoft Graph only once that view is opened. **Effective
-  access…** opens Security lookup on the user's effective access.
+  switches on; they are read from Microsoft Graph only once that view is opened. **Entra groups**
+  lists the groups the user is in, directly or through a nested group, with each group's type and
+  the group team linked to it in this environment, if any (a link to it on the Teams tab) - also
+  read from Graph only once opened. **Effective access…** opens Security lookup on the user's
+  effective access.
 - **Teams** — every team, searchable, filtered by type (owner, access, Entra group) and business
   unit. A team shows its business unit, administrator, default queue, email, Entra group and
   membership type, whether it is a business unit's default team, and then its members (with
@@ -599,7 +602,7 @@ someone removed from the group but not yet re-synced.
 
 Graph is called as the tab's signed-in account, in the environment's tenant. The default client
 is pre-consented; with your own `ClientId`, grant it `GroupMember.Read.All` and `User.Read.All`
-delegated permissions. The Users tab's **Licences** needs `User.Read.All` too.
+delegated permissions. The Users tab's **Licences** and **Entra groups** need `User.Read.All` too.
 
 ### Queue membership sync
 

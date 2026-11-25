@@ -258,6 +258,69 @@ public class EnvironmentAdminTests
         Assert.Contains("User.Read.All", admin.Users.LicenseStatus);
     }
 
+    [Fact]
+    public async Task Entra_groups_are_read_once_their_view_is_opened_and_link_to_their_team_here()
+    {
+        var oid = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+        var alice = User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"));
+        alice["azureactivedirectoryobjectid"] = oid;
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "systemusers?", Value(alice))
+            .OnJson(HttpMethod.Get, "teams?$select=", Value(new Dictionary<string, object?>
+            {
+                ["teamid"] = TeamA, ["name"] = "Case Work", ["teamtype"] = 2, ["azureactivedirectoryobjectid"] = groupId,
+                ["isdefault"] = false, ["_businessunitid_value" + Fv] = "Contoso"
+            }));
+        var graph = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, $"users/{oid}/memberOf", Value(new { id = groupId.ToString() }))
+            .OnJson(HttpMethod.Get, $"users/{oid}/transitiveMemberOf", Value(
+                new { id = groupId.ToString(), displayName = "Case Work", securityEnabled = true, mailEnabled = false },
+                new { id = "g-all", displayName = "All staff", securityEnabled = false, mailEnabled = true, groupTypes = new[] { "Unified" } }));
+        var admin = Admin(handler, graph: graph);
+        await admin.LoadAsync();
+
+        admin.Users.SelectedUser = admin.Users.Items.Single();
+        await Settle(admin);
+        Assert.Empty(graph.Requests);
+
+        admin.Users.DetailView = UserDetailView.Groups;
+        await Settle(admin);
+        Assert.Equal(["All staff", "Case Work"], admin.Users.Groups.Select(g => g.Name));
+        Assert.Null(admin.Users.Groups[0].Team);
+        Assert.Equal("Case Work", admin.Users.Groups[1].TeamLabel);
+        Assert.True(admin.Users.Groups[1].IsDirect);
+
+        admin.Users.DetailView = UserDetailView.Roles;
+        admin.Users.DetailView = UserDetailView.Groups;
+        await Settle(admin);
+        Assert.Equal(2, graph.Requests.Count);
+
+        Assert.False(admin.Users.ShowGroupTeamCommand.CanExecute(admin.Users.Groups[0]));
+        admin.Users.ShowGroupTeamCommand.Execute(admin.Users.Groups[1]);
+        await Settle(admin);
+        Assert.Equal(AdminTab.Teams, admin.SelectedTab);
+    }
+
+    [Fact]
+    public async Task A_group_read_that_fails_says_why_in_the_list()
+    {
+        var oid = Guid.NewGuid();
+        var alice = User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"));
+        alice["azureactivedirectoryobjectid"] = oid;
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Value(alice));
+        var graph = new FakeHttpHandler().OnError(HttpMethod.Get, "memberOf", HttpStatusCode.Forbidden, "Insufficient privileges.");
+        var admin = Admin(handler, graph: graph);
+        await admin.LoadAsync();
+
+        admin.Users.DetailView = UserDetailView.Groups;
+        admin.Users.SelectedUser = admin.Users.Items.Single();
+        await Settle(admin);
+
+        Assert.Empty(admin.Users.Groups);
+        Assert.StartsWith("Could not read groups from Entra - ", admin.Users.GroupStatus);
+    }
+
     // ---------------------------------------------------------------- security roles
 
     [Fact]
