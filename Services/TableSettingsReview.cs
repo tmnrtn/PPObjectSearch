@@ -154,11 +154,16 @@ public sealed class SettingRow
 /// <summary>A column that is not audited on a table that is, in one environment: changes going unrecorded.</summary>
 public sealed record AuditGap(string Environment, string Table, string? TableLabel, string Column, string? ColumnLabel, bool IsManaged);
 
-/// <summary>A table with columns going unaudited somewhere: the group they are listed under.</summary>
-public sealed class GapGroup
+/// <summary>
+/// A table with columns going unaudited somewhere: the group they are listed under. Comparable by
+/// <see cref="Order"/> because a header click on a grouped DataGrid sorts by the group first.
+/// </summary>
+public sealed class GapGroup : IComparable
 {
     /// <summary>Where the group sits among the others, whichever column the rows are sorted by.</summary>
     public int Order { get; init; }
+
+    public int CompareTo(object? obj) => obj is GapGroup other ? Order.CompareTo(other.Order) : 1;
 
     public required string Table { get; init; }
     public required string Label { get; init; }
@@ -173,11 +178,16 @@ public sealed class GapGroup
 /// <summary>A column not audited somewhere on an audited table, with a cell per environment.</summary>
 public sealed record GapRow(GapGroup Group, string Column, string? ColumnLabel, bool IsManaged, IReadOnlyList<SettingCell> Cells);
 
-/// <summary>One environment's link profile: the group its tables are listed under.</summary>
-public sealed class LinkGroup
+/// <summary>
+/// One environment's link profile: the group its tables are listed under. Comparable by
+/// <see cref="Order"/> for the same reason as <see cref="GapGroup"/>.
+/// </summary>
+public sealed class LinkGroup : IComparable
 {
     /// <summary>Where the group sits among the others, whichever column the rows are sorted by.</summary>
     public int Order { get; set; }
+
+    public int CompareTo(object? obj) => obj is LinkGroup other ? Order.CompareTo(other.Order) : 1;
 
     public required string Environment { get; init; }
     public required SynapseLinkProfile Profile { get; init; }
