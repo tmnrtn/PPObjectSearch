@@ -825,6 +825,7 @@ public sealed partial class EnvironmentSessionViewModel : ObservableObject, IDis
                 EntraTeamSyncCommand.RaiseCanExecuteChanged();
                 QueueSyncCommand.RaiseCanExecuteChanged();
                 EnvironmentAdminCommand.RaiseCanExecuteChanged();
+                _auditRowCommand?.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(IsSolutionPickerEnabled));
                 OnPropertyChanged(nameof(CanFilterByLayer));
                 RaiseEmptyState();

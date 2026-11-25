@@ -55,6 +55,23 @@ public class EnvironmentSessionConnectTests
     });
 
     [Fact]
+    public Task Connecting_enables_audit_a_row_for_a_button_bound_before_it() => EnvironmentSessionThread.Run(async () =>
+    {
+        var env = new FakeEnvironment();
+        var session = env.Session();
+        // The sidebar binds the button while the tab is still connecting, so it asks then and waits to be told.
+        var audit = session.AuditRowCommand;
+        Assert.False(audit.CanExecute(null));
+        var raised = 0;
+        audit.CanExecuteChanged += (_, _) => raised++;
+
+        await session.ConnectAsync();
+
+        Assert.True(raised >= 1);
+        Assert.True(audit.CanExecute(null));
+    });
+
+    [Fact]
     public Task Without_a_remembered_solution_the_default_solution_is_loaded() => EnvironmentSessionThread.Run(async () =>
     {
         var env = new FakeEnvironment();
