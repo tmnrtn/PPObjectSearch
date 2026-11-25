@@ -262,4 +262,32 @@ public class TableSettingsViewModelTests
         Assert.Equal(["z_column", "b_column"], groups[0].Items.Cast<GapRow>().Select(r => r.Column));
         Assert.Equal(["y_column", "a_column"], groups[1].Items.Cast<GapRow>().Select(r => r.Column));
     }
+
+    [Fact]
+    public void A_header_click_on_a_grouped_grid_sorts_by_the_group_first_without_throwing()
+    {
+        var profile = new SynapseLinkProfile(Profile, "Lake", 1, "Active", null, "lake", null, null);
+        LinkGroup Group(int order) => new() { Order = order, Environment = "Dev", Profile = profile, IsCounted = true, TableCount = 2, ProblemCount = 0 };
+        LinkRow Row(LinkGroup group, string table, int day) =>
+            new("Dev", profile, new SynapseLinkTable(Profile, table, 4, "Completed", null, null, 1, 1, new DateTimeOffset(2026, 11, day, 0, 0, 0, TimeSpan.Zero), true), true)
+            { Group = group, TableLabel = table };
+        var (first, second) = (Group(0), Group(1));
+        var rows = new System.Collections.ObjectModel.ObservableCollection<LinkRow>
+        {
+            Row(second, "account", 3), Row(second, "contact", 9), Row(first, "case", 1), Row(first, "task", 20)
+        };
+        var view = TableSettingsViewModel.Grouped(rows, nameof(LinkRow.Group));
+
+        // A grouped DataGrid puts the group property ahead of the clicked column. An incomparable
+        // group threw "Failed to compare two elements", and the grid dropped the sort.
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription(nameof(LinkRow.Group),
+            System.ComponentModel.ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription("Table.LastSynced",
+            System.ComponentModel.ListSortDirection.Descending));
+
+        var groups = view.Groups.Cast<System.Windows.Data.CollectionViewGroup>().ToList();
+        Assert.Equal([first, second], groups.Select(g => g.Name));
+        Assert.Equal(["task", "case"], groups[0].Items.Cast<LinkRow>().Select(r => r.TableLabel));
+        Assert.Equal(["contact", "account"], groups[1].Items.Cast<LinkRow>().Select(r => r.TableLabel));
+    }
 }
