@@ -25,7 +25,7 @@ public enum QueueTypeFilter { All, Public, Private }
 public enum TeamTypeFilter { All, Owner, Access, Entra }
 
 /// <summary>What the selected user's pane lists below their properties.</summary>
-public enum UserDetailView { Roles, Teams, FieldSecurity, Licenses }
+public enum UserDetailView { Roles, Teams, FieldSecurity, Licenses, Groups }
 
 /// <summary>What the selected team's pane lists below its properties.</summary>
 public enum TeamDetailView { Members, Roles, FieldSecurity }
@@ -186,7 +186,7 @@ public sealed class EnvironmentAdminViewModel : ObservableObject, IDisposable
     /// <summary>Reads the tab on show - called when the window opens.</summary>
     public Task LoadAsync() => Pane(SelectedTab).EnsureLoadedAsync();
 
-    /// <summary>Microsoft Graph, in the environment's tenant - made the first time a user's licences are asked for.</summary>
+    /// <summary>Microsoft Graph, in the environment's tenant - made the first time a user's licences or groups are asked for.</summary>
     internal GraphClient Graph => _graph ??= _createGraph();
 
     public void Dispose()
@@ -460,7 +460,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     }
 
     private UserDetailView _detailView;
-    /// <summary>Security roles, Teams, Field security or Licences, below the user's properties.</summary>
+    /// <summary>Security roles, Teams, Field security, Licences or Entra groups, below the user's properties.</summary>
     public UserDetailView DetailView
     {
         get => _detailView;
@@ -469,6 +469,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             if (!SetProperty(ref _detailView, value)) return;
             OnPropertyChanged(nameof(IsRolesView));
             EnsureLicenses();
+            EnsureGroups();
         }
     }
 
@@ -525,6 +526,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             EffectiveAccessCommand.RaiseCanExecuteChanged();
             Owner.Work.Track(LoadDetailsAsync(value));
             ShowLicensesFor(value);
+            ShowGroupsFor(value);
         }
     }
 
@@ -754,6 +756,100 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         catch (Exception ex)
         {
             if (request == _licenseRequest) LicenseStatus = "Could not read licences from Entra - " + ex.Message;
+        }
+    }
+
+    // ---------------------------------------------------------------- Entra groups
+
+    /// <summary>The Entra groups the user is in, directly or nested, by name.</summary>
+    public ObservableCollection<EntraUserGroup> Groups { get; } = new();
+
+    private string _groupStatus = string.Empty;
+    /// <summary>Why the group list is empty - still reading, in none, no Entra user, or the read failed.</summary>
+    public string GroupStatus { get => _groupStatus; private set => SetProperty(ref _groupStatus, value); }
+
+    /// <summary>The Dataverse team a group is linked to, shown on the Teams tab.</summary>
+    public RelayCommand ShowGroupTeamCommand => _showGroupTeamCommand ??= new RelayCommand(
+        p => Owner.Work.Track(ShowTeamAsync((p as EntraUserGroup)?.Team)), p => p is EntraUserGroup { Team: not null });
+    private RelayCommand? _showGroupTeamCommand;
+
+    /// <summary>The user whose groups are on show or being read; null until the Entra groups view is opened for them.</summary>
+    private Guid? _groupsFor;
+    private int _groupRequest;
+
+    /// <summary>The environment's group teams, read once - to say which of the user's groups have a team here.</summary>
+    private Task<IReadOnlyList<TeamInfo>>? _groupTeams;
+
+    private void ShowGroupsFor(UserInfo? user)
+    {
+        _groupRequest++;
+        _groupsFor = null;
+        Groups.Clear();
+        GroupStatus = string.Empty;
+        if (user is not null) EnsureGroups();
+    }
+
+    /// <summary>Like licences, groups come from Microsoft Graph - so they are read only once their view is opened.</summary>
+    private void EnsureGroups()
+    {
+        if (DetailView != UserDetailView.Groups || SelectedUser is not { } user || _groupsFor == user.SystemUserId) return;
+
+        _groupsFor = user.SystemUserId;
+        Owner.Work.Track(LoadGroupsAsync(user, ++_groupRequest));
+    }
+
+    private async Task LoadGroupsAsync(UserInfo user, int request)
+    {
+        if (user.AadObjectId is not { } objectId)
+        {
+            GroupStatus = user.IsApplicationUser
+                ? "An application user is a service principal; its group memberships are not listed here."
+                : "This user has no Entra object id, so their groups cannot be looked up.";
+            return;
+        }
+
+        GroupStatus = "Reading groups from Entra…";
+
+        try
+        {
+            var groupsTask = Owner.Graph.GetUserGroupsAsync(objectId.ToString());
+            var teams = await ReadGroupTeamsAsync();
+            var groups = await groupsTask;
+            if (request != _groupRequest) return;
+
+            var teamsByGroup = teams.Where(t => t.AadObjectId is not null).ToLookup(t => t.AadObjectId!.Value);
+            foreach (var group in groups ?? [])
+            {
+                Groups.Add(Guid.TryParse(group.Id, out var id) && teamsByGroup.Contains(id)
+                    ? group with { Teams = teamsByGroup[id].OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase).ToList() }
+                    : group);
+            }
+
+            GroupStatus = groups switch
+            {
+                null => "Entra has no user with this object id - they may have been deleted there.",
+                { Count: 0 } => "This user is not in any Entra group.",
+                _ => string.Empty
+            };
+        }
+        catch (Exception ex)
+        {
+            if (request == _groupRequest) GroupStatus = "Could not read groups from Entra - " + ex.Message;
+        }
+    }
+
+    /// <summary>The environment's group teams; none where they cannot be read, which costs only the links.</summary>
+    private async Task<IReadOnlyList<TeamInfo>> ReadGroupTeamsAsync()
+    {
+        try
+        {
+            return await (_groupTeams ??= Client.GetTeamsAsync(entraGroupTeamsOnly: true));
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warn("Group teams could not be read", ex);
+            _groupTeams = null;
+            return [];
         }
     }
 

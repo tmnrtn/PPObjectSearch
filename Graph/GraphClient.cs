@@ -19,7 +19,7 @@ public sealed class GraphException : Exception
 }
 
 /// <summary>
-/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user and their licences.
+/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user, their licences and groups.
 ///
 /// Signs in through the tab's own account, in the environment's tenant, so the Entra side of a
 /// comparison is always the same directory the Dataverse environment belongs to. The default
@@ -32,6 +32,7 @@ public sealed class GraphClient : IDisposable
     private string Resource => _auth.Cloud.Graph;
     private string BaseUrl => _auth.Cloud.Graph + "/v1.0/";
     private const string UserSelect = "id,displayName,userPrincipalName,mail,accountEnabled,userType";
+    private const string GroupSelect = "id,displayName,description,securityEnabled,mailEnabled,groupTypes";
 
     /// <summary>A group big enough to hit this is not one to reconcile by eye.</summary>
     private const int MaxMembers = 100_000;
@@ -145,6 +146,41 @@ public sealed class GraphClient : IDisposable
         }
 
         return licenses.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// The groups a user is in, nested membership included, each marked direct or not - the
+    /// groups behind a group team or a group-assigned licence count whichever way the user is in
+    /// them. Directory roles and administrative units are left out. Null where there is no such user.
+    /// </summary>
+    public async Task<IReadOnlyList<EntraUserGroup>?> GetUserGroupsAsync(string userId, CancellationToken ct = default)
+    {
+        var user = BaseUrl + $"users/{Uri.EscapeDataString(userId)}/";
+        var direct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var groups = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            await ReadAllPagesAsync(user + "memberOf/microsoft.graph.group?$select=id&$top=999", row =>
+            {
+                if (Str(row, "id") is { } id) direct.Add(id);
+            }, ct).ConfigureAwait(false);
+
+            await ReadAllPagesAsync(user + $"transitiveMemberOf/microsoft.graph.group?$select={GroupSelect}&$top=999", row =>
+            {
+                // Clone: the row's document is disposed with its page.
+                if (Str(row, "id") is { } id) groups.TryAdd(id, row.Clone());
+            }, ct).ConfigureAwait(false);
+        }
+        catch (GraphException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        return groups.Values
+            .Select(row => ReadUserGroup(row, direct))
+            .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
     }
 
     /// <summary>
@@ -277,6 +313,24 @@ public sealed class GraphClient : IDisposable
             Str(row, "mail"),
             Bool(row, "accountEnabled"),
             Str(row, "userType"));
+    }
+
+    private static EntraUserGroup ReadUserGroup(JsonElement row, HashSet<string> direct)
+    {
+        var id = Str(row, "id")!;
+        var groupTypes = row.TryGetProperty("groupTypes", out var types) && types.ValueKind == JsonValueKind.Array
+            ? types.EnumerateArray().Select(t => t.GetString()).OfType<string>().ToList()
+            : [];
+
+        return new EntraUserGroup(
+            id,
+            Str(row, "displayName"),
+            Str(row, "description"),
+            Bool(row, "securityEnabled"),
+            Bool(row, "mailEnabled"),
+            groupTypes.Contains("Unified", StringComparer.OrdinalIgnoreCase),
+            groupTypes.Contains("DynamicMembership", StringComparer.OrdinalIgnoreCase),
+            direct.Contains(id));
     }
 
     private static string? Str(JsonElement e, string name) =>

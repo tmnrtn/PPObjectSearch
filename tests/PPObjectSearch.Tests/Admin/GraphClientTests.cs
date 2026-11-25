@@ -184,4 +184,37 @@ public class GraphClientTests
 
         Assert.Null(await Fakes.Graph(handler).GetUserLicensesAsync("u1"));
     }
+
+    [Fact]
+    public async Task GetUserGroupsAsync_lists_nested_groups_once_marking_the_direct_ones()
+    {
+        // The second page repeats a group, as Graph can across pages; the next-page route goes first to win the match.
+        var handler = new FakeHttpHandler()
+            .OnJson(HttpMethod.Get, "users/u1/memberOf", Page([new { id = "g-sec" }]))
+            .OnJson(HttpMethod.Get, "skiptoken=2", Page([
+                new { id = "g-sec", displayName = "Case Work", securityEnabled = true, mailEnabled = false, groupTypes = Array.Empty<string>() },
+                new { id = "g-dl", displayName = "Bulletins", securityEnabled = false, mailEnabled = true, groupTypes = Array.Empty<string>() }
+            ]))
+            .OnJson(HttpMethod.Get, "users/u1/transitiveMemberOf", Page([
+                new { id = "g-sec", displayName = "Case Work", securityEnabled = true, mailEnabled = false, groupTypes = Array.Empty<string>() },
+                new { id = "g-365", displayName = "All staff", securityEnabled = false, mailEnabled = true, groupTypes = new[] { "Unified", "DynamicMembership" } }
+            ], nextLink: "https://graph.microsoft.com/v1.0/users/u1/transitiveMemberOf/microsoft.graph.group?$skiptoken=2"));
+
+        var groups = await Fakes.Graph(handler).GetUserGroupsAsync("u1");
+
+        Assert.NotNull(groups);
+        Assert.Equal(["All staff", "Bulletins", "Case Work"], groups.Select(g => g.Name));
+        Assert.Equal(["Microsoft 365", "Distribution", "Security"], groups.Select(g => g.Kind));
+        Assert.Equal(["Nested · dynamic", "Nested", "Direct"], groups.Select(g => g.Membership));
+        Assert.Contains(handler.Requests, r => r.Url.Contains("memberOf/microsoft.graph.group?$select=id"));
+        Assert.Contains(handler.Requests, r => r.Url.Contains("transitiveMemberOf/microsoft.graph.group?$select=id,displayName"));
+    }
+
+    [Fact]
+    public async Task GetUserGroupsAsync_returns_null_for_a_missing_user()
+    {
+        var handler = new FakeHttpHandler().OnError(HttpMethod.Get, "memberOf", HttpStatusCode.NotFound, "Resource does not exist.");
+
+        Assert.Null(await Fakes.Graph(handler).GetUserGroupsAsync("u1"));
+    }
 }
