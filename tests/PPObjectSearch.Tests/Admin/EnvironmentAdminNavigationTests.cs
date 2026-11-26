@@ -236,13 +236,12 @@ public class EnvironmentAdminNavigationTests
         admin.Users.SearchText = "alice";
         admin.Users.SelectedType = "Read-Write";
         admin.Users.SelectedUnit = "Contoso";
-        admin.Users.SelectedLicense = AdminUsersViewModel.Unlicensed;
 
         await admin.ShowAsync(AdminTab.Users, Bob);
 
         Assert.Equal(Bob, admin.Users.SelectedUser?.SystemUserId);
-        Assert.Equal((string.Empty, AdminUsersViewModel.AllTypes, AdminUsersViewModel.AllUnits, AdminUsersViewModel.AllLicenses, UserStatusFilter.All),
-            (admin.Users.SearchText, admin.Users.SelectedType, admin.Users.SelectedUnit, admin.Users.SelectedLicense, admin.Users.StatusFilter));
+        Assert.Equal((string.Empty, AdminUsersViewModel.AllTypes, AdminUsersViewModel.AllUnits, UserStatusFilter.All),
+            (admin.Users.SearchText, admin.Users.SelectedType, admin.Users.SelectedUnit, admin.Users.StatusFilter));
     }
 
     [Fact]

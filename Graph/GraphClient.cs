@@ -19,7 +19,8 @@ public sealed class GraphException : Exception
 }
 
 /// <summary>
-/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user, their licences and groups.
+/// The handful of Microsoft Graph reads the admin tools need: a group, its users, and a user, their licences and groups -
+/// and every user's licences at once, for the Users tab's licence filter.
 ///
 /// Signs in through the tab's own account, in the environment's tenant, so the Entra side of a
 /// comparison is always the same directory the Dataverse environment belongs to. The default
@@ -146,6 +147,130 @@ public sealed class GraphClient : IDisposable
         }
 
         return licenses.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>Requests to a <c>$batch</c> - Graph takes no more than 20.</summary>
+    private const int BatchSize = 20;
+
+    /// <summary>Batches in flight at once: quicker than one at a time, gentle enough not to be throttled hard.</summary>
+    private const int BatchesInParallel = 4;
+
+    /// <summary>Times a throttled request in a batch is asked again before it counts as failed.</summary>
+    private const int ThrottledAttempts = 4;
+
+    /// <summary>How long to wait before asking again; tests make it instant.</summary>
+    internal Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = Task.Delay;
+
+    /// <summary>
+    /// The licences each user holds, by SKU - no service plans - read 20 users to a <c>$batch</c>
+    /// request. A user Entra does not know holds none; a user whose read failed is left out, so
+    /// they are never mistaken for someone with no licence. <paramref name="progress"/> gets how
+    /// many users have been read so far.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<EntraLicense>>> GetUsersLicensesAsync(
+        IReadOnlyCollection<string> userIds, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        var licenses = new System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<EntraLicense>>(StringComparer.OrdinalIgnoreCase);
+        var read = 0;
+        using var gate = new SemaphoreSlim(BatchesInParallel);
+
+        await Task.WhenAll(userIds.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(BatchSize).Select(async chunk =>
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                foreach (var (id, held) in await ReadLicenseBatchAsync(chunk, ct).ConfigureAwait(false))
+                    licenses[id] = held;
+                progress?.Report(Interlocked.Add(ref read, chunk.Length));
+            }
+            finally
+            {
+                gate.Release();
+            }
+        })).ConfigureAwait(false);
+
+        return licenses;
+    }
+
+    /// <summary>One batch of users' licences, asking again for those Graph throttled.</summary>
+    private async Task<Dictionary<string, IReadOnlyList<EntraLicense>>> ReadLicenseBatchAsync(string[] userIds, CancellationToken ct)
+    {
+        var licenses = new Dictionary<string, IReadOnlyList<EntraLicense>>(StringComparer.OrdinalIgnoreCase);
+        var pending = userIds;
+
+        for (var attempt = 1; pending.Length > 0 && attempt <= ThrottledAttempts; attempt++)
+        {
+            var body = JsonSerializer.Serialize(new
+            {
+                requests = pending.Select((id, i) => new
+                {
+                    id = i.ToString(),
+                    method = "GET",
+                    url = $"/users/{Uri.EscapeDataString(id)}/licenseDetails?$select=skuId,skuPartNumber"
+                })
+            });
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, BaseUrl + "$batch")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            using var doc = await SendAsync(request, ct).ConfigureAwait(false);
+
+            var throttled = new List<string>();
+            var wait = TimeSpan.FromSeconds(attempt * 2);
+
+            if (doc.RootElement.TryGetProperty("responses", out var responses) && responses.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var response in responses.EnumerateArray())
+                {
+                    if (!int.TryParse(Str(response, "id"), out var i) || i < 0 || i >= pending.Length) continue;
+                    var status = response.TryGetProperty("status", out var s) && s.TryGetInt32(out var code) ? code : 0;
+
+                    switch (status)
+                    {
+                        case 200:
+                            licenses[pending[i]] = ReadSkus(response);
+                            break;
+                        case 404:
+                            licenses[pending[i]] = [];
+                            break;
+                        case 429 or 503 or 504:
+                            throttled.Add(pending[i]);
+                            if (RetryAfter(response) is { } after && after > wait) wait = after;
+                            break;
+                    }
+                }
+            }
+
+            pending = throttled.ToArray();
+            if (pending.Length > 0 && attempt < ThrottledAttempts) await Delay(wait, ct).ConfigureAwait(false);
+        }
+
+        return licenses;
+    }
+
+    private static List<EntraLicense> ReadSkus(JsonElement response) =>
+        response.TryGetProperty("body", out var body) && body.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray()
+                .Select(row => new EntraLicense(Str(row, "skuId") ?? string.Empty, Str(row, "skuPartNumber"), []))
+                .ToList()
+            : [];
+
+    /// <summary>The Retry-After a throttled request in a batch carries, capped at a minute.</summary>
+    private static TimeSpan? RetryAfter(JsonElement response)
+    {
+        if (!response.TryGetProperty("headers", out var headers) || headers.ValueKind != JsonValueKind.Object) return null;
+
+        foreach (var header in headers.EnumerateObject())
+        {
+            if (header.Name.Equals("Retry-After", StringComparison.OrdinalIgnoreCase) &&
+                header.Value.ValueKind == JsonValueKind.String && int.TryParse(header.Value.GetString(), out var seconds))
+            {
+                return TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 60));
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
