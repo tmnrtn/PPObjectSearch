@@ -33,18 +33,18 @@ public class EnvironmentAdminTests
     private readonly record struct Choice(int Code, string Label);
 
     private static Dictionary<string, object?> User(Guid id, string name, string bu, bool disabled, Choice accessMode,
-        Guid? app = null, Guid? mailbox = null, bool licensed = true) => new()
+        Guid? app = null, Guid? mailbox = null) => new()
     {
         ["systemuserid"] = id, ["fullname"] = name, ["domainname"] = name.ToLowerInvariant().Replace(' ', '.') + "@contoso.com",
         ["_businessunitid_value"] = Guid.NewGuid(), ["_businessunitid_value" + Fv] = bu,
         ["isdisabled"] = disabled, ["accessmode"] = accessMode.Code, ["accessmode" + Fv] = accessMode.Label,
-        ["applicationid"] = app, ["_defaultmailbox_value"] = mailbox, ["islicensed"] = licensed
+        ["applicationid"] = app, ["_defaultmailbox_value"] = mailbox
     };
 
     private static string Users() => Value(
         User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"), mailbox: MailboxA),
-        User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write"), licensed: false),
-        User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid(), licensed: false));
+        User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write")),
+        User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid()));
 
     /// <summary>
     /// A mailbox regarding a user or queue. Every mailbox here delivers by server-side sync both
@@ -128,25 +128,106 @@ public class EnvironmentAdminTests
         Assert.Equal("Alice Smith", Assert.Single(users.View.Cast<UserInfo>()).FullName);
     }
 
-    [Fact]
-    public async Task The_users_tab_filters_to_unlicensed_people_but_not_application_users()
+    /// <summary>A $batch answer: each request's user gets the licences named for them, or a 404.</summary>
+    private static Func<RecordedRequest, HttpResponseMessage> LicenseBatch(Dictionary<Guid, string[]> held) => request =>
     {
-        var admin = Admin(new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Users()));
-        var users = admin.Users;
+        using var body = JsonDocument.Parse(request.Body!);
+        var responses = body.RootElement.GetProperty("requests").EnumerateArray().Select(r =>
+        {
+            var user = Guid.Parse(r.GetProperty("url").GetString()!.Split('/')[2]);
+            return held.TryGetValue(user, out var skus)
+                ? (object)new { id = r.GetProperty("id").GetString(), status = 200, body = new { value = skus.Select(sku => new { skuId = "id-" + sku, skuPartNumber = sku }) } }
+                : new { id = r.GetProperty("id").GetString(), status = 404 };
+        });
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { responses }), System.Text.Encoding.UTF8, "application/json")
+        };
+    };
+
+    [Fact]
+    public void The_licence_filter_shows_people_holding_none_of_the_ticked_licences() => AdminUiThread.Run(async () =>
+    {
+        Guid alice = Guid.NewGuid(), bob = Guid.NewGuid(), carol = Guid.NewGuid();
+        var carolId = Guid.NewGuid();
+        var users = Value(
+            WithObjectId(User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write")), alice),
+            WithObjectId(User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write")), bob),
+            WithObjectId(User(carolId, "Carol White", "Contoso", false, new(0, "Read-Write")), carol),
+            User(Guid.NewGuid(), "Dan Brown", "Contoso", false, new(0, "Read-Write")),
+            WithObjectId(User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid()), Guid.NewGuid()));
+        var graph = new FakeHttpHandler().On(HttpMethod.Post, "$batch", LicenseBatch(new()
+        {
+            [alice] = ["POWERAPPS_PER_USER", "SPE_E5"],
+            [bob] = ["FLOW_FREE"],
+            // Carol is no longer in Entra: she holds nothing.
+        }));
+        var admin = Admin(new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", users), graph: graph);
+        await admin.LoadAsync();
+        var tab = admin.Users;
+        Assert.Empty(graph.Requests);
+
+        tab.IsLicensePickerOpen = true;
+        await Settle(admin);
+
+        // People with an object id only, in one batch.
+        var request = Assert.Single(graph.Requests);
+        Assert.Equal(3, JsonDocument.Parse(request.Body!).RootElement.GetProperty("requests").GetArrayLength());
+        Assert.Equal(["FLOW_FREE", "POWERAPPS_PER_USER", "SPE_E5"], tab.LicenseChoices.Select(c => c.Name));
+        Assert.All(tab.LicenseChoices, c => Assert.Equal(1, c.Holders));
+        Assert.Equal("Read 3 users' licences from Entra. 1 has no Entra object id. Those are never listed as holding none.",
+            tab.LicenseReadStatus);
+        Assert.Equal("Any", tab.LicenseFilterLabel);
+        Assert.Equal(4, tab.View.Count);
+
+        tab.LicenseChoices.Single(c => c.Name == "POWERAPPS_PER_USER").IsChosen = true;
+        Assert.Equal("Without POWERAPPS_PER_USER", tab.LicenseFilterLabel);
+        Assert.Equal(["Carol White"], tab.View.Cast<UserInfo>().Select(u => u.FullName));
+        Assert.Equal("Showing 1 of 4 enabled - 1 disabled also matches", tab.ShowingSummary);
+
+        tab.StatusFilter = UserStatusFilter.All;
+        Assert.Equal(["Bob Jones", "Carol White"], tab.View.Cast<UserInfo>().Select(u => u.FullName).Order());
+        Assert.Contains("FLOW_FREE", tab.CsvLines().Single(l => l.Contains("Bob Jones")));
+
+        tab.LicenseChoices.Single(c => c.Name == "FLOW_FREE").IsChosen = true;
+        Assert.Equal("None of 2", tab.LicenseFilterLabel);
+        Assert.Equal("Carol White", Assert.Single(tab.View.Cast<UserInfo>()).FullName);
+
+        tab.ClearLicensesCommand.Execute(null);
+        Assert.False(tab.IsLicenseFilterOn);
+        Assert.All(tab.LicenseChoices, c => Assert.False(c.IsChosen));
+        Assert.Equal(5, tab.View.Count);
+
+        // Opening it again does not read again.
+        tab.IsLicensePickerOpen = false;
+        tab.IsLicensePickerOpen = true;
+        await Settle(admin);
+        Assert.Single(graph.Requests);
+    });
+
+    [Fact]
+    public void A_failed_licence_read_says_why_and_is_tried_again_next_time() => AdminUiThread.Run(async () =>
+    {
+        var graph = new FakeHttpHandler().OnError(HttpMethod.Post, "$batch", HttpStatusCode.Forbidden, "Insufficient privileges");
+        var alice = WithObjectId(User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write")), Guid.NewGuid());
+        var admin = Admin(new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Value(alice)), graph: graph);
         await admin.LoadAsync();
 
-        users.SelectedLicense = AdminUsersViewModel.Unlicensed;
-        Assert.Empty(users.View);
-        Assert.Equal("Showing 0 of 2 enabled - 1 disabled also matches", users.ShowingSummary);
+        admin.Users.IsLicensePickerOpen = true;
+        await Settle(admin);
+        Assert.StartsWith("Could not read licences from Entra - Microsoft Graph: 403 Insufficient privileges", admin.Users.LicenseReadStatus);
+        Assert.Empty(admin.Users.LicenseChoices);
 
-        users.StatusFilter = UserStatusFilter.All;
-        Assert.Equal("Bob Jones", Assert.Single(users.View.Cast<UserInfo>()).FullName);
+        admin.Users.IsLicensePickerOpen = false;
+        admin.Users.IsLicensePickerOpen = true;
+        await Settle(admin);
+        Assert.Equal(2, graph.Requests.Count);
+    });
 
-        users.SelectedLicense = AdminUsersViewModel.Licensed;
-        Assert.Equal("Alice Smith", Assert.Single(users.View.Cast<UserInfo>()).FullName);
-
-        users.SelectedLicense = AdminUsersViewModel.AllLicenses;
-        Assert.Equal(3, users.View.Count);
+    private static Dictionary<string, object?> WithObjectId(Dictionary<string, object?> user, Guid objectId)
+    {
+        user["azureactivedirectoryobjectid"] = objectId;
+        return user;
     }
 
     [Fact]

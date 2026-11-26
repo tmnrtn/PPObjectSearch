@@ -345,16 +345,19 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     public override IReadOnlyList<string> CsvLines() =>
         View.Cast<UserInfo>()
             .Select(u => CsvExporter.Line(u.FullName, u.DomainName, u.Email, u.UserType, u.BusinessUnit, u.Title, u.StatusLabel,
-                u.LicenseLabel, Date(u.CreatedOn), u.AadObjectId?.ToString(), u.SystemUserId.ToString()))
+                u.LicenseType, EntraLicenseNames(u), Date(u.CreatedOn), u.AadObjectId?.ToString(), u.SystemUserId.ToString()))
             .Prepend(CsvExporter.Line("Name", "User name", "Email", "Type", "Business unit", "Title", "Status",
-                "Licence", "Created", "Entra object id", "User id"))
+                "Licence", "Entra licences", "Created", "Entra object id", "User id"))
             .ToList();
+
+    /// <summary>The user's licences in Entra, once the licence filter has read them - empty until then.</summary>
+    private string? EntraLicenseNames(UserInfo u) =>
+        _entraLicenses?.TryGetValue(u.SystemUserId, out var held) == true
+            ? string.Join("; ", held.Select(l => l.Name).Order(StringComparer.OrdinalIgnoreCase))
+            : null;
 
     public const string AllTypes = "All user types";
     public const string AllUnits = "All business units";
-    public const string AllLicenses = "All licences";
-    public const string Licensed = "Licensed";
-    public const string Unlicensed = "Unlicensed";
 
     public AdminUsersViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
     {
@@ -372,6 +375,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         EffectiveAccessCommand = new RelayCommand(
             _ => { if (SelectedUser is { } user) Owner.Session.OpenSecurityLookup(user); },
             _ => SelectedUser is not null);
+        ClearLicensesCommand = new RelayCommand(_ => ClearLicenseChoices());
     }
 
     /// <summary>
@@ -419,19 +423,6 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         }
     }
 
-    public IReadOnlyList<string> LicenseOptions { get; } = [AllLicenses, Licensed, Unlicensed];
-
-    private string _selectedLicense = AllLicenses;
-    /// <summary>Licensed or unlicensed, by the user record's own licence flag - application users are neither.</summary>
-    public string SelectedLicense
-    {
-        get => _selectedLicense;
-        set
-        {
-            if (SetProperty(ref _selectedLicense, value ?? AllLicenses)) ApplyFilter();
-        }
-    }
-
     private UserStatusFilter _statusFilter = UserStatusFilter.Enabled;
     /// <summary>Enabled users by default - most environments carry years of disabled ones.</summary>
     public UserStatusFilter StatusFilter
@@ -441,6 +432,140 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         {
             if (SetProperty(ref _statusFilter, value)) ApplyFilter();
         }
+    }
+
+    // ---------------------------------------------------------------- the licence filter
+
+    /// <summary>
+    /// Each licence the environment's people hold in Entra, with how many hold it. Ticking some
+    /// leaves the people who hold none of them - Dataverse's own licence flag counts free and
+    /// Microsoft 365 plans, so it cannot say who lacks a Power Apps or Dynamics 365 licence.
+    /// </summary>
+    public ObservableCollection<LicenseChoice> LicenseChoices { get; } = new();
+
+    /// <summary>Every person's licences in Entra, by user id; null until the licence filter is first opened.</summary>
+    private Dictionary<Guid, IReadOnlyList<EntraLicense>>? _entraLicenses;
+    private readonly HashSet<string> _chosenSkus = new(StringComparer.OrdinalIgnoreCase);
+    private bool _entraLicensesAsked;
+    private int _entraLicenseRequest;
+    private bool _choosingInBulk;
+
+    public bool IsLicenseFilterOn => _chosenSkus.Count > 0;
+
+    /// <summary>The filter button's value: "Any", "Without POWERAPPS_PER_USER", or "None of 3".</summary>
+    public string LicenseFilterLabel => _chosenSkus.Count switch
+    {
+        0 => "Any",
+        1 => "Without " + (LicenseChoices.FirstOrDefault(c => c.IsChosen)?.Name ?? "1 licence"),
+        var n => $"None of {n}"
+    };
+
+    private bool _isLicensePickerOpen;
+    /// <summary>The licence filter's list is open. The first time, every person's licences are read from Entra.</summary>
+    public bool IsLicensePickerOpen
+    {
+        get => _isLicensePickerOpen;
+        set
+        {
+            if (SetProperty(ref _isLicensePickerOpen, value) && value) EnsureEntraLicenses();
+        }
+    }
+
+    private bool _isReadingLicenses;
+    public bool IsReadingLicenses { get => _isReadingLicenses; private set => SetProperty(ref _isReadingLicenses, value); }
+
+    private string _licenseReadStatus = string.Empty;
+    /// <summary>Under the licence list: how many were read, how far it has got, or why it could not.</summary>
+    public string LicenseReadStatus { get => _licenseReadStatus; private set => SetProperty(ref _licenseReadStatus, value); }
+
+    public RelayCommand ClearLicensesCommand { get; }
+
+    /// <summary>Reads every person's licences, once - a failed read is tried again the next time the list opens.</summary>
+    private void EnsureEntraLicenses()
+    {
+        if (_entraLicensesAsked || Items.Count == 0) return;
+
+        _entraLicensesAsked = true;
+        Owner.Work.Track(LoadEntraLicensesAsync(++_entraLicenseRequest));
+    }
+
+    private async Task LoadEntraLicensesAsync(int request)
+    {
+        var people = Items.Where(u => !u.IsApplicationUser && u.AadObjectId is not null).ToList();
+        var noObjectId = Items.Count(u => !u.IsApplicationUser && u.AadObjectId is null);
+
+        IsReadingLicenses = true;
+        LicenseReadStatus = "Reading licences from Entra…";
+        var progress = new Progress<int>(n =>
+        {
+            if (request == _entraLicenseRequest && IsReadingLicenses)
+                LicenseReadStatus = $"Reading licences from Entra… {n:N0} of {people.Count:N0} users";
+        });
+
+        try
+        {
+            var read = await Owner.Graph.GetUsersLicensesAsync(people.Select(u => u.AadObjectId!.Value.ToString()).ToList(), progress);
+            if (request != _entraLicenseRequest) return;
+
+            _entraLicenses = people
+                .Where(u => read.ContainsKey(u.AadObjectId!.Value.ToString()))
+                .ToDictionary(u => u.SystemUserId, u => read[u.AadObjectId!.Value.ToString()]);
+
+            // Ticks survive a refresh, for the licences still held.
+            LicenseChoices.Clear();
+            foreach (var sku in _entraLicenses.Values.SelectMany(held => held.DistinctBy(l => l.SkuId))
+                         .GroupBy(l => l.SkuId, StringComparer.OrdinalIgnoreCase)
+                         .Select(g => (Id: g.Key, g.First().Name, Holders: g.Count()))
+                         .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                LicenseChoices.Add(new LicenseChoice(sku.Id, sku.Name, sku.Holders, _chosenSkus.Contains(sku.Id), OnLicenseChoiceChanged));
+            }
+            _chosenSkus.IntersectWith(LicenseChoices.Where(c => c.IsChosen).Select(c => c.SkuId));
+
+            var unread = people.Count - _entraLicenses.Count;
+            LicenseReadStatus = $"Read {_entraLicenses.Count:N0} users' licences from Entra." +
+                (unread > 0 ? $" {unread:N0} could not be read." : string.Empty) +
+                (noObjectId > 0 ? $" {noObjectId:N0} {(noObjectId == 1 ? "has" : "have")} no Entra object id." : string.Empty) +
+                (unread + noObjectId > 0 ? " Those are never listed as holding none." : string.Empty);
+        }
+        catch (Exception ex)
+        {
+            if (request != _entraLicenseRequest) return;
+            _entraLicensesAsked = false;
+            LicenseReadStatus = "Could not read licences from Entra - " + ex.Message;
+        }
+        finally
+        {
+            if (request == _entraLicenseRequest) IsReadingLicenses = false;
+        }
+
+        LicenseFilterChanged();
+    }
+
+    private void OnLicenseChoiceChanged()
+    {
+        if (_choosingInBulk) return;
+
+        _chosenSkus.Clear();
+        _chosenSkus.UnionWith(LicenseChoices.Where(c => c.IsChosen).Select(c => c.SkuId));
+        LicenseFilterChanged();
+    }
+
+    private void ClearLicenseChoices()
+    {
+        _choosingInBulk = true;
+        foreach (var choice in LicenseChoices) choice.IsChosen = false;
+        _choosingInBulk = false;
+
+        _chosenSkus.Clear();
+        LicenseFilterChanged();
+    }
+
+    private void LicenseFilterChanged()
+    {
+        OnPropertyChanged(nameof(IsLicenseFilterOn));
+        OnPropertyChanged(nameof(LicenseFilterLabel));
+        ApplyFilter();
     }
 
     public int CountAll => Items.Count;
@@ -463,13 +588,17 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         InLicense(u) &&
         Matches(u.SearchText, SearchText);
 
-    private bool InLicense(UserInfo u) =>
-        SelectedLicense switch
-        {
-            Licensed => u.IsLicensed == true && !u.IsApplicationUser,
-            Unlicensed => u.IsUnlicensed,
-            _ => true
-        };
+    /// <summary>
+    /// With licences chosen, only people Entra says hold none of them. Application users need no
+    /// licence, and a user whose licences could not be read is never counted as holding none.
+    /// </summary>
+    private bool InLicense(UserInfo u)
+    {
+        if (!IsLicenseFilterOn) return true;
+        if (u.IsApplicationUser || _entraLicenses?.TryGetValue(u.SystemUserId, out var held) != true) return false;
+
+        return !held.Any(l => _chosenSkus.Contains(l.SkuId));
+    }
 
     protected override int Count => Items.Count;
     protected override string Noun => "users";
@@ -495,7 +624,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     /// </summary>
     private string HiddenByStatus()
     {
-        if (StatusFilter == UserStatusFilter.All || (string.IsNullOrWhiteSpace(SearchText) && SelectedLicense == AllLicenses))
+        if (StatusFilter == UserStatusFilter.All || (string.IsNullOrWhiteSpace(SearchText) && !IsLicenseFilterOn))
             return string.Empty;
 
         var hidden = Items.Count(u => !InStatus(u) && MatchesOtherFilters(u));
@@ -540,6 +669,13 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         OnPropertyChanged(nameof(CountDisabled));
         ApplyFilter();
 
+        // Licences read for the old list are read again for the new one, keeping what was ticked.
+        if (_entraLicensesAsked)
+        {
+            _entraLicensesAsked = false;
+            EnsureEntraLicenses();
+        }
+
         if (selected is { } id) SelectedUser = Items.FirstOrDefault(u => u.SystemUserId == id);
     }
 
@@ -552,7 +688,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             SearchText = string.Empty;
             SelectedType = AllTypes;
             SelectedUnit = AllUnits;
-            SelectedLicense = AllLicenses;
+            ClearLicenseChoices();
             StatusFilter = UserStatusFilter.All;
         }
 
@@ -966,6 +1102,38 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     private Task ShowTeamAsync(TeamInfo? team) =>
         team is null ? Task.CompletedTask : Owner.ShowAsync(AdminTab.Teams, team.TeamId);
+}
+
+/// <summary>A licence in the Users tab's licence filter: how many of the environment's people hold it, and whether it is ticked.</summary>
+public sealed class LicenseChoice : ObservableObject
+{
+    private readonly Action _changed;
+
+    public LicenseChoice(string skuId, string name, int holders, bool isChosen, Action changed)
+    {
+        SkuId = skuId;
+        Name = name;
+        Holders = holders;
+        _isChosen = isChosen;
+        _changed = changed;
+    }
+
+    public string SkuId { get; }
+
+    /// <summary>The SKU's part number - POWERAPPS_PER_USER, DYN365_ENTERPRISE_PLAN1.</summary>
+    public string Name { get; }
+
+    public int Holders { get; }
+
+    private bool _isChosen;
+    public bool IsChosen
+    {
+        get => _isChosen;
+        set
+        {
+            if (SetProperty(ref _isChosen, value)) _changed();
+        }
+    }
 }
 
 // ==================================================================== teams

@@ -499,9 +499,13 @@ its filters leave it - as CSV.
   application user's app (client) id or user id, filtered by user type (application user, or the
   access mode: Read-Write, Administrative, Non-interactive...), business unit, licence and status
   (enabled users by default; the status bar says when a search or the licence filter also matches
-  users the status hides). **Licence: Unlicensed** lists the people whose user record says the
-  environment holds no licence for them - most are disabled, so set status to **All** to see every
-  one; application users need no licence and are left out. A user shows their teams, and their security roles both direct and through each
+  users the status hides). **Licence** reads every person's licences from Entra the first time it
+  is opened, and lists each licence they hold with how many hold it: tick the ones that let
+  someone use the environment (Power Apps Premium, a Dynamics 365 app...) and the tab shows the
+  people who hold none of them. Dataverse's own licence flag cannot answer this - free and
+  Microsoft 365 licences carry a Dataverse plan, so it counts their holders as licensed.
+  Application users need no licence and are left out, as is anyone whose licences could not be
+  read; **Export** adds each user's Entra licences once they are read. A user shows their teams, and their security roles both direct and through each
   team, each in the business unit it is held in, their field security profiles (direct and through
   teams - access to secured columns, which roles do not grant), and their mailbox's approval and
   test result. **Last sign-in** comes from the audit log - the latest *User Access via Web*
@@ -606,7 +610,7 @@ someone removed from the group but not yet re-synced.
 
 Graph is called as the tab's signed-in account, in the environment's tenant. The default client
 is pre-consented; with your own `ClientId`, grant it `GroupMember.Read.All` and `User.Read.All`
-delegated permissions. The Users tab's **Licences** and **Entra groups** need `User.Read.All` too.
+delegated permissions. The Users tab's **Licence** filter, **Licences** and **Entra groups** need `User.Read.All` too.
 
 ### Queue membership sync
 

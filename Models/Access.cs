@@ -15,7 +15,6 @@ public sealed record UserInfo(
     Guid? AadObjectId,
     string? Title,
     string? LicenseType,
-    bool? IsLicensed,
     Guid? DefaultMailboxId,
     DateTimeOffset? CreatedOn)
 {
@@ -29,15 +28,6 @@ public sealed record UserInfo(
     public bool IsApplicationUser => ApplicationId is not null;
 
     public string StatusLabel => IsDisabled ? "Disabled" : "Enabled";
-
-    /// <summary>
-    /// A person the environment holds no licence for. Application users never hold one, so they
-    /// are not counted; nor is a user whose licence flag was not read.
-    /// </summary>
-    public bool IsUnlicensed => IsLicensed == false && !IsApplicationUser;
-
-    /// <summary>"Unlicensed", or the licence type - Professional, Administrative...</summary>
-    public string? LicenseLabel => IsUnlicensed ? "Unlicensed" : LicenseType;
 
     public string SearchText =>
         $"{FullName} {DomainName} {Email} {BusinessUnit} {UserType} {Title} {AadObjectId} {ApplicationId} {SystemUserId}";

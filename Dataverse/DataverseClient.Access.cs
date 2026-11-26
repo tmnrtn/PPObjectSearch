@@ -20,7 +20,7 @@ public sealed partial class DataverseClient
 
     private const string UserSelect =
         "systemuserid,fullname,domainname,internalemailaddress,_businessunitid_value,isdisabled,accessmode," +
-        "applicationid,azureactivedirectoryobjectid,title,caltype,islicensed,_defaultmailbox_value,createdon";
+        "applicationid,azureactivedirectoryobjectid,title,caltype,_defaultmailbox_value,createdon";
 
     private const string UserCoreSelect =
         "systemuserid,fullname,domainname,internalemailaddress,_businessunitid_value,isdisabled,accessmode," +
@@ -48,7 +48,6 @@ public sealed partial class DataverseClient
             ParseGuid(JsonHelper.GetString(row, "azureactivedirectoryobjectid")),
             JsonHelper.GetString(row, "title"),
             Label(row, "caltype"),
-            JsonHelper.GetBool(row, "islicensed"),
             ParseGuid(JsonHelper.GetString(row, "_defaultmailbox_value")),
             JsonHelper.GetDate(row, "createdon"));
     }

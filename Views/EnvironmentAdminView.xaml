@@ -231,9 +231,82 @@
                                       ToolTip="Application user, or the access mode: Read-Write, Administrative, Read, Non-interactive..." />
                             <ComboBox Grid.Column="2" Margin="8,0,0,0" MinWidth="150" MaxWidth="300" Padding="7,0"
                                       core:Ui.InlineLabel="Business unit" ItemsSource="{Binding UnitOptions}" SelectedItem="{Binding SelectedUnit}" />
-                            <ComboBox Grid.Column="3" Margin="8,0,0,0" MinWidth="110" Padding="7,0"
-                                      core:Ui.InlineLabel="Licence" ItemsSource="{Binding LicenseOptions}" SelectedItem="{Binding SelectedLicense}"
-                                      ToolTip="Whether the environment holds a licence for the user, by the licence flag on their user record. Most unlicensed users are disabled, so choose All for status to see them all. Application users need no licence and are neither." />
+                            <!-- Licences to filter by, read from Entra the first time it opens; several can be ticked, so not a combo box. -->
+                            <Grid Grid.Column="3" Margin="8,0,0,0">
+                                <ToggleButton x:Name="LicenseToggle" Padding="8,0"
+                                              IsChecked="{Binding IsLicensePickerOpen}"
+                                              IsHitTestVisible="{Binding IsOpen, ElementName=LicensePopup, Converter={StaticResource NotBool}}"
+                                              AutomationProperties.Name="Licence filter"
+                                              ToolTip="Show the people who hold none of the licences you tick, read from Entra">
+                                    <ToggleButton.Style>
+                                        <Style TargetType="ToggleButton" BasedOn="{StaticResource FilterToggle}">
+                                            <Style.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource Surface}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                                </Trigger>
+                                                <DataTrigger Binding="{Binding IsLicenseFilterOn}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource Link}" />
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ToggleButton.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Licence" Foreground="{DynamicResource Muted}" FontWeight="Normal" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding LicenseFilterLabel}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="9" FontWeight="Normal"
+                                                   Foreground="{DynamicResource Muted}" Margin="8,1,0,0" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Popup x:Name="LicensePopup" PlacementTarget="{Binding ElementName=LicenseToggle}" Placement="Bottom"
+                                       IsOpen="{Binding IsChecked, ElementName=LicenseToggle}" StaysOpen="False" AllowsTransparency="True"
+                                       PopupAnimation="None">
+                                    <Grid Margin="0,4,10,10">
+                                        <Border Width="360" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border2}"
+                                                BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
+                                            </Border.Effect>
+                                            <StackPanel>
+                                                <TextBlock Text="Tick the licences that let someone use this environment. The list then shows the people who hold none of them in Entra, directly or through a group. Application users need no licence and are left out."
+                                                           Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                                <ProgressBar Style="{StaticResource BusyBar}" Margin="0,0,0,6"
+                                                             Visibility="{Binding IsReadingLicenses, Converter={StaticResource BoolToVis}}" />
+                                                <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+                                                    <ItemsControl ItemsSource="{Binding LicenseChoices}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <CheckBox IsChecked="{Binding IsChosen}" Margin="0,3" HorizontalContentAlignment="Stretch"
+                                                                          AutomationProperties.Name="{Binding Name}">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Holders, StringFormat=N0}" Margin="12,0,0,0"
+                                                                                   Foreground="{DynamicResource Muted}" ToolTip="People in this environment who hold it" />
+                                                                    </Grid>
+                                                                </CheckBox>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                                <TextBlock Text="{Binding LicenseReadStatus}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                                           TextWrapping="Wrap" Margin="0,8,0,0"
+                                                           Visibility="{Binding LicenseReadStatus, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <Button Style="{StaticResource LinkButton}" Content="Clear" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                        Command="{Binding ClearLicensesCommand}"
+                                                        Visibility="{Binding IsLicenseFilterOn, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Popup>
+                            </Grid>
 
                             <TextBox AutomationProperties.Name="Name, email, UPN, title, object id or app id" Grid.Column="4" Height="30" Margin="8,0,0,0"
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title, object id or app id"
@@ -341,7 +414,8 @@
                                                            Text="{Binding SelectedUser.Title, TargetNullValue=—}" />
                                                 <TextBlock Grid.Row="1" Text="Licence" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
-                                                           Text="{Binding SelectedUser.LicenseLabel, TargetNullValue=—}" />
+                                                           Text="{Binding SelectedUser.LicenseType, TargetNullValue=—}"
+                                                           ToolTip="The licence type on the user record in Dataverse - not the licences they hold in Entra, which Licences below lists." />
                                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="Email" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="3" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
                                                            Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}"

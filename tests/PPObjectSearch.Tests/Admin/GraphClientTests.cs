@@ -217,4 +217,96 @@ public class GraphClientTests
 
         Assert.Null(await Fakes.Graph(handler).GetUserGroupsAsync("u1"));
     }
+
+    /// <summary>The urls a $batch request asked for.</summary>
+    private static List<string> Urls(RecordedRequest request) =>
+        JsonDocument.Parse(request.Body!).RootElement.GetProperty("requests").EnumerateArray()
+            .Select(r => r.GetProperty("url").GetString()!)
+            .ToList();
+
+    /// <summary>Answers each request in a $batch with what <paramref name="answer"/> says for its user.</summary>
+    private static Func<RecordedRequest, HttpResponseMessage> Batch(Func<string, object> answer) => request =>
+    {
+        using var body = JsonDocument.Parse(request.Body!);
+        var responses = new System.Text.Json.Nodes.JsonArray();
+        foreach (var r in body.RootElement.GetProperty("requests").EnumerateArray())
+        {
+            var response = JsonSerializer.SerializeToNode(answer(r.GetProperty("url").GetString()!.Split('/')[2]))!.AsObject();
+            response["id"] = r.GetProperty("id").GetString();
+            responses.Add(response);
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(new System.Text.Json.Nodes.JsonObject { ["responses"] = responses }.ToJsonString(),
+                System.Text.Encoding.UTF8, "application/json")
+        };
+    };
+
+    private static object Skus(params string[] names) =>
+        new { status = 200, body = new { value = names.Select(n => new { skuId = "id-" + n, skuPartNumber = n }) } };
+
+    [Fact]
+    public async Task GetUsersLicensesAsync_reads_twenty_users_to_a_batch()
+    {
+        var ids = Enumerable.Range(0, 45).Select(i => $"u{i}").ToList();
+        var handler = new FakeHttpHandler().On(HttpMethod.Post, "v1.0/$batch", Batch(id => id == "u7" ? Skus("POWERAPPS_PER_USER", "SPE_E5") : Skus()));
+        var progress = new List<int>();
+
+        var licenses = await Fakes.Graph(handler).GetUsersLicensesAsync(ids, new SyncProgress(progress));
+
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.Equal([5, 20, 20], handler.Requests.Select(r => Urls(r).Count).Order());
+        Assert.Contains("/users/u0/licenseDetails?$select=skuId,skuPartNumber", handler.Requests.SelectMany(Urls));
+        Assert.Equal(45, licenses.Count);
+        Assert.Equal(["POWERAPPS_PER_USER", "SPE_E5"], licenses["u7"].Select(l => l.Name));
+        Assert.Equal("id-SPE_E5", licenses["u7"][1].SkuId);
+        Assert.Empty(licenses["u8"]);
+        Assert.Equal(45, progress.Max());
+    }
+
+    [Fact]
+    public async Task GetUsersLicensesAsync_counts_a_missing_user_as_holding_none_and_leaves_out_a_failed_one()
+    {
+        var handler = new FakeHttpHandler().On(HttpMethod.Post, "$batch", Batch(id => id switch
+        {
+            "gone" => new { status = 404 },
+            "broken" => new { status = 500 },
+            _ => Skus("FLOW_FREE")
+        }));
+
+        var licenses = await Fakes.Graph(handler).GetUsersLicensesAsync(["ok", "gone", "broken"]);
+
+        Assert.Equal(["gone", "ok"], licenses.Keys.Order());
+        Assert.Empty(licenses["gone"]);
+    }
+
+    [Fact]
+    public async Task GetUsersLicensesAsync_asks_again_for_users_graph_throttled()
+    {
+        var asked = 0;
+        var handler = new FakeHttpHandler().On(HttpMethod.Post, "$batch", Batch(id =>
+            id == "busy" && Interlocked.Increment(ref asked) == 1
+                ? new { status = 429, headers = new Dictionary<string, string> { ["Retry-After"] = "7" } }
+                : Skus("SPE_E5")));
+        var waits = new List<TimeSpan>();
+        var graph = Fakes.Graph(handler);
+        graph.Delay = (wait, _) => { waits.Add(wait); return Task.CompletedTask; };
+
+        var licenses = await graph.GetUsersLicensesAsync(["calm", "busy"]);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(["/users/busy/licenseDetails?$select=skuId,skuPartNumber"], Urls(handler.Requests[1]));
+        Assert.Equal([TimeSpan.FromSeconds(7)], waits);
+        Assert.Equal("SPE_E5", Assert.Single(licenses["busy"]).Name);
+    }
+
+    /// <summary>Reports straight away, where Progress&lt;T&gt; would post them for later.</summary>
+    private sealed class SyncProgress(List<int> into) : IProgress<int>
+    {
+        public void Report(int value)
+        {
+            lock (into) into.Add(value);
+        }
+    }
 }
