@@ -431,13 +431,17 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     public int CountEnabled => Items.Count(u => !u.IsDisabled);
     public int CountDisabled => Items.Count(u => u.IsDisabled);
 
-    private bool Include(UserInfo u) =>
+    private bool Include(UserInfo u) => InStatus(u) && MatchesOtherFilters(u);
+
+    private bool InStatus(UserInfo u) =>
         StatusFilter switch
         {
             UserStatusFilter.Enabled => !u.IsDisabled,
             UserStatusFilter.Disabled => u.IsDisabled,
             _ => true
-        } &&
+        };
+
+    private bool MatchesOtherFilters(UserInfo u) =>
         (SelectedType == AllTypes || string.Equals(u.UserType, SelectedType, StringComparison.CurrentCultureIgnoreCase)) &&
         (SelectedUnit == AllUnits || string.Equals(u.BusinessUnit, SelectedUnit, StringComparison.CurrentCultureIgnoreCase)) &&
         Matches(u.SearchText, SearchText);
@@ -456,7 +460,22 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             UserStatusFilter.Disabled => (CountDisabled, "disabled"),
             _ => (CountAll, "users")
         };
-        ShowingSummary = Showing(View.Count, inStatus, noun);
+        ShowingSummary = Showing(View.Count, inStatus, noun) + HiddenByStatus();
+    }
+
+    /// <summary>
+    /// " - 1 disabled also matches" when a search finds users the status filter hides: a search for
+    /// someone's object id that shows nothing otherwise looks like they are not in the environment.
+    /// </summary>
+    private string HiddenByStatus()
+    {
+        if (StatusFilter == UserStatusFilter.All || string.IsNullOrWhiteSpace(SearchText)) return string.Empty;
+
+        var hidden = Items.Count(u => !InStatus(u) && MatchesOtherFilters(u));
+        if (hidden == 0) return string.Empty;
+
+        var other = StatusFilter == UserStatusFilter.Enabled ? "disabled" : "enabled";
+        return $" - {hidden:N0} {other} also match{(hidden == 1 ? "es" : string.Empty)}";
     }
 
     private UserDetailView _detailView;

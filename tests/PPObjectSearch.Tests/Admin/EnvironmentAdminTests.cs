@@ -719,6 +719,13 @@ public class EnvironmentAdminTests
         admin.Users.SearchText = "alice";
         Assert.Equal("Showing 1 of 2 enabled", admin.Users.ShowingSummary);
 
+        admin.Users.SearchText = "bob";
+        Assert.Equal("Showing 0 of 2 enabled - 1 disabled also matches", admin.Users.ShowingSummary);
+
+        admin.Users.StatusFilter = UserStatusFilter.Disabled;
+        admin.Users.SearchText = "contoso";
+        Assert.Equal("Showing 1 disabled - 2 enabled also match", admin.Users.ShowingSummary);
+
         admin.Users.SearchText = string.Empty;
         admin.Users.StatusFilter = UserStatusFilter.All;
         Assert.Equal("Showing 3 users", admin.Users.ShowingSummary);

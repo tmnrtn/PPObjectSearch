@@ -11,7 +11,7 @@ public sealed record UserInfo(
     bool IsDisabled,
     int? AccessMode,
     string? AccessModeLabel,
-    bool IsApplicationUser,
+    Guid? ApplicationId,
     Guid? AadObjectId,
     string? Title,
     string? LicenseType,
@@ -24,9 +24,13 @@ public sealed record UserInfo(
     /// </summary>
     public string UserType => IsApplicationUser ? "Application user" : AccessModeLabel ?? AccessMode?.ToString() ?? "Unknown";
 
+    /// <summary>An application user - a service principal, with the app registration's client id.</summary>
+    public bool IsApplicationUser => ApplicationId is not null;
+
     public string StatusLabel => IsDisabled ? "Disabled" : "Enabled";
 
-    public string SearchText => $"{FullName} {DomainName} {Email} {BusinessUnit} {UserType} {Title} {AadObjectId} {SystemUserId}";
+    public string SearchText =>
+        $"{FullName} {DomainName} {Email} {BusinessUnit} {UserType} {Title} {AadObjectId} {ApplicationId} {SystemUserId}";
 }
 
 /// <summary>A security role a user holds - directly, or through a team they belong to.</summary>

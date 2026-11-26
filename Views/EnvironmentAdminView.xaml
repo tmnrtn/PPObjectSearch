@@ -231,8 +231,8 @@
                             <ComboBox Grid.Column="2" Margin="8,0,0,0" MinWidth="150" MaxWidth="300" Padding="7,0"
                                       core:Ui.InlineLabel="Business unit" ItemsSource="{Binding UnitOptions}" SelectedItem="{Binding SelectedUnit}" />
 
-                            <TextBox AutomationProperties.Name="Name, email, UPN, title or object id" Grid.Column="3" Height="30" Margin="8,0,0,0"
-                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title or object id"
+                            <TextBox AutomationProperties.Name="Name, email, UPN, title, object id or app id" Grid.Column="3" Height="30" Margin="8,0,0,0"
+                                     core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title, object id or app id"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
                             <Button AutomationProperties.Name="Refresh" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="8,0,0,0"
@@ -326,6 +326,7 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
 
                                                 <TextBlock Grid.Row="0" Text="Business unit" Style="{StaticResource DetailKey}" />
@@ -357,8 +358,15 @@
                                                 <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
                                                            FontFamily="{StaticResource MonoFont}" FontSize="11"
                                                            Text="{Binding SelectedUser.SystemUserId}" />
-                                                <TextBlock Grid.Row="5" Text="Mailbox" Style="{StaticResource DetailKey}" />
-                                                <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Grid.Row="5" Text="App id" Style="{StaticResource DetailKey}"
+                                                           ToolTip="The app registration's application (client) id."
+                                                           Visibility="{Binding SelectedUser.ApplicationId, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource DetailValue}"
+                                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           Text="{Binding SelectedUser.ApplicationId}"
+                                                           Visibility="{Binding SelectedUser.ApplicationId, Converter={StaticResource EmptyToCollapsed}}" />
+                                                <TextBlock Grid.Row="6" Text="Mailbox" Style="{StaticResource DetailKey}" />
+                                                <StackPanel Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,6">
                                                     <StackPanel Orientation="Horizontal" DataContext="{Binding Mailbox}"
                                                                 Visibility="{Binding Converter={StaticResource EmptyToCollapsed}}">
                                                         <ContentControl Style="{StaticResource ApprovalPill}" Content="{Binding ApprovalLabel, TargetNullValue=Not approved}" />
