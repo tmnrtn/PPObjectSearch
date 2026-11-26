@@ -40,7 +40,7 @@ public class CopyOnClickTests
     public void A_user_can_be_found_by_their_user_id()
     {
         var id = Guid.NewGuid();
-        var user = new UserInfo(id, "Alice", null, null, null, null, false, 0, null, false, null, null, null, null, null);
+        var user = new UserInfo(id, "Alice", null, null, null, null, false, 0, null, null, null, null, null, null, null);
 
         Assert.Contains(id.ToString(), user.SearchText);
     }

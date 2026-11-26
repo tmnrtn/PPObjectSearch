@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Text.Json;
 using PPObjectSearch.Models;
 using PPObjectSearch.Tests.Infrastructure;
+using PPObjectSearch.ViewModels;
 
 namespace PPObjectSearch.Tests.Admin;
 
@@ -14,7 +15,7 @@ public class AccessModelTests
     private static string Rows(params object[] rows) => JsonSerializer.Serialize(new { value = rows });
 
     private static UserInfo User(bool app = false, int? mode = null, string? modeLabel = null) =>
-        new(Guid.NewGuid(), "Alice", null, null, null, null, false, mode, modeLabel, app, null, null, null, null, null);
+        new(Guid.NewGuid(), "Alice", null, null, null, null, false, mode, modeLabel, app ? Guid.NewGuid() : null, null, null, null, null, null);
 
     private static MailboxInfo Mailbox(string? regardingType, int? incoming = 1, int? outgoing = 1, bool? scheduled = false) =>
         new(Guid.NewGuid(), "m", null, null, null, regardingType, 1, "Approved", incoming, null, outgoing, null, null,
@@ -51,6 +52,25 @@ public class AccessModelTests
         Assert.Equal(new DateTimeOffset(2024, 3, 1, 9, 0, 0, TimeSpan.Zero), user.CreatedOn);
         Assert.Equal("Enabled", user.StatusLabel);
         Assert.Contains("Engineer", user.SearchText);
+        Assert.Null(user.ApplicationId);
+    }
+
+    [Fact]
+    public async Task A_user_is_found_by_part_of_their_entra_object_id_or_app_id()
+    {
+        Guid oid = Guid.Parse("fc715848-1111-2222-3333-444444444444"), app = Guid.Parse("0a1b2c3d-5555-6666-7777-888888888888");
+        var handler = new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Rows(new Dictionary<string, object?>
+        {
+            ["systemuserid"] = Guid.NewGuid(), ["fullname"] = "# Integration", ["isdisabled"] = false,
+            ["azureactivedirectoryobjectid"] = oid, ["applicationid"] = app
+        }));
+
+        var user = Assert.Single(await Fakes.Dataverse(handler).GetUsersAsync());
+
+        Assert.Equal(app, user.ApplicationId);
+        Assert.True(user.IsApplicationUser);
+        Assert.True(AdminPaneViewModel.Matches(user.SearchText, "FC715848"));
+        Assert.True(AdminPaneViewModel.Matches(user.SearchText, "0a1b2c3d-5555"));
     }
 
     [Theory]

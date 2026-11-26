@@ -154,7 +154,7 @@ public class SecurityLookupViewModelTests
 
         lookup.Tab = SecurityLookupTab.Effective;
         Assert.False(lookup.RunCommand.CanExecute(null));
-        lookup.SelectedUser = new UserInfo(Alice, "Alice", null, null, null, null, false, 0, null, false, null, null, null, null, null);
+        lookup.SelectedUser = new UserInfo(Alice, "Alice", null, null, null, null, false, 0, null, null, null, null, null, null, null);
         Assert.True(lookup.RunCommand.CanExecute(null));
 
         lookup.Tab = SecurityLookupTab.SecuredColumn;

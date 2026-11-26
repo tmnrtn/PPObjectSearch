@@ -44,7 +44,7 @@ public sealed partial class DataverseClient
             JsonHelper.GetBool(row, "isdisabled") ?? false,
             JsonHelper.GetInt(row, "accessmode"),
             Label(row, "accessmode"),
-            ParseGuid(JsonHelper.GetString(row, "applicationid")) is not null,
+            ParseGuid(JsonHelper.GetString(row, "applicationid")),
             ParseGuid(JsonHelper.GetString(row, "azureactivedirectoryobjectid")),
             JsonHelper.GetString(row, "title"),
             Label(row, "caltype"),

@@ -495,9 +495,10 @@ Teams tab, a queue's mailbox on the Mailboxes tab, a mailbox's owner on the User
 **Export ▾** in the header saves the tab showing - users, teams, roles, mailboxes or queues, as
 its filters leave it - as CSV.
 
-- **Users** — every user, searchable, filtered by user type (application user, or the access
-  mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled users
-  by default). A user shows their teams, and their security roles both direct and through each
+- **Users** — every user, searchable by name, email, UPN, title, Entra object id, an
+  application user's app (client) id or user id, filtered by user type (application user, or the
+  access mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled
+  users by default; the status bar says when a search also matches users the status hides). A user shows their teams, and their security roles both direct and through each
   team, each in the business unit it is held in, their field security profiles (direct and through
   teams - access to secured columns, which roles do not grant), and their mailbox's approval and
   test result. **Last sign-in** comes from the audit log - the latest *User Access via Web*
