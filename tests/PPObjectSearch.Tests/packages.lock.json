@@ -37,8 +37,8 @@
       },
       "Anthropic": {
         "type": "Transitive",
-        "resolved": "13.10.0",
-        "contentHash": "p9kXFfvKk2quABpikYRstGp522CAMp9nQkllnS5dV07T6lmY6OBX2pSW6QTrI844vovya0jYC84cSCQuxGVnDw==",
+        "resolved": "13.14.0",
+        "contentHash": "dphTzq4C8yJg4IhLDQDD0USK5bAiL+TGXHFl3FsebWjl9x5++wtv52fmETBWYQiEf2e2lo8CvwKx47JoF6m1Wg==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "10.5.1"
         }
@@ -138,7 +138,7 @@
       "ppobjectsearch": {
         "type": "Project",
         "dependencies": {
-          "Anthropic": "[13.10.0, )",
+          "Anthropic": "[13.14.0, )",
           "AutomaticGraphLayout": "[1.1.12, )",
           "AvalonEdit": "[6.3.1.120, )",
           "Microsoft.Identity.Client": "[4.90.1, )"
