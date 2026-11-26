@@ -19,6 +19,9 @@ public enum AdminTab
 }
 
 public enum UserStatusFilter { All, Enabled, Disabled }
+
+/// <summary>Who the Users tab's licence filter shows: people holding none, any or all of the ticked licences.</summary>
+public enum LicenseMatch { NoneOf, AnyOf, AllOf }
 public enum RoleManagedFilter { All, Managed, Unmanaged }
 public enum MailboxOwnerFilter { All, Users, Queues, Other }
 public enum QueueTypeFilter { All, Public, Private }
@@ -438,8 +441,8 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     /// <summary>
     /// Each licence the environment's people hold in Entra, with how many hold it. Ticking some
-    /// leaves the people who hold none of them - Dataverse's own licence flag counts free and
-    /// Microsoft 365 plans, so it cannot say who lacks a Power Apps or Dynamics 365 licence.
+    /// leaves the people who hold none, any or all of them - Dataverse's own licence flag counts
+    /// free and Microsoft 365 plans, so it cannot say who lacks a Power Apps or Dynamics 365 licence.
     /// </summary>
     public ObservableCollection<LicenseChoice> LicenseChoices { get; } = new();
 
@@ -452,13 +455,32 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
 
     public bool IsLicenseFilterOn => _chosenSkus.Count > 0;
 
-    /// <summary>The filter button's value: "Any", "Without POWERAPPS_PER_USER", or "None of 3".</summary>
-    public string LicenseFilterLabel => _chosenSkus.Count switch
+    private LicenseMatch _licenseMatch = LicenseMatch.NoneOf;
+    /// <summary>Whether the ticked licences pick out the people holding none of them, any, or all.</summary>
+    public LicenseMatch LicenseMatch
     {
-        0 => "Any",
-        1 => "Without " + (LicenseChoices.FirstOrDefault(c => c.IsChosen)?.Name ?? "1 licence"),
-        var n => $"None of {n}"
+        get => _licenseMatch;
+        set
+        {
+            if (SetProperty(ref _licenseMatch, value)) LicenseFilterChanged();
+        }
+    }
+
+    /// <summary>
+    /// The filter button's value: "Any", "Without POWERAPPS_PER_USER", "With SPE_E5", or for
+    /// several ticked "None of 3", "Any of 3", "All of 3".
+    /// </summary>
+    public string LicenseFilterLabel => (_chosenSkus.Count, LicenseMatch) switch
+    {
+        (0, _) => "Any",
+        (1, LicenseMatch.NoneOf) => "Without " + ChosenName,
+        (1, _) => "With " + ChosenName,
+        (var n, LicenseMatch.NoneOf) => $"None of {n}",
+        (var n, LicenseMatch.AnyOf) => $"Any of {n}",
+        (var n, _) => $"All of {n}"
     };
+
+    private string ChosenName => LicenseChoices.FirstOrDefault(c => c.IsChosen)?.Name ?? "1 licence";
 
     private bool _isLicensePickerOpen;
     /// <summary>The licence filter's list is open. The first time, every person's licences are read from Entra.</summary>
@@ -526,7 +548,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             LicenseReadStatus = $"Read {_entraLicenses.Count:N0} users' licences from Entra." +
                 (unread > 0 ? $" {unread:N0} could not be read." : string.Empty) +
                 (noObjectId > 0 ? $" {noObjectId:N0} {(noObjectId == 1 ? "has" : "have")} no Entra object id." : string.Empty) +
-                (unread + noObjectId > 0 ? " Those are never listed as holding none." : string.Empty);
+                (unread + noObjectId > 0 ? " Those are left out while licences are ticked." : string.Empty);
         }
         catch (Exception ex)
         {
@@ -589,15 +611,21 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         Matches(u.SearchText, SearchText);
 
     /// <summary>
-    /// With licences chosen, only people Entra says hold none of them. Application users need no
-    /// licence, and a user whose licences could not be read is never counted as holding none.
+    /// With licences ticked, only people Entra says hold none, any or all of them. Application
+    /// users need no licence, and a user whose licences could not be read is left out either way.
     /// </summary>
     private bool InLicense(UserInfo u)
     {
         if (!IsLicenseFilterOn) return true;
-        if (u.IsApplicationUser || _entraLicenses?.TryGetValue(u.SystemUserId, out var held) != true) return false;
+        if (u.IsApplicationUser || _entraLicenses is not { } read || !read.TryGetValue(u.SystemUserId, out var held)) return false;
 
-        return !held.Any(l => _chosenSkus.Contains(l.SkuId));
+        var holds = held.Select(l => l.SkuId).Distinct(StringComparer.OrdinalIgnoreCase).Count(_chosenSkus.Contains);
+        return LicenseMatch switch
+        {
+            LicenseMatch.AnyOf => holds > 0,
+            LicenseMatch.AllOf => holds == _chosenSkus.Count,
+            _ => holds == 0
+        };
     }
 
     protected override int Count => Items.Count;

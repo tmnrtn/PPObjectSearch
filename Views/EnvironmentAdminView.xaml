@@ -237,7 +237,7 @@
                                               IsChecked="{Binding IsLicensePickerOpen}"
                                               IsHitTestVisible="{Binding IsOpen, ElementName=LicensePopup, Converter={StaticResource NotBool}}"
                                               AutomationProperties.Name="Licence filter"
-                                              ToolTip="Show the people who hold none of the licences you tick, read from Entra">
+                                              ToolTip="Show the people who hold none, any or all of the licences you tick, read from Entra">
                                     <ToggleButton.Style>
                                         <Style TargetType="ToggleButton" BasedOn="{StaticResource FilterToggle}">
                                             <Style.Triggers>
@@ -272,7 +272,20 @@
                                                 <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.18" />
                                             </Border.Effect>
                                             <StackPanel>
-                                                <TextBlock Text="Tick the licences that let someone use this environment. The list then shows the people who hold none of them in Entra, directly or through a group. Application users need no licence and are left out."
+                                                <Border Style="{StaticResource Segmented}" HorizontalAlignment="Left" Margin="0,0,0,8">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="None of" GroupName="LicenseMatch"
+                                                                     ToolTip="People holding none of the ticked licences"
+                                                                     IsChecked="{Binding LicenseMatch, Converter={StaticResource EnumEquals}, ConverterParameter=NoneOf}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="Any of" GroupName="LicenseMatch"
+                                                                     ToolTip="People holding at least one of the ticked licences"
+                                                                     IsChecked="{Binding LicenseMatch, Converter={StaticResource EnumEquals}, ConverterParameter=AnyOf}" />
+                                                        <RadioButton Style="{StaticResource SegmentedToggle}" Content="All of" GroupName="LicenseMatch"
+                                                                     ToolTip="People holding every one of the ticked licences"
+                                                                     IsChecked="{Binding LicenseMatch, Converter={StaticResource EnumEquals}, ConverterParameter=AllOf}" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <TextBlock Text="Tick licences to show the people who hold none, any or all of them in Entra, directly or through a group. Application users need no licence and are left out."
                                                            Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                                                 <ProgressBar Style="{StaticResource BusyBar}" Margin="0,0,0,6"
                                                              Visibility="{Binding IsReadingLicenses, Converter={StaticResource BoolToVis}}" />
