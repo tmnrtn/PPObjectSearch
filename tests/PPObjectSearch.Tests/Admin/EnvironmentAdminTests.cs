@@ -175,7 +175,7 @@ public class EnvironmentAdminTests
         Assert.Equal(3, JsonDocument.Parse(request.Body!).RootElement.GetProperty("requests").GetArrayLength());
         Assert.Equal(["FLOW_FREE", "POWERAPPS_PER_USER", "SPE_E5"], tab.LicenseChoices.Select(c => c.Name));
         Assert.All(tab.LicenseChoices, c => Assert.Equal(1, c.Holders));
-        Assert.Equal("Read 3 users' licences from Entra. 1 has no Entra object id. Those are never listed as holding none.",
+        Assert.Equal("Read 3 users' licences from Entra. 1 has no Entra object id. Those are left out while licences are ticked.",
             tab.LicenseReadStatus);
         Assert.Equal("Any", tab.LicenseFilterLabel);
         Assert.Equal(4, tab.View.Count);
@@ -192,6 +192,25 @@ public class EnvironmentAdminTests
         tab.LicenseChoices.Single(c => c.Name == "FLOW_FREE").IsChosen = true;
         Assert.Equal("None of 2", tab.LicenseFilterLabel);
         Assert.Equal("Carol White", Assert.Single(tab.View.Cast<UserInfo>()).FullName);
+
+        // The same ticks, matched the other ways.
+        tab.LicenseMatch = LicenseMatch.AnyOf;
+        Assert.Equal("Any of 2", tab.LicenseFilterLabel);
+        Assert.Equal(["Alice Smith", "Bob Jones"], tab.View.Cast<UserInfo>().Select(u => u.FullName).Order());
+
+        tab.LicenseMatch = LicenseMatch.AllOf;
+        Assert.Equal("All of 2", tab.LicenseFilterLabel);
+        Assert.Empty(tab.View);
+
+        tab.LicenseChoices.Single(c => c.Name == "FLOW_FREE").IsChosen = false;
+        tab.LicenseChoices.Single(c => c.Name == "SPE_E5").IsChosen = true;
+        Assert.Equal("Alice Smith", Assert.Single(tab.View.Cast<UserInfo>()).FullName);
+
+        tab.LicenseChoices.Single(c => c.Name == "POWERAPPS_PER_USER").IsChosen = false;
+        Assert.Equal("With SPE_E5", tab.LicenseFilterLabel);
+        tab.LicenseMatch = LicenseMatch.NoneOf;
+        Assert.Equal("Without SPE_E5", tab.LicenseFilterLabel);
+        Assert.Equal(["Bob Jones", "Carol White"], tab.View.Cast<UserInfo>().Select(u => u.FullName).Order());
 
         tab.ClearLicensesCommand.Execute(null);
         Assert.False(tab.IsLicenseFilterOn);

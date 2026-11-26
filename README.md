@@ -500,9 +500,11 @@ its filters leave it - as CSV.
   access mode: Read-Write, Administrative, Non-interactive...), business unit, licence and status
   (enabled users by default; the status bar says when a search or the licence filter also matches
   users the status hides). **Licence** reads every person's licences from Entra the first time it
-  is opened, and lists each licence they hold with how many hold it: tick the ones that let
-  someone use the environment (Power Apps Premium, a Dynamics 365 app...) and the tab shows the
-  people who hold none of them. Dataverse's own licence flag cannot answer this - free and
+  is opened, and lists each licence they hold with how many hold it. Tick some and choose **None
+  of**, **Any of** or **All of**: tick the licences that let someone use the environment (Power
+  Apps Premium, a Dynamics 365 app...) with **None of** to find the people who lack one, or a set
+  with **Any of** or **All of** to find who holds them. Dataverse's own licence flag cannot tell
+  who lacks a licence - free and
   Microsoft 365 licences carry a Dataverse plan, so it counts their holders as licensed.
   Application users need no licence and are left out, as is anyone whose licences could not be
   read; **Export** adds each user's Entra licences once they are read. A user shows their teams, and their security roles both direct and through each
