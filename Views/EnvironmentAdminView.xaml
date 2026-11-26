@@ -207,6 +207,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
@@ -230,12 +231,15 @@
                                       ToolTip="Application user, or the access mode: Read-Write, Administrative, Read, Non-interactive..." />
                             <ComboBox Grid.Column="2" Margin="8,0,0,0" MinWidth="150" MaxWidth="300" Padding="7,0"
                                       core:Ui.InlineLabel="Business unit" ItemsSource="{Binding UnitOptions}" SelectedItem="{Binding SelectedUnit}" />
+                            <ComboBox Grid.Column="3" Margin="8,0,0,0" MinWidth="110" Padding="7,0"
+                                      core:Ui.InlineLabel="Licence" ItemsSource="{Binding LicenseOptions}" SelectedItem="{Binding SelectedLicense}"
+                                      ToolTip="Whether the environment holds a licence for the user, by the licence flag on their user record. Most unlicensed users are disabled, so choose All for status to see them all. Application users need no licence and are neither." />
 
-                            <TextBox AutomationProperties.Name="Name, email, UPN, title, object id or app id" Grid.Column="3" Height="30" Margin="8,0,0,0"
+                            <TextBox AutomationProperties.Name="Name, email, UPN, title, object id or app id" Grid.Column="4" Height="30" Margin="8,0,0,0"
                                      core:Ui.Icon="&#xE721;" core:Ui.Placeholder="Name, email, UPN, title, object id or app id"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" />
 
-                            <Button AutomationProperties.Name="Refresh" Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="8,0,0,0"
+                            <Button AutomationProperties.Name="Refresh" Grid.Column="5" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="8,0,0,0"
                                     Command="{Binding RefreshCommand}" ToolTip="Refresh - read the users again" />
                         </Grid>
 
@@ -337,7 +341,7 @@
                                                            Text="{Binding SelectedUser.Title, TargetNullValue=—}" />
                                                 <TextBlock Grid.Row="1" Text="Licence" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource DetailValue}" Margin="0,0,10,6"
-                                                           Text="{Binding SelectedUser.LicenseType, TargetNullValue=—}" />
+                                                           Text="{Binding SelectedUser.LicenseLabel, TargetNullValue=—}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="Email" Style="{StaticResource DetailKey}" />
                                                 <TextBlock Grid.Row="1" Grid.Column="3" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
                                                            Text="{Binding SelectedUser.Email, TargetNullValue=—}" ToolTip="{Binding SelectedUser.Email}"

@@ -497,8 +497,11 @@ its filters leave it - as CSV.
 
 - **Users** — every user, searchable by name, email, UPN, title, Entra object id, an
   application user's app (client) id or user id, filtered by user type (application user, or the
-  access mode: Read-Write, Administrative, Non-interactive...), business unit and status (enabled
-  users by default; the status bar says when a search also matches users the status hides). A user shows their teams, and their security roles both direct and through each
+  access mode: Read-Write, Administrative, Non-interactive...), business unit, licence and status
+  (enabled users by default; the status bar says when a search or the licence filter also matches
+  users the status hides). **Licence: Unlicensed** lists the people whose user record says the
+  environment holds no licence for them - most are disabled, so set status to **All** to see every
+  one; application users need no licence and are left out. A user shows their teams, and their security roles both direct and through each
   team, each in the business unit it is held in, their field security profiles (direct and through
   teams - access to secured columns, which roles do not grant), and their mailbox's approval and
   test result. **Last sign-in** comes from the audit log - the latest *User Access via Web*

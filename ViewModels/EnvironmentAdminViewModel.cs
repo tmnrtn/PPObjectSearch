@@ -345,13 +345,16 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     public override IReadOnlyList<string> CsvLines() =>
         View.Cast<UserInfo>()
             .Select(u => CsvExporter.Line(u.FullName, u.DomainName, u.Email, u.UserType, u.BusinessUnit, u.Title, u.StatusLabel,
-                u.LicenseType, Date(u.CreatedOn), u.AadObjectId?.ToString(), u.SystemUserId.ToString()))
+                u.LicenseLabel, Date(u.CreatedOn), u.AadObjectId?.ToString(), u.SystemUserId.ToString()))
             .Prepend(CsvExporter.Line("Name", "User name", "Email", "Type", "Business unit", "Title", "Status",
                 "Licence", "Created", "Entra object id", "User id"))
             .ToList();
 
     public const string AllTypes = "All user types";
     public const string AllUnits = "All business units";
+    public const string AllLicenses = "All licences";
+    public const string Licensed = "Licensed";
+    public const string Unlicensed = "Unlicensed";
 
     public AdminUsersViewModel(EnvironmentAdminViewModel owner, DataverseClient client) : base(owner, client)
     {
@@ -416,6 +419,19 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
         }
     }
 
+    public IReadOnlyList<string> LicenseOptions { get; } = [AllLicenses, Licensed, Unlicensed];
+
+    private string _selectedLicense = AllLicenses;
+    /// <summary>Licensed or unlicensed, by the user record's own licence flag - application users are neither.</summary>
+    public string SelectedLicense
+    {
+        get => _selectedLicense;
+        set
+        {
+            if (SetProperty(ref _selectedLicense, value ?? AllLicenses)) ApplyFilter();
+        }
+    }
+
     private UserStatusFilter _statusFilter = UserStatusFilter.Enabled;
     /// <summary>Enabled users by default - most environments carry years of disabled ones.</summary>
     public UserStatusFilter StatusFilter
@@ -444,7 +460,16 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     private bool MatchesOtherFilters(UserInfo u) =>
         (SelectedType == AllTypes || string.Equals(u.UserType, SelectedType, StringComparison.CurrentCultureIgnoreCase)) &&
         (SelectedUnit == AllUnits || string.Equals(u.BusinessUnit, SelectedUnit, StringComparison.CurrentCultureIgnoreCase)) &&
+        InLicense(u) &&
         Matches(u.SearchText, SearchText);
+
+    private bool InLicense(UserInfo u) =>
+        SelectedLicense switch
+        {
+            Licensed => u.IsLicensed == true && !u.IsApplicationUser,
+            Unlicensed => u.IsUnlicensed,
+            _ => true
+        };
 
     protected override int Count => Items.Count;
     protected override string Noun => "users";
@@ -464,12 +489,14 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
     }
 
     /// <summary>
-    /// " - 1 disabled also matches" when a search finds users the status filter hides: a search for
-    /// someone's object id that shows nothing otherwise looks like they are not in the environment.
+    /// " - 1 disabled also matches" when a search or the licence filter finds users the status
+    /// filter hides: a search for someone's object id that shows nothing otherwise looks like they
+    /// are not in the environment, and most unlicensed users are disabled.
     /// </summary>
     private string HiddenByStatus()
     {
-        if (StatusFilter == UserStatusFilter.All || string.IsNullOrWhiteSpace(SearchText)) return string.Empty;
+        if (StatusFilter == UserStatusFilter.All || (string.IsNullOrWhiteSpace(SearchText) && SelectedLicense == AllLicenses))
+            return string.Empty;
 
         var hidden = Items.Count(u => !InStatus(u) && MatchesOtherFilters(u));
         if (hidden == 0) return string.Empty;
@@ -525,6 +552,7 @@ public sealed class AdminUsersViewModel : AdminPaneViewModel
             SearchText = string.Empty;
             SelectedType = AllTypes;
             SelectedUnit = AllUnits;
+            SelectedLicense = AllLicenses;
             StatusFilter = UserStatusFilter.All;
         }
 

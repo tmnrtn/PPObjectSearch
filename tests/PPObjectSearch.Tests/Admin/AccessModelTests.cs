@@ -14,8 +14,10 @@ public class AccessModelTests
 
     private static string Rows(params object[] rows) => JsonSerializer.Serialize(new { value = rows });
 
-    private static UserInfo User(bool app = false, int? mode = null, string? modeLabel = null) =>
-        new(Guid.NewGuid(), "Alice", null, null, null, null, false, mode, modeLabel, app ? Guid.NewGuid() : null, null, null, null, null, null);
+    private static UserInfo User(bool app = false, int? mode = null, string? modeLabel = null, bool? licensed = null,
+        string? licenseType = null) =>
+        new(Guid.NewGuid(), "Alice", null, null, null, null, false, mode, modeLabel, app ? Guid.NewGuid() : null, null, null,
+            licenseType, licensed, null, null);
 
     private static MailboxInfo Mailbox(string? regardingType, int? incoming = 1, int? outgoing = 1, bool? scheduled = false) =>
         new(Guid.NewGuid(), "m", null, null, null, regardingType, 1, "Approved", incoming, null, outgoing, null, null,
@@ -35,7 +37,7 @@ public class AccessModelTests
             ["internalemailaddress"] = "alice.smith@contoso.com", ["_businessunitid_value"] = unit,
             ["_businessunitid_value" + Fv] = "Contoso", ["isdisabled"] = false, ["accessmode"] = 1,
             ["accessmode" + Fv] = "Administrative", ["azureactivedirectoryobjectid"] = oid, ["title"] = "Engineer",
-            ["caltype" + Fv] = "Professional", ["_defaultmailbox_value"] = mailbox, ["createdon"] = "2024-03-01T09:00:00Z"
+            ["caltype" + Fv] = "Professional", ["islicensed"] = true, ["_defaultmailbox_value"] = mailbox, ["createdon"] = "2024-03-01T09:00:00Z"
         }));
 
         var user = Assert.Single(await Fakes.Dataverse(handler).GetUsersAsync());
@@ -48,11 +50,25 @@ public class AccessModelTests
         Assert.Equal(oid, user.AadObjectId);
         Assert.Equal("Engineer", user.Title);
         Assert.Equal("Professional", user.LicenseType);
+        Assert.True(user.IsLicensed);
+        Assert.Equal("Professional", user.LicenseLabel);
         Assert.Equal(mailbox, user.DefaultMailboxId);
         Assert.Equal(new DateTimeOffset(2024, 3, 1, 9, 0, 0, TimeSpan.Zero), user.CreatedOn);
         Assert.Equal("Enabled", user.StatusLabel);
         Assert.Contains("Engineer", user.SearchText);
         Assert.Null(user.ApplicationId);
+    }
+
+    [Theory]
+    [InlineData(false, false, true, "Unlicensed")]
+    [InlineData(true, false, false, "Professional")]
+    [InlineData(false, true, false, "Professional")]
+    [InlineData(null, false, false, "Professional")]
+    public void Only_a_person_flagged_unlicensed_counts_as_unlicensed(bool? licensed, bool app, bool unlicensed, string label)
+    {
+        var user = User(app, licensed: licensed, licenseType: "Professional");
+
+        Assert.Equal((unlicensed, label), (user.IsUnlicensed, user.LicenseLabel));
     }
 
     [Fact]

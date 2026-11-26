@@ -33,18 +33,18 @@ public class EnvironmentAdminTests
     private readonly record struct Choice(int Code, string Label);
 
     private static Dictionary<string, object?> User(Guid id, string name, string bu, bool disabled, Choice accessMode,
-        Guid? app = null, Guid? mailbox = null) => new()
+        Guid? app = null, Guid? mailbox = null, bool licensed = true) => new()
     {
         ["systemuserid"] = id, ["fullname"] = name, ["domainname"] = name.ToLowerInvariant().Replace(' ', '.') + "@contoso.com",
         ["_businessunitid_value"] = Guid.NewGuid(), ["_businessunitid_value" + Fv] = bu,
         ["isdisabled"] = disabled, ["accessmode"] = accessMode.Code, ["accessmode" + Fv] = accessMode.Label,
-        ["applicationid"] = app, ["_defaultmailbox_value"] = mailbox
+        ["applicationid"] = app, ["_defaultmailbox_value"] = mailbox, ["islicensed"] = licensed
     };
 
     private static string Users() => Value(
         User(Alice, "Alice Smith", "Contoso", false, new(0, "Read-Write"), mailbox: MailboxA),
-        User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write")),
-        User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid()));
+        User(Bob, "Bob Jones", "Contoso UK", true, new(0, "Read-Write"), licensed: false),
+        User(AppUser, "Flow Bot", "Contoso", false, new(4, "Non-interactive"), app: Guid.NewGuid(), licensed: false));
 
     /// <summary>
     /// A mailbox regarding a user or queue. Every mailbox here delivers by server-side sync both
@@ -126,6 +126,27 @@ public class EnvironmentAdminTests
         users.SelectedUnit = AdminUsersViewModel.AllUnits;
         users.SearchText = "alice";
         Assert.Equal("Alice Smith", Assert.Single(users.View.Cast<UserInfo>()).FullName);
+    }
+
+    [Fact]
+    public async Task The_users_tab_filters_to_unlicensed_people_but_not_application_users()
+    {
+        var admin = Admin(new FakeHttpHandler().OnJson(HttpMethod.Get, "systemusers?", Users()));
+        var users = admin.Users;
+        await admin.LoadAsync();
+
+        users.SelectedLicense = AdminUsersViewModel.Unlicensed;
+        Assert.Empty(users.View);
+        Assert.Equal("Showing 0 of 2 enabled - 1 disabled also matches", users.ShowingSummary);
+
+        users.StatusFilter = UserStatusFilter.All;
+        Assert.Equal("Bob Jones", Assert.Single(users.View.Cast<UserInfo>()).FullName);
+
+        users.SelectedLicense = AdminUsersViewModel.Licensed;
+        Assert.Equal("Alice Smith", Assert.Single(users.View.Cast<UserInfo>()).FullName);
+
+        users.SelectedLicense = AdminUsersViewModel.AllLicenses;
+        Assert.Equal(3, users.View.Count);
     }
 
     [Fact]
